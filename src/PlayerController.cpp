@@ -54,14 +54,4 @@ void PlayerController::Update(float dt) {
         character->Issue(moveCommand);
     }
 
-    // 4. Se o mouse for clicado, manda um comando de atirar com a posição do mouse
-    if (input.MousePress(LEFT_MOUSE_BUTTON)) {
-        
-        float mouseX = input.GetMouseX() + Camera::pos.x;               // Posição do mouse na tela convertida
-        float mouseY = input.GetMouseY() + Camera::pos.y;               // para coordenadas do mundo
-
-        Character::Command shootCommand(Character::Command::SHOOT, mouseX, mouseY);
-        character->Issue(shootCommand);
-    }
-
 }

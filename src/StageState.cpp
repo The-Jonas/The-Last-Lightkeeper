@@ -3,7 +3,6 @@
 #include "../include/GameObject.h"
 #include "../include/SpriteRenderer.h"
 #include "../include/Rect.h"
-#include "../include/Zombie.h"
 #include "../include/TileSet.h"
 #include "../include/TileMap.h"
 #include "../include/InputManager.h"
@@ -13,7 +12,6 @@
 #include "../include/PlayerController.h"
 #include "../include/Collider.h"
 #include "../include/Collision.h"
-#include "../include/WaveSpawner.h"
 #include "../include/GameData.h"
 #include "../include/EndState.h"
 #include <iostream>
@@ -90,13 +88,6 @@ void StageState::LoadAssets() {
 
     Camera::Follow(playerObject);                                                       // Foca a câmera no personagem
 
-    // --------------------------------------
-
-    // Criação do Spawner de inimigos
-    GameObject* spawnerObject = new GameObject();
-    spawnerObject->AddComponent(new WaveSpawner(*spawnerObject));
-    AddObject(spawnerObject);
-
 }
 
 void StageState::Update(float dt){
@@ -113,22 +104,6 @@ void StageState::Update(float dt){
     if (input.KeyPress(ESCAPE_KEY)) {
         popRequested = true;
     }
-
-    /* Se a barra de espaço for pressionada, cria um zumbi na posição do mouse
-    if (InputManager::GetInstance().KeyPress(SPACE_KEY)) {
-        GameObject* newZombie = new GameObject();
-        Zombie* zombieComponent = new Zombie(*newZombie);
-        newZombie->AddComponent(zombieComponent);
-        //Obter as coordenadas do centro (posição do mouse no mundo)
-        float centerX = InputManager::GetInstance().GetMouseX() + Camera::pos.x;
-        float centerY = InputManager::GetInstance().GetMouseY() + Camera::pos.y;
-        //Defini a posição para spawnar onde meu mouse estiver parado
-        newZombie->box.x = centerX - (newZombie->box.w / 2.0f);
-        newZombie->box.y = centerY - (newZombie->box.h / 2.0f);
-        newZombie->z = 2;                                                               // Z = 2 (Camada de Gameplay, mesma do Jogador)
-        AddObject(newZombie);
-    }
-    */
 
     UpdateArray(dt);                                                                    // Percorre o vetor de GameObjects chamando o Update de cada um
 
@@ -175,14 +150,6 @@ void StageState::Update(float dt){
 
         // Empilha a tela de fim e pausa a fase atual
         popRequested = true;                                    // Remove o StageState atual
-        Game::GetInstance().Push(new EndState());
-    }
-
-    // 2. Vitória: Sobrevivemos todas as waves
-    else if (WaveSpawner::isFinished) {
-        GameData::playerVictory = true;
-
-        popRequested = true;
         Game::GetInstance().Push(new EndState());
     }
 }
