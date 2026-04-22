@@ -42,6 +42,9 @@ Game::Game(std::string title, int width, int heigh) {
         exit(1);
     }
     Mix_AllocateChannels(32);           // Para conseguir reproduzir 32 sons simultaneam
+    const int masterVolume = (MIX_MAX_VOLUME * MASTER_VOLUME_PERCENT) / 100;
+    Mix_Volume(-1, masterVolume);
+    Mix_VolumeMusic(masterVolume);
 
     // Inicializa TTF
     if (TTF_Init() != 0) {
