@@ -35,13 +35,16 @@ public:
     void Issue(Command task);                                           // Adiciona um comando a fila de tarefas      
     static Character* player;                                           // Ponteiro estático para a instância do jogador principal
     Vec2 GetCenter();                                                   // Para pegar o centro do personagem
+    void SetSpeedMultiplier(float multiplier);                          // Ajusta multiplicador de velocidade do personagem
+    void SetBaseSpeed(float speed);                                     // Ajusta velocidade base de movimento
 
 private:
     std::queue<Command> taskQueue;                                      // Fila de comando a serem executados
 
     Vec2 speed;                                                         // Velocidade do personagem
-    Vec2 targetSpeed;                                                   // Velocidade-alvo para suavizar aceleração e desaceleração
+    Vec2 targetSpeed;                                                   // Velocidade-alvo usada na suavização
     float linearSpeed;                                                  // Velocidade linear base (módulo de velocidade)
+    float speedMultiplier;                                              // Multiplicador aplicado sobre linearSpeed
     float acceleration;                                                 // Taxa de aceleração em movimento
     float deceleration;                                                 // Taxa de desaceleração ao soltar input
     bool facingLeft;                                                    // Lembrar pra onde deve olhar conforme a ultima tecla apertada

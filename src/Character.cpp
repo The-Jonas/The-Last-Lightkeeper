@@ -15,23 +15,36 @@ Character::Command::Command(CommandType type, float x, float y): type(type), pos
 Character* Character::player = nullptr;
 
 Character::Character(GameObject& associated, std::string spritePath) : Component(associated){
+    // Definições das animações
+    constexpr int PLAYER_FRAMES_PER_ROW = 3;
+    constexpr int PLAYER_ROWS = 4;
+    constexpr int RUN_START = 0;
+    constexpr int RUN_END = 5;
+    constexpr int IDLE_START = 6;
+    constexpr int IDLE_END = 9;
+    constexpr int DEATH_START = 10;
+    constexpr int DEATH_END = 11;
+
+    // Definições de velocidade e aceleração
     linearSpeed = 200.0f;
+    speedMultiplier = 1.0f;
     acceleration = 1000.0f;
     deceleration = 1400.0f;
     facingLeft = false;                                                                 // Começa olhando pra direita
 
-    SpriteRenderer* sprite = new SpriteRenderer(associated, spritePath, 3, 4);          // Usa o path fornecido
+    SpriteRenderer* sprite = new SpriteRenderer(associated, spritePath, PLAYER_FRAMES_PER_ROW, PLAYER_ROWS);          // Usa o path fornecido
+    sprite->SetFrameCount(PLAYER_FRAMES_PER_ROW, PLAYER_ROWS);
     associated.AddComponent(sprite);
 
     Animator* animator = new Animator(associated);
     associated.AddComponent(animator);
 
     //Adicionando as animações para o character
-    animator->AddAnimation("idle", Animation(6, 9, 0.4f));
-    animator->AddAnimation("idle-flip", Animation(6, 9, 0.4f, SDL_FLIP_HORIZONTAL));
-    animator->AddAnimation("walking", Animation(0, 5, 0.3f));
-    animator->AddAnimation("dead", Animation(10, 11, 0.5f));
-    animator->AddAnimation("walking-flip", Animation(0, 5, 0.3f, SDL_FLIP_HORIZONTAL));
+    animator->AddAnimation("idle", Animation(IDLE_START, IDLE_END, 0.4f));
+    animator->AddAnimation("idle-flip", Animation(IDLE_START, IDLE_END, 0.4f, SDL_FLIP_HORIZONTAL));
+    animator->AddAnimation("walking", Animation(RUN_START, RUN_END, 0.3f));
+    animator->AddAnimation("dead", Animation(DEATH_START, DEATH_END, 0.5f));
+    animator->AddAnimation("walking-flip", Animation(RUN_START, RUN_END, 0.3f, SDL_FLIP_HORIZONTAL));
     animator->SetAnimation("idle");
 
     if (player == nullptr) {                                                            
@@ -67,7 +80,7 @@ void Character::Update(float dt) {
             Vec2 targePos = cmd.pos;
             Vec2 direction = (targePos - associated.box.Center()).Normalized();
             //Define velocidade-alvo para suavização de movimento
-            targetSpeed = direction * linearSpeed;
+            targetSpeed = direction * (linearSpeed * speedMultiplier);
             hasMoveCommand = true;
         } 
     }
@@ -162,6 +175,20 @@ Vec2 Character::GetCenter() {
 
 void Character::Issue(Command task) {                       // Adiciona comando na fila
     taskQueue.push(task);
+}
+
+void Character::SetSpeedMultiplier(float multiplier) { // Ajusta o multiplicador de velocidade
+    if (multiplier < 0.1f) {
+        speedMultiplier = 0.1f;
+        return;
+    }
+    speedMultiplier = multiplier;
+}
+
+void Character::SetBaseSpeed(float speed) { // Ajusta a velocidade base
+    if (speed > 0.0f) {
+        linearSpeed = speed;
+    }
 }
 
 

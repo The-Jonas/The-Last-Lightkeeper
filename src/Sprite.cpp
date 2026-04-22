@@ -14,14 +14,22 @@ Sprite::Sprite(){                               // Inicializa como padrão
 
     scale = Vec2(1.0f, 1.0f);
     flip = SDL_FLIP_NONE;
+    tintR = 255;
+    tintG = 255;
+    tintB = 255;
+    tintA = 255;
 }
 
 Sprite::Sprite(const std::string file, int frameCountW, int frameCountH) : frameCountW(frameCountW), frameCountH(frameCountH) {        // Construtor que carrega imagem
     texture = nullptr;
-    Open(file);
-
     scale = Vec2(1.0f, 1.0f);
     flip = SDL_FLIP_NONE;
+    tintR = 255;
+    tintG = 255;
+    tintB = 255;
+    tintA = 255;
+
+    Open(file);
 }
 
 Sprite::~Sprite(){                              // Destrutor
@@ -65,16 +73,31 @@ void Sprite::SetScale(float scaleX, float scaleY) {
     }
 }
 
+void Sprite::SetTint(Uint8 r, Uint8 g, Uint8 b, Uint8 a) {
+    tintR = r;
+    tintG = g;
+    tintB = b;
+    tintA = a;
+}
+
 void Sprite::Render(int x, int y, int w, int h, double angleDeg) {
     int finalX = x;
     int finalY = y;
+    int finalW = w;
+    int finalH = h;
 
     if(!cameraFollower){
-        finalX = x - static_cast<int>(Camera::pos.x);
-        finalY = y - static_cast<int>(Camera::pos.y);
+        float zoom = Camera::GetZoom();
+        finalX = static_cast<int>((x - Camera::pos.x) * zoom);
+        finalY = static_cast<int>((y - Camera::pos.y) * zoom);
+        finalW = static_cast<int>(w * zoom);
+        finalH = static_cast<int>(h * zoom);
     }
     
-    SDL_Rect dstRect = { finalX, finalY, w, h };                          // Área destino na tela
+    SDL_Rect dstRect = { finalX, finalY, finalW, finalH };                          // Área destino na tela
+
+    SDL_SetTextureColorMod(texture.get(), tintR, tintG, tintB);
+    SDL_SetTextureAlphaMod(texture.get(), tintA);
 
     //SDL_RenderCopy(Game::GetInstance().GetRenderer(), texture, &clipRect, &dstRect);  // Desenha
     SDL_RenderCopyEx(
@@ -93,17 +116,21 @@ void Sprite::SetCameraFollower(bool follow) {                           // Funç
 }
 
 void Sprite::SetFrame(int frame) {                                      // Calcula as coordenadas x e y do frame na sprite sheet
-    int y_offset = (frame / frameCountW) * GetHeight();                 // O PDF sugere dividir o índice do frame pela quantidade de frames em cada linha para obter o número de linhas a pular
-    int x_offset = (frame % frameCountW) * GetWidth();                  // O resto dará o número de colunas a pular
+    int frameWidth = width / frameCountW;
+    int frameHeight = height / frameCountH;
+    int y_offset = (frame / frameCountW) * frameHeight;                 // O PDF sugere dividir o índice do frame pela quantidade de frames em cada linha para obter o número de linhas a pular
+    int x_offset = (frame % frameCountW) * frameWidth;                  // O resto dará o número de colunas a pular
     
-    SetClip(x_offset, y_offset, GetWidth(), GetHeight());               // Define o clip para o novo frame
+    SetClip(x_offset, y_offset, frameWidth, frameHeight);               // Define o clip para o novo frame
 }
 
 void Sprite::SetFrameCount(int frameCountW, int frameCountH) {          // Seta os respectivos membros
     this->frameCountW = frameCountW;
     this->frameCountH = frameCountH;
 
-    clipRect = { 0, 0, GetWidth(), GetHeight() };                       // Usa a imagem toda como clip (A largura e altura do clip inicial devem ser a largura e altura de um frame)
+    int frameWidth = width / this->frameCountW;
+    int frameHeight = height / this->frameCountH;
+    clipRect = { 0, 0, frameWidth, frameHeight };                       // Usa um frame base sem aplicar escala no recorte
 }
 
 Vec2 Sprite::GetScale() {

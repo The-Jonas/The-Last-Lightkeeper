@@ -28,6 +28,7 @@ public:
     void SetScale(float scaleX, float scaleY);              // Seta o tamanho do componente, valor 1 seria o padrão
     Vec2 GetScale();                                        // Retorna o valor de scale
     void SetFlip(SDL_RendererFlip flip);                    // Setar se o objeto vai ser espelhado
+    void SetTint(Uint8 r, Uint8 g, Uint8 b, Uint8 a = 255); // Aplica modulação de cor/alpha na textura
 
     void SetCameraFollower(bool follow);                    // O CameraFollower vai escolher se o objeto fica fixo no mapa (false)
     bool cameraFollower;                                    // ou se ele segue a câmera (true), como por exemplo ser usado em elementos de fundo
@@ -41,6 +42,10 @@ private:
     // Valores para modificar os objetos em termos de espelhamento e escala
     SDL_RendererFlip flip;
     Vec2 scale;
+    Uint8 tintR;
+    Uint8 tintG;
+    Uint8 tintB;
+    Uint8 tintA;
 
 };
 
