@@ -13,10 +13,11 @@ class State;
 
 class Game {
 public:
-    static constexpr int MASTER_VOLUME_PERCENT = 15;
+    static constexpr int MASTER_VOLUME_PERCENT = 5;
 
     static Game& GetInstance();                 // Retorna instância única (singleton)
     SDL_Renderer* GetRenderer();                // Retorna o renderizador SDL
+    SDL_Window* GetWindow();                    // Retorna a janela SDL
     State& GetCurrentState();                   // Retorna o estado atual do jogo
     void Run();                                 // Loop Principal do jogo
 

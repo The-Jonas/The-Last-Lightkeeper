@@ -115,6 +115,10 @@ SDL_Renderer* Game::GetRenderer(){                  // Retorna o Renderizador
     return renderer; 
 }
 
+SDL_Window* Game::GetWindow() {                     // Retorna a Janela
+    return window;
+}
+
 void Game::Push(State* state) {
     storedState = state;                            // Guarda para empilhar no início do frame                  
 }

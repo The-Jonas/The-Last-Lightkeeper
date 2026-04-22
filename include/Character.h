@@ -40,7 +40,10 @@ private:
     std::queue<Command> taskQueue;                                      // Fila de comando a serem executados
 
     Vec2 speed;                                                         // Velocidade do personagem
+    Vec2 targetSpeed;                                                   // Velocidade-alvo para suavizar aceleração e desaceleração
     float linearSpeed;                                                  // Velocidade linear base (módulo de velocidade)
+    float acceleration;                                                 // Taxa de aceleração em movimento
+    float deceleration;                                                 // Taxa de desaceleração ao soltar input
     bool facingLeft;                                                    // Lembrar pra onde deve olhar conforme a ultima tecla apertada
 
 };

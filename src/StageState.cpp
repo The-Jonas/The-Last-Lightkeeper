@@ -23,6 +23,20 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+namespace {
+void SetMouseConfinedToWindow(bool shouldConfine) {
+    SDL_Window* window = Game::GetInstance().GetWindow();
+    if (!window) {
+        return;
+    }
+
+    SDL_SetWindowGrab(window, shouldConfine ? SDL_TRUE : SDL_FALSE);
+    if (shouldConfine) {
+        SDL_WarpMouseInWindow(window, Game::GetInstance().GetWindowsWidth() / 2, Game::GetInstance().GetWindowsHeight() / 2);
+    }
+}
+}
+
 StageState::StageState() {
     music.Open("Recursos/audio/BGM.wav");        // Carrega música de fundo
     music.Play();                                // Toca música
@@ -31,6 +45,7 @@ StageState::StageState() {
 StageState::~StageState(){                                
     // O destrutor de State cuida de limpar o objectArray
     // A música é limpa pelo destrutor de Music
+    SetMouseConfinedToWindow(false);
 }
 
 void StageState::LoadAssets() {
@@ -195,13 +210,14 @@ void StageState::Render(){
 void StageState::Start() {
     LoadAssets();
     StartArray(); // Chama Start() de todos os objetos
+    SetMouseConfinedToWindow(true);
     started = true;
 }
 
 void StageState::Pause() {
-    //Vazio
+    SetMouseConfinedToWindow(false);
 }
 
 void StageState::Resume() {
-    //Vazio
+    SetMouseConfinedToWindow(true);
 }

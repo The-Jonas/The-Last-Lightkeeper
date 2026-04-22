@@ -5,6 +5,7 @@
 #include "../include/Animator.h"
 #include "../include/Collider.h"
 #include "../include/Camera.h"
+#include <cmath>
 
 
 // Implementação do construtor da classe aninhada Command.
@@ -15,6 +16,8 @@ Character* Character::player = nullptr;
 
 Character::Character(GameObject& associated, std::string spritePath) : Component(associated){
     linearSpeed = 200.0f;
+    acceleration = 1000.0f;
+    deceleration = 1400.0f;
     facingLeft = false;                                                                 // Começa olhando pra direita
 
     SpriteRenderer* sprite = new SpriteRenderer(associated, spritePath, 3, 4);          // Usa o path fornecido
@@ -36,6 +39,7 @@ Character::Character(GameObject& associated, std::string spritePath) : Component
     } 
 
     speed = Vec2(0, 0);                                                                 // Inicializa a velocidade como zero.
+    targetSpeed = Vec2(0, 0);                                                           // Começa sem alvo de movimento.
 }
 
 // Destrutor de Character
@@ -51,6 +55,7 @@ void Character::Start() {
 
 void Character::Update(float dt) {
     Animator* animator = associated.GetComponent<Animator>();
+    bool hasMoveCommand = false;
 
     //Processa a fila de comandos
     while (!taskQueue.empty()) {                    // Chegamos se há alguma ação na fila
@@ -61,10 +66,28 @@ void Character::Update(float dt) {
             //Calcula a direção normalizada
             Vec2 targePos = cmd.pos;
             Vec2 direction = (targePos - associated.box.Center()).Normalized();
-            //Define a velocidade baseada na direção e linearSpeed
-            speed = direction * linearSpeed;
+            //Define velocidade-alvo para suavização de movimento
+            targetSpeed = direction * linearSpeed;
+            hasMoveCommand = true;
         } 
     }
+
+    if (!hasMoveCommand) {
+        targetSpeed = Vec2(0, 0);
+    }
+
+    auto approach = [](float current, float target, float maxDelta) {
+        float delta = target - current;
+        if (std::fabs(delta) <= maxDelta) {
+            return target;
+        }
+        return current + ((delta > 0.0f) ? maxDelta : -maxDelta);
+    };
+
+    float changeRate = hasMoveCommand ? acceleration : deceleration;
+    float maxDelta = changeRate * dt;
+    speed.x = approach(speed.x, targetSpeed.x, maxDelta);
+    speed.y = approach(speed.y, targetSpeed.y, maxDelta);
 
     //Atualiza a posição do GameObject com base na velocidade e dt
     associated.box.x += speed.x * dt;
@@ -96,7 +119,7 @@ void Character::Update(float dt) {
 
     //Atualiza a animação com base no movimento
     if (animator) {
-        if (speed.Magnitude() > 0.01f) {                                    // Se estiver se movendo
+        if (speed.Magnitude() > 5.0f) {                                     // Se estiver se movendo
 
             // Atualiza a animação APENAS se houver movimento horizontal
             if (speed.x < 0) {                                              // Se a velocidade X é negativa (indo para esquerda)
@@ -123,8 +146,6 @@ void Character::Update(float dt) {
         }
     }
 
-    speed = Vec2(0,0);                                      // Reseta a velocidade se não houver o comando MOVE (para parar)
-    
 }
 
 
