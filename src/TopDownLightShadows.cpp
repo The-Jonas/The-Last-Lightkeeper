@@ -80,7 +80,7 @@ void AppendCircleShadowEdges(const Vec2& centerWorld, float radiusWorld, int seg
     if (radiusWorld < 0.5f) {
         return;
     }
-    segments = std::max(6, std::min(32, segments));
+    segments = std::max(8, std::min(64, segments));
     const float twoPi = 6.28318530718f;
     const float dth = twoPi / static_cast<float>(segments);
     for (int i = 0; i < segments; i++) {
@@ -95,7 +95,7 @@ void AppendCircleShadowEdges(const Vec2& centerWorld, float radiusWorld, int seg
 void RenderShadowVolumes(SDL_Renderer* renderer, float lightScreenX, float lightScreenY, int windowW, int windowH,
                          const std::vector<TopDownShadowEdge>& staticEdgesWorld,
                          const std::vector<TopDownShadowEdge>& dynamicEdgesWorld, Uint8 shadowAlpha,
-                         float shadowLengthPx, int softnessLayers) {
+                         float shadowLengthPx, int softnessLayers, float softness) {
     if (!renderer || windowW < 1 || windowH < 1) {
         return;
     }
@@ -103,6 +103,7 @@ void RenderShadowVolumes(SDL_Renderer* renderer, float lightScreenX, float light
     const Vec2 L(lightScreenX, lightScreenY);
     const float extend = std::max(8.0f, std::min(420.0f, shadowLengthPx));
     const int layers = std::max(1, std::min(4, softnessLayers));
+    const float softness01 = std::max(0.0f, std::min(1.0f, softness));
 
     static thread_local std::vector<SDL_Vertex> verts;
     static thread_local std::vector<int> ind;
@@ -139,16 +140,16 @@ void RenderShadowVolumes(SDL_Renderer* renderer, float lightScreenX, float light
     for (const TopDownShadowEdge& e : staticEdgesWorld) {
         for (int i = 0; i < layers; i++) {
             const float t = static_cast<float>(i) / static_cast<float>(layers);
-            const float spread = t * (extend * 0.28f);
-            const Uint8 layerAlpha = static_cast<Uint8>(std::max(1.0f, shadowAlpha * (1.0f - 0.65f * t)));
+            const float spread = t * (extend * (0.12f + 0.40f * softness01));
+            const Uint8 layerAlpha = static_cast<Uint8>(std::max(1.0f, shadowAlpha * (1.0f - (0.45f + 0.40f * softness01) * t)));
             pushQuad(e.a, e.b, spread, layerAlpha);
         }
     }
     for (const TopDownShadowEdge& e : dynamicEdgesWorld) {
         for (int i = 0; i < layers; i++) {
             const float t = static_cast<float>(i) / static_cast<float>(layers);
-            const float spread = t * (extend * 0.28f);
-            const Uint8 layerAlpha = static_cast<Uint8>(std::max(1.0f, shadowAlpha * (1.0f - 0.65f * t)));
+            const float spread = t * (extend * (0.12f + 0.40f * softness01));
+            const Uint8 layerAlpha = static_cast<Uint8>(std::max(1.0f, shadowAlpha * (1.0f - (0.45f + 0.40f * softness01) * t)));
             pushQuad(e.a, e.b, spread, layerAlpha);
         }
     }

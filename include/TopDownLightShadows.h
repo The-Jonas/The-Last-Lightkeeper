@@ -27,7 +27,7 @@ void AppendCircleShadowEdges(const Vec2& centerWorld, float radiusWorld, int seg
 void RenderShadowVolumes(SDL_Renderer* renderer, float lightScreenX, float lightScreenY, int windowW, int windowH,
                          const std::vector<TopDownShadowEdge>& staticEdgesWorld,
                          const std::vector<TopDownShadowEdge>& dynamicEdgesWorld, Uint8 shadowAlpha = 80,
-                         float shadowLengthPx = 160.0f, int softnessLayers = 1);
+                         float shadowLengthPx = 160.0f, int softnessLayers = 1, float softness = 0.5f);
 
 } // namespace TopDownLightShadows
 

@@ -14,6 +14,7 @@ public:
         float y;
         LightMaskShape shape;
         LightMaskParams params;
+        float animationSeed = 0.0f;
     };
 
     RadialLightOverlay() = default;
@@ -31,7 +32,7 @@ public:
 private:
     static float FalloffShape(float t01, const LightMaskParams& params);
     static float AlphaAt(float dx, float dy, LightMaskShape shape, const LightMaskParams& params, float dMax,
-                         float innerLift, float rFalloff, float axisRad, int mouseX, int mouseY);
+                         float innerLift, float rFalloff, float axisRad, float timeSec, float seed);
 };
 
 #endif

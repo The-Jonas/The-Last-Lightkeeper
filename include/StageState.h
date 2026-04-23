@@ -10,13 +10,16 @@
 #include "LightMaskTypes.h"
 #include "RadialLightOverlay.h"
 #include "LightTweakPanel.h"
+#include "TopDownLightShadows.h"
 #include "Vec2.h"
 
 #include <memory>
+#include <unordered_set>
 #include <vector>
 
 class Character;
 class GameObject;
+class TileMap;
 
 class StageState : public State {
 public:
@@ -37,6 +40,7 @@ private:
         LightMaskShape shape = LightMaskShape::Circle;
         LightMaskParams params;
         bool enabled = true;
+        float animationSeed = 0.0f;
     };
 
     enum class PartyMode {
@@ -60,6 +64,7 @@ private:
 
     Music music;                                                        // Música de Fundo
     TileSet* tileSet;                                                   // Caso precise guardar ponteiro
+    Vec2 mapOrigin{0.0f, 0.0f};
     GameObject* bigCharacterObject;                                      // GameObject do personagem grande (IRMÃOZÃO)
     GameObject* smallCharacterObject;                                    // GameObject do personagem pequeno (IRMÃOZINHO)
     Character* bigCharacter;                                             // Componente Character do grande (IRMÃOZÃO)
@@ -77,9 +82,16 @@ private:
     LightMaskShape lightMaskShape;
     std::unique_ptr<LightTweakPanel> lightTweakPanel;
     std::vector<LightInstance> lights;
+    TileMap* tileMapComp = nullptr;
+    std::vector<TopDownShadowEdge> staticShadowEdges;
+    bool staticShadowEdgesBuilt = false;
+    bool renderStaticTileShadows = false;
+    Vec2 smoothedDynamicLightScreenPos{0.0f, 0.0f};
+    bool hasSmoothedDynamicLight = false;
     int maxActiveLights = 24;
     bool lightsEnabled = true;
     bool shadowsEnabled = true;
+    bool musicMuted = true;
 };
 
 #endif

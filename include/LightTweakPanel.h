@@ -24,7 +24,7 @@ public:
 
     bool visible = true;
 
-    static constexpr int kLogicalRows = 17;
+    static constexpr int kLogicalRows = 29;
 
 private:
     static constexpr int kPanelWMax = 248;

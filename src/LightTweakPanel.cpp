@@ -29,6 +29,18 @@ const char* kRowLabels[LightTweakPanel::kLogicalRows] = {
     "Rect: meia-altura",
     "Rect: banda suave",
     "Sombra: limiar dist",
+    "Sombra: comprimento max",
+    "Sombra: escala por luz",
+    "Sombra: suavidade",
+    "Sombra: camadas soft",
+    "Luz: suavizacao temporal",
+    "Luz: grid passo px",
+    "Tocha: velocidade anim",
+    "Tocha: alcance movimento",
+    "Tocha: distorcao borda",
+    "Tocha: forca pulso",
+    "Tocha: calor da cor",
+    "Tocha: intensidade cor",
     "Criar luz em C / clique",
 };
 
@@ -43,16 +55,19 @@ void appendRowsForShape(LightMaskShape s, std::vector<int>& out) {
     out.clear();
     switch (s) {
     case LightMaskShape::Circle:
-        out = {0, 1, 2, 3, 4, 5, 6, 15, 16};
+        out = {0, 1, 2, 3, 4, 5, 6, 15, 16, 17, 18, 19, 20, 21, 28};
         break;
     case LightMaskShape::Ellipse:
-        out = {0, 1, 2, 3, 4, 5, 6, 7, 15};
+        out = {0, 1, 2, 3, 4, 5, 6, 7, 15, 16, 17, 18, 19, 20, 21, 28};
         break;
     case LightMaskShape::Cone:
-        out = {0, 2, 3, 4, 5, 6, 8, 9, 10, 11, 15};
+        out = {0, 2, 3, 4, 5, 6, 8, 9, 10, 11, 15, 16, 17, 18, 19, 20, 21, 28};
         break;
     case LightMaskShape::SoftRect:
-        out = {0, 2, 3, 4, 5, 6, 12, 13, 14, 15};
+        out = {0, 2, 3, 4, 5, 6, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 28};
+        break;
+    case LightMaskShape::Torch:
+        out = {0, 1, 2, 3, 4, 5, 6, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28};
         break;
     default:
         out = {0, 1, 2, 3, 4, 5, 6};
@@ -106,13 +121,15 @@ const char* LightTweakPanel::shapeName() const {
         return "Cone";
     case LightMaskShape::SoftRect:
         return "Rect suave";
+    case LightMaskShape::Torch:
+        return "Tocha";
     default:
         return "?";
     }
 }
 
 void LightTweakPanel::cycleShape() {
-    const int v = (static_cast<int>(shape) + 1) % 4;
+    const int v = (static_cast<int>(shape) + 1) % 5;
     shape = static_cast<LightMaskShape>(v);
 }
 
@@ -151,6 +168,30 @@ float LightTweakPanel::getRowNormalized(int logicalRow) const {
     case 15:
         return (params.shadowCastDistanceMul - 0.5f) / (2.2f - 0.5f);
     case 16:
+        return (params.shadowMaxLengthPx - 40.0f) / (800.0f - 40.0f);
+    case 17:
+        return (params.shadowLengthByLightMul - 0.35f) / (2.60f - 0.35f);
+    case 18:
+        return params.shadowSoftness;
+    case 19:
+        return static_cast<float>(params.shadowSoftLayers - 1) / 3.0f;
+    case 20:
+        return (params.lightTemporalSmoothing - 0.01f) / (0.95f - 0.01f);
+    case 21:
+        return (params.lightGridStepPx - 12.0f) / (64.0f - 12.0f);
+    case 22:
+        return (params.torchAnimSpeed - 0.15f) / (4.0f - 0.15f);
+    case 23:
+        return (params.torchMotionRangePx - 0.0f) / (30.0f - 0.0f);
+    case 24:
+        return params.torchWarpStrength;
+    case 25:
+        return params.torchPulseStrength;
+    case 26:
+        return params.torchColorWarmth / 2.0f;
+    case 27:
+        return params.torchColorStrength;
+    case 28:
         return 0.0f;
     default:
         return 0.0f;
@@ -209,6 +250,42 @@ void LightTweakPanel::setRowFromNormalized(int logicalRow, float n01) {
         params.shadowCastDistanceMul = 0.5f + u * (2.2f - 0.5f);
         break;
     case 16:
+        params.shadowMaxLengthPx = 40.0f + u * (800.0f - 40.0f);
+        break;
+    case 17:
+        params.shadowLengthByLightMul = 0.35f + u * (2.60f - 0.35f);
+        break;
+    case 18:
+        params.shadowSoftness = u;
+        break;
+    case 19:
+        params.shadowSoftLayers = 1 + static_cast<int>(u * 3.0f + 0.5f);
+        break;
+    case 20:
+        params.lightTemporalSmoothing = 0.01f + u * (0.95f - 0.01f);
+        break;
+    case 21:
+        params.lightGridStepPx = 12.0f + u * (64.0f - 12.0f);
+        break;
+    case 22:
+        params.torchAnimSpeed = 0.15f + u * (4.0f - 0.15f);
+        break;
+    case 23:
+        params.torchMotionRangePx = u * 30.0f;
+        break;
+    case 24:
+        params.torchWarpStrength = u;
+        break;
+    case 25:
+        params.torchPulseStrength = u;
+        break;
+    case 26:
+        params.torchColorWarmth = u * 2.0f;
+        break;
+    case 27:
+        params.torchColorStrength = u;
+        break;
+    case 28:
         break;
     default:
         break;
@@ -220,7 +297,7 @@ bool LightTweakPanel::barHit(int mx, int my, int /*winW*/, int panelLeft, int pa
         return false;
     }
     const int y = kFirstRowY + slotIndex * kRowH;
-    if (logicalRowAtSlot(slotIndex) == 16) {
+    if (logicalRowAtSlot(slotIndex) == 28) {
         return false;
     }
     const int by = y + kBarOffsetY;
@@ -239,7 +316,7 @@ bool LightTweakPanel::rowButtonHit(int mx, int my, int panelLeft, int panelW, in
     if (slotIndex < 0 || slotIndex >= slotCount()) {
         return false;
     }
-    if (logicalRowAtSlot(slotIndex) != 16) {
+    if (logicalRowAtSlot(slotIndex) != 28) {
         return false;
     }
     const int y = kFirstRowY + slotIndex * kRowH;
@@ -306,6 +383,42 @@ void LightTweakPanel::rebuildRowLabel(SDL_Renderer* renderer, int logicalRow) {
         std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], params.shadowCastDistanceMul);
         break;
     case 16:
+        std::snprintf(buf, sizeof(buf), "%s: %.0f", kRowLabels[logicalRow], params.shadowMaxLengthPx);
+        break;
+    case 17:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], params.shadowLengthByLightMul);
+        break;
+    case 18:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], params.shadowSoftness);
+        break;
+    case 19:
+        std::snprintf(buf, sizeof(buf), "%s: %d", kRowLabels[logicalRow], params.shadowSoftLayers);
+        break;
+    case 20:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], params.lightTemporalSmoothing);
+        break;
+    case 21:
+        std::snprintf(buf, sizeof(buf), "%s: %.0f", kRowLabels[logicalRow], params.lightGridStepPx);
+        break;
+    case 22:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], params.torchAnimSpeed);
+        break;
+    case 23:
+        std::snprintf(buf, sizeof(buf), "%s: %.1f", kRowLabels[logicalRow], params.torchMotionRangePx);
+        break;
+    case 24:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], params.torchWarpStrength);
+        break;
+    case 25:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], params.torchPulseStrength);
+        break;
+    case 26:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], params.torchColorWarmth);
+        break;
+    case 27:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], params.torchColorStrength);
+        break;
+    case 28:
         std::snprintf(buf, sizeof(buf), "%s", kRowLabels[logicalRow]);
         break;
     default:
@@ -355,7 +468,7 @@ void LightTweakPanel::Update(InputManager& input, float /*dt*/, int windowW, int
         refreshActiveRows();
     }
 
-    if (shape == LightMaskShape::Circle && input.KeyPress(CREATE_LIGHT_KEY)) {
+    if ((shape == LightMaskShape::Circle || shape == LightMaskShape::Torch) && input.KeyPress(CREATE_LIGHT_KEY)) {
         createLightRequested = true;
     }
 
@@ -375,15 +488,49 @@ void LightTweakPanel::Update(InputManager& input, float /*dt*/, int windowW, int
     int panelW = 0;
     layoutPanel(windowW, panelLeft, panelW);
 
+    auto nudgeRowKeyboard = [&](int lr, int dir) {
+        if (dir == 0) {
+            return;
+        }
+        switch (lr) {
+        case 3:
+            params.falloffCurve = (params.falloffCurve == LightFalloffCurve::Power) ? LightFalloffCurve::Smoothstep
+                                                                                      : LightFalloffCurve::Power;
+            return;
+        case 11:
+            params.coneFollowMouse = !params.coneFollowMouse;
+            return;
+        case 19:
+            params.shadowSoftLayers = std::max(1, std::min(4, params.shadowSoftLayers + dir));
+            return;
+        default:
+            break;
+        }
+
+        float step = 0.03f;
+        if (lr == 5 || lr == 6) {
+            step = 0.08f;
+        } else if (lr == 10) {
+            step = 5.0f / 360.0f;
+        } else if (lr == 2 || lr == 4 || lr == 15 || lr == 17 || lr == 18 || lr == 20 || lr == 22 || lr == 24 ||
+                   lr == 25 || lr == 26 || lr == 27) {
+            step = 0.02f;
+        } else if (lr == 23) {
+            step = 0.03f;
+        } else if (lr == 28) {
+            step = 0.0f;
+        }
+        if (step > 0.0f) {
+            const float v = getRowNormalized(lr);
+            setRowFromNormalized(lr, v + static_cast<float>(dir) * step);
+        }
+    };
+
     if (input.KeyPress(SDLK_EQUALS) || input.KeyPress(SDLK_PLUS) || input.KeyPress(SDLK_KP_PLUS)) {
-        const int lr = logicalRowAtSlot(focusedSlot);
-        const float v = getRowNormalized(lr);
-        setRowFromNormalized(lr, v + 0.03f);
+        nudgeRowKeyboard(logicalRowAtSlot(focusedSlot), +1);
     }
     if (input.KeyPress(SDLK_MINUS) || input.KeyPress(SDLK_KP_MINUS)) {
-        const int lr = logicalRowAtSlot(focusedSlot);
-        const float v = getRowNormalized(lr);
-        setRowFromNormalized(lr, v - 0.03f);
+        nudgeRowKeyboard(logicalRowAtSlot(focusedSlot), -1);
     }
 
     const int mx = input.GetMouseX();
@@ -503,14 +650,14 @@ void LightTweakPanel::Render(SDL_Renderer* renderer, int windowW, int /*windowH*
             SDL_RenderCopy(renderer, rowLabelTex[lr], nullptr, &tdst);
         }
 
-        if (lr == 16) {
+        if (lr == 28) {
             SDL_SetRenderDrawColor(renderer, 48, 82, 58, 255);
             SDL_FRect button{(float)bx, (float)(y + 16), (float)bw, (float)std::max(16, kRowH - 20)};
             SDL_RenderFillRectF(renderer, &button);
             SDL_SetRenderDrawColor(renderer, 100, 170, 120, 255);
             SDL_RenderDrawRectF(renderer, &button);
         } else {
-            const float n = getRowNormalized(lr);
+            const float n = std::max(0.0f, std::min(1.0f, getRowNormalized(lr)));
             SDL_SetRenderDrawColor(renderer, 40, 40, 52, 255);
             SDL_FRect track{(float)bx, (float)by, (float)bw, (float)kBarH};
             SDL_RenderFillRectF(renderer, &track);
