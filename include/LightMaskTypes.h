@@ -34,6 +34,8 @@ struct LightMaskParams {
     float shadowCastDistanceMul = 1.62f;
     float shadowMaxLengthPx = 600.0f;
     float shadowLengthByLightMul = 1.40f;
+    float spriteShadowMinScale = 1.00f;
+    float spriteShadowMaxScale = 2.40f;
     float shadowSoftness = 0.0f;
     int shadowSoftLayers = 1;
     float lightTemporalSmoothing = 0.20f;

@@ -102,15 +102,18 @@ void RenderShadowVolumes(SDL_Renderer* renderer, float lightScreenX, float light
 
     const Vec2 L(lightScreenX, lightScreenY);
     const float extend = std::max(8.0f, std::min(420.0f, shadowLengthPx));
-    const int layers = std::max(1, std::min(4, softnessLayers));
+    const int baseLayers = std::max(1, std::min(6, softnessLayers));
     const float softness01 = std::max(0.0f, std::min(1.0f, softness));
+    // Add automatic feather layers so shadows look less hard-edged even with low settings.
+    const int extraFeatherLayers = 1 + static_cast<int>(std::round(softness01 * 3.0f));
+    const int layers = std::max(1, std::min(9, baseLayers + extraFeatherLayers));
 
     static thread_local std::vector<SDL_Vertex> verts;
     static thread_local std::vector<int> ind;
     verts.clear();
     ind.clear();
-    verts.reserve((staticEdgesWorld.size() + dynamicEdgesWorld.size()) * 4u);
-    ind.reserve((staticEdgesWorld.size() + dynamicEdgesWorld.size()) * 6u);
+    verts.reserve((staticEdgesWorld.size() + dynamicEdgesWorld.size()) * 4u * static_cast<size_t>(layers));
+    ind.reserve((staticEdgesWorld.size() + dynamicEdgesWorld.size()) * 6u * static_cast<size_t>(layers));
 
     auto pushQuad = [&](const Vec2& Aw, const Vec2& Bw, float layerSpread, Uint8 layerAlpha) {
         const Vec2 As = WorldToScreen(Aw);
@@ -137,22 +140,23 @@ void RenderShadowVolumes(SDL_Renderer* renderer, float lightScreenX, float light
         ind.push_back(base + 3);
     };
 
-    for (const TopDownShadowEdge& e : staticEdgesWorld) {
-        for (int i = 0; i < layers; i++) {
-            const float t = static_cast<float>(i) / static_cast<float>(layers);
-            const float spread = t * (extend * (0.12f + 0.40f * softness01));
-            const Uint8 layerAlpha = static_cast<Uint8>(std::max(1.0f, shadowAlpha * (1.0f - (0.45f + 0.40f * softness01) * t)));
-            pushQuad(e.a, e.b, spread, layerAlpha);
+    auto drawEdgeSet = [&](const std::vector<TopDownShadowEdge>& edges) {
+        for (const TopDownShadowEdge& e : edges) {
+            for (int i = 0; i < layers; i++) {
+                const float t = static_cast<float>(i) / static_cast<float>(std::max(1, layers - 1));
+                // Non-linear ramp keeps the contact area dark while softening far edge.
+                const float softnessRamp = t * t;
+                const float spread = softnessRamp * (extend * (0.18f + 0.72f * softness01));
+                const float alphaRamp = std::pow(1.0f - t, 1.35f + 1.25f * softness01);
+                const float alphaFloor = 0.02f + 0.04f * (1.0f - softness01);
+                const Uint8 layerAlpha = static_cast<Uint8>(
+                    std::max(1.0f, shadowAlpha * std::max(alphaFloor, alphaRamp)));
+                pushQuad(e.a, e.b, spread, layerAlpha);
+            }
         }
-    }
-    for (const TopDownShadowEdge& e : dynamicEdgesWorld) {
-        for (int i = 0; i < layers; i++) {
-            const float t = static_cast<float>(i) / static_cast<float>(layers);
-            const float spread = t * (extend * (0.12f + 0.40f * softness01));
-            const Uint8 layerAlpha = static_cast<Uint8>(std::max(1.0f, shadowAlpha * (1.0f - (0.45f + 0.40f * softness01) * t)));
-            pushQuad(e.a, e.b, spread, layerAlpha);
-        }
-    }
+    };
+    drawEdgeSet(staticEdgesWorld);
+    drawEdgeSet(dynamicEdgesWorld);
 
     if (verts.empty() || ind.empty()) {
         return;

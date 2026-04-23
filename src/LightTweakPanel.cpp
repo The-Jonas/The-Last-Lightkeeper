@@ -41,6 +41,8 @@ const char* kRowLabels[LightTweakPanel::kLogicalRows] = {
     "Tocha: forca pulso",
     "Tocha: calor da cor",
     "Tocha: intensidade cor",
+    "Sombra sprite: escala min",
+    "Sombra sprite: escala max",
     "Criar luz em C / clique",
 };
 
@@ -55,19 +57,19 @@ void appendRowsForShape(LightMaskShape s, std::vector<int>& out) {
     out.clear();
     switch (s) {
     case LightMaskShape::Circle:
-        out = {0, 1, 2, 3, 4, 5, 6, 15, 16, 17, 18, 19, 20, 21, 28};
+        out = {0, 1, 2, 3, 4, 5, 6, 15, 16, 17, 28, 29, 18, 19, 20, 21, 30};
         break;
     case LightMaskShape::Ellipse:
-        out = {0, 1, 2, 3, 4, 5, 6, 7, 15, 16, 17, 18, 19, 20, 21, 28};
+        out = {0, 1, 2, 3, 4, 5, 6, 7, 15, 16, 17, 28, 29, 18, 19, 20, 21, 30};
         break;
     case LightMaskShape::Cone:
-        out = {0, 2, 3, 4, 5, 6, 8, 9, 10, 11, 15, 16, 17, 18, 19, 20, 21, 28};
+        out = {0, 2, 3, 4, 5, 6, 8, 9, 10, 11, 15, 16, 17, 28, 29, 18, 19, 20, 21, 30};
         break;
     case LightMaskShape::SoftRect:
-        out = {0, 2, 3, 4, 5, 6, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 28};
+        out = {0, 2, 3, 4, 5, 6, 12, 13, 14, 15, 16, 17, 28, 29, 18, 19, 20, 21, 30};
         break;
     case LightMaskShape::Torch:
-        out = {0, 1, 2, 3, 4, 5, 6, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28};
+        out = {0, 1, 2, 3, 4, 5, 6, 15, 16, 17, 28, 29, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 30};
         break;
     default:
         out = {0, 1, 2, 3, 4, 5, 6};
@@ -192,6 +194,10 @@ float LightTweakPanel::getRowNormalized(int logicalRow) const {
     case 27:
         return params.torchColorStrength;
     case 28:
+        return (params.spriteShadowMinScale - 0.60f) / (2.20f - 0.60f);
+    case 29:
+        return (params.spriteShadowMaxScale - 1.00f) / (4.20f - 1.00f);
+    case 30:
         return 0.0f;
     default:
         return 0.0f;
@@ -286,6 +292,18 @@ void LightTweakPanel::setRowFromNormalized(int logicalRow, float n01) {
         params.torchColorStrength = u;
         break;
     case 28:
+        params.spriteShadowMinScale = 0.60f + u * (2.20f - 0.60f);
+        if (params.spriteShadowMaxScale < params.spriteShadowMinScale + 0.05f) {
+            params.spriteShadowMaxScale = params.spriteShadowMinScale + 0.05f;
+        }
+        break;
+    case 29:
+        params.spriteShadowMaxScale = 1.00f + u * (4.20f - 1.00f);
+        if (params.spriteShadowMaxScale < params.spriteShadowMinScale + 0.05f) {
+            params.spriteShadowMinScale = params.spriteShadowMaxScale - 0.05f;
+        }
+        break;
+    case 30:
         break;
     default:
         break;
@@ -297,7 +315,7 @@ bool LightTweakPanel::barHit(int mx, int my, int /*winW*/, int panelLeft, int pa
         return false;
     }
     const int y = kFirstRowY + slotIndex * kRowH;
-    if (logicalRowAtSlot(slotIndex) == 28) {
+    if (logicalRowAtSlot(slotIndex) == 30) {
         return false;
     }
     const int by = y + kBarOffsetY;
@@ -316,7 +334,7 @@ bool LightTweakPanel::rowButtonHit(int mx, int my, int panelLeft, int panelW, in
     if (slotIndex < 0 || slotIndex >= slotCount()) {
         return false;
     }
-    if (logicalRowAtSlot(slotIndex) != 28) {
+    if (logicalRowAtSlot(slotIndex) != 30) {
         return false;
     }
     const int y = kFirstRowY + slotIndex * kRowH;
@@ -419,6 +437,12 @@ void LightTweakPanel::rebuildRowLabel(SDL_Renderer* renderer, int logicalRow) {
         std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], params.torchColorStrength);
         break;
     case 28:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], params.spriteShadowMinScale);
+        break;
+    case 29:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], params.spriteShadowMaxScale);
+        break;
+    case 30:
         std::snprintf(buf, sizeof(buf), "%s", kRowLabels[logicalRow]);
         break;
     default:
@@ -513,11 +537,11 @@ void LightTweakPanel::Update(InputManager& input, float /*dt*/, int windowW, int
         } else if (lr == 10) {
             step = 5.0f / 360.0f;
         } else if (lr == 2 || lr == 4 || lr == 15 || lr == 17 || lr == 18 || lr == 20 || lr == 22 || lr == 24 ||
-                   lr == 25 || lr == 26 || lr == 27) {
+                   lr == 25 || lr == 26 || lr == 27 || lr == 28 || lr == 29) {
             step = 0.02f;
         } else if (lr == 23) {
             step = 0.03f;
-        } else if (lr == 28) {
+        } else if (lr == 30) {
             step = 0.0f;
         }
         if (step > 0.0f) {
@@ -650,7 +674,7 @@ void LightTweakPanel::Render(SDL_Renderer* renderer, int windowW, int /*windowH*
             SDL_RenderCopy(renderer, rowLabelTex[lr], nullptr, &tdst);
         }
 
-        if (lr == 28) {
+        if (lr == 30) {
             SDL_SetRenderDrawColor(renderer, 48, 82, 58, 255);
             SDL_FRect button{(float)bx, (float)(y + 16), (float)bw, (float)std::max(16, kRowH - 20)};
             SDL_RenderFillRectF(renderer, &button);

@@ -204,6 +204,65 @@ void AppendFootCircleShadows(GameObject* go, const Vec2& lightScreenPos, const L
     const int segments = 14 + static_cast<int>(touch * 18.0f);
     AppendBackHemisphereShadowEdges(foot, r, lightWorld, segments, outEdges);
 }
+
+void RenderProjectedSpriteShadow(GameObject* go, const Vec2& lightScreenPos, float lightTouch, float shadowLengthPx, Uint8 shadowAlpha,
+                                 const LightMaskParams& params) {
+    if (!go || lightTouch <= 0.01f || shadowLengthPx <= 1.0f) {
+        return;
+    }
+    SpriteRenderer* sprite = go->GetComponent<SpriteRenderer>();
+    if (!sprite) {
+        return;
+    }
+
+    const Rect originalBox = go->box;
+    const double originalAngle = go->angleDeg;
+
+    const Vec2 foot(go->box.x + 0.5f * go->box.w, go->box.y + go->box.h);
+    const Vec2 lightWorld(lightScreenPos.x / Camera::GetZoom() + Camera::pos.x, lightScreenPos.y / Camera::GetZoom() + Camera::pos.y);
+    Vec2 dir = foot - lightWorld;
+    if (dir.Magnitude() < 1e-3f) {
+        return;
+    }
+    dir = dir.Normalized();
+
+    const float h = std::max(8.0f, originalBox.h);
+    const float distance01 = std::max(0.0f, std::min(1.0f, 1.0f - lightTouch));
+    const float growthMetric = std::max(0.0f, params.shadowLengthByLightMul);
+    // Stronger distance-to-scale response: far lights push shadow size much more.
+    const float amplifiedDist = std::max(0.0f, std::min(1.0f, std::pow(distance01, 0.72f)));
+    const float growthGain = std::max(0.35f, std::min(2.4f, growthMetric * 1.35f));
+    const float growth01 = std::max(0.0f, std::min(1.0f, amplifiedDist * growthGain));
+    const float minScale = std::max(0.40f, params.spriteShadowMinScale);
+    const float maxScale = std::max(minScale + 0.05f, params.spriteShadowMaxScale);
+    const float lengthHint01 = std::max(0.0f, std::min(1.0f, shadowLengthPx / std::max(12.0f, h * 2.4f)));
+    const float final01 = std::max(growth01, lengthHint01 * 0.85f);
+    const float stretch = minScale + (maxScale - minScale) * final01;
+    const float widen = 1.02f + 0.18f * final01;
+
+    Rect shadowBox = originalBox;
+    shadowBox.w = std::max(2.0f, originalBox.w * widen);
+    shadowBox.h = std::max(2.0f, originalBox.h * stretch);
+    const double angDeg = std::atan2(dir.y, dir.x) * (180.0 / M_PI) + 90.0;
+    const double angRad = angDeg * (M_PI / 180.0);
+    // Lock shadow "feet" to character feet: rotate/stretch around anchored foot.
+    const Vec2 footAnchor(originalBox.x + 0.5f * originalBox.w, originalBox.y + originalBox.h);
+    const Vec2 localFootToCenter(0.0f, -shadowBox.h * 0.5f);
+    const Vec2 rotatedFootToCenter(localFootToCenter.x * std::cos(angRad) - localFootToCenter.y * std::sin(angRad),
+                                   localFootToCenter.x * std::sin(angRad) + localFootToCenter.y * std::cos(angRad));
+    const Vec2 center = footAnchor + rotatedFootToCenter;
+    shadowBox.x = center.x - shadowBox.w * 0.5f;
+    shadowBox.y = center.y - shadowBox.h * 0.5f;
+
+    go->box = shadowBox;
+    go->angleDeg = angDeg;
+    const Uint8 spriteShadowAlpha = static_cast<Uint8>(std::max(18, std::min(205, static_cast<int>(shadowAlpha))));
+    sprite->SetTint(0, 0, 0, spriteShadowAlpha);
+    go->Render();
+
+    go->box = originalBox;
+    go->angleDeg = originalAngle;
+}
 }
 
 StageState::StageState() {
@@ -516,30 +575,33 @@ void StageState::Render(){
     Game& g = Game::GetInstance();
     const bool showDebugTools = (lightTweakPanel && lightTweakPanel->visible);
     if (lightsEnabled && shadowsEnabled) {
-        static thread_local std::vector<TopDownShadowEdge> playerEdges;
+        struct SpriteShadowCast {
+            Vec2 lightScreen;
+            float touch = 0.0f;
+            float lengthPx = 0.0f;
+            Uint8 alpha = 0;
+        };
+        std::vector<SpriteShadowCast> bigShadowCasts;
+        std::vector<SpriteShadowCast> smallShadowCasts;
+        bigShadowCasts.reserve(6);
+        smallShadowCasts.reserve(6);
 
         auto renderShadowsForLight = [&](const Vec2& lightScreen, const LightMaskParams& params) {
-            playerEdges.clear();
-            float lightTouch = 0.0f;
-            AppendFootCircleShadows(bigCharacterObject, lightScreen, params, playerEdges, &lightTouch);
-            AppendFootCircleShadows(smallCharacterObject, lightScreen, params, playerEdges, &lightTouch);
-            if (playerEdges.empty()) {
-                return;
-            }
-            // Distance-sensitive response:
-            // closer (high touch) => longer + darker
-            // farther (low touch) => shorter + brighter
+            float touchBig = 0.0f;
+            float touchSmall = 0.0f;
+            IsFootLit(bigCharacterObject, lightScreen, params, &touchBig);
+            IsFootLit(smallCharacterObject, lightScreen, params, &touchSmall);
+            const float touchMax = std::max(touchBig, touchSmall);
             const float shadowLengthPx =
-                std::max(params.falloffRadiusPx * params.shadowLengthByLightMul, 8.0f + params.shadowMaxLengthPx * lightTouch);
-            // Clamp so shadow stacking never dominates the base dark overlay.
+                std::max(params.falloffRadiusPx * params.shadowLengthByLightMul, 8.0f + params.shadowMaxLengthPx * touchMax);
             const float alphaCap = static_cast<float>(params.darknessMax) * 0.40f;
-            const Uint8 shadowAlpha = static_cast<Uint8>(std::max(8.0f, std::min(alphaCap, 110.0f * lightTouch)));
-            const int softLayers = std::max(1, std::min(4, params.shadowSoftLayers));
-            static const std::vector<TopDownShadowEdge> kNoStaticEdges;
-            const std::vector<TopDownShadowEdge>& staticEdges = renderStaticTileShadows ? staticShadowEdges : kNoStaticEdges;
-            TopDownLightShadows::RenderShadowVolumes(g.GetRenderer(), lightScreen.x, lightScreen.y, g.GetWindowsWidth(),
-                                                     g.GetWindowsHeight(), staticEdges, playerEdges, shadowAlpha,
-                                                     shadowLengthPx, softLayers, params.shadowSoftness);
+            const Uint8 shadowAlpha = static_cast<Uint8>(std::max(8.0f, std::min(alphaCap, 110.0f * touchMax)));
+            if (touchBig > 0.10f) {
+                bigShadowCasts.push_back({lightScreen, touchBig, shadowLengthPx, shadowAlpha});
+            }
+            if (touchSmall > 0.10f) {
+                smallShadowCasts.push_back({lightScreen, touchSmall, shadowLengthPx, shadowAlpha});
+            }
         };
 
         // Preview light also casts shadows for immediate feedback.
@@ -578,6 +640,26 @@ void StageState::Render(){
             }
             renderedLights++;
         }
+
+        // Sprite-projected player shadows: each relevant nearby light casts its own shadow.
+        constexpr size_t kMaxSpriteShadowsPerPlayer = 4;
+        std::sort(bigShadowCasts.begin(), bigShadowCasts.end(),
+                  [](const SpriteShadowCast& a, const SpriteShadowCast& b) { return a.touch > b.touch; });
+        std::sort(smallShadowCasts.begin(), smallShadowCasts.end(),
+                  [](const SpriteShadowCast& a, const SpriteShadowCast& b) { return a.touch > b.touch; });
+        if (bigShadowCasts.size() > kMaxSpriteShadowsPerPlayer) {
+            bigShadowCasts.resize(kMaxSpriteShadowsPerPlayer);
+        }
+        if (smallShadowCasts.size() > kMaxSpriteShadowsPerPlayer) {
+            smallShadowCasts.resize(kMaxSpriteShadowsPerPlayer);
+        }
+        for (const SpriteShadowCast& c : bigShadowCasts) {
+            RenderProjectedSpriteShadow(bigCharacterObject, c.lightScreen, c.touch, c.lengthPx, c.alpha, lightMaskParams);
+        }
+        for (const SpriteShadowCast& c : smallShadowCasts) {
+            RenderProjectedSpriteShadow(smallCharacterObject, c.lightScreen, c.touch, c.lengthPx, c.alpha, lightMaskParams);
+        }
+        UpdateControlledCharacterVisuals(); // restore player tint after black sprite-shadow rendering
 
         if (showDebugTools) {
             // Visualize the player collision box and foot point used by shadow-touch checks.
