@@ -7,6 +7,13 @@
 #include "State.h"
 #include "Music.h"
 #include "TileSet.h"
+#include "LightMaskTypes.h"
+#include "RadialLightOverlay.h"
+#include "LightTweakPanel.h"
+#include "Vec2.h"
+
+#include <memory>
+#include <vector>
 
 class Character;
 class GameObject;
@@ -25,6 +32,13 @@ public:
     void Resume() override;
 
 private:
+    struct LightInstance {
+        Vec2 worldPos;
+        LightMaskShape shape = LightMaskShape::Circle;
+        LightMaskParams params;
+        bool enabled = true;
+    };
+
     enum class PartyMode {
         TOGETHER,      // Personagens andam juntos (seguidor ativo)
         INDEPENDENT    // Só o controlado anda; parceiro fica parado
@@ -39,6 +53,9 @@ private:
     void RefreshCameraTargets();                                         // Atualiza alvos da câmera (dupla + principal)
     void UpdateHudInstructions();                                        // Mantém HUD no canto superior esquerdo
     void UpdateControlledCharacterVisuals();                             // Destaca visualmente quem está sob controle
+    void CreateLightAtCursor();
+    Vec2 ScreenToWorld(const Vec2& screenPos) const;
+    Vec2 WorldToScreen(const Vec2& worldPos) const;
     bool IsPartyReady() const;                                           // Confere se referências da dupla são válidas
 
     Music music;                                                        // Música de Fundo
@@ -54,6 +71,15 @@ private:
     PartyMode partyMode;                                                 // Estado atual da dupla (junto/independente)
     GameObject* hudLine1;                                                // Linha 1 de instruções
     GameObject* hudLine2;                                                // Linha 2 de instruções
+    GameObject* hudLine3;                                                // Linha 3: atalhos luz / painel
+    RadialLightOverlay* radialGeometry;                                  // Vignette procedural (várias formas)
+    LightMaskParams lightMaskParams;
+    LightMaskShape lightMaskShape;
+    std::unique_ptr<LightTweakPanel> lightTweakPanel;
+    std::vector<LightInstance> lights;
+    int maxActiveLights = 24;
+    bool lightsEnabled = true;
+    bool shadowsEnabled = true;
 };
 
-#endif   
+#endif

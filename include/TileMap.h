@@ -5,8 +5,10 @@
 #include "TileSet.h"
 #include "Sprite.h"
 
-#include <vector>
+#include <cstdint>
 #include <string>
+#include <unordered_set>
+#include <vector>
 
 // A classe TileMap simula uma matriz tridimensional para representar um mapa
 // e suas diversas camadas, contendo em cada posição um índice de tile no TileSet.
@@ -28,6 +30,9 @@ public:
 
     void SetParallax(int layer, float multiplier);                                      // Método para definir o multiplicador de uma camada.
 
+    void BuildLightOcclusionFromLayer(int layerZ, const std::unordered_set<int>& passableTileIds);
+    const std::vector<std::uint8_t>& GetLightOcclusionSolid() const { return lightOcclusionSolid; }
+
 private:
 
     std::vector<float> parallaxMultipliers;                                             // Multiplicadores para cada camada
@@ -36,6 +41,8 @@ private:
 
     //Dimensões do mapa
     int mapWidth, mapHeight, mapDepth;
+
+    std::vector<std::uint8_t> lightOcclusionSolid;
 };
 
 

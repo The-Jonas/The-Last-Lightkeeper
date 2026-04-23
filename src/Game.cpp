@@ -141,6 +141,14 @@ int Game::GetWindowsHeight() {                      // Retorna a altura da janel
     return windowsHeight;
 }
 
+bool Game::IsDebugBuild() {
+#ifdef DEBUG
+    return true;
+#else
+    return false;
+#endif
+}
+
 void Game::Run() {
 
     if (storedState) {

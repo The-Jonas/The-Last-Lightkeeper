@@ -14,10 +14,12 @@
 #include "../include/GameData.h"
 #include "../include/EndState.h"
 #include "../include/Text.h"
+#include "../include/TopDownLightShadows.h"
 #include <iostream>
 #include <fstream> 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -34,6 +36,72 @@ void SetMouseConfinedToWindow(bool shouldConfine) {
     if (shouldConfine) {
         SDL_WarpMouseInWindow(window, Game::GetInstance().GetWindowsWidth() / 2, Game::GetInstance().GetWindowsHeight() / 2);
     }
+}
+
+float Clamp01(float v) {
+    return std::max(0.0f, std::min(1.0f, v));
+}
+
+float ComputeLightIntensityAtDistance(float distancePx, const LightMaskParams& params) {
+    const float radius = std::max(8.0f, params.falloffRadiusPx);
+    const float t = Clamp01(distancePx / radius);
+    float curve = t * t * (3.0f - 2.0f * t);
+    if (params.falloffCurve == LightFalloffCurve::Power) {
+        curve = std::pow(t, std::max(0.05f, params.falloffGamma));
+    }
+    const float darkness = static_cast<float>(params.darknessMax) * (params.innerLift + (1.0f - params.innerLift) * curve);
+    return Clamp01(1.0f - (darkness / 255.0f));
+}
+
+float ComputeShadowInfluence(const Vec2& pointScreen, const Vec2& lightScreenPos, const LightMaskParams& params) {
+    // Hard distance cutoff for shadow casting; beyond this, no shadows.
+    const float maxShadowDist = std::max(24.0f, params.falloffRadiusPx * params.shadowCastDistanceMul);
+    const float d = pointScreen.Distance(lightScreenPos);
+    if (d > maxShadowDist) {
+        return 0.0f;
+    }
+    const float intensity = ComputeLightIntensityAtDistance(d, params);
+    // Keep distance as dominant term so far lights get noticeably smaller/lighter shadows.
+    const float distanceFactor = 1.0f - Clamp01(d / maxShadowDist);
+    return Clamp01(distanceFactor * (0.15f + 0.85f * intensity));
+}
+
+bool IsPointLit(const Vec2& pointScreen, const Vec2& lightScreenPos, const LightMaskParams& params, float* outIntensity = nullptr) {
+    const float intensity = ComputeShadowInfluence(pointScreen, lightScreenPos, params);
+    if (outIntensity) {
+        *outIntensity = intensity;
+    }
+    return intensity > 0.10f;
+}
+
+bool IsFootLit(GameObject* go, const Vec2& lightScreenPos, const LightMaskParams& params, float* outIntensity = nullptr) {
+    if (!go) {
+        return false;
+    }
+    const Rect& b = go->box;
+    const Vec2 footWorld(b.x + 0.5f * b.w, b.y + b.h);
+    const Vec2 footScreen((footWorld.x - Camera::pos.x) * Camera::GetZoom(), (footWorld.y - Camera::pos.y) * Camera::GetZoom());
+    return IsPointLit(footScreen, lightScreenPos, params, outIntensity);
+}
+
+void AppendFootCircleShadows(GameObject* go, const Vec2& lightScreenPos, const LightMaskParams& params,
+                             std::vector<TopDownShadowEdge>& outEdges, float* outLightTouch = nullptr) {
+    if (!go) {
+        return;
+    }
+    float touch = 0.0f;
+    if (!IsFootLit(go, lightScreenPos, params, &touch)) {
+        return;
+    }
+    if (outLightTouch) {
+        *outLightTouch = std::max(*outLightTouch, touch);
+    }
+    const Rect& b = go->box;
+    const Vec2 foot(b.x + 0.5f * b.w, b.y + b.h);
+    const float m = (b.w < b.h) ? b.w : b.h;
+    // Near lights generate broader contact shadows; far lights generate tighter ones.
+    const float r = std::max(4.0f, std::min(36.0f, (0.10f + 0.28f * touch) * m));
+    TopDownLightShadows::AppendCircleShadowEdges(foot, r, 16, outEdges);
 }
 }
 
@@ -52,12 +120,19 @@ StageState::StageState() {
     partyMode = PartyMode::TOGETHER;             // Estado atual da dupla (junto/independente)
     hudLine1 = nullptr;                          // Linha 1 de instruções
     hudLine2 = nullptr;                          // Linha 2 de instruções
+    hudLine3 = nullptr;                          // Linha 3: atalhos luz
+    radialGeometry = nullptr;
+    lightMaskShape = LightMaskShape::Circle;
+    lightTweakPanel.reset();
 }
 
 StageState::~StageState(){                                
     // O destrutor de State cuida de limpar o objectArray
     // A música é limpa pelo destrutor de Music
     SetMouseConfinedToWindow(false);
+    delete radialGeometry;
+    radialGeometry = nullptr;
+    lightTweakPanel.reset();
 }
 
 void StageState::LoadAssets() {
@@ -149,6 +224,21 @@ void StageState::LoadAssets() {
     hudLine2->AddComponent(new Text(*hudLine2, "Recursos/font/neodgm.ttf", 18, Text::BLENDED, "F: alternar entre junto e independente", hudColor));
     AddObject(hudLine2);
 
+    hudLine3 = new GameObject();
+    hudLine3->z = 100;
+    hudLine3->AddComponent(new Text(*hudLine3, "Recursos/font/neodgm.ttf", 18, Text::BLENDED,
+                                      "K forma | C criar luz | P painel | L luz | O sombras", hudColor));
+    AddObject(hudLine3);
+
+    Game& gameRef = Game::GetInstance();
+    radialGeometry = new RadialLightOverlay();
+    if (!radialGeometry->Init(gameRef.GetRenderer())) {
+        delete radialGeometry;
+        radialGeometry = nullptr;
+    }
+
+    lightTweakPanel = std::make_unique<LightTweakPanel>(lightMaskParams, lightMaskShape);
+
     RefreshCameraTargets(); // Atualiza alvos da câmera (dupla + principal)
 
 }
@@ -166,6 +256,16 @@ void StageState::Update(float dt){
         popRequested = true;
     }
 
+    if (input.KeyPress(LIGHTS_TOGGLE_KEY)) {
+        lightsEnabled = !lightsEnabled;
+    }
+    if (input.KeyPress(SHADOWS_TOGGLE_KEY)) {
+        shadowsEnabled = !shadowsEnabled;
+    }
+    if (input.KeyPress(CREATE_LIGHT_KEY) && lightMaskShape == LightMaskShape::Circle) {
+        CreateLightAtCursor();
+    }
+
     if (IsPartyReady()) {
         HandlePartyInput();
         IssueMovementFromInput(controlledCharacter, controlledCharacterObject);
@@ -180,6 +280,13 @@ void StageState::Update(float dt){
     }
     Camera::Update(dt);                                                                 // Atualizando a camera cada iteração do gameloop
     UpdateHudInstructions();
+
+    if (lightTweakPanel) {
+        lightTweakPanel->Update(input, dt, Game::GetInstance().GetWindowsWidth(), Game::GetInstance().GetWindowsHeight());
+        if (lightTweakPanel->ConsumeCreateLightRequest()) {
+            CreateLightAtCursor();
+        }
+    }
 
     // Loop duplo para testar pares de objetos
     for (size_t i = 0; i < objectArray.size(); i++) {
@@ -263,7 +370,101 @@ void StageState::Render(){
     
     // Fim do sorting
 
-    RenderArray();                                                   // Percorre o vetor de GameObjects chamando o Render de cada um 
+    // Cenário: depois a luz escurece tudo — redesenha HUD (z>=100) por cima
+    constexpr int kHudZ = 100;
+    for (const auto& go : objectArray) {
+        if (go->z < kHudZ) {
+            go->Render();
+        }
+    }
+
+    Game& g = Game::GetInstance();
+    InputManager& in = InputManager::GetInstance();
+    if (lightsEnabled && radialGeometry != nullptr) {
+        std::vector<RadialLightOverlay::ScreenLight> screenLights;
+        screenLights.reserve(static_cast<size_t>(maxActiveLights + 1));
+        // Dynamic preview light is always present.
+        screenLights.push_back({static_cast<float>(in.GetMouseX()), static_cast<float>(in.GetMouseY()), lightMaskShape, lightMaskParams});
+        int renderedLights = 0;
+        for (LightInstance& light : lights) {
+            if (!light.enabled) {
+                continue;
+            }
+            if (renderedLights >= maxActiveLights) {
+                break;
+            }
+
+            const Vec2 lightScreen = WorldToScreen(light.worldPos);
+            const float cullRadius = std::max(32.0f, light.params.falloffRadiusPx * 1.4f);
+            if (lightScreen.x < -cullRadius || lightScreen.y < -cullRadius ||
+                lightScreen.x > static_cast<float>(g.GetWindowsWidth()) + cullRadius ||
+                lightScreen.y > static_cast<float>(g.GetWindowsHeight()) + cullRadius) {
+                continue;
+            }
+            screenLights.push_back({lightScreen.x, lightScreen.y, light.shape, light.params});
+            renderedLights++;
+        }
+        radialGeometry->RenderMany(g.GetRenderer(), g.GetWindowsWidth(), g.GetWindowsHeight(), screenLights);
+    }
+
+    if (lightsEnabled && shadowsEnabled) {
+        static const std::vector<TopDownShadowEdge> kNoMapShadows;
+        static thread_local std::vector<TopDownShadowEdge> playerEdges;
+
+        auto renderShadowsForLight = [&](const Vec2& lightScreen, const LightMaskParams& params) {
+            playerEdges.clear();
+            float lightTouch = 0.0f;
+            AppendFootCircleShadows(bigCharacterObject, lightScreen, params, playerEdges, &lightTouch);
+            AppendFootCircleShadows(smallCharacterObject, lightScreen, params, playerEdges, &lightTouch);
+            if (playerEdges.empty()) {
+                return;
+            }
+            // Distance-sensitive response:
+            // closer (high touch) => longer + darker
+            // farther (low touch) => shorter + brighter
+            const float shadowLengthPx = 12.0f + 140.0f * lightTouch;
+            // Clamp so shadow stacking never dominates the base dark overlay.
+            const float alphaCap = static_cast<float>(params.darknessMax) * 0.40f;
+            const Uint8 shadowAlpha = static_cast<Uint8>(std::max(8.0f, std::min(alphaCap, 110.0f * lightTouch)));
+            TopDownLightShadows::RenderShadowVolumes(g.GetRenderer(), lightScreen.x, lightScreen.y, g.GetWindowsWidth(),
+                                                     g.GetWindowsHeight(), kNoMapShadows, playerEdges, shadowAlpha,
+                                                     shadowLengthPx, 2);
+        };
+
+        // Preview light also casts shadows for immediate feedback.
+        renderShadowsForLight(Vec2(static_cast<float>(in.GetMouseX()), static_cast<float>(in.GetMouseY())), lightMaskParams);
+
+        int renderedLights = 0;
+        for (const LightInstance& light : lights) {
+            if (!light.enabled) {
+                continue;
+            }
+            if (renderedLights >= maxActiveLights) {
+                break;
+            }
+
+            const Vec2 lightScreen = WorldToScreen(light.worldPos);
+            const float cullRadius = std::max(32.0f, light.params.falloffRadiusPx * 1.6f);
+            if (lightScreen.x < -cullRadius || lightScreen.y < -cullRadius ||
+                lightScreen.x > static_cast<float>(g.GetWindowsWidth()) + cullRadius ||
+                lightScreen.y > static_cast<float>(g.GetWindowsHeight()) + cullRadius) {
+                continue;
+            }
+
+            renderShadowsForLight(lightScreen, light.params);
+            renderedLights++;
+        }
+    }
+
+    if (lightTweakPanel && lightTweakPanel->visible) {
+        lightTweakPanel->Render(g.GetRenderer(), g.GetWindowsWidth(), g.GetWindowsHeight());
+    }
+
+    for (const auto& go : objectArray) {
+        if (go->z >= kHudZ) {
+            go->Render();
+        }
+    }
 }
 
 void StageState::Start() {
@@ -279,6 +480,35 @@ void StageState::Pause() {
 
 void StageState::Resume() {
     SetMouseConfinedToWindow(true);
+}
+
+Vec2 StageState::ScreenToWorld(const Vec2& screenPos) const {
+    const float z = Camera::GetZoom();
+    if (z <= 1e-5f) {
+        return Vec2(Camera::pos.x, Camera::pos.y);
+    }
+    return Vec2(screenPos.x / z + Camera::pos.x, screenPos.y / z + Camera::pos.y);
+}
+
+Vec2 StageState::WorldToScreen(const Vec2& worldPos) const {
+    const float z = Camera::GetZoom();
+    return Vec2((worldPos.x - Camera::pos.x) * z, (worldPos.y - Camera::pos.y) * z);
+}
+
+void StageState::CreateLightAtCursor() {
+    if (lightMaskShape != LightMaskShape::Circle) {
+        return;
+    }
+    InputManager& input = InputManager::GetInstance();
+    LightInstance light;
+    light.worldPos = ScreenToWorld(Vec2(static_cast<float>(input.GetMouseX()), static_cast<float>(input.GetMouseY())));
+    light.shape = LightMaskShape::Circle;
+    light.params = lightMaskParams;
+    light.enabled = true;
+    lights.push_back(light);
+    if (static_cast<int>(lights.size()) > maxActiveLights * 2) {
+        lights.erase(lights.begin(), lights.begin() + (lights.size() - static_cast<size_t>(maxActiveLights * 2)));
+    }
 }
 
 bool StageState::IsPartyReady() const { // Verifica se a dupla está pronta (ambos os personagens estão presentes)
@@ -449,5 +679,10 @@ void StageState::UpdateHudInstructions() {
     if (hudLine2) {
         hudLine2->box.x = Camera::pos.x + startX;
         hudLine2->box.y = Camera::pos.y + startY + lineGap;
+    }
+
+    if (hudLine3) {
+        hudLine3->box.x = Camera::pos.x + startX;
+        hudLine3->box.y = Camera::pos.y + startY + lineGap * 2.0f;
     }
 }

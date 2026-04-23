@@ -28,6 +28,9 @@ public:
     int GetWindowsWidth();                      // Funções get para altura e 
     int GetWindowsHeight();                     // largura da janela do jogo
 
+    // true quando compilado com alvo `mingw32-make debug` (-DDEBUG)
+    static bool IsDebugBuild();
+
     void Push(State* state);
 
 private:

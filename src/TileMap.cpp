@@ -85,3 +85,23 @@ int TileMap::GetDepth() {                                               // Retor
     return mapDepth;
 }
 
+void TileMap::BuildLightOcclusionFromLayer(int layerZ, const std::unordered_set<int>& passableTileIds) {
+    lightOcclusionSolid.clear();
+    if (mapWidth < 1 || mapHeight < 1 || layerZ < 0 || layerZ >= mapDepth) {
+        return;
+    }
+    const int cells = mapWidth * mapHeight;
+    if (passableTileIds.empty()) {
+        lightOcclusionSolid.assign(static_cast<size_t>(cells), 0);
+        return;
+    }
+    lightOcclusionSolid.assign(static_cast<size_t>(cells), 0);
+    for (int y = 0; y < mapHeight; y++) {
+        for (int x = 0; x < mapWidth; x++) {
+            const int t = At(x, y, layerZ);
+            const bool pass = passableTileIds.find(t) != passableTileIds.end();
+            lightOcclusionSolid[static_cast<size_t>(x + y * mapWidth)] = pass ? 0 : 1;
+        }
+    }
+}
+
