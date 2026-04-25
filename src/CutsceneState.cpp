@@ -4,7 +4,7 @@
 #include "../include/Game.h"
 #include "../include/InputManager.h"
 
-CutsceneState::CutsceneState(std::string videoPath, std::string audioPath) : videoPath(videoPath), audioPath(audioPath) {
+CutsceneState::CutsceneState(std::string videoPath, std::string audioPath, State* nextState) : videoPath(videoPath), audioPath(audioPath), nextState(nextState) {
     // Construtor recebe os caminhos do vídeo e do áudio
 }
 
@@ -41,7 +41,10 @@ void CutsceneState::Update(float dt) {
     if (input.KeyPress(ESCAPE_KEY) || input.KeyPress(SPACE_KEY)) {
         backgroundAudio.Stop();
         popRequested = true;
-        Game::GetInstance().Push(new StageState());
+
+        if (nextState != nullptr) { 
+            Game::GetInstance().Push(nextState);
+        }
         return; 
     }
 
@@ -54,8 +57,11 @@ void CutsceneState::Update(float dt) {
         if (vp && vp->HasEnded()) {
             backgroundAudio.Stop();
             popRequested = true;
-            Game::GetInstance().Push(new StageState());
-            break;
+
+            if (nextState != nullptr) { 
+                Game::GetInstance().Push(nextState);
+            }
+            return; 
         }
     }
 }

@@ -52,7 +52,11 @@ void TitleState::Update(float dt) {
 
     // Se apertar Space, vai para o Jogo (StageState)
     if (input.KeyPress(SPACE_KEY)) {
-        Game::GetInstance().Push(new CutsceneState("Recursos/video/video_cutscene.mpg", "Recursos/audio/audio_cutscene.wav"));                 // Cria o estado do jogo e empilha
+        Game::GetInstance().Push(new CutsceneState(
+        "Recursos/video/video_cutscene.mpg",
+        "Recursos/audio/audio_cutscene.wav",
+        new StageState()
+        ));                 
     }
 
     // Lógica de piscar texto
