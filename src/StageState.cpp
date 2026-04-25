@@ -24,8 +24,6 @@
 #endif
 
 StageState::StageState() {
-    music.Open("Recursos/audio/BGM.wav");        // Carrega música de fundo
-    music.Play();                                // Toca música
 }
 
 StageState::~StageState(){                                
@@ -193,8 +191,10 @@ void StageState::Render(){
 }
 
 void StageState::Start() {
+    music.Open("Recursos/audio/BGM.wav");                           // Carrega música de fundo
+    music.Play();                                                   // Toca música
     LoadAssets();
-    StartArray(); // Chama Start() de todos os objetos
+    StartArray();                                                   // Chama Start() de todos os objetos
     started = true;
 }
 

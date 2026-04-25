@@ -6,6 +6,7 @@
 #include "../include/InputManager.h"
 #include "../include/Camera.h"
 #include "../include/Text.h"
+#include "../include/CutsceneState.h"
 
 TitleState::TitleState() : State() {
     // Vazio, lógica pesada fica no LoadAssets/Start (achei fazer dessa forma com mais sentido)
@@ -51,7 +52,7 @@ void TitleState::Update(float dt) {
 
     // Se apertar Space, vai para o Jogo (StageState)
     if (input.KeyPress(SPACE_KEY)) {
-        Game::GetInstance().Push(new StageState());                 // Cria o estado do jogo e empilha
+        Game::GetInstance().Push(new CutsceneState("Recursos/video/video_cutscene.mpg", "Recursos/audio/audio_cutscene.wav"));                 // Cria o estado do jogo e empilha
     }
 
     // Lógica de piscar texto
