@@ -264,9 +264,10 @@ StageState::StageState() {
     levelTracks = {
         "Recursos/audio/soundtracks/Akane's Regret.mp3",
         "Recursos/audio/soundtracks/Last Hideout.mp3",
-        "Recursos/audio/soundtracks/Unworn - When will this end_.mp3",
+        "Recursos/audio/soundtracks/dark_harmonics_Dark_Rumble_Atmos_02_191.mp3",
     };
-    currentTrack = 0;
+    // randomize the current track
+    currentTrack = rand() % levelTracks.size();
     music.Open(levelTracks[currentTrack]);
     music.Play();
     Mix_VolumeMusic((MIX_MAX_VOLUME * Game::masterVolumePercent) / 100); // Default: ON
@@ -1037,8 +1038,6 @@ void StageState::Render(){
 }
 
 void StageState::Start() {
-    music.Open("Recursos/audio/BGM.wav");                           // Carrega música de fundo
-    music.Play();                                                   // Toca música
     LoadAssets();
     StartArray();                                                   // Chama Start() de todos os objetos
     SetMouseConfinedToWindow(true);
