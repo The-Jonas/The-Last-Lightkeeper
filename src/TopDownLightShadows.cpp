@@ -108,8 +108,8 @@ void RenderShadowVolumes(SDL_Renderer* renderer, float lightScreenX, float light
     const int extraFeatherLayers = 1 + static_cast<int>(std::round(softness01 * 3.0f));
     const int layers = std::max(1, std::min(9, baseLayers + extraFeatherLayers));
 
-    static thread_local std::vector<SDL_Vertex> verts;
-    static thread_local std::vector<int> ind;
+    std::vector<SDL_Vertex> verts;
+    std::vector<int> ind;
     verts.clear();
     ind.clear();
     verts.reserve((staticEdgesWorld.size() + dynamicEdgesWorld.size()) * 4u * static_cast<size_t>(layers));

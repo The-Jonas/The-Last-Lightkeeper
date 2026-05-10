@@ -1,6 +1,7 @@
 #include "TileSet.h"
 #include "Sprite.h"
 #include <iostream>
+#include <algorithm>
 
 
 TileSet::TileSet(int tileWidth, int tileHeight, const std::string file) {  
@@ -10,14 +11,34 @@ TileSet::TileSet(int tileWidth, int tileHeight, const std::string file) {
     tileSet.Open(file);
 
     if (tileSet.IsOpen()){                                                                          // Se a abertura do sprite for bem-sucedida
-        int frameCountW = tileSet.GetWidth() / tileWidth;                                           
-        int frameCountH = tileSet.GetHeight() / tileHeight;                                         
-    
-        tileCount = frameCountW * frameCountH;                                                      // calcula o número total de tiles
+        frameCountW = std::max(1, tileSet.GetWidth() / tileWidth);
+        frameCountH = std::max(1, tileSet.GetHeight() / tileHeight);
+
+        tileCount = static_cast<unsigned>(frameCountW * frameCountH);                              // calcula o número total de tiles
         tileSet.SetFrameCount(frameCountW, frameCountH);                                            // Seta o frameCount no sprite para que GetWidth/GetHeight retornem o valor correto
-    
+
     } else {
         tileCount = 0;                                                                              // Se não carregar, trata o caso de falha no carregamento
+        frameCountW = 0;
+        frameCountH = 0;
+    }
+}
+
+TileSet::TileSet(int tileWidth, int tileHeight, const std::string file, int frameCountW, int frameCountH) {
+    this->tileWidth = tileWidth;                                                                    // Seta as dimensões 
+    this->tileHeight = tileHeight;                                                                  // do tile
+
+    tileSet.Open(file);
+
+    if (tileSet.IsOpen()){                                                                          // Se a abertura do sprite for bem-sucedida
+        this->frameCountW = std::max(1, frameCountW);
+        this->frameCountH = std::max(1, frameCountH);
+        tileCount = static_cast<unsigned>(this->frameCountW * this->frameCountH);
+        tileSet.SetFrameCount(this->frameCountW, this->frameCountH);
+    } else {
+        tileCount = 0;
+        this->frameCountW = 0;
+        this->frameCountH = 0;
     }
 }
 

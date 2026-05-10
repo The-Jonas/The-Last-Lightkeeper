@@ -14,6 +14,11 @@ class State;
 class Game {
 public:
     static constexpr int MASTER_VOLUME_PERCENT = 5;
+    static int masterVolumePercent;
+    static void LoadEnvVolume();
+    static void SetMasterVolume(int percent);
+    static constexpr int WINDOW_WIDTH = 1920;
+    static constexpr int WINDOW_HEIGHT = 1080;
 
     static Game& GetInstance();                 // Retorna instância única (singleton)
     SDL_Renderer* GetRenderer();                // Retorna o renderizador SDL

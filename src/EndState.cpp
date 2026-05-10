@@ -46,7 +46,7 @@ void EndState::LoadAssets() {
 
     SDL_Color color = {255, 255, 255, 255};                         // Branco
     // Pressione "ESC" para sair ou Espaço para jogar de novo"
-    Text* text = new Text(*textGO, "Recursos/font/neodgm.ttf", 30, Text::BLENDED, "ESC para Sair | ESPACO para Menu", color);
+    Text* text = new Text(*textGO, "Recursos/font/TradeWinds-Regular.ttf", 30, Text::BLENDED, "ESC para Sair | ESPACO para Menu", color);
     textGO->AddComponent(text);
     AddObject(textGO);
 }

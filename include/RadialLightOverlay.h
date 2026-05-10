@@ -27,7 +27,8 @@ public:
 
     void Render(SDL_Renderer* renderer, int mouseX, int mouseY, int windowW, int windowH, LightMaskShape shape,
                 const LightMaskParams& params);
-    void RenderMany(SDL_Renderer* renderer, int windowW, int windowH, const std::vector<ScreenLight>& lights);
+    void RenderMany(SDL_Renderer* renderer, int windowW, int windowH, const std::vector<ScreenLight>& lights,
+                    const LightOcclusionContext& occlusion = {});
 
 private:
     static float FalloffShape(float t01, const LightMaskParams& params);

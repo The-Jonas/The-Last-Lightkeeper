@@ -22,7 +22,7 @@ public:
     void Render(SDL_Renderer* renderer, int windowW, int windowH);
     bool ConsumeCreateLightRequest();
 
-    bool visible = true;
+    bool visible = false;
 
     static constexpr int kLogicalRows = 31;
 

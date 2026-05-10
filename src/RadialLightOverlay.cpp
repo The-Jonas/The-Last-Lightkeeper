@@ -11,7 +11,6 @@ namespace {
 int g_prevMx = 0;
 int g_prevMy = 0;
 bool g_hasPrevMouse = false;
-
 float ComputeAxisRad(const RadialLightOverlay::ScreenLight& light) {
     float axisRad = light.params.coneAxisDeg * static_cast<float>(M_PI) / 180.0f;
     if (light.shape == LightMaskShape::Cone && light.params.coneFollowMouse) {
@@ -195,7 +194,8 @@ void RadialLightOverlay::Render(SDL_Renderer* renderer, int mouseX, int mouseY, 
     RenderMany(renderer, windowW, windowH, lights);
 }
 
-void RadialLightOverlay::RenderMany(SDL_Renderer* renderer, int windowW, int windowH, const std::vector<ScreenLight>& lights) {
+void RadialLightOverlay::RenderMany(SDL_Renderer* renderer, int windowW, int windowH, const std::vector<ScreenLight>& lights,
+                                     const LightOcclusionContext& occlusion) {
     if (!renderer || windowW < 1 || windowH < 1) {
         return;
     }
@@ -285,11 +285,29 @@ void RadialLightOverlay::RenderMany(SDL_Renderer* renderer, int windowW, int win
             torchSpikeAmp = warp * (0.22f + 0.28f * std::max(0.0f, std::min(1.0f, light.params.torchPulseStrength)));
         }
 
+        if (occlusion.IsEnabled()) {
+            const float lxWorld = evalX / occlusion.zoom + occlusion.cameraX;
+            const float lyWorld = evalY / occlusion.zoom + occlusion.cameraY;
+            const int ltx = static_cast<int>((lxWorld - occlusion.mapOriginX) / occlusion.tileWidth);
+            const int lty = static_cast<int>((lyWorld - occlusion.mapOriginY) / occlusion.tileHeight);
+            if (ltx >= 0 && ltx < occlusion.mapWidth && lty >= 0 && lty < occlusion.mapHeight) {
+                if ((*occlusion.solidGrid)[static_cast<size_t>(ltx + lty * occlusion.mapWidth)] != 0) {
+                    continue;
+                }
+            }
+        }
+
+        const float dMax =
+            std::max(0.0f, std::min(255.0f, static_cast<float>(light.params.darknessMax)));
         prepared.push_back({evalX, evalY, light.shape, evalShape, light.params,
-                            static_cast<float>(std::min(255, static_cast<int>(light.params.darknessMax))),
+                            dMax,
                             rGeomMax, evalRFalloff, ComputeAxisRad(light), seed, tintStrength, tintWarmth,
                             torchKx, torchKy, torchKxy, torchKquad,
                             torchAx1, torchAy1, torchAx2, torchAy2, torchAx3, torchAy3, torchSpikeAmp});
+    }
+
+    if (prepared.empty()) {
+        return;
     }
 
     const float gridStep = std::max(12.0f, std::min(64.0f, prepared[0].params.lightGridStepPx));
@@ -315,14 +333,12 @@ void RadialLightOverlay::RenderMany(SDL_Renderer* renderer, int windowW, int win
                 const float ly = py - light.y;
                 float a = 255.0f;
                 if (light.shape == LightMaskShape::Torch) {
-                    // Cheap irregular torch edge: directional warp from precomputed coefficients.
                     const float d = std::sqrt(lx * lx + ly * ly);
                     const float inv = 1.0f / std::max(1e-3f, d);
                     const float nx = lx * inv;
                     const float ny = ly * inv;
                     const float dirWarp = light.torchKx * nx + light.torchKy * ny + light.torchKxy * (nx * ny) +
                                           light.torchKquad * (nx * nx - ny * ny);
-                    // Pointy spikes: high-power directional lobes create sharp protrusions.
                     const float s1 = std::fabs(nx * light.torchAx1 + ny * light.torchAy1);
                     const float s2 = std::fabs(nx * light.torchAx2 + ny * light.torchAy2);
                     const float s3 = std::fabs(nx * light.torchAx3 + ny * light.torchAy3);

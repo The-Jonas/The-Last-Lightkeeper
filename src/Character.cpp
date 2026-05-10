@@ -25,8 +25,8 @@ Character::Character(GameObject& associated, std::string spritePath) : Component
     constexpr int DEATH_START = 10;
     constexpr int DEATH_END = 11;
 
-    // Definições de velocidade e aceleração
-    linearSpeed = 200.0f;
+    // Definições de velocidade e aceleração (+25% vs older default)
+    linearSpeed = 250.0f;
     speedMultiplier = 1.0f;
     acceleration = 1000.0f;
     deceleration = 1400.0f;
@@ -105,30 +105,6 @@ void Character::Update(float dt) {
     //Atualiza a posição do GameObject com base na velocidade e dt
     associated.box.x += speed.x * dt;
     associated.box.y += speed.y * dt;
-
-    // -- LIMITAÇÃO DE MAPA (TILEMAP)
-
-    float mapMinX = 640.0f - 40.0f;
-    float mapMinY = 512.0f - 60.0f;
-    float mapMaxX = 1920.0f + 50.0f; // 640 + 1280
-    float mapMaxY = 2048.0f + 5.0f;  // 512 + 1536
-
-    // Verifica e corrige X
-    if (associated.box.x < mapMinX) {
-        associated.box.x = mapMinX;
-    }
-    else if (associated.box.x > mapMaxX - associated.box.w) {               // Subtrai largura do char para não sair pela direita
-        associated.box.x = mapMaxX - associated.box.w;
-    }
-
-    // Verifica e corrige Y
-    if (associated.box.y < mapMinY) {
-        associated.box.y = mapMinY;
-    } 
-    else if (associated.box.y > mapMaxY - associated.box.h) {               // Subtrai altura do char para não sair por baixo
-        associated.box.y = mapMaxY - associated.box.h;
-    }
-
 
     //Atualiza a animação com base no movimento
     if (animator) {

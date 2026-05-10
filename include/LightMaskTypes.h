@@ -4,12 +4,32 @@
 #define INCLUDE_SDL
 #include "SDL_include.h"
 
+#include <cstdint>
+#include <vector>
+
 enum class LightFalloffCurve { Smoothstep, Power };
 
 enum class LightMaskShape { Circle, Ellipse, Cone, SoftRect, Torch };
 
+struct LightOcclusionContext {
+    const std::vector<std::uint8_t>* solidGrid = nullptr;
+    int mapWidth = 0;
+    int mapHeight = 0;
+    float tileWidth = 0.0f;
+    float tileHeight = 0.0f;
+    float mapOriginX = 0.0f;
+    float mapOriginY = 0.0f;
+    float cameraX = 0.0f;
+    float cameraY = 0.0f;
+    float zoom = 1.0f;
+
+    bool IsEnabled() const {
+        return solidGrid != nullptr && !solidGrid->empty() && mapWidth > 0 && mapHeight > 0;
+    }
+};
+
 struct LightMaskParams {
-    Uint8 darknessMax = 220;
+    Uint8 darknessMax = 250;
     float falloffRadiusPx = 240.0f;
     float fatorDicaDeRaio = 1.2f;
     LightFalloffCurve falloffCurve = LightFalloffCurve::Smoothstep;

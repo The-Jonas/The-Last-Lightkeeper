@@ -57,19 +57,19 @@ void appendRowsForShape(LightMaskShape s, std::vector<int>& out) {
     out.clear();
     switch (s) {
     case LightMaskShape::Circle:
-        out = {0, 1, 2, 3, 4, 5, 6, 15, 16, 17, 28, 29, 18, 19, 20, 21, 30};
+        out = {0, 1, 2, 3, 4, 5, 6, 16, 17, 28, 29, 18, 19, 20, 21, 30};
         break;
     case LightMaskShape::Ellipse:
-        out = {0, 1, 2, 3, 4, 5, 6, 7, 15, 16, 17, 28, 29, 18, 19, 20, 21, 30};
+        out = {0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 28, 29, 18, 19, 20, 21, 30};
         break;
     case LightMaskShape::Cone:
-        out = {0, 2, 3, 4, 5, 6, 8, 9, 10, 11, 15, 16, 17, 28, 29, 18, 19, 20, 21, 30};
+        out = {0, 2, 3, 4, 5, 6, 8, 9, 10, 11, 16, 17, 28, 29, 18, 19, 20, 21, 30};
         break;
     case LightMaskShape::SoftRect:
-        out = {0, 2, 3, 4, 5, 6, 12, 13, 14, 15, 16, 17, 28, 29, 18, 19, 20, 21, 30};
+        out = {0, 2, 3, 4, 5, 6, 12, 13, 14, 16, 17, 28, 29, 18, 19, 20, 21, 30};
         break;
     case LightMaskShape::Torch:
-        out = {0, 1, 2, 3, 4, 5, 6, 15, 16, 17, 28, 29, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 30};
+        out = {0, 1, 2, 3, 4, 5, 6, 16, 17, 28, 29, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 30};
         break;
     default:
         out = {0, 1, 2, 3, 4, 5, 6};
@@ -458,7 +458,7 @@ void LightTweakPanel::rebuildRowLabel(SDL_Renderer* renderer, int logicalRow) {
     rowLabelW[logicalRow] = 0;
     rowLabelH[logicalRow] = 0;
 
-    auto font = Resources::GetFont("Recursos/font/neodgm.ttf", 14);
+    auto font = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 14);
     if (!font) {
         return;
     }
@@ -584,6 +584,14 @@ void LightTweakPanel::Update(InputManager& input, float /*dt*/, int windowW, int
         float n = 0.0f;
         if (barHit(mx, my, windowW, panelLeft, panelW, dragSlot, &n)) {
             setRowFromNormalized(logicalRowAtSlot(dragSlot), n);
+        } else {
+            // Keep updating from horizontal position while dragging (cursor often leaves the thin bar vertically).
+            const int bx = panelLeft + kPadX;
+            const int bw = std::max(20, panelW - kPadX * 2);
+            if (logicalRowAtSlot(dragSlot) != 30 && mx >= bx && mx <= bx + bw) {
+                n = static_cast<float>(mx - bx) / static_cast<float>(bw);
+                setRowFromNormalized(logicalRowAtSlot(dragSlot), n);
+            }
         }
     }
 
@@ -630,7 +638,7 @@ void LightTweakPanel::Render(SDL_Renderer* renderer, int windowW, int /*windowH*
 
     char title[112];
     std::snprintf(title, sizeof(title), "Afina luz [%s]  K=forma P=ocultar", shapeName());
-    auto font = Resources::GetFont("Recursos/font/neodgm.ttf", 15);
+    auto font = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 15);
     if (font) {
         SDL_Color tc{255, 240, 200, 255};
         SDL_Surface* ts = TTF_RenderUTF8_Blended(font.get(), title, tc);
