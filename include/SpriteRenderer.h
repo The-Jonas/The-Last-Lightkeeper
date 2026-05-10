@@ -24,6 +24,7 @@ public:
     void SetFrame(int frame, SDL_RendererFlip flip);                                                                // Variante do SetFrame
     void SetScale(float scaleX, float scaleY);  
     void SetFlip(SDL_RendererFlip flip);                                                                            // Precisei pra manter a animação da arma ao espelhar ela (não tá no PDF)
+    void SetTint(Uint8 r, Uint8 g, Uint8 b, Uint8 a = 255);
     
     void SetCameraFollower(bool follow);
 

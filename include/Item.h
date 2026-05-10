@@ -1,0 +1,24 @@
+#ifndef ITEM_H
+#define ITEM_H
+
+#include <string>
+#include <utility>
+#include <vector>
+
+enum class ItemProperty { SPEED_BOOST, FUEL, LIGHT_SOURCE, HEALTH };
+
+struct ItemDef {
+    std::string name;
+    std::string spritePath;
+    int maxDurability;
+    bool durabilityDecreases;
+    int sortOrder;
+    std::vector<std::pair<ItemProperty, float>> properties;
+};
+
+struct ItemInstance {
+    ItemDef def;
+    int durability;
+};
+
+#endif

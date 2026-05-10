@@ -5,6 +5,7 @@
 #include "../include/Animator.h"
 #include "../include/Collider.h"
 #include "../include/Camera.h"
+#include <cmath>
 
 
 // Implementação do construtor da classe aninhada Command.
@@ -14,21 +15,36 @@ Character::Command::Command(CommandType type, float x, float y): type(type), pos
 Character* Character::player = nullptr;
 
 Character::Character(GameObject& associated, std::string spritePath) : Component(associated){
-    linearSpeed = 200.0f;
+    // Definições das animações
+    constexpr int PLAYER_FRAMES_PER_ROW = 3;
+    constexpr int PLAYER_ROWS = 4;
+    constexpr int RUN_START = 0;
+    constexpr int RUN_END = 5;
+    constexpr int IDLE_START = 6;
+    constexpr int IDLE_END = 9;
+    constexpr int DEATH_START = 10;
+    constexpr int DEATH_END = 11;
+
+    // Definições de velocidade e aceleração (+25% vs older default)
+    linearSpeed = 250.0f;
+    speedMultiplier = 1.0f;
+    acceleration = 1000.0f;
+    deceleration = 1400.0f;
     facingLeft = false;                                                                 // Começa olhando pra direita
 
-    SpriteRenderer* sprite = new SpriteRenderer(associated, spritePath, 3, 4);          // Usa o path fornecido
+    SpriteRenderer* sprite = new SpriteRenderer(associated, spritePath, PLAYER_FRAMES_PER_ROW, PLAYER_ROWS);          // Usa o path fornecido
+    sprite->SetFrameCount(PLAYER_FRAMES_PER_ROW, PLAYER_ROWS);
     associated.AddComponent(sprite);
 
     Animator* animator = new Animator(associated);
     associated.AddComponent(animator);
 
     //Adicionando as animações para o character
-    animator->AddAnimation("idle", Animation(6, 9, 0.4f));
-    animator->AddAnimation("idle-flip", Animation(6, 9, 0.4f, SDL_FLIP_HORIZONTAL));
-    animator->AddAnimation("walking", Animation(0, 5, 0.3f));
-    animator->AddAnimation("dead", Animation(10, 11, 0.5f));
-    animator->AddAnimation("walking-flip", Animation(0, 5, 0.3f, SDL_FLIP_HORIZONTAL));
+    animator->AddAnimation("idle", Animation(IDLE_START, IDLE_END, 0.4f));
+    animator->AddAnimation("idle-flip", Animation(IDLE_START, IDLE_END, 0.4f, SDL_FLIP_HORIZONTAL));
+    animator->AddAnimation("walking", Animation(RUN_START, RUN_END, 0.3f));
+    animator->AddAnimation("dead", Animation(DEATH_START, DEATH_END, 0.5f));
+    animator->AddAnimation("walking-flip", Animation(RUN_START, RUN_END, 0.3f, SDL_FLIP_HORIZONTAL));
     animator->SetAnimation("idle");
 
     if (player == nullptr) {                                                            
@@ -36,6 +52,7 @@ Character::Character(GameObject& associated, std::string spritePath) : Component
     } 
 
     speed = Vec2(0, 0);                                                                 // Inicializa a velocidade como zero.
+    targetSpeed = Vec2(0, 0);                                                           // Começa sem alvo de movimento.
 }
 
 // Destrutor de Character
@@ -51,6 +68,7 @@ void Character::Start() {
 
 void Character::Update(float dt) {
     Animator* animator = associated.GetComponent<Animator>();
+    bool hasMoveCommand = false;
 
     //Processa a fila de comandos
     while (!taskQueue.empty()) {                    // Chegamos se há alguma ação na fila
@@ -61,42 +79,36 @@ void Character::Update(float dt) {
             //Calcula a direção normalizada
             Vec2 targePos = cmd.pos;
             Vec2 direction = (targePos - associated.box.Center()).Normalized();
-            //Define a velocidade baseada na direção e linearSpeed
-            speed = direction * linearSpeed;
+            //Define velocidade-alvo para suavização de movimento
+            targetSpeed = direction * (linearSpeed * speedMultiplier);
+            hasMoveCommand = true;
         } 
     }
+
+    if (!hasMoveCommand) {
+        targetSpeed = Vec2(0, 0);
+    }
+
+    auto approach = [](float current, float target, float maxDelta) {
+        float delta = target - current;
+        if (std::fabs(delta) <= maxDelta) {
+            return target;
+        }
+        return current + ((delta > 0.0f) ? maxDelta : -maxDelta);
+    };
+
+    float changeRate = hasMoveCommand ? acceleration : deceleration;
+    float maxDelta = changeRate * dt;
+    speed.x = approach(speed.x, targetSpeed.x, maxDelta);
+    speed.y = approach(speed.y, targetSpeed.y, maxDelta);
 
     //Atualiza a posição do GameObject com base na velocidade e dt
     associated.box.x += speed.x * dt;
     associated.box.y += speed.y * dt;
 
-    // -- LIMITAÇÃO DE MAPA (TILEMAP)
-
-    float mapMinX = 640.0f - 40.0f;
-    float mapMinY = 512.0f - 60.0f;
-    float mapMaxX = 1920.0f + 50.0f; // 640 + 1280
-    float mapMaxY = 2048.0f + 5.0f;  // 512 + 1536
-
-    // Verifica e corrige X
-    if (associated.box.x < mapMinX) {
-        associated.box.x = mapMinX;
-    }
-    else if (associated.box.x > mapMaxX - associated.box.w) {               // Subtrai largura do char para não sair pela direita
-        associated.box.x = mapMaxX - associated.box.w;
-    }
-
-    // Verifica e corrige Y
-    if (associated.box.y < mapMinY) {
-        associated.box.y = mapMinY;
-    } 
-    else if (associated.box.y > mapMaxY - associated.box.h) {               // Subtrai altura do char para não sair por baixo
-        associated.box.y = mapMaxY - associated.box.h;
-    }
-
-
     //Atualiza a animação com base no movimento
     if (animator) {
-        if (speed.Magnitude() > 0.01f) {                                    // Se estiver se movendo
+        if (speed.Magnitude() > 5.0f) {                                     // Se estiver se movendo
 
             // Atualiza a animação APENAS se houver movimento horizontal
             if (speed.x < 0) {                                              // Se a velocidade X é negativa (indo para esquerda)
@@ -123,8 +135,6 @@ void Character::Update(float dt) {
         }
     }
 
-    speed = Vec2(0,0);                                      // Reseta a velocidade se não houver o comando MOVE (para parar)
-    
 }
 
 
@@ -141,6 +151,20 @@ Vec2 Character::GetCenter() {
 
 void Character::Issue(Command task) {                       // Adiciona comando na fila
     taskQueue.push(task);
+}
+
+void Character::SetSpeedMultiplier(float multiplier) { // Ajusta o multiplicador de velocidade
+    if (multiplier < 0.1f) {
+        speedMultiplier = 0.1f;
+        return;
+    }
+    speedMultiplier = multiplier;
+}
+
+void Character::SetBaseSpeed(float speed) { // Ajusta a velocidade base
+    if (speed > 0.0f) {
+        linearSpeed = speed;
+    }
 }
 
 

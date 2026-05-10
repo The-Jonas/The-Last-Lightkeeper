@@ -30,6 +30,10 @@ void SpriteRenderer::SetFlip(SDL_RendererFlip flip) {
     sprite.SetFlip(flip);
 }
 
+void SpriteRenderer::SetTint(Uint8 r, Uint8 g, Uint8 b, Uint8 a) {
+    sprite.SetTint(r, g, b, a);
+}
+
 void SpriteRenderer::SetFrameCount(int frameCountW, int frameCountH) {
     sprite.SetFrameCount(frameCountW, frameCountH);                         // Chama o método homônimo da classe Sprite
 }

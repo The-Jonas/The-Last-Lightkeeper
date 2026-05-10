@@ -13,8 +13,16 @@ class State;
 
 class Game {
 public:
+    static constexpr int MASTER_VOLUME_PERCENT = 5;
+    static int masterVolumePercent;
+    static void LoadEnvVolume();
+    static void SetMasterVolume(int percent);
+    static constexpr int WINDOW_WIDTH = 1920;
+    static constexpr int WINDOW_HEIGHT = 1080;
+
     static Game& GetInstance();                 // Retorna instância única (singleton)
     SDL_Renderer* GetRenderer();                // Retorna o renderizador SDL
+    SDL_Window* GetWindow();                    // Retorna a janela SDL
     State& GetCurrentState();                   // Retorna o estado atual do jogo
     void Run();                                 // Loop Principal do jogo
 
@@ -24,6 +32,9 @@ public:
 
     int GetWindowsWidth();                      // Funções get para altura e 
     int GetWindowsHeight();                     // largura da janela do jogo
+
+    // true quando compilado com alvo `mingw32-make debug` (-DDEBUG)
+    static bool IsDebugBuild();
 
     void Push(State* state);
 

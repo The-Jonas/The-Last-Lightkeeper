@@ -3,6 +3,9 @@
 #include "../include/InputManager.h"
 #include <cstdlib>
 #include <ctime>
+#include <fstream>
+#include <sstream>
+#include <string>
 
 #define INCLUDE_SDL_TTF
 #define INCLUDE_SDL_IMAGE
@@ -12,6 +15,38 @@
 #include <iostream>
 
 Game* Game::instance = nullptr;
+int Game::masterVolumePercent = Game::MASTER_VOLUME_PERCENT;
+
+void Game::LoadEnvVolume() {
+    std::ifstream env(".env");
+    if (env.is_open()) {
+        std::string line;
+        while (std::getline(env, line)) {
+            std::istringstream iss(line);
+            std::string key;
+            if (std::getline(iss, key, '=')) {
+                std::string value;
+                if (std::getline(iss, value)) {
+                    if (key == "MASTER_VOLUME") {
+                        int vol = std::stoi(value);
+                        if (vol >= 0 && vol <= 100) {
+                            masterVolumePercent = vol;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+void Game::SetMasterVolume(int percent) {
+    if (percent < 0) percent = 0;
+    if (percent > 100) percent = 100;
+    masterVolumePercent = percent;
+    const int vol = (MIX_MAX_VOLUME * masterVolumePercent) / 100;
+    Mix_Volume(-1, vol);
+    Mix_VolumeMusic(vol);
+}
 
 Game::Game(std::string title, int width, int heigh) {
     if (instance != nullptr) {
@@ -21,6 +56,7 @@ Game::Game(std::string title, int width, int heigh) {
 
     instance = this;                  // Define a instância atual
 
+    LoadEnvVolume();                  // Carrega volume do .env
     srand(time(NULL));                // Inicializando o gerador de números aleátorios
 
     // Inicializa SDL
@@ -41,7 +77,10 @@ Game::Game(std::string title, int width, int heigh) {
         std::cerr << "Mix_OpenAudio falhou: " << Mix_GetError() << std::endl;
         exit(1);
     }
-    Mix_AllocateChannels(32);           // Para conseguir reproduzir 32 sons simultaneam
+    Mix_AllocateChannels(32);
+    const int masterVolume = (MIX_MAX_VOLUME * masterVolumePercent) / 100;
+    Mix_Volume(-1, masterVolume);
+    Mix_VolumeMusic(masterVolume);
 
     // Inicializa TTF
     if (TTF_Init() != 0) {
@@ -99,7 +138,7 @@ Game::~Game() {
 
 Game& Game::GetInstance() {                         // Se não tiver instância do game, cria e retorna a instância
     if (!instance){
-        instance = new Game("A Luz do Farol", 1920, 1080);
+        instance = new Game("The Last LightKeeper", 1920, 1080);
     }
     return *instance;                               // O compilador resolve como uma referência
 }
@@ -110,6 +149,10 @@ State& Game::GetCurrentState() {                    // Retorna o State atual
 
 SDL_Renderer* Game::GetRenderer(){                  // Retorna o Renderizador
     return renderer; 
+}
+
+SDL_Window* Game::GetWindow() {                     // Retorna a Janela
+    return window;
 }
 
 void Game::Push(State* state) {
@@ -127,11 +170,25 @@ float Game::GetDeltaTime() {                        // GetDeltaTime retorna dt p
 }
 
 int Game::GetWindowsWidth() {                       // Retorna a largura da janela do jogo
+    if (window) {
+        SDL_GetWindowSize(window, &windowsWidth, &windowsHeight);
+    }
     return windowsWidth;
 }
 
 int Game::GetWindowsHeight() {                      // Retorna a altura da janela do jogo
+    if (window) {
+        SDL_GetWindowSize(window, &windowsWidth, &windowsHeight);
+    }
     return windowsHeight;
+}
+
+bool Game::IsDebugBuild() {
+#ifdef DEBUG
+    return true;
+#else
+    return false;
+#endif
 }
 
 void Game::Run() {

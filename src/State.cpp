@@ -1,4 +1,5 @@
 #include "../include/State.h"
+#include <algorithm>
 
 State::State() {
     popRequested = false;
@@ -51,6 +52,10 @@ void State::UpdateArray(float dt) {
 }
 
 void State::RenderArray() {
+    std::stable_sort(objectArray.begin(), objectArray.end(), [](const auto& a, const auto& b) {
+        if (std::abs(a->z - b->z) > 0.01f) return a->z < b->z;
+        return a->box.Center().y < b->box.Center().y;
+    });
     for (auto& go : objectArray) {
         go->Render();
     }
