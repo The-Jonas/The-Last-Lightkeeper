@@ -138,7 +138,7 @@ Game::~Game() {
 
 Game& Game::GetInstance() {                         // Se não tiver instância do game, cria e retorna a instância
     if (!instance){
-        instance = new Game("João Victor Pereira Vieira - 211036114", WINDOW_WIDTH, WINDOW_HEIGHT);
+        instance = new Game("The Last LightKeeper", 1920, 1080);
     }
     return *instance;                               // O compilador resolve como uma referência
 }

@@ -1037,8 +1037,10 @@ void StageState::Render(){
 }
 
 void StageState::Start() {
+    music.Open("Recursos/audio/BGM.wav");                           // Carrega música de fundo
+    music.Play();                                                   // Toca música
     LoadAssets();
-    StartArray(); // Chama Start() de todos os objetos
+    StartArray();                                                   // Chama Start() de todos os objetos
     SetMouseConfinedToWindow(true);
     started = true;
 }

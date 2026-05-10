@@ -37,6 +37,7 @@ void LayoutTitleScreen(GameObject* background, GameObject* title,
     pressSpace->box.y = Camera::pos.y + windowH - std::max(120.0f, textH + 56.0f);
 }
 }
+#include "../include/CutsceneState.h"
 
 TitleState::TitleState() : State() {
     sliderVolume = Game::masterVolumePercent;
@@ -83,6 +84,11 @@ void TitleState::Update(float dt) {
 
     if (input.KeyPress(SPACE_KEY)) {
         Game::GetInstance().Push(new StageState());
+        // Game::GetInstance().Push(new CutsceneState(
+        // "Recursos/video/video_cutscene.mpg",
+        // "Recursos/audio/audio_cutscene.wav",
+        // new StageState()
+        // ));                 
     }
 
     fadeTimer.Update(dt);
