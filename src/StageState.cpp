@@ -312,21 +312,6 @@ void StageState::LoadAssets() {
 
     // OBS: TOMAR CUIDADO NA ORDEM EM QUE CARREGAMOS OS COMPONENTES, POIS MUITO PROVAVELMENTE ISSO É A CAUSA DE ESTAREM SUMINDO, UM É DESENHADO POR CIMA DO OUTRO
 
-    // // Criação do Background como Component e GameObject
-    // GameObject* bgObject = new GameObject();            // Criação de um ponteiro de GameObject
-    // SpriteRenderer* bgSprite = new SpriteRenderer(*bgObject, "Recursos/img/Background.png");        // Criando um spriteRenderer com os mesmos parâmetros de antes
-    //
-    // bgObject->AddComponent(bgSprite);                   // Adiciona o SpriteRenderer ao GameObject
-    //
-    // bgSprite->SetCameraFollower(true);                  // Por conta o setCameraFollower, agora a imagem não fica mais por baixo do TileSet sumida, agora o background segue a câmera
-    //
-    // bgObject->box.x = 0;                                // background colocado em (0, 0)
-    // bgObject->box.y = 0;
-    // bgObject->z = 0;                                    // Z = 0 (Camada mais ao fundo)
-    // AddObject(bgObject);                                // Colocando o ponteiro para o GameObject no ObjectArray usando AddObject
-    //
-    //------------------------------------------
-
     // Criação do TileSet (64x64 tiles, 7 colunas)
     dungeonTileSet = std::make_unique<TileSet>(64, 64, "Recursos/img/Tileset.png");
     tileSet = dungeonTileSet.get();
