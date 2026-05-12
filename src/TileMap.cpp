@@ -68,9 +68,7 @@ void TileMap::SetParallax(int layer, float multiplier) {
 }
 
 void TileMap::Render() {
-    for (int i = 0; i < mapDepth; i++){                                 // Itera até renderizar todas as camadas
-        RenderLayer(i);
-    }
+// Adeus tiles... tudo aqui morreu
 }
 
 int TileMap::GetWidth() {                                               // Retorna a largura do mapa

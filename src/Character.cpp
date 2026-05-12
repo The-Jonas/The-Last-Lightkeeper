@@ -5,6 +5,8 @@
 #include "../include/Animator.h"
 #include "../include/Collider.h"
 #include "../include/Camera.h"
+#include "../include/Game.h"
+#include "../include/StageState.h"
 #include <cmath>
 
 
@@ -103,8 +105,58 @@ void Character::Update(float dt) {
     speed.y = approach(speed.y, targetSpeed.y, maxDelta);
 
     //Atualiza a posição do GameObject com base na velocidade e dt
-    associated.box.x += speed.x * dt;
-    associated.box.y += speed.y * dt;
+    // associated.box.x += speed.x * dt;
+    // associated.box.y += speed.y * dt;
+
+    // REFATORANDO COM A LÓGICA DE MOVIMENTAÇÃO COM SLIDE COLLISION
+
+    Collider* collider = associated.GetComponent<Collider>();
+
+    if (collider != nullptr){
+
+        StageState* stage = (StageState*)&Game::GetInstance().GetCurrentState();
+
+        // --- TESTE DO EIXO X ---
+        float oldX = associated.box.x;
+        associated.box.x += speed.x * dt;
+
+        // Atualiza a posição do collider manualmente para teste futuro
+        collider->Update(0);
+
+        SDL_Rect hitboxX = {
+            (int)collider->box.x, (int)collider->box.y,
+            (int)collider->box.w, (int)collider->box.h
+        };
+
+        // Usa o ponteiro 'stage' para acessar o level e testar a colisão
+        if (stage -> level.CheckCollision(hitboxX)) {
+            associated.box.x = oldX; // Bateu! Desfaz o movimento em X
+            speed.x = 0;             // Zera a inércia pra não acumular
+        }
+
+        // --- TESTE DO EIXO Y ---
+        float oldY = associated.box.y;
+        associated.box.y += speed.y * dt;
+
+        collider->Update(0);
+
+        SDL_Rect hitboxY = {
+            (int)collider->box.x, (int)collider->box.y,
+            (int)collider->box.w, (int)collider->box.h
+        };
+
+        if (stage -> level.CheckCollision(hitboxY)) {
+            associated.box.y = oldY; // Bateu! Desfaz o movimento em Y
+            speed.y = 0;
+        }
+    
+    } else {
+        // Fallback caso o GameObject não tenha Collider (não deve acontecer com os irmãos)
+        associated.box.x += speed.x * dt;
+        associated.box.y += speed.y * dt;
+    }
+
+    // ==============================================
 
     //Atualiza a animação com base no movimento
     if (animator) {
@@ -130,11 +182,9 @@ void Character::Update(float dt) {
                 animator->SetAnimation("idle-flip");
             } else {
                 animator->SetAnimation("idle");
-            }
-                
+            }     
         }
     }
-
 }
 
 

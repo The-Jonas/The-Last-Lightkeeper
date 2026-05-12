@@ -12,6 +12,7 @@
 #include "LightTweakPanel.h"
 #include "TopDownLightShadows.h"
 #include "Inventory.h"
+#include "LevelManager.h"
 #include "Vec2.h"
 
 #include <memory>
@@ -27,6 +28,7 @@ public:
     StageState();                                                       // Construtor
     ~StageState();                                                      // Destrutor
 
+    LevelManager level;
     void LoadAssets() override;                                         // Carrega assets do estado
     void Update(float dt) override ;                                    // Atualiza lógica de estado
     void Render() override;                                             // Desenha na tela
@@ -36,6 +38,7 @@ public:
     void Resume() override;
 
 private:
+
     struct LightInstance {
         Vec2 worldPos;
         LightMaskShape shape = LightMaskShape::Circle;

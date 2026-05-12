@@ -1,8 +1,30 @@
 #include "../include/LevelManager.h"
+#include "../include/Camera.h"
+#include <SDL2/SDL_image.h>
 #include <fstream>
 #include <iostream>
 
-// Lembre-se de usar seu TextureManager para carregar as imagens!
+LevelManager::LevelManager() {
+    // Inicializamos os ponteiros como nulos por segurança
+    floorTexture = nullptr;
+    wallTexture = nullptr;
+}
+
+LevelManager::~LevelManager() {
+    // Quando o andar for destruído, limpamos as texturas da placa de vídeo 
+    // para não causar vazamento de memória (memory leak)
+    if (floorTexture != nullptr) {
+        SDL_DestroyTexture(floorTexture);
+    }
+    if (wallTexture != nullptr) {
+        SDL_DestroyTexture(wallTexture);
+    }
+
+    // Limpamos também as listas de colisores
+    rectColliders.clear();
+    polyColliders.clear();
+    circleColliders.clear();
+}
 
 void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
     std::ifstream file(path);
@@ -19,16 +41,22 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
     // 2. No Tiled, você criará camadas de objetos. Vamos iterar por elas.
     for (auto& layer : j["layers"]) {
         if (layer["type"] == "objectgroup") {
+
+            float layerOffsetX = layer.contains("offsetx") ? (float)layer["offsetx"] : 0.0f;
+            float layerOffsetY = layer.contains("offsety") ? (float)layer["offsety"] : 0.0f;
+
             for (auto& obj : layer["objects"]) {
+
+                // Soma o X/Y do objeto com o deslocamento da camada APENAS UMA VEZ
+                float finalX = (float)obj["x"] + layerOffsetX;
+                float finalY = (float)obj["y"] + layerOffsetY;
                 
                 // CASO 1: Polígono
                 if (obj.contains("polygon")) {
                     Polygon poly;
-                    float objX = obj["x"];
-                    float objY = obj["y"];
                     for (auto& p : obj["polygon"]) {
-                        poly.vertices.push_back({ (int)(objX + (float)p["x"]), 
-                                                  (int)(objY + (float)p["y"]) });
+                        poly.vertices.push_back({ (int)(finalX + (float)p["x"]), 
+                                                  (int)(finalY + (float)p["y"]) });
                     }
                     polyColliders.push_back(poly);
                 }
@@ -36,15 +64,15 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
                 else if (obj.contains("ellipse")) {
                     Circle c;
                     c.radius = (int)obj["width"] / 2;
-                    c.center.x = (int)obj["x"] + c.radius;
-                    c.center.y = (int)obj["y"] + c.radius;
+                    c.center.x = (int)finalX + c.radius;
+                    c.center.y = (int)finalY + c.radius;
                     circleColliders.push_back(c);
                 }
                 // CASO 3: Retângulo Simples
                 else {
                     SDL_Rect r;
-                    r.x = obj["x"];
-                    r.y = obj["y"];
+                    r.x = (int)finalX;
+                    r.y = (int)finalY;
                     r.w = obj["width"];
                     r.h = obj["height"];
                     rectColliders.push_back(r);
@@ -53,9 +81,12 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
         }
     }
     
-    // 3. Aqui é pra carregar as texturas de fundo e paredes
-    // floorTexture = IMG_LoadTexture(renderer, "assets/mapa1_chao.jpg");
-    // wallTexture = IMG_LoadTexture(renderer, "assets/mapa1_parede.jpg");
+    floorTexture = IMG_LoadTexture(renderer, "Recursos/img/cenario/mapa1_chao.png");
+    wallTexture = IMG_LoadTexture(renderer, "Recursos/img/cenario/mapa1_parede.png");
+
+    if (floorTexture == nullptr || wallTexture == nullptr) {
+        std::cout << "Erro ao carregar texturas do mapa no LevelManager!" << std::endl;
+    }
 }
 
 bool LevelManager::CheckCollision(const SDL_Rect& entityBox) {
@@ -154,4 +185,72 @@ bool LevelManager::CheckPolygonVsPolygon(const Polygon& p1, const Polygon& p2) {
     
     // Se testou todos os eixos e nenhuma teve vão livre, estão colidindo.
     return true;
+}
+
+void LevelManager::RenderFloor(SDL_Renderer* renderer) {
+    if (floorTexture == nullptr) return;
+
+    int offsetX = 0; // Exemplo: empurra o chão 350 pixels pra direita
+    int offsetY = 0; // Exemplo: empurra o chão 500 pixels pra baixo
+
+    // Criamos o retângulo de destino baseado no tamanho real do seu mapa
+    // Subtraímos a posição da câmera para o mapa "correr" conforme o player anda
+    SDL_Rect destRect = { 
+        (int)(-Camera::pos.x + offsetX), 
+        (int)(-Camera::pos.y + offsetY), 
+        4357, 3276  
+    };
+
+    SDL_RenderCopy(renderer, floorTexture, nullptr, &destRect);
+}
+
+void LevelManager::RenderWalls(SDL_Renderer* renderer) {
+    if (wallTexture == nullptr) return;
+
+    // A parede usa a mesma lógica do chão para ficarem alinhados
+    SDL_Rect destRect = { 
+        (int)(-Camera::pos.x), 
+        (int)(-Camera::pos.y), 
+        5066, 4399
+    };
+
+    SDL_RenderCopy(renderer, wallTexture, nullptr, &destRect);
+}
+
+void LevelManager::RenderDebug(SDL_Renderer* renderer){
+#ifdef DEBUG
+    // Cor vermelha para as hitbox do cenário
+    SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+
+    // 1. Desenha Retângulos
+    for (auto& r : rectColliders) {
+        SDL_Rect screenRect = { 
+            (int)(r.x - Camera::pos.x), 
+            (int)(r.y - Camera::pos.y), 
+            r.w, r.h 
+        };
+        SDL_RenderDrawRect(renderer, &screenRect);
+    }
+
+    // 2. Desenha Polígonos (Linha por linha)
+    for (auto& poly : polyColliders) {
+        for (size_t i = 0; i < poly.vertices.size(); i++) {
+            SDL_Point p1 = poly.vertices[i];
+            SDL_Point p2 = poly.vertices[(i + 1) % poly.vertices.size()];
+            SDL_RenderDrawLine(renderer, 
+                p1.x - (int)Camera::pos.x, p1.y - (int)Camera::pos.y, 
+                p2.x - (int)Camera::pos.x, p2.y - (int)Camera::pos.y);
+        }
+    }
+
+    // 3. Desenha Círculos (Aproximado por um losango/quadrado para ser rápido)
+    for (auto& c : circleColliders) {
+        SDL_Rect r = { 
+            (int)(c.center.x - c.radius - Camera::pos.x), 
+            (int)(c.center.y - c.radius - Camera::pos.y), 
+            c.radius * 2, c.radius * 2 
+        };
+        SDL_RenderDrawRect(renderer, &r);
+    }
+#endif
 }

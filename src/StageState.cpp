@@ -266,6 +266,7 @@ StageState::StageState() {
         "Recursos/audio/soundtracks/Last Hideout.mp3",
         "Recursos/audio/soundtracks/dark_harmonics_Dark_Rumble_Atmos_02_191.mp3",
     };
+
     // randomize the current track
     currentTrack = rand() % levelTracks.size();
     music.Open(levelTracks[currentTrack]);
@@ -310,12 +311,19 @@ StageState::~StageState(){
 
 void StageState::LoadAssets() {
 
+    // ==================================
     // OBS: TOMAR CUIDADO NA ORDEM EM QUE CARREGAMOS OS COMPONENTES, POIS MUITO PROVAVELMENTE ISSO É A CAUSA DE ESTAREM SUMINDO, UM É DESENHADO POR CIMA DO OUTRO
+    // ==================================
 
-    // Criação do TileSet (64x64 tiles, 7 colunas)
+    // Carregamento do mapa livre
+    level.LoadLevel("Recursos/map/mapa_teste.json", Game::GetInstance().GetRenderer());
+
+    mapOrigin = Vec2(0,0);
+
+
+    /* (ANTIGO) Criação do TileSet (64x64 tiles, 7 colunas)
     dungeonTileSet = std::make_unique<TileSet>(64, 64, "Recursos/img/Tileset.png");
     tileSet = dungeonTileSet.get();
-
     GameObject* mapObject = new GameObject();                                           // Criando o GameObject para o TileMap
     TileMap* tileMap = new TileMap(*mapObject, "Recursos/map/level_from_json.txt", tileSet); // Nível exportado do level.json (52x52)
     mapObject->AddComponent(tileMap);                                                   // Adicionando o TileMap ao GameObject
@@ -339,6 +347,8 @@ void StageState::LoadAssets() {
             mapObject->box.x, mapObject->box.y, tileMapComp->GetLightOcclusionSolid(), staticShadowEdges);
         staticShadowEdgesBuilt = !staticShadowEdges.empty();
     }
+
+    */
 
     //------------------------------------------
     
@@ -365,32 +375,23 @@ void StageState::LoadAssets() {
     }
     smallComp->SetBaseSpeed(275.0f);
 
-    // Spawn dinâmico: centro do mapa atual (horizontal + vertical).
-    if (tileMapComp && tileSet) {
-        const float mapWpx = static_cast<float>(tileMapComp->GetWidth() * tileSet->GetTileWidth());
-        const float mapHpx = static_cast<float>(tileMapComp->GetHeight() * tileSet->GetTileHeight());
-        const float mapLeft = mapOrigin.x;
-        const float mapTop = mapOrigin.y;
-        const float mapRight = mapLeft + mapWpx;
-        const float mapBottom = mapTop + mapHpx;
+    // ==========================================
+    // SPAWN FIXO DOS IRMÃOS NO CENTRO DO MAPA
+    // ==========================================
+    // Sabendo que o mapa tem 4500x4000, o centro é a metade disso.
 
-        const float centerX = mapLeft + mapWpx * 0.5f;
-        const float centerY = mapTop + mapHpx * 0.5f;
+    const float centerX = 4358.0f / 2.0f;
+    const float centerY = 3276.0f / 2.0f;
 
+    if (bigObject) {
         bigObject->box.x = centerX - (bigObject->box.w * 0.5f);
         bigObject->box.y = centerY - (bigObject->box.h * 0.5f);
+    }
 
-        // Companheiro nasce próximo ao jogador, sem sobrepor.
-        smallObject->box.x = bigObject->box.x - std::max(18.0f, smallObject->box.w * 0.9f);
+    if (smallObject) {
+        // O irmãozinho nasce um pouco pro lado para não nascerem grudados
+        smallObject->box.x = bigObject->box.x - std::max(40.0f, smallObject->box.w * 1.2f);
         smallObject->box.y = centerY - (smallObject->box.h * 0.5f);
-
-        auto clampInsideMap = [&](GameObject* go) {
-            if (!go) return;
-            go->box.x = std::max(mapLeft, std::min(go->box.x, mapRight - go->box.w));
-            go->box.y = std::max(mapTop, std::min(go->box.y, mapBottom - go->box.h));
-        };
-        clampInsideMap(bigObject);
-        clampInsideMap(smallObject);
     }
 
     previewLightLockedToPlayer = true;
@@ -711,9 +712,19 @@ void StageState::Update(float dt){
 }
 
 void StageState::Render(){
-    // Implementação Z/Y sorting
+
+    // Desenha a parede 
+    level.RenderWalls(Game::GetInstance().GetRenderer());
+
+    // Desenha o chão no fundo de tudo (textura já foi carregada)
+    level.RenderFloor(Game::GetInstance().GetRenderer());
+
+
+    // ============================
+    // Implementação Z/Y sorting ==
+    // ============================
     
-    // 1. Defina a função de comparação (lambda)
+    // Defina a função de comparação (lambda)
     auto compareObjects = [](const std::shared_ptr<GameObject>& a, const std::shared_ptr<GameObject>& b) {
         
         // Regra 1: Z-Sorting (Profundidade)
@@ -739,11 +750,11 @@ void StageState::Render(){
         // O sub_z menor (Character=0) é desenhado primeiro.
         return a->sub_z < b->sub_z;
     };
-
-    // 2. Ordene o objectArray usando a função de comparação
+    // Ordene o objectArray usando a função de comparação
     std::sort(objectArray.begin(), objectArray.end(), compareObjects);
+
+    // ===================================================================
     
-    // Fim do sorting
 
     // Cenário: depois a luz escurece tudo — redesenha HUD (z>=100) por cima
     constexpr int kHudZ = 100;
@@ -912,6 +923,8 @@ void StageState::Render(){
             smallCharacterObject->Render();
         }
     }
+
+    level.RenderDebug(Game::GetInstance().GetRenderer());
 
     if (lightsEnabled && radialGeometry != nullptr) {
         std::vector<RadialLightOverlay::ScreenLight> screenLights;

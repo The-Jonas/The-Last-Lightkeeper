@@ -32,6 +32,7 @@ public:
     
     void RenderFloor(SDL_Renderer* renderer);
     void RenderWalls(SDL_Renderer* renderer);
+    void RenderDebug(SDL_Renderer* renderer);
 
     // Getters para o sistema de colisão usar depois
     std::vector<SDL_Rect>& GetRectColliders();
