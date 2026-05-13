@@ -47,7 +47,11 @@ private:
     float speedMultiplier;                                              // Multiplicador aplicado sobre linearSpeed
     float acceleration;                                                 // Taxa de aceleração em movimento
     float deceleration;                                                 // Taxa de desaceleração ao soltar input
-    bool facingLeft;                                                    // Lembrar pra onde deve olhar conforme a ultima tecla apertada
+    
+    enum class Direction {UP, DOWN, LEFT, RIGHT};                       // enum saberá onde o character está andando
+    Direction currentDirection;
+    
+    std::string baseSpritePath;                                         // guarda o caminho base (Ex: Recursos/img/personagens(irmãozao))
 
 };
 

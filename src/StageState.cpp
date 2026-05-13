@@ -355,25 +355,25 @@ void StageState::LoadAssets() {
     // Criação dos dois personagens controláveis
     // Personagem grande (IRMÃOZÃO)
     GameObject* bigObject = new GameObject();
-    Character* bigComp = new Character(*bigObject, "Recursos/img/Player.png");
+    Character* bigComp = new Character(*bigObject, "Recursos/img/personagens/Irmãozão");
     bigObject->AddComponent(bigComp);
     bigObject->z = 2;
     AddObject(bigObject);
 
     // Personagem pequeno (IRMÃOZINHO)
     GameObject* smallObject = new GameObject();
-    Character* smallComp = new Character(*smallObject, "Recursos/img/Player.png");
+    Character* smallComp = new Character(*smallObject, "Recursos/img/personagens/irmãozinho");
     smallObject->AddComponent(smallComp);
     smallObject->z = 2;
     AddObject(smallObject);
 
     // Configurações do personagem pequeno (IRMÃOZINHO)
-    SpriteRenderer* smallSprite = smallObject->GetComponent<SpriteRenderer>();
-    if (smallSprite) {
-        smallSprite->SetScale(0.72f, 0.72f);
-        smallSprite->SetTint(150, 200, 255, 240);
-    }
-    smallComp->SetBaseSpeed(275.0f);
+    //SpriteRenderer* smallSprite = smallObject->GetComponent<SpriteRenderer>();
+    //if (smallSprite) {
+    //    smallSprite->SetScale(0.72f, 0.72f);
+    //    smallSprite->SetTint(150, 200, 255, 240);
+    //}
+    //smallComp->SetBaseSpeed(275.0f);
 
     // ==========================================
     // SPAWN FIXO DOS IRMÃOS NO CENTRO DO MAPA
