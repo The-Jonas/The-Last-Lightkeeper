@@ -415,6 +415,14 @@ void StageState::LoadAssets() {
     dynamicBoxObj->AddComponent(new Box(*dynamicBoxObj, false)); // false = Dinâmica
     AddObject(dynamicBoxObj);
 
+        // 2. CAIXA DINÂMICA 2 (Empurrável)
+    GameObject* dynamicBoxObj2 = new GameObject();
+    dynamicBoxObj2->box.x = centerX - 400; // Nasce um pouco pra esquerda do jogador
+    dynamicBoxObj2->box.y = centerY + 100;
+    dynamicBoxObj2->z = 2;
+    dynamicBoxObj2->AddComponent(new Box(*dynamicBoxObj2, false)); // false = Dinâmica
+    AddObject(dynamicBoxObj2);
+
     previewLightLockedToPlayer = true;
     previewLightAnchorPlayer = bigCharacterObject;
 
