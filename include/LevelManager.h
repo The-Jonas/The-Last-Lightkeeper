@@ -20,6 +20,13 @@ struct Circle {
     int radius;
 };
 
+// Ler as camadas das imagens
+struct ImageLayer {
+    SDL_Texture* texture;
+    int x, y;
+    int w, h;
+};
+
 class LevelManager {
 public:
     LevelManager();
@@ -27,11 +34,14 @@ public:
 
     // Carrega o JSON exportado pelo Tiled
     void LoadLevel(std::string path, SDL_Renderer* renderer);
+
     // A função principal que o Player vai chamar
     bool CheckCollision(const SDL_Rect& entityBox);
-    
-    void RenderFloor(SDL_Renderer* renderer);
-    void RenderWalls(SDL_Renderer* renderer);
+
+    // Permite testar a colisão enviando um Círculo ao invés de um Retângulo!
+    bool CheckCollision(const Circle& entityCircle);
+
+    void RenderBackground(SDL_Renderer* renderer);
     void RenderDebug(SDL_Renderer* renderer);
 
     // Getters para o sistema de colisão usar depois
@@ -40,12 +50,15 @@ public:
     std::vector<Circle>& GetCircleColliders();
 
 private:
-    SDL_Texture* floorTexture;
-    SDL_Texture* wallTexture;
+    // Vetor pra guardar todas as imagens na ordem certa
+    std::vector<ImageLayer> imageLayers;              
 
     // Funções matemáticas auxiliares para resolver cada tipo de forma
     bool CheckRectVsCircle(const SDL_Rect& rect, const Circle& circle);
     bool CheckPolygonVsPolygon(const Polygon& p1, const Polygon& p2);
+
+    // Ferramenta matemática para testar um polígono contra um círculo
+    bool CheckPolygonVsCircle(const Polygon& poly, const Circle& circle);
 
     // Listas de colisores baseadas no que o Tiled exporta
     std::vector<SDL_Rect> rectColliders;

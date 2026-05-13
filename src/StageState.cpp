@@ -18,6 +18,7 @@
 #include "../include/Item.h"
 #include "../include/ItemPickup.h"
 #include "../include/HotbarComponent.h"
+#include "../include/Box.h"
 #include <iostream>
 #include <fstream> 
 #include <algorithm>
@@ -316,7 +317,7 @@ void StageState::LoadAssets() {
     // ==================================
 
     // Carregamento do mapa livre
-    level.LoadLevel("Recursos/map/mapa_teste.json", Game::GetInstance().GetRenderer());
+    level.LoadLevel("Recursos/map/mapa_1_andar.json", Game::GetInstance().GetRenderer());
 
     mapOrigin = Vec2(0,0);
 
@@ -393,6 +394,26 @@ void StageState::LoadAssets() {
         smallObject->box.x = bigObject->box.x - std::max(40.0f, smallObject->box.w * 1.2f);
         smallObject->box.y = centerY - (smallObject->box.h * 0.5f);
     }
+
+    // ==========================================
+    // SPAWN DAS CAIXAS DE TESTE
+    // ==========================================
+
+    // 1. CAIXA ESTÁTICA (Não se mexe)
+    GameObject* staticBoxObj = new GameObject();
+    staticBoxObj->box.x = centerX + 400; // Nasce um pouco pra direita do jogador
+    staticBoxObj->box.y = centerY;
+    staticBoxObj->z = 2;                 // z=2 para ela organizar a profundidade (Y-Sorting) com os irmãos!
+    staticBoxObj->AddComponent(new Box(*staticBoxObj, true)); // true = Estática
+    AddObject(staticBoxObj);
+
+    // 2. CAIXA DINÂMICA (Empurrável)
+    GameObject* dynamicBoxObj = new GameObject();
+    dynamicBoxObj->box.x = centerX - 400; // Nasce um pouco pra esquerda do jogador
+    dynamicBoxObj->box.y = centerY;
+    dynamicBoxObj->z = 2;
+    dynamicBoxObj->AddComponent(new Box(*dynamicBoxObj, false)); // false = Dinâmica
+    AddObject(dynamicBoxObj);
 
     previewLightLockedToPlayer = true;
     previewLightAnchorPlayer = bigCharacterObject;
@@ -716,70 +737,38 @@ void StageState::Render(){
     SDL_Renderer* renderer = Game::GetInstance().GetRenderer();
 
     // 1. PINTA O VAZIO DE PRETO
-    // Define a cor (R: 0, G: 0, B: 0, Alpha: 255)
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    // Limpa a tela inteira preenchendo com a cor preta
     SDL_RenderClear(renderer);
 
-    // Desenha a parede 
-    level.RenderWalls(Game::GetInstance().GetRenderer());
-
-    // Desenha o chão no fundo de tudo (textura já foi carregada)
-    level.RenderFloor(Game::GetInstance().GetRenderer());
-
+    // 2. DESENHA TODO O CENÁRIO (Parede, Chão)
+    level.RenderBackground(renderer);
 
     // ============================
-    // Implementação Z/Y sorting ==
+    // 3. ORDENAÇÃO Z/Y SORTING
     // ============================
-    
-    // Defina a função de comparação (lambda)
     auto compareObjects = [](const std::shared_ptr<GameObject>& a, const std::shared_ptr<GameObject>& b) {
+        if (a->z != b->z) return a->z < b->z;
         
-        // Regra 1: Z-Sorting (Profundidade)
-        if (a->z != b->z) {
-            return a->z < b->z;
-        }
-
-        // Regra 2: Y-Sorting (Usando o Y do "dono" se houver)
-        // Se o objeto tem um 'owner', ele usa o Y-base do owner para a ordenação.
         float a_bottom_y = (a->owner != nullptr) ? (a->owner->box.y + a->owner->box.h) : (a->box.y + a->box.h);
         float b_bottom_y = (b->owner != nullptr) ? (b->owner->box.y + b->owner->box.h) : (b->box.y + b->box.h);
         
-        // Tolerância (epsilon) para comparação de floats
         float epsilon = 0.01f; 
-
-        // Se os Ys são diferentes, ordena pelo Y.
-        if (std::abs(a_bottom_y - b_bottom_y) > epsilon) {
-            return a_bottom_y < b_bottom_y;
-        }
-
-        // Regra 3: Sub-Z Sorting (Desempate)
-        // Se os Ys são iguais (ex: Character e sua Gun), usa a sub-camada.
-        // O sub_z menor (Character=0) é desenhado primeiro.
+        if (std::abs(a_bottom_y - b_bottom_y) > epsilon) return a_bottom_y < b_bottom_y;
+        
         return a->sub_z < b->sub_z;
     };
-    // Ordene o objectArray usando a função de comparação
     std::sort(objectArray.begin(), objectArray.end(), compareObjects);
 
     // ===================================================================
-    
-
-    // Cenário: depois a luz escurece tudo — redesenha HUD (z>=100) por cima
-    constexpr int kHudZ = 100;
-    for (const auto& go : objectArray) {
-        if (go->z < kHudZ && go.get() != bigCharacterObject && go.get() != smallCharacterObject) {
-            go->Render();
-        }
-    }
-
+    // 4. LUZES E SOMBRAS VÃO PARA O CHÃO (Antes de desenhar os sprites!)
+    // ===================================================================
     Game& g = Game::GetInstance();
     const bool showDebugTools = (lightTweakPanel && lightTweakPanel->visible);
-    const bool bigCircleOnlyLight =
-        previewLightLockedToPlayer && previewLightAnchorPlayer == bigCharacterObject;
-    const bool smallCircleOnlyLight =
-        previewLightLockedToPlayer && previewLightAnchorPlayer == smallCharacterObject;
+    const bool bigCircleOnlyLight = previewLightLockedToPlayer && previewLightAnchorPlayer == bigCharacterObject;
+    const bool smallCircleOnlyLight = previewLightLockedToPlayer && previewLightAnchorPlayer == smallCharacterObject;
     float bigMaxContact = 0.0f;
     float smallMaxContact = 0.0f;
+
     if (lightsEnabled && shadowsEnabled) {
         struct SpriteShadowCast {
             Vec2 lightScreen;
@@ -819,8 +808,7 @@ void StageState::Render(){
             const float bigContactRadiusPx = std::max(6.0f, maxBigPx * 0.07f);
             const float smallContactRadiusPx = std::max(6.0f, maxSmallPx * 0.07f);
             const float bigContact = (dBigPx <= bigContactRadiusPx) ? Clamp01(1.0f - dBigPx / bigContactRadiusPx) : 0.0f;
-            const float smallContact =
-                (dSmallPx <= smallContactRadiusPx) ? Clamp01(1.0f - dSmallPx / smallContactRadiusPx) : 0.0f;
+            const float smallContact = (dSmallPx <= smallContactRadiusPx) ? Clamp01(1.0f - dSmallPx / smallContactRadiusPx) : 0.0f;
             bigMaxContact = std::max(bigMaxContact, bigContact);
             smallMaxContact = std::max(smallMaxContact, smallContact);
 
@@ -831,30 +819,22 @@ void StageState::Render(){
             }
             if (touchSmall > 0.0f) {
                 const float shadowLengthPx = params.shadowMaxLengthPx * distSmall;
-                const Uint8 shadowAlpha =
-                    static_cast<Uint8>(std::max(0.0f, std::min(255.0f, params.darknessMax * touchSmall)));
+                const Uint8 shadowAlpha = static_cast<Uint8>(std::max(0.0f, std::min(255.0f, params.darknessMax * touchSmall)));
                 smallShadowCasts.push_back({lightScreen, touchSmall, shadowLengthPx, shadowAlpha, smallContact});
             }
         };
 
-        // Preview light also casts shadows for immediate feedback.
         renderShadowsForLight(smoothedDynamicLightScreenPos, lightMaskParams);
+        
         if (showDebugTools) {
-            const float previewShadowRadius =
-                std::max(24.0f,
-                         std::max(8.0f, lightMaskParams.falloffRadiusPx) * std::max(0.4f, lightMaskParams.fatorDicaDeRaio));
-            DrawDebugCircle(g.GetRenderer(), smoothedDynamicLightScreenPos.x, smoothedDynamicLightScreenPos.y, previewShadowRadius,
-                            255, 210, 90, 130);
+            const float previewShadowRadius = std::max(24.0f, std::max(8.0f, lightMaskParams.falloffRadiusPx) * std::max(0.4f, lightMaskParams.fatorDicaDeRaio));
+            DrawDebugCircle(g.GetRenderer(), smoothedDynamicLightScreenPos.x, smoothedDynamicLightScreenPos.y, previewShadowRadius, 255, 210, 90, 130);
         }
 
         int renderedLights = 0;
         for (const LightInstance& light : lights) {
-            if (!light.enabled) {
-                continue;
-            }
-            if (renderedLights >= maxActiveLights) {
-                break;
-            }
+            if (!light.enabled) continue;
+            if (renderedLights >= maxActiveLights) break;
 
             const Vec2 lightScreen = WorldToScreen(light.worldPos);
             const float cullRadius = std::max(32.0f, light.params.falloffRadiusPx * 1.6f);
@@ -866,29 +846,20 @@ void StageState::Render(){
 
             renderShadowsForLight(lightScreen, light.params);
             if (showDebugTools) {
-                const float placedShadowRadius =
-                    std::max(24.0f,
-                             std::max(8.0f, light.params.falloffRadiusPx) * std::max(0.4f, light.params.fatorDicaDeRaio));
+                const float placedShadowRadius = std::max(24.0f, std::max(8.0f, light.params.falloffRadiusPx) * std::max(0.4f, light.params.fatorDicaDeRaio));
                 DrawDebugCircle(g.GetRenderer(), lightScreen.x, lightScreen.y, placedShadowRadius, 120, 220, 255, 95);
             }
             renderedLights++;
         }
 
-        // Sprite-projected player shadows: each relevant nearby light casts its own shadow.
         constexpr size_t kMaxSpriteShadowsPerPlayer = 4;
-        std::sort(bigShadowCasts.begin(), bigShadowCasts.end(),
-                  [](const SpriteShadowCast& a, const SpriteShadowCast& b) { return a.touch > b.touch; });
-        std::sort(smallShadowCasts.begin(), smallShadowCasts.end(),
-                  [](const SpriteShadowCast& a, const SpriteShadowCast& b) { return a.touch > b.touch; });
-        if (bigShadowCasts.size() > kMaxSpriteShadowsPerPlayer) {
-            bigShadowCasts.resize(kMaxSpriteShadowsPerPlayer);
-        }
-        if (smallShadowCasts.size() > kMaxSpriteShadowsPerPlayer) {
-            smallShadowCasts.resize(kMaxSpriteShadowsPerPlayer);
-        }
+        std::sort(bigShadowCasts.begin(), bigShadowCasts.end(), [](const SpriteShadowCast& a, const SpriteShadowCast& b) { return a.touch > b.touch; });
+        std::sort(smallShadowCasts.begin(), smallShadowCasts.end(), [](const SpriteShadowCast& a, const SpriteShadowCast& b) { return a.touch > b.touch; });
+        
+        if (bigShadowCasts.size() > kMaxSpriteShadowsPerPlayer) bigShadowCasts.resize(kMaxSpriteShadowsPerPlayer);
+        if (smallShadowCasts.size() > kMaxSpriteShadowsPerPlayer) smallShadowCasts.resize(kMaxSpriteShadowsPerPlayer);
+        
         for (const SpriteShadowCast& c : bigShadowCasts) {
-            // If light is right on the feet, keep only the contact circle.
-            // While preview light is locked to this player, never draw the stretched sprite shadow for them.
             if (!bigCircleOnlyLight && c.contact < 0.50f) {
                 RenderProjectedSpriteShadow(bigCharacterObject, c.lightScreen, c.touch, c.lengthPx, c.alpha, lightMaskParams);
             }
@@ -898,15 +869,14 @@ void StageState::Render(){
                 RenderProjectedSpriteShadow(smallCharacterObject, c.lightScreen, c.touch, c.lengthPx, c.alpha, lightMaskParams);
             }
         }
-        UpdateControlledCharacterVisuals(); // restore player tint after black sprite-shadow rendering
+        
+        UpdateControlledCharacterVisuals(); // Restaura as cores originais pós-sombra
 
         if (showDebugTools) {
-            // Visualize the player collision box and foot point used by shadow-touch checks.
             DrawPlayerShadowTouchDebug(g.GetRenderer(), bigCharacterObject, 255, 120, 120);
             DrawPlayerShadowTouchDebug(g.GetRenderer(), smallCharacterObject, 130, 220, 255);
         }
 
-        // Contact blob under the feet: draw before the sprite so it sits on the ground, not on top.
         if (bigCharacterObject && bigMaxContact > 0.0f) {
             DrawContactFootShadow(g.GetRenderer(), bigCharacterObject->box, bigMaxContact);
         }
@@ -915,38 +885,30 @@ void StageState::Render(){
         }
     }
 
-    if (bigCharacterObject && smallCharacterObject) {
-        if (BottomYOf(bigCharacterObject) <= BottomYOf(smallCharacterObject)) {
-            bigCharacterObject->Render();
-            smallCharacterObject->Render();
-        } else {
-            smallCharacterObject->Render();
-            bigCharacterObject->Render();
-        }
-    } else {
-        if (bigCharacterObject) {
-            bigCharacterObject->Render();
-        }
-        if (smallCharacterObject) {
-            smallCharacterObject->Render();
+    // ===================================================================
+    // 5. AGORA DESENHAMOS A LISTA ORDENADA INTEIRA SEM REGRAS
+    // ===================================================================
+    constexpr int kHudZ = 100;
+    for (const auto& go : objectArray) {
+        if (go->z < kHudZ) {
+            go->Render();
         }
     }
 
+    // ===================================================================
+    // 6. DEBUG E SISTEMA DE LUZ RADIAL
+    // ===================================================================
     level.RenderDebug(Game::GetInstance().GetRenderer());
 
     if (lightsEnabled && radialGeometry != nullptr) {
         std::vector<RadialLightOverlay::ScreenLight> screenLights;
         screenLights.reserve(static_cast<size_t>(maxActiveLights + 1));
-        // Dynamic preview light is always present.
         screenLights.push_back({smoothedDynamicLightScreenPos.x, smoothedDynamicLightScreenPos.y, lightMaskShape, lightMaskParams, 0.317f});
+        
         int renderedLights = 0;
         for (LightInstance& light : lights) {
-            if (!light.enabled) {
-                continue;
-            }
-            if (renderedLights >= maxActiveLights) {
-                break;
-            }
+            if (!light.enabled) continue;
+            if (renderedLights >= maxActiveLights) break;
 
             const Vec2 lightScreen = WorldToScreen(light.worldPos);
             const float cullRadius = std::max(32.0f, light.params.falloffRadiusPx * 1.4f);
@@ -958,6 +920,7 @@ void StageState::Render(){
             screenLights.push_back({lightScreen.x, lightScreen.y, light.shape, light.params, light.animationSeed});
             renderedLights++;
         }
+        
         LightOcclusionContext occCtx;
         if (tileMapComp && tileSet) {
             occCtx.solidGrid = &tileMapComp->GetLightOcclusionSolid();
@@ -1001,22 +964,14 @@ void StageState::Render(){
         }
     }
 
-    // Draw shadow-radius debug circles on top of dark overlay (toggle with P).
     if (lightsEnabled && shadowsEnabled && showDebugTools) {
-        const float previewShadowRadius =
-            std::max(24.0f,
-                     std::max(8.0f, lightMaskParams.falloffRadiusPx) * std::max(0.4f, lightMaskParams.fatorDicaDeRaio));
-        DrawDebugCircle(g.GetRenderer(), smoothedDynamicLightScreenPos.x, smoothedDynamicLightScreenPos.y, previewShadowRadius,
-                        255, 210, 90, 130);
+        const float previewShadowRadius = std::max(24.0f, std::max(8.0f, lightMaskParams.falloffRadiusPx) * std::max(0.4f, lightMaskParams.fatorDicaDeRaio));
+        DrawDebugCircle(g.GetRenderer(), smoothedDynamicLightScreenPos.x, smoothedDynamicLightScreenPos.y, previewShadowRadius, 255, 210, 90, 130);
 
         int renderedLights = 0;
         for (const LightInstance& light : lights) {
-            if (!light.enabled) {
-                continue;
-            }
-            if (renderedLights >= maxActiveLights) {
-                break;
-            }
+            if (!light.enabled) continue;
+            if (renderedLights >= maxActiveLights) break;
             const Vec2 lightScreen = WorldToScreen(light.worldPos);
             const float cullRadius = std::max(32.0f, light.params.falloffRadiusPx * 1.6f);
             if (lightScreen.x < -cullRadius || lightScreen.y < -cullRadius ||
@@ -1024,9 +979,7 @@ void StageState::Render(){
                 lightScreen.y > static_cast<float>(g.GetWindowsHeight()) + cullRadius) {
                 continue;
             }
-            const float placedShadowRadius =
-                std::max(24.0f,
-                         std::max(8.0f, light.params.falloffRadiusPx) * std::max(0.4f, light.params.fatorDicaDeRaio));
+            const float placedShadowRadius = std::max(24.0f, std::max(8.0f, light.params.falloffRadiusPx) * std::max(0.4f, light.params.fatorDicaDeRaio));
             DrawDebugCircle(g.GetRenderer(), lightScreen.x, lightScreen.y, placedShadowRadius, 120, 220, 255, 95);
             renderedLights++;
         }
@@ -1036,6 +989,7 @@ void StageState::Render(){
         lightTweakPanel->Render(g.GetRenderer(), g.GetWindowsWidth(), g.GetWindowsHeight());
     }
 
+    // 7. HUD FICA ACIMA DE TUDO (Z >= 100)
     for (const auto& go : objectArray) {
         if (go->z >= kHudZ) {
             go->Render();

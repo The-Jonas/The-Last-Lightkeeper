@@ -1,0 +1,6 @@
+Cuidado ao manipular o tmx (o arquivo do Tiled)
+
+- Quando você selecionar uma imagem ela tem que obedecer o caminho relativo e não o absoluto
+Ou seja
+- Caminho absoluto seria um diretorio do seu computador
+- Caminho relativo seria os arquivos desse projeto, vai carregar diretamente daqui...

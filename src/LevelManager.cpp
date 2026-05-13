@@ -2,6 +2,8 @@
 #include "../include/Camera.h"
 #include <SDL2/SDL_image.h>
 #include <cmath>
+#include <algorithm>
+#include <limits>
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -10,21 +12,16 @@
 
 LevelManager::LevelManager() {
     // Inicializamos os ponteiros como nulos por segurança
-    floorTexture = nullptr;
-    wallTexture = nullptr;
 }
 
 LevelManager::~LevelManager() {
-    // Quando o andar for destruído, limpamos as texturas da placa de vídeo 
-    // para não causar vazamento de memória (memory leak)
-    if (floorTexture != nullptr) {
-        SDL_DestroyTexture(floorTexture);
+    // O destrutor limpa todas as texturas do vetor automaticamente
+    for (auto& layer : imageLayers) {
+        if (layer.texture != nullptr) {
+            SDL_DestroyTexture(layer.texture);
+        }
     }
-    if (wallTexture != nullptr) {
-        SDL_DestroyTexture(wallTexture);
-    }
-
-    // Limpamos também as listas de colisores
+    imageLayers.clear();
     rectColliders.clear();
     polyColliders.clear();
     circleColliders.clear();
@@ -37,64 +34,84 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
     json j;
     file >> j;
 
-    // 1. Limpa dados anteriores caso esteja trocando de andar
+    // Limpa a fase anterior
+    for (auto& layer : imageLayers) {
+        SDL_DestroyTexture(layer.texture);
+    }
+    imageLayers.clear();
     rectColliders.clear();
     polyColliders.clear();
     circleColliders.clear();
 
-    // 2. No Tiled, você criará camadas de objetos. Vamos iterar por elas.
+    // Lemos as camadas na ordem em que o Tiled exportou!
     for (auto& layer : j["layers"]) {
-        if (layer["type"] == "objectgroup") {
+        
+        // ==========================================
+        // SE FOR UMA CAMADA DE IMAGEM (Chão, Parede)
+        // ==========================================
+        if (layer["type"] == "imagelayer") {
+            ImageLayer imgLayer;
+            
+            // Pega o offset se existir (senão é 0)
+            imgLayer.x = layer.contains("offsetx") ? (int)layer["offsetx"] : 0;
+            imgLayer.y = layer.contains("offsety") ? (int)layer["offsety"] : 0;
+            imgLayer.w = layer.contains("imagewidth") ? (int)layer["imagewidth"] : 0;
+            imgLayer.h = layer.contains("imageheight") ? (int)layer["imageheight"] : 0;
 
+            // O Tiled salva como "../img/...". Nossa engine precisa de "Recursos/img/..."
+            std::string imagePath = layer["image"];
+            size_t pos = imagePath.find("../");
+            if (pos != std::string::npos) {
+                imagePath.replace(pos, 3, "Recursos/");
+            }
+
+            // Carrega a textura e guarda no nosso vetor
+            imgLayer.texture = IMG_LoadTexture(renderer, imagePath.c_str());
+            if (imgLayer.texture == nullptr) {
+                std::cout << "Erro ao carregar textura do Tiled: " << imagePath << std::endl;
+            } else {
+                imageLayers.push_back(imgLayer);
+            }
+        }
+        
+        // ==========================================
+        // SE FOR A CAMADA DE COLISÃO
+        // ==========================================
+        else if (layer["type"] == "objectgroup") {
             float layerOffsetX = layer.contains("offsetx") ? (float)layer["offsetx"] : 0.0f;
             float layerOffsetY = layer.contains("offsety") ? (float)layer["offsety"] : 0.0f;
 
-            // ESTES SÃO OS MESMOS VALORES QUE VOCÊ USOU NO RENDER FLOOR!
-            // Se você mudar lá no Render, tem que mudar aqui também.
-            float mapGlobalOffsetX = 350.0f; 
-            float mapGlobalOffsetY = 1100.0f;
-
             for (auto& obj : layer["objects"]) {
-
-                // Soma o X/Y do objeto com o deslocamento da camada APENAS UMA VEZ
-                float finalX = (float)obj["x"] + layerOffsetX + mapGlobalOffsetX;
-                float finalY = (float)obj["y"] + layerOffsetY + mapGlobalOffsetY;
+                float finalX = (float)obj["x"] + layerOffsetX;
+                float finalY = (float)obj["y"] + layerOffsetY;
                 
-                // CASO 1: Polígono
                 if (obj.contains("polygon")) {
                     Polygon poly;
                     for (auto& p : obj["polygon"]) {
                         poly.vertices.push_back({ (int)(finalX + (float)p["x"]), 
                                                   (int)(finalY + (float)p["y"]) });
                     }
-                    polyColliders.push_back(poly);
-                }
-                // CASO 2: Círculo (No Tiled, elipses com W=H)
-                else if (obj.contains("ellipse")) {
+                    // Só adiciona se for um polígono válido (pelo menos um triângulo)
+                    if (poly.vertices.size() >= 3) {
+                        polyColliders.push_back(poly);
+                    }
+                } else if (obj.contains("ellipse")) {
                     Circle c;
-                    c.radius = (int)obj["width"] / 2;
+                    // Usa .value() para evitar crashes se a propriedade não existir
+                    c.radius = (int)obj.value("width", 0.0f) / 2;
                     c.center.x = (int)finalX + c.radius;
                     c.center.y = (int)finalY + c.radius;
-                    circleColliders.push_back(c);
-                }
-                // CASO 3: Retângulo Simples
-                else {
+                    if (c.radius > 0) circleColliders.push_back(c);
+                } else {
                     SDL_Rect r;
                     r.x = (int)finalX;
                     r.y = (int)finalY;
-                    r.w = obj["width"];
-                    r.h = obj["height"];
-                    rectColliders.push_back(r);
+                    r.w = obj.value("width", 0.0f);
+                    r.h = obj.value("height", 0.0f);
+                    if (r.w > 0 && r.h > 0) rectColliders.push_back(r);
                 }
             }
         }
-    }
-    
-    floorTexture = IMG_LoadTexture(renderer, "Recursos/img/cenario/mapa1_chao.png");
-    wallTexture = IMG_LoadTexture(renderer, "Recursos/img/cenario/mapa1_parede.png");
-
-    if (floorTexture == nullptr || wallTexture == nullptr) {
-        std::cout << "Erro ao carregar texturas do mapa no LevelManager!" << std::endl;
     }
 }
 
@@ -150,6 +167,9 @@ bool LevelManager::CheckRectVsCircle(const SDL_Rect& rect, const Circle& circle)
 }
 
 bool LevelManager::CheckPolygonVsPolygon(const Polygon& p1, const Polygon& p2) {
+    // Trava de segurança: Um poligono precisa de no mínimo 3 pontos para ter volume
+    if (p1.vertices.size() < 3 || p2.vertices.size() < 3) return false;
+
     // Primeiro testar os eixos (normais) de ambos os polígonos
     const Polygon* polys[2] = {&p1, &p2};
 
@@ -169,7 +189,8 @@ bool LevelManager::CheckPolygonVsPolygon(const Polygon& p1, const Polygon& p2) {
             float normalY = edgeX;
             
             // Projeta os dois polígonos nesse eixo Normal
-            float minA = INFINITY, maxA = -INFINITY;
+            float minA = std::numeric_limits<float>::max();
+            float maxA = std::numeric_limits<float>::lowest();
             for (const auto& p : p1.vertices) {
                 // Produto escalar para projetar
                 float projection = (p.x * normalX) + (p.y * normalY);
@@ -177,7 +198,8 @@ bool LevelManager::CheckPolygonVsPolygon(const Polygon& p1, const Polygon& p2) {
                 maxA = std::max(maxA, projection);
             }
 
-            float minB = INFINITY, maxB = -INFINITY;
+            float minB = std::numeric_limits<float>::max();
+            float maxB = std::numeric_limits<float>::lowest();
             for (const auto& p : p2.vertices) {
                 float projection = (p.x * normalX) + (p.y * normalY);
                 minB = std::min(minB, projection);
@@ -196,35 +218,99 @@ bool LevelManager::CheckPolygonVsPolygon(const Polygon& p1, const Polygon& p2) {
     return true;
 }
 
-void LevelManager::RenderFloor(SDL_Renderer* renderer) {
-    if (floorTexture == nullptr) return;
-
-    int offsetX = 350; // Exemplo: empurra o chão 350 pixels pra direita
-    int offsetY = 1100; // Exemplo: empurra o chão 500 pixels pra baixo
-
-    // Criamos o retângulo de destino baseado no tamanho real do seu mapa
-    // Subtraímos a posição da câmera para o mapa "correr" conforme o player anda
-    SDL_Rect destRect = { 
-        (int)(-Camera::pos.x + offsetX), 
-        (int)(-Camera::pos.y + offsetY), 
-        4357, 3276  
-    };
-
-    SDL_RenderCopy(renderer, floorTexture, nullptr, &destRect);
+void LevelManager::RenderBackground(SDL_Renderer* renderer) {
+    // Como o vetor guardou as imagens na ordem do JSON (Parede -> Chão),
+    // ele vai desenhar automaticamente na ordem certa!
+    for (const auto& imgLayer : imageLayers) {
+        if (imgLayer.texture != nullptr) {
+            SDL_Rect destRect = { 
+                (int)(-Camera::pos.x + imgLayer.x), 
+                (int)(-Camera::pos.y + imgLayer.y), 
+                imgLayer.w, imgLayer.h
+            };
+            SDL_RenderCopy(renderer, imgLayer.texture, nullptr, &destRect);
+        }
+    }
 }
 
-void LevelManager::RenderWalls(SDL_Renderer* renderer) {
-    if (wallTexture == nullptr) return;
+bool LevelManager::CheckCollision(const Circle& entityCircle) {
+    // Checagem contra Retângulos do Cenário 
+    for (const auto& rectCol : rectColliders) {
+        if (CheckRectVsCircle(rectCol, entityCircle)) {
+            return true;
+        }
+    }
 
-    // A parede usa a mesma lógica do chão para ficarem alinhados
-    SDL_Rect destRect = { 
-        (int)(-Camera::pos.x), 
-        (int)(-Camera::pos.y), 
-        5066, 4399
-    };
+    // Checagem contra outros Círculos do Cenário
+    for (const auto& circleCol : circleColliders) {
+        int dx = entityCircle.center.x - circleCol.center.x;
+        int dy = entityCircle.center.y - circleCol.center.y;
+        int distSq = (dx * dx) + (dy * dy);
+        int rSum = entityCircle.radius + circleCol.radius;
+        if (distSq < (rSum * rSum)) return true;
+    }
 
-    SDL_RenderCopy(renderer, wallTexture, nullptr, &destRect);
+    // Checagem contra Polígonos (As paredes diagonais do Tiled)
+    for (const auto& polyCol : polyColliders) {
+        if (CheckPolygonVsCircle(polyCol, entityCircle)) {
+            return true;
+        }
+    }
+
+    return false; // Caminho livre!
 }
+
+bool LevelManager::CheckPolygonVsCircle(const Polygon& poly, const Circle& circle) {
+    if (poly.vertices.empty()) return false;
+
+    float cx = (float)circle.center.x;
+    float cy = (float)circle.center.y;
+    float radiusSq = (float)(circle.radius * circle.radius);
+
+    // Teste 1: O centro do círculo está DE DENTRO do polígono? (Ray-casting algorithm)
+    bool inside = false;
+    for (size_t i = 0, j = poly.vertices.size() - 1; i < poly.vertices.size(); j = i++) {
+        float p1x = (float)poly.vertices[i].x, p1y = (float)poly.vertices[i].y;
+        float p2x = (float)poly.vertices[j].x, p2y = (float)poly.vertices[j].y;
+
+        if (((p1y > cy) != (p2y > cy)) &&
+            (cx < (p2x - p1x) * (cy - p1y) / (p2y - p1y) + p1x)) {
+            inside = !inside;
+        }
+    }
+    if (inside) return true;
+
+    // Teste 2: O círculo está esbarrando (raspando) em alguma das paredes do polígono?
+    for (size_t i = 0; i < poly.vertices.size(); i++) {
+        float p1x = (float)poly.vertices[i].x, p1y = (float)poly.vertices[i].y;
+        float p2x = (float)poly.vertices[(i + 1) % poly.vertices.size()].x, p2y = (float)poly.vertices[(i + 1) % poly.vertices.size()].y;
+
+        float lineLenSq = (p2x - p1x) * (p2x - p1x) + (p2y - p1y) * (p2y - p1y);
+        if (lineLenSq == 0) continue; // Previne divisão por zero se a linha for um ponto
+        
+        // Acha o ponto exato da parede que está mais perto do jogador
+        float dot = (((cx - p1x) * (p2x - p1x)) + ((cy - p1y) * (p2y - p1y))) / lineLenSq;
+        
+        float closestX, closestY;
+        if (dot < 0) {
+            closestX = p1x; closestY = p1y;
+        } else if (dot > 1) {
+            closestX = p2x; closestY = p2y;
+        } else {
+            closestX = p1x + (dot * (p2x - p1x));
+            closestY = p1y + (dot * (p2y - p1y));
+        }
+
+        float distX = cx - closestX;
+        float distY = cy - closestY;
+        float distSq = (distX * distX) + (distY * distY);
+
+        if (distSq < radiusSq) return true; // Bateu na parede!
+    }
+
+    return false;
+}
+
 
 void LevelManager::RenderDebug(SDL_Renderer* renderer){
 #ifdef DEBUG
