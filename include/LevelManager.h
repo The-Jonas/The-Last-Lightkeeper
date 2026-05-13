@@ -27,6 +27,14 @@ struct ImageLayer {
     int w, h;
 };
 
+// Guarda a "receita" de qualquer entidade do jogo
+struct EntitySpawn {
+    std::string type;
+    float x, y;
+    bool isStatic;
+    int z;
+};
+
 class LevelManager {
 public:
     LevelManager();
@@ -48,6 +56,9 @@ public:
     std::vector<SDL_Rect>& GetRectColliders();
     std::vector<Polygon>& GetPolyColliders();
     std::vector<Circle>& GetCircleColliders();
+
+    // Lista de Spawns
+    std::vector<EntitySpawn> entitySpawns;
 
 private:
     // Vetor pra guardar todas as imagens na ordem certa

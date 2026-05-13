@@ -315,7 +315,7 @@ void StageState::LoadAssets() {
     // ==================================
     // OBS: TOMAR CUIDADO NA ORDEM EM QUE CARREGAMOS OS COMPONENTES, POIS MUITO PROVAVELMENTE ISSO É A CAUSA DE ESTAREM SUMINDO, UM É DESENHADO POR CIMA DO OUTRO
     // ==================================
-
+    
     // Carregamento do mapa livre
     level.LoadLevel("Recursos/map/mapa_1_andar.json", Game::GetInstance().GetRenderer());
 
@@ -396,32 +396,22 @@ void StageState::LoadAssets() {
     }
 
     // ==========================================
-    // SPAWN DAS CAIXAS DE TESTE
+    // SPAWN AUTOMÁTICO DAS ENTIDADES (TILED)
     // ==========================================
-
-    // 1. CAIXA ESTÁTICA (Não se mexe)
-    GameObject* staticBoxObj = new GameObject();
-    staticBoxObj->box.x = centerX + 400; // Nasce um pouco pra direita do jogador
-    staticBoxObj->box.y = centerY;
-    staticBoxObj->z = 2;                 // z=2 para ela organizar a profundidade (Y-Sorting) com os irmãos!
-    staticBoxObj->AddComponent(new Box(*staticBoxObj, true)); // true = Estática
-    AddObject(staticBoxObj);
-
-    // 2. CAIXA DINÂMICA (Empurrável)
-    GameObject* dynamicBoxObj = new GameObject();
-    dynamicBoxObj->box.x = centerX - 400; // Nasce um pouco pra esquerda do jogador
-    dynamicBoxObj->box.y = centerY;
-    dynamicBoxObj->z = 2;
-    dynamicBoxObj->AddComponent(new Box(*dynamicBoxObj, false)); // false = Dinâmica
-    AddObject(dynamicBoxObj);
-
-        // 2. CAIXA DINÂMICA 2 (Empurrável)
-    GameObject* dynamicBoxObj2 = new GameObject();
-    dynamicBoxObj2->box.x = centerX - 400; // Nasce um pouco pra esquerda do jogador
-    dynamicBoxObj2->box.y = centerY + 100;
-    dynamicBoxObj2->z = 2;
-    dynamicBoxObj2->AddComponent(new Box(*dynamicBoxObj2, false)); // false = Dinâmica
-    AddObject(dynamicBoxObj2);
+    for (const auto& spawn : level.entitySpawns) {
+        
+        if (spawn.type == "Caixa") {
+            GameObject* boxObj = new GameObject();
+            boxObj->box.x = spawn.x;
+            boxObj->box.y = spawn.y;
+            boxObj->z = spawn.z; 
+            
+            // Instancia a classe Box passando a flag isStatic lida do Tiled!
+            boxObj->AddComponent(new Box(*boxObj, spawn.isStatic));
+            AddObject(boxObj);
+        }
+        
+    }
 
     previewLightLockedToPlayer = true;
     previewLightAnchorPlayer = bigCharacterObject;

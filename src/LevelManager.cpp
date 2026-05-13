@@ -25,93 +25,150 @@ LevelManager::~LevelManager() {
     rectColliders.clear();
     polyColliders.clear();
     circleColliders.clear();
+    entitySpawns.clear();
 }
 
 void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
     std::ifstream file(path);
-    if (!file.is_open()) return;
+    if (!file.is_open()) {
+        std::cout << "Erro: Arquivo do mapa nao encontrado -> " << path << std::endl;
+        return;
+    }
 
     json j;
-    file >> j;
+    try {
+        file >> j;
 
-    // Limpa a fase anterior
-    for (auto& layer : imageLayers) {
-        SDL_DestroyTexture(layer.texture);
-    }
-    imageLayers.clear();
-    rectColliders.clear();
-    polyColliders.clear();
-    circleColliders.clear();
-
-    // Lemos as camadas na ordem em que o Tiled exportou!
-    for (auto& layer : j["layers"]) {
-        
-        // ==========================================
-        // SE FOR UMA CAMADA DE IMAGEM (Chão, Parede)
-        // ==========================================
-        if (layer["type"] == "imagelayer") {
-            ImageLayer imgLayer;
-            
-            // Pega o offset se existir (senão é 0)
-            imgLayer.x = layer.contains("offsetx") ? (int)layer["offsetx"] : 0;
-            imgLayer.y = layer.contains("offsety") ? (int)layer["offsety"] : 0;
-            imgLayer.w = layer.contains("imagewidth") ? (int)layer["imagewidth"] : 0;
-            imgLayer.h = layer.contains("imageheight") ? (int)layer["imageheight"] : 0;
-
-            // O Tiled salva como "../img/...". Nossa engine precisa de "Recursos/img/..."
-            std::string imagePath = layer["image"];
-            size_t pos = imagePath.find("../");
-            if (pos != std::string::npos) {
-                imagePath.replace(pos, 3, "Recursos/");
-            }
-
-            // Carrega a textura e guarda no nosso vetor
-            imgLayer.texture = IMG_LoadTexture(renderer, imagePath.c_str());
-            if (imgLayer.texture == nullptr) {
-                std::cout << "Erro ao carregar textura do Tiled: " << imagePath << std::endl;
-            } else {
-                imageLayers.push_back(imgLayer);
+        // Limpa a fase anterior
+        for (auto& layer : imageLayers) {
+            if (layer.texture != nullptr) {
+                SDL_DestroyTexture(layer.texture);
             }
         }
-        
-        // ==========================================
-        // SE FOR A CAMADA DE COLISÃO
-        // ==========================================
-        else if (layer["type"] == "objectgroup") {
-            float layerOffsetX = layer.contains("offsetx") ? (float)layer["offsetx"] : 0.0f;
-            float layerOffsetY = layer.contains("offsety") ? (float)layer["offsety"] : 0.0f;
+        imageLayers.clear();
+        rectColliders.clear();
+        polyColliders.clear();
+        circleColliders.clear();
+        entitySpawns.clear();
 
-            for (auto& obj : layer["objects"]) {
-                float finalX = (float)obj["x"] + layerOffsetX;
-                float finalY = (float)obj["y"] + layerOffsetY;
+        // Se o JSON estiver vazio, aborta com seguranca
+        if (!j.contains("layers")) return;
+
+        // Lemos as camadas na ordem em que o Tiled exportou!
+        for (auto& layer : j["layers"]) {
+            std::string layerType = layer.value("type", "");
+
+            // ==========================================
+            // SE FOR UMA CAMADA DE IMAGEM (Chão, Parede)
+            // ==========================================
+            if (layerType == "imagelayer") {
+                ImageLayer imgLayer;
+
+                // Pega o offset se existir (senão é 0)
+                imgLayer.x = layer.value("offsetx", 0);
+                imgLayer.y = layer.value("offsety", 0);
+                imgLayer.w = layer.value("imagewidth", 0);
+                imgLayer.h = layer.value("imageheight", 0);
+
+                // O Tiled salva como "../img/...". Nossa engine precisa de "Recursos/img/..."
+                std::string imagePath = layer.value("image", "");
+                if (imagePath != "") {
+                    size_t pos = imagePath.find("../");
+                    if (pos != std::string::npos) {
+                        imagePath.replace(pos, 3, "Recursos/");
+                    }
+                    imgLayer.texture = IMG_LoadTexture(renderer, imagePath.c_str());
+                    if (imgLayer.texture) {
+                        imageLayers.push_back(imgLayer);
+                    } else {
+                        std::cout << "Erro ao carregar textura: " << imagePath << std::endl;
+                    }
+                }
+            }
+
+            // ==========================================
+            // SE FOR A CAMADA DE COLISÃO
+            // ==========================================
+            else if (layerType == "objectgroup") {
+                std::string layerName = layer.value("name", "");
+                float layerOffsetX = layer.value("offsetx", 0.0f);
+                float layerOffsetY = layer.value("offsety", 0.0f);
+
+                // Trava de seguranca: Se nao tem objetos, pula!
+                if (!layer.contains("objects")) continue;
+
+                // CAMADA DE COLISÃO FÍSICA (Paredes)
+                if (layerName == "Collision") {
+                    for (auto& obj : layer["objects"]) {
+                        float finalX = obj.value("x", 0.0f) + layerOffsetX;
+                        float finalY = obj.value("y", 0.0f) + layerOffsetY;
+                    
+                        if (obj.contains("polygon")) {
+                            Polygon poly;
+                            for (auto& p : obj["polygon"]) {
+                                float px = p.value("x", 0.0f);
+                                float py = p.value("y", 0.0f);
+                                poly.vertices.push_back({ (int)(finalX + px), (int)(finalY + py) });
+                            }
+                            // Só adiciona se for um polígono válido (pelo menos um triângulo)
+                            if (poly.vertices.size() >= 3) polyColliders.push_back(poly);
+
+                        } else if (obj.contains("ellipse")) {
+                            Circle c;
+                            // Usa .value() para evitar crashes se a propriedade não existir
+                            c.radius = (int)obj.value("width", 0.0f) / 2;
+                            c.center.x = (int)finalX + c.radius;
+                            c.center.y = (int)finalY + c.radius;
+                            if (c.radius > 0) circleColliders.push_back(c);
+
+                        } else {
+                            SDL_Rect r;
+                            r.x = (int)finalX;
+                            r.y = (int)finalY;
+                            r.w = obj.value("width", 0.0f);
+                            r.h = obj.value("height", 0.0f);
+                            if (r.w > 0 && r.h > 0) rectColliders.push_back(r);
+                        }
+                    }
+                }
                 
-                if (obj.contains("polygon")) {
-                    Polygon poly;
-                    for (auto& p : obj["polygon"]) {
-                        poly.vertices.push_back({ (int)(finalX + (float)p["x"]), 
-                                                  (int)(finalY + (float)p["y"]) });
+                // CAMADA DE ENTIDADES (Spawns)
+                else if (layerName == "Entidades") {
+                    for (auto& obj : layer["objects"]){
+                        EntitySpawn spawn;
+
+                        // O Tiled pode ler tanto "type" ou "class". Usarei as duas por segurança
+                        spawn.type = obj.value("class", obj.value("type", ""));
+                        spawn.x = obj.value("x", 0.0f) + layerOffsetX;
+                        spawn.y = obj.value("y", 0.0f) + layerOffsetY;
+
+                        // Valores padrão caso esqueçamos de criar no Tiled
+                        spawn.isStatic = false;
+                        spawn.z = 2;
+
+                        // Lendo agora as propriedades customizadas
+                        if (obj.contains("properties")) {
+                            for (auto& prop : obj["properties"]) {
+                                std::string pName = prop.value("name", "");
+                                if (pName == "isStatic" && prop.contains("value")) {
+                                    if (prop["value"].is_boolean()) spawn.isStatic = prop["value"].get<bool>();
+                                } 
+                                else if (pName == "z" && prop.contains("value")) {
+                                    if (prop["value"].is_number()) spawn.z = prop["value"].get<int>();
+                                }
+                            }    
+                        }
+
+                        // Guarda na lista do mapa!
+                        entitySpawns.push_back(spawn);
                     }
-                    // Só adiciona se for um polígono válido (pelo menos um triângulo)
-                    if (poly.vertices.size() >= 3) {
-                        polyColliders.push_back(poly);
-                    }
-                } else if (obj.contains("ellipse")) {
-                    Circle c;
-                    // Usa .value() para evitar crashes se a propriedade não existir
-                    c.radius = (int)obj.value("width", 0.0f) / 2;
-                    c.center.x = (int)finalX + c.radius;
-                    c.center.y = (int)finalY + c.radius;
-                    if (c.radius > 0) circleColliders.push_back(c);
-                } else {
-                    SDL_Rect r;
-                    r.x = (int)finalX;
-                    r.y = (int)finalY;
-                    r.w = obj.value("width", 0.0f);
-                    r.h = obj.value("height", 0.0f);
-                    if (r.w > 0 && r.h > 0) rectColliders.push_back(r);
                 }
             }
         }
+    } 
+    catch (const std::exception& e) { // <-- CORREÇÃO AQUI
+        std::cout << "Erro Fatal ao processar o JSON: " << e.what() << std::endl;
+        return;
     }
 }
 
