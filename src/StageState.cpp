@@ -713,6 +713,14 @@ void StageState::Update(float dt){
 
 void StageState::Render(){
 
+    SDL_Renderer* renderer = Game::GetInstance().GetRenderer();
+
+    // 1. PINTA O VAZIO DE PRETO
+    // Define a cor (R: 0, G: 0, B: 0, Alpha: 255)
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    // Limpa a tela inteira preenchendo com a cor preta
+    SDL_RenderClear(renderer);
+
     // Desenha a parede 
     level.RenderWalls(Game::GetInstance().GetRenderer());
 

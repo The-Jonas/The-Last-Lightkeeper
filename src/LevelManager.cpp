@@ -1,6 +1,10 @@
 #include "../include/LevelManager.h"
 #include "../include/Camera.h"
 #include <SDL2/SDL_image.h>
+#include <cmath>
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include <fstream>
 #include <iostream>
 
@@ -45,11 +49,16 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
             float layerOffsetX = layer.contains("offsetx") ? (float)layer["offsetx"] : 0.0f;
             float layerOffsetY = layer.contains("offsety") ? (float)layer["offsety"] : 0.0f;
 
+            // ESTES SÃO OS MESMOS VALORES QUE VOCÊ USOU NO RENDER FLOOR!
+            // Se você mudar lá no Render, tem que mudar aqui também.
+            float mapGlobalOffsetX = 350.0f; 
+            float mapGlobalOffsetY = 1100.0f;
+
             for (auto& obj : layer["objects"]) {
 
                 // Soma o X/Y do objeto com o deslocamento da camada APENAS UMA VEZ
-                float finalX = (float)obj["x"] + layerOffsetX;
-                float finalY = (float)obj["y"] + layerOffsetY;
+                float finalX = (float)obj["x"] + layerOffsetX + mapGlobalOffsetX;
+                float finalY = (float)obj["y"] + layerOffsetY + mapGlobalOffsetY;
                 
                 // CASO 1: Polígono
                 if (obj.contains("polygon")) {
@@ -190,8 +199,8 @@ bool LevelManager::CheckPolygonVsPolygon(const Polygon& p1, const Polygon& p2) {
 void LevelManager::RenderFloor(SDL_Renderer* renderer) {
     if (floorTexture == nullptr) return;
 
-    int offsetX = 0; // Exemplo: empurra o chão 350 pixels pra direita
-    int offsetY = 0; // Exemplo: empurra o chão 500 pixels pra baixo
+    int offsetX = 350; // Exemplo: empurra o chão 350 pixels pra direita
+    int offsetY = 1100; // Exemplo: empurra o chão 500 pixels pra baixo
 
     // Criamos o retângulo de destino baseado no tamanho real do seu mapa
     // Subtraímos a posição da câmera para o mapa "correr" conforme o player anda
@@ -243,14 +252,22 @@ void LevelManager::RenderDebug(SDL_Renderer* renderer){
         }
     }
 
-    // 3. Desenha Círculos (Aproximado por um losango/quadrado para ser rápido)
+    // 3. Desenha Círculos de verdade
     for (auto& c : circleColliders) {
-        SDL_Rect r = { 
-            (int)(c.center.x - c.radius - Camera::pos.x), 
-            (int)(c.center.y - c.radius - Camera::pos.y), 
-            c.radius * 2, c.radius * 2 
-        };
-        SDL_RenderDrawRect(renderer, &r);
+        int cx = c.center.x - (int)Camera::pos.x;
+        int cy = c.center.y - (int)Camera::pos.y;
+        int r = c.radius;
+
+        // Desenhamos 36 linhas curtas para formar um círculo suave
+        const int kSeg = 36; 
+        for (int i = 0; i < kSeg; i++) {
+            float a0 = ((float)i / kSeg) * 2.0f * M_PI;
+            float a1 = ((float)(i + 1) / kSeg) * 2.0f * M_PI;
+            
+            SDL_RenderDrawLine(renderer, 
+                cx + (int)(cos(a0) * r), cy + (int)(sin(a0) * r), 
+                cx + (int)(cos(a1) * r), cy + (int)(sin(a1) * r));
+        }        
     }
 #endif
 }
