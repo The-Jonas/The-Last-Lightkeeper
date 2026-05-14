@@ -402,15 +402,19 @@ void StageState::LoadAssets() {
         
         if (spawn.type == "Caixa") {
             GameObject* boxObj = new GameObject();
-            boxObj->box.x = spawn.x;
-            boxObj->box.y = spawn.y;
             boxObj->z = spawn.z; 
             
             // Instancia a classe Box passando a flag isStatic lida do Tiled!
+            // o SpriteRenderer carrega a imagem e ajusta a largura/altura do boxObj.
             boxObj->AddComponent(new Box(*boxObj, spawn.isStatic));
+
+            // Subtrai metade da largura e metade da altura.
+            // Agora o ponto do Tiled fica exatamente no centro da caixa!
+            boxObj->box.x = spawn.x;
+            boxObj->box.y = spawn.y - (boxObj->box.h);
+            
             AddObject(boxObj);
         }
-        
     }
 
     previewLightLockedToPlayer = true;
