@@ -20,6 +20,7 @@
 #include "../include/HotbarComponent.h"
 #include "../include/Box.h"
 #include "../include/FadeEffect.h"
+#include "../include/Repairable.h"
 #include <iostream>
 #include <fstream> 
 #include <algorithm>
@@ -401,6 +402,26 @@ void StageState::LoadAssets() {
             pilarObj->box.y = spawn.y - pilarObj->box.h;
 
             AddObject(pilarObj);
+        }
+        else if (spawn.type == "Escada_Quebrada") {
+            GameObject* ladderObj = new GameObject();
+            ladderObj->z = spawn.z;
+            ladderObj->AddComponent(new SpriteRenderer(*ladderObj, "Recursos/img/cenario/escada_quebrada.png"));
+            
+            ladderObj->AddComponent(new FadeEffect(*ladderObj));
+
+            ladderObj->AddComponent(new Repairable(*ladderObj,
+            "Recursos/img/cenario/escada_inteira.png",
+            "Tabua de Madeira",
+            "Recursos/audio/Hit0.wav",
+            80.0f,
+            Vec2(0, 0)
+            ));
+
+            ladderObj->box.x = spawn.x;
+            ladderObj->box.y = spawn.y - ladderObj->box.h;
+
+            AddObject(ladderObj);
         }
     }
 

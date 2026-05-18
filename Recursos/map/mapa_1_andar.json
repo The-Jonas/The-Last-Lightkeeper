@@ -1668,7 +1668,7 @@
                  "rotation":0,
                  "type":"",
                  "visible":true,
-                 "width":158.666666666667,
+                 "width":158.667,
                  "x":3120,
                  "y":1224
                 }, 
@@ -1803,6 +1803,19 @@
                  "width":2847,
                  "x":439,
                  "y":1406
+                }, 
+                {
+                 "gid":3,
+                 "height":1553,
+                 "id":190,
+                 "name":"",
+                 "opacity":1,
+                 "rotation":0,
+                 "type":"Escada_Quebrada",
+                 "visible":true,
+                 "width":2497,
+                 "x":1191.27,
+                 "y":883.182
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -1811,7 +1824,7 @@
          "y":0
         }],
  "nextlayerid":27,
- "nextobjectid":188,
+ "nextobjectid":191,
  "orientation":"orthogonal",
  "renderorder":"right-down",
  "tiledversion":"1.12.1",
