@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.10" tiledversion="1.12.1" orientation="orthogonal" renderorder="right-down" width="60" height="46" tilewidth="64" tileheight="64" infinite="0" nextlayerid="27" nextobjectid="173">
+<map version="1.10" tiledversion="1.12.1" orientation="orthogonal" renderorder="right-down" width="60" height="46" tilewidth="64" tileheight="64" infinite="0" nextlayerid="27" nextobjectid="188">
  <editorsettings>
   <export target="mapa_teste.json" format="json"/>
  </editorsettings>
@@ -9,12 +9,6 @@
  </imagelayer>
  <imagelayer id="2" name="chao_cenario">
   <image source="../img/cenario/chao.png" width="3839" height="2881"/>
- </imagelayer>
- <imagelayer id="25" name="escada" offsetx="1192.73" offsety="-660.848">
-  <image source="../img/cenario/escada quebrada.png" width="2497" height="1553"/>
- </imagelayer>
- <imagelayer id="26" name="pilar " offsetx="440.455" offsety="60.5758">
-  <image source="../img/cenario/pilares.png" width="2847" height="1347"/>
  </imagelayer>
  <objectgroup id="6" name="Collision">
   <object id="107" x="2672.64" y="222.182">
@@ -182,6 +176,10 @@
   <object id="165" x="2456.5" y="159.75">
    <polygon points="0,0 215.5,62.5 217.5,49 3.25,-8.25"/>
   </object>
+  <object id="176" x="1700" y="1152" width="328" height="248"/>
+  <object id="184" x="449" y="1222" width="158" height="85"/>
+  <object id="186" x="3120" y="1224" width="158.667" height="96"/>
+  <object id="187" x="4108" y="1260"/>
  </objectgroup>
  <objectgroup id="3" name="Entidades">
   <object id="167" type="Caixa" gid="1" x="2498.18" y="1114.58" width="153.121" height="223.091">
@@ -208,5 +206,6 @@
     <property name="z" type="int" value="2"/>
    </properties>
   </object>
+  <object id="173" type="Pilar" gid="2" x="439" y="1406" width="2847" height="1347"/>
  </objectgroup>
 </map>

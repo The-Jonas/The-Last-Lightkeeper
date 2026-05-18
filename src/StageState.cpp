@@ -19,6 +19,7 @@
 #include "../include/ItemPickup.h"
 #include "../include/HotbarComponent.h"
 #include "../include/Box.h"
+#include "../include/FadeEffect.h"
 #include <iostream>
 #include <fstream> 
 #include <algorithm>
@@ -318,38 +319,7 @@ void StageState::LoadAssets() {
     
     // Carregamento do mapa livre
     level.LoadLevel("Recursos/map/mapa_1_andar.json", Game::GetInstance().GetRenderer());
-
     mapOrigin = Vec2(0,0);
-
-
-    /* (ANTIGO) Criação do TileSet (64x64 tiles, 7 colunas)
-    dungeonTileSet = std::make_unique<TileSet>(64, 64, "Recursos/img/Tileset.png");
-    tileSet = dungeonTileSet.get();
-    GameObject* mapObject = new GameObject();                                           // Criando o GameObject para o TileMap
-    TileMap* tileMap = new TileMap(*mapObject, "Recursos/map/level_from_json.txt", tileSet); // Nível exportado do level.json (52x52)
-    mapObject->AddComponent(tileMap);                                                   // Adicionando o TileMap ao GameObject
-    tileMapComp = tileMap;
-
-    // Define os multiplicador9s de parallax
-    tileMap->SetParallax(0, -0.2f);                                                     // Camada 0 (ao fundo) se move mais devagar (na direção oposta?)
-    tileMap->SetParallax(1, 0.0f);                                                      // Camada 1 (o chão) se move na velocidade normal
-    
-    mapObject->box.x = 0;                                                               // Definindo a posição
-    mapObject->box.y = 0;                                                               // do mapa no jogo
-    mapOrigin = Vec2(mapObject->box.x, mapObject->box.y);
-    mapObject->z = 1;                                                                   // // Z = 1 (Camada do mapa, acima do fundo)
-    AddObject(mapObject);                                                               // Adicionando o GameObject do mapa ao array de objetos
-
-    if (tileMapComp) {
-        tileMapComp->BuildLightOcclusionFromLayer(1, walkableTileIds);
-        TopDownLightShadows::BuildShadowEdgesFromSolidGrid(
-            tileMapComp->GetWidth(), tileMapComp->GetHeight(),
-            static_cast<float>(tileSet->GetTileWidth()), static_cast<float>(tileSet->GetTileHeight()),
-            mapObject->box.x, mapObject->box.y, tileMapComp->GetLightOcclusionSolid(), staticShadowEdges);
-        staticShadowEdgesBuilt = !staticShadowEdges.empty();
-    }
-
-    */
 
     //------------------------------------------
     
@@ -403,17 +373,34 @@ void StageState::LoadAssets() {
         if (spawn.type == "Caixa") {
             GameObject* boxObj = new GameObject();
             boxObj->z = spawn.z; 
-            
             // Instancia a classe Box passando a flag isStatic lida do Tiled!
             // o SpriteRenderer carrega a imagem e ajusta a largura/altura do boxObj.
             boxObj->AddComponent(new Box(*boxObj, spawn.isStatic));
-
             // Subtrai metade da largura e metade da altura.
             // Agora o ponto do Tiled fica exatamente no centro da caixa!
             boxObj->box.x = spawn.x;
             boxObj->box.y = spawn.y - (boxObj->box.h);
-            
             AddObject(boxObj);
+        }
+        // Exemplo de objeto que só faz parte do cenário e por isso não tem classe própria
+        else if (spawn.type == "Pilar") {
+            GameObject* pilarObj = new GameObject();
+            pilarObj->z = spawn.z;
+
+            // 1. Adiciona a arte do pilar
+            SpriteRenderer* sprite = new SpriteRenderer(*pilarObj, "Recursos/img/cenario/pilares.png");
+            pilarObj->AddComponent(sprite);
+
+            // 2. Adiciona o Efeito Transparente
+            pilarObj->AddComponent(new FadeEffect(*pilarObj));
+
+            // A colisão foi feita diretamente no Tiled por ser algo mais complexo (3 pernas)
+
+            // 3. Posicionamento do Tiled
+            pilarObj->box.x = spawn.x;
+            pilarObj->box.y = spawn.y - pilarObj->box.h;
+
+            AddObject(pilarObj);
         }
     }
 

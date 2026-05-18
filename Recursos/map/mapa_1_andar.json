@@ -37,34 +37,6 @@
          "y":0
         }, 
         {
-         "id":25,
-         "image":"..\/img\/cenario\/escada quebrada.png",
-         "imageheight":1553,
-         "imagewidth":2497,
-         "name":"escada",
-         "offsetx":1192.72727272727,
-         "offsety":-660.848484848485,
-         "opacity":1,
-         "type":"imagelayer",
-         "visible":true,
-         "x":0,
-         "y":0
-        }, 
-        {
-         "id":26,
-         "image":"..\/img\/cenario\/pilares.png",
-         "imageheight":1347,
-         "imagewidth":2847,
-         "name":"pilar ",
-         "offsetx":440.454545454545,
-         "offsety":60.5757575757576,
-         "opacity":1,
-         "type":"imagelayer",
-         "visible":true,
-         "x":0,
-         "y":0
-        }, 
-        {
          "draworder":"topdown",
          "id":6,
          "name":"Collision",
@@ -1663,6 +1635,54 @@
                  "width":0,
                  "x":2456.5,
                  "y":159.75
+                }, 
+                {
+                 "height":248,
+                 "id":176,
+                 "name":"",
+                 "opacity":1,
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":328,
+                 "x":1700,
+                 "y":1152
+                }, 
+                {
+                 "height":85,
+                 "id":184,
+                 "name":"",
+                 "opacity":1,
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":158,
+                 "x":449,
+                 "y":1222
+                }, 
+                {
+                 "height":96,
+                 "id":186,
+                 "name":"",
+                 "opacity":1,
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":158.666666666667,
+                 "x":3120,
+                 "y":1224
+                }, 
+                {
+                 "height":0,
+                 "id":187,
+                 "name":"",
+                 "opacity":1,
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":4108,
+                 "y":1260
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -1696,8 +1716,8 @@
                  "type":"Caixa",
                  "visible":true,
                  "width":153.121,
-                 "x":2498.18424242424,
-                 "y":1114.57757575758
+                 "x":2498.18,
+                 "y":1114.58
                 }, 
                 {
                  "gid":1,
@@ -1770,6 +1790,19 @@
                  "width":153.121,
                  "x":2567.88,
                  "y":1875.18
+                }, 
+                {
+                 "gid":2,
+                 "height":1347,
+                 "id":173,
+                 "name":"",
+                 "opacity":1,
+                 "rotation":0,
+                 "type":"Pilar",
+                 "visible":true,
+                 "width":2847,
+                 "x":439,
+                 "y":1406
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -1778,7 +1811,7 @@
          "y":0
         }],
  "nextlayerid":27,
- "nextobjectid":173,
+ "nextobjectid":188,
  "orientation":"orthogonal",
  "renderorder":"right-down",
  "tiledversion":"1.12.1",

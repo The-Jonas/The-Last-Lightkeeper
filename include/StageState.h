@@ -37,6 +37,9 @@ public:
     void Pause() override;
     void Resume() override;
 
+    GameObject* GetBigCharacter() { return bigCharacterObject; }
+    GameObject* GetSmallCharacter() { return smallCharacterObject; }
+
 private:
 
     struct LightInstance {
