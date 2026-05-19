@@ -97,6 +97,40 @@ void DrawDebugRect(SDL_Renderer* renderer, const Rect& rect, Uint8 red, Uint8 gr
     SDL_SetRenderDrawColor(renderer, dr, dg, db, da);
 }
 
+/// OBB outline (matches `Collider::Render` / sprite space): (world − camera) × zoom.
+void DrawColliderDebugWire(SDL_Renderer* renderer, const Rect& box, float angleDeg, Uint8 cr, Uint8 cg, Uint8 cb, Uint8 ca) {
+    if (!renderer || box.w < 0.5f || box.h < 0.5f) {
+        return;
+    }
+    Vec2 center(box.Center());
+    const float angleRad = angleDeg * (M_PI / 180.0f);
+    const float z = Camera::GetZoom();
+    auto corner = [&](float x, float y) {
+        Vec2 w = (Vec2(x, y) - center).Rotated(angleRad) + center;
+        return Vec2((w.x - Camera::pos.x) * z, (w.y - Camera::pos.y) * z);
+    };
+    SDL_Point pts[5];
+    Vec2 p = corner(box.x, box.y);
+    pts[0] = {(int)p.x, (int)p.y};
+    p = corner(box.x + box.w, box.y);
+    pts[1] = {(int)p.x, (int)p.y};
+    p = corner(box.x + box.w, box.y + box.h);
+    pts[2] = {(int)p.x, (int)p.y};
+    p = corner(box.x, box.y + box.h);
+    pts[3] = {(int)p.x, (int)p.y};
+    pts[4] = pts[0];
+
+    SDL_BlendMode oldBlend;
+    SDL_GetRenderDrawBlendMode(renderer, &oldBlend);
+    Uint8 dr, dg, db, da;
+    SDL_GetRenderDrawColor(renderer, &dr, &dg, &db, &da);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, cr, cg, cb, ca);
+    SDL_RenderDrawLines(renderer, pts, 5);
+    SDL_SetRenderDrawBlendMode(renderer, oldBlend);
+    SDL_SetRenderDrawColor(renderer, dr, dg, db, da);
+}
+
 void DrawDebugCross(SDL_Renderer* renderer, float x, float y, float halfSize, Uint8 red, Uint8 green, Uint8 blue, Uint8 alpha) {
     if (!renderer || halfSize < 1.0f) {
         return;
@@ -472,7 +506,7 @@ void StageState::LoadAssets() {
     hudLine3 = new GameObject();
     hudLine3->z = 100;
     hudLine3->AddComponent(new Text(*hudLine3, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
-                                      "K forma | C criar luz | P painel | L luz | O sombras", hudColor));
+                                      "K forma | C criar luz | P painel | L luz | O sombras | B mapa colisao", hudColor));
     AddObject(hudLine3);
 
     hudFps = new GameObject();
@@ -571,6 +605,9 @@ void StageState::Update(float dt){
         const int masterVolume = (MIX_MAX_VOLUME * Game::masterVolumePercent) / 100;
         Mix_VolumeMusic(musicMuted ? 0 : masterVolume);
     }
+    if (input.KeyPress(MAP_PHYSICS_DEBUG_KEY)) {
+        showMapPhysicsDebug = !showMapPhysicsDebug;
+    }
 
     if (!Mix_PlayingMusic() && !musicMuted && !levelTracks.empty()) {
         currentTrack = (currentTrack + 1) % static_cast<int>(levelTracks.size());
@@ -662,8 +699,18 @@ void StageState::Update(float dt){
             }
             previewLightLockedToPlayer = true;
         } else {
-            previewLightLockedToPlayer = false;
-            previewLightAnchorPlayer = nullptr;
+            bool blockUnlock = false;
+            if (hotbarObject) {
+                if (HotbarComponent* hb = hotbarObject->GetComponent<HotbarComponent>()) {
+                    if (hb->BlocksLightPointerUnlock(mx, my)) {
+                        blockUnlock = true;
+                    }
+                }
+            }
+            if (!blockUnlock) {
+                previewLightLockedToPlayer = false;
+                previewLightAnchorPlayer = nullptr;
+            }
         }
     }
 
@@ -939,7 +986,6 @@ void StageState::Render(){
     // ===================================================================
     // 6. DEBUG E SISTEMA DE LUZ RADIAL
     // ===================================================================
-    level.RenderDebug(Game::GetInstance().GetRenderer());
 
     if (lightsEnabled && radialGeometry != nullptr) {
         std::vector<RadialLightOverlay::ScreenLight> screenLights;
@@ -1030,12 +1076,92 @@ void StageState::Render(){
         lightTweakPanel->Render(g.GetRenderer(), g.GetWindowsWidth(), g.GetWindowsHeight());
     }
 
+    if (showMapPhysicsDebug) {
+        SDL_Renderer* dbgR = g.GetRenderer();
+        level.RenderCollisionOverlay(dbgR);
+        RenderGameplayCollisionDebug(dbgR);
+        RenderCompanionFollowPathDebug(dbgR);
+    }
+
     // 7. HUD FICA ACIMA DE TUDO (Z >= 100)
     for (const auto& go : objectArray) {
         if (go->z >= kHudZ) {
             go->Render();
         }
     }
+}
+
+void StageState::RenderGameplayCollisionDebug(SDL_Renderer* renderer) const {
+    if (!renderer) {
+        return;
+    }
+    const float z = Camera::GetZoom();
+    for (const auto& goPtr : objectArray) {
+        GameObject* go = goPtr.get();
+        if (!go) {
+            continue;
+        }
+        Collider* col = go->GetComponent<Collider>();
+        if (!col) {
+            continue;
+        }
+        const bool isBig = (go == bigCharacterObject);
+        const bool isSmall = (go == smallCharacterObject);
+        Uint8 pr = 200, pg = 230, pb = 255;
+        if (isBig) {
+            pr = 255;
+            pg = 190;
+            pb = 70;
+        } else if (isSmall) {
+            pr = 90;
+            pg = 255;
+            pb = 200;
+        }
+        DrawColliderDebugWire(renderer, col->box, static_cast<float>(go->angleDeg), pr, pg, pb, 215);
+
+        if (go->GetComponent<Character>() != nullptr) {
+            const float rFoot = go->box.w * 0.25f;
+            const Vec2 footWorld(go->box.x + go->box.w * 0.5f, go->box.y + go->box.h - rFoot);
+            const Vec2 screen = WorldToScreen(footWorld);
+            const float rScreen = std::max(1.5f, rFoot * z);
+            Uint8 fr = 80, fg = 255, fb = 120;
+            if (isBig) {
+                fr = 255;
+                fg = 240;
+                fb = 60;
+            } else if (isSmall) {
+                fr = 60;
+                fg = 255;
+                fb = 180;
+            }
+            DrawDebugCircle(renderer, screen.x, screen.y, rScreen, fr, fg, fb, 185);
+        }
+    }
+}
+
+/// Polylinha amarela: rota que o seguidor usa neste frame (A* ou linha reta) — só faz sentido com `PartyMode::TOGETHER`.
+void StageState::RenderCompanionFollowPathDebug(SDL_Renderer* renderer) const {
+    if (!renderer || companionFollowPathWorld.size() < 2) {
+        return;
+    }
+    const float z = Camera::GetZoom();
+    SDL_BlendMode oldBlend;
+    SDL_GetRenderDrawBlendMode(renderer, &oldBlend);
+    Uint8 dr, dg, db, da;
+    SDL_GetRenderDrawColor(renderer, &dr, &dg, &db, &da);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 255, 235, 70, 210);
+    for (size_t i = 1; i < companionFollowPathWorld.size(); i++) {
+        const Vec2 a = WorldToScreen(companionFollowPathWorld[i - 1]);
+        const Vec2 b = WorldToScreen(companionFollowPathWorld[i]);
+        SDL_RenderDrawLineF(renderer, a.x, a.y, b.x, b.y);
+    }
+    for (const Vec2& wp : companionFollowPathWorld) {
+        const Vec2 sp = WorldToScreen(wp);
+        DrawDebugCircle(renderer, sp.x, sp.y, std::max(2.5f, 4.0f * z), 255, 220, 50, 175);
+    }
+    SDL_SetRenderDrawBlendMode(renderer, oldBlend);
+    SDL_SetRenderDrawColor(renderer, dr, dg, db, da);
 }
 
 void StageState::Start() {
@@ -1487,6 +1613,8 @@ void StageState::IssueMovementFromInput(Character* character, GameObject* object
 }
 
 void StageState::IssueFollowCommand(Character* follower, GameObject* followerObject, GameObject* leaderObject, bool allowCatchup) {
+    companionFollowPathWorld.clear();
+
     if (!follower || !followerObject || !leaderObject) {
         return;
     }
@@ -1523,11 +1651,23 @@ void StageState::IssueFollowCommand(Character* follower, GameObject* followerObj
     Vec2 followTarget = targetPos;
     if (tileMapComp && tileSet && !HasWalkableLine(followerCenter, targetPos)) {
         const std::vector<Vec2> path = FindPathWorld(followerCenter, targetPos);
+        companionFollowPathWorld = path;
+        if (!companionFollowPathWorld.empty()) {
+            if ((companionFollowPathWorld.front() - followerCenter).Magnitude() > 3.0f) {
+                companionFollowPathWorld.insert(companionFollowPathWorld.begin(), followerCenter);
+            }
+        } else {
+            // A* falhou: ainda mostramos o desejo de ir em linha reta até o alvo (mesmo que o movimento use só `targetPos`).
+            companionFollowPathWorld = {followerCenter, targetPos};
+        }
         if (path.size() >= 2) {
             followTarget = path[1];
         } else if (!path.empty()) {
             followTarget = path.front();
         }
+    } else {
+        // Linha de visada livre (ou sem grade): mostramos o segmento direto até o ponto-alvo atrás do líder.
+        companionFollowPathWorld = {followerCenter, targetPos};
     }
 
     Character::Command followCommand(Character::Command::MOVE, followTarget.x, followTarget.y);
@@ -1536,6 +1676,7 @@ void StageState::IssueFollowCommand(Character* follower, GameObject* followerObj
 
 void StageState::UpdateCompanionBehavior() {
     if (!IsPartyReady()) {
+        companionFollowPathWorld.clear();
         return;
     }
 
@@ -1544,6 +1685,7 @@ void StageState::UpdateCompanionBehavior() {
         return;
     }
 
+    companionFollowPathWorld.clear();
     companionCharacter->SetSpeedMultiplier(1.0f);
 }
 
@@ -1559,8 +1701,8 @@ void StageState::EnforceMaxDistance() {
 }
 
 void StageState::RefreshCameraTargets() {
-    if (bigCharacterObject && smallCharacterObject) {
-        Camera::FollowPair(bigCharacterObject, smallCharacterObject, controlledCharacterObject);
+    if (controlledCharacterObject) {
+        Camera::Follow(controlledCharacterObject);
     }
 }
 

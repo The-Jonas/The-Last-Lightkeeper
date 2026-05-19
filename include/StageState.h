@@ -76,6 +76,8 @@ private:
     bool FindNearestWalkableTile(int startTx, int startTy, int& outTx, int& outTy, int maxRadius = 8) const;
     std::vector<Vec2> FindPathWorld(const Vec2& fromWorld, const Vec2& toWorld, int nodeBudget = 4096) const;
     bool IsPartyReady() const;                                           // Confere se referências da dupla são válidas
+    void RenderGameplayCollisionDebug(SDL_Renderer* renderer) const;     // Com showMapPhysicsDebug: colliders + foot circles
+    void RenderCompanionFollowPathDebug(SDL_Renderer* renderer) const;   // Com showMapPhysicsDebug: polylinha do seguidor (modo junto)
 
     Music music;                                                        // Música de Fundo
     TileSet* tileSet;                                                   // TileSet atualmente ativo no mapa
@@ -114,6 +116,12 @@ private:
     bool lightsEnabled = true;
     bool shadowsEnabled = true;
     bool musicMuted = false;
+
+    /// B: map collision / collider debug + caminho A* ou linha reta do parceiro que segue até o outro (modo dupla junto).
+    bool showMapPhysicsDebug = false;
+
+    /// Última rota planejada para o `companion` alcançar o alvo atrás do líder (só preenchido em `PartyMode::TOGETHER`).
+    std::vector<Vec2> companionFollowPathWorld;
 
     std::vector<std::string> levelTracks;
     int currentTrack = 0;

@@ -23,6 +23,9 @@ public:
                     std::vector<ItemPickup*>& pickups,
                     std::function<void(GameObject*)> addObjFn);
 
+    /// Screen-space: hotbar bar or open inventory panel (used so UI clicks don't unlock the preview light).
+    bool BlocksLightPointerUnlock(int screenX, int screenY) const;
+
     void Start() override;
     void Update(float dt) override;
     void Render() override;

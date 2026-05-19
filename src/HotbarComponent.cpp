@@ -63,6 +63,33 @@ void HotbarComponent::Start() {
     dragSprite->SetTint(255, 255, 255, 180);
 }
 
+bool HotbarComponent::BlocksLightPointerUnlock(int mx, int my) const {
+    SDL_Point pt{mx, my};
+    const int screenW = Game::GetInstance().GetWindowsWidth();
+    const int screenH = Game::GetInstance().GetWindowsHeight();
+    constexpr int kSlotSize = 48;
+    constexpr int kSlotGap = 4;
+    const int totalW = Inventory::kHotbarSlots * kSlotSize + (Inventory::kHotbarSlots - 1) * kSlotGap;
+    const int barH = kSlotSize + 12;
+    const int startX = (screenW - totalW) / 2;
+    const int startY = screenH - barH;
+    SDL_Rect bar{startX - 4, startY - 6, totalW + 8, barH + 2};
+    if (SDL_PointInRect(&pt, &bar) == SDL_TRUE) {
+        return true;
+    }
+    if (inventoryOpen) {
+        const int fullTotalW = Inventory::kCols * kSlotSize + (Inventory::kCols - 1) * kSlotGap;
+        const int fullTotalH = Inventory::kRows * kSlotSize + (Inventory::kRows - 1) * kSlotGap;
+        const int invStartX = (screenW - fullTotalW) / 2;
+        const int invStartY = (screenH - fullTotalH) / 2 - 30;
+        SDL_Rect invBg{invStartX - 12, invStartY - 12, fullTotalW + 24, fullTotalH + 24};
+        if (SDL_PointInRect(&pt, &invBg) == SDL_TRUE) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void HotbarComponent::Update(float dt) {
     if (!controlledCharacterPtr || *controlledCharacterPtr != bigCharacter) {
         return;

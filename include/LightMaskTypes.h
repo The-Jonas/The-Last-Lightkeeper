@@ -30,7 +30,7 @@ struct LightOcclusionContext {
 
 struct LightMaskParams {
     Uint8 darknessMax = 250;
-    float falloffRadiusPx = 240.0f;
+    float falloffRadiusPx = 400.0f;
     float fatorDicaDeRaio = 1.2f;
     LightFalloffCurve falloffCurve = LightFalloffCurve::Smoothstep;
     float falloffGamma = 2.0f;

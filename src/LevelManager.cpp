@@ -409,82 +409,86 @@ bool LevelManager::CheckPolygonVsCircle(const Polygon& poly, const Circle& circl
 }
 
 
-void LevelManager::RenderDebug(SDL_Renderer* renderer){
-#ifdef DEBUG
-    // Cor vermelha para as hitbox do cenário (Chão Normal)
-    SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+void LevelManager::RenderCollisionOverlay(SDL_Renderer* renderer) const {
+    if (!renderer) {
+        return;
+    }
+    const float zm = Camera::GetZoom();
+    SDL_BlendMode oldBlend;
+    SDL_GetRenderDrawBlendMode(renderer, &oldBlend);
+    Uint8 dr, dg, db, da;
+    SDL_GetRenderDrawColor(renderer, &dr, &dg, &db, &da);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
-    // 1. Desenha Retângulos
-    for (auto& r : rectColliders) {
-        SDL_Rect screenRect = { 
-            (int)(r.x - Camera::pos.x), 
-            (int)(r.y - Camera::pos.y), 
-            r.w, r.h 
-        };
-        SDL_RenderDrawRect(renderer, &screenRect);
+    // Retângulos Tiled (mesmo espaço dos sprites: mundo − câmera, com zoom)
+    SDL_SetRenderDrawColor(renderer, 255, 90, 90, 230);
+    for (const auto& r : rectColliders) {
+        SDL_FRect screenRect = {(r.x - Camera::pos.x) * zm, (r.y - Camera::pos.y) * zm, r.w * zm, r.h * zm};
+        SDL_RenderDrawRectF(renderer, &screenRect);
     }
 
-    // 2. Desenha Polígonos do Chão Normal (Linha por linha)
-    for (auto& poly : chaoNormal) {
+    // Polígonos — paredes / obstáculos
+    SDL_SetRenderDrawColor(renderer, 255, 60, 60, 235);
+    for (const auto& poly : chaoNormal) {
         for (size_t i = 0; i < poly.vertices.size(); i++) {
             SDL_Point p1 = poly.vertices[i];
             SDL_Point p2 = poly.vertices[(i + 1) % poly.vertices.size()];
-            SDL_RenderDrawLine(renderer, 
-                p1.x - (int)Camera::pos.x, p1.y - (int)Camera::pos.y, 
-                p2.x - (int)Camera::pos.x, p2.y - (int)Camera::pos.y);
+            const float x1 = (static_cast<float>(p1.x) - Camera::pos.x) * zm;
+            const float y1 = (static_cast<float>(p1.y) - Camera::pos.y) * zm;
+            const float x2 = (static_cast<float>(p2.x) - Camera::pos.x) * zm;
+            const float y2 = (static_cast<float>(p2.y) - Camera::pos.y) * zm;
+            SDL_RenderDrawLineF(renderer, x1, y1, x2, y2);
         }
     }
 
-    // =================================================================
-    // 2.5 Desenha Polígonos da Escada (Em Azul Ciano para diferenciar)
-    SDL_SetRenderDrawColor(renderer, 0, 255, 255, 255); 
-
-    for (auto& poly : chaoEscada) {
+    SDL_SetRenderDrawColor(renderer, 0, 220, 255, 230);
+    for (const auto& poly : chaoEscada) {
         for (size_t i = 0; i < poly.vertices.size(); i++) {
             SDL_Point p1 = poly.vertices[i];
             SDL_Point p2 = poly.vertices[(i + 1) % poly.vertices.size()];
-            SDL_RenderDrawLine(renderer, 
-                p1.x - (int)Camera::pos.x, p1.y - (int)Camera::pos.y, 
-                p2.x - (int)Camera::pos.x, p2.y - (int)Camera::pos.y);
+            const float x1 = (static_cast<float>(p1.x) - Camera::pos.x) * zm;
+            const float y1 = (static_cast<float>(p1.y) - Camera::pos.y) * zm;
+            const float x2 = (static_cast<float>(p2.x) - Camera::pos.x) * zm;
+            const float y2 = (static_cast<float>(p2.y) - Camera::pos.y) * zm;
+            SDL_RenderDrawLineF(renderer, x1, y1, x2, y2);
         }
     }
-    // =================================================================
-    
-    // 2.6 Desenha o Buraco da Escada (Roxo Magenta) - SÓ SE ESTIVER QUEBRADA!
+
     if (!escadaConsertada) {
-        SDL_SetRenderDrawColor(renderer, 255, 0, 255, 255); 
-
-        for (auto& poly : chaoBuraco) {
+        SDL_SetRenderDrawColor(renderer, 255, 80, 255, 220);
+        for (const auto& poly : chaoBuraco) {
             for (size_t i = 0; i < poly.vertices.size(); i++) {
                 SDL_Point p1 = poly.vertices[i];
                 SDL_Point p2 = poly.vertices[(i + 1) % poly.vertices.size()];
-                SDL_RenderDrawLine(renderer, 
-                    p1.x - (int)Camera::pos.x, p1.y - (int)Camera::pos.y, 
-                    p2.x - (int)Camera::pos.x, p2.y - (int)Camera::pos.y);
+                const float x1 = (static_cast<float>(p1.x) - Camera::pos.x) * zm;
+                const float y1 = (static_cast<float>(p1.y) - Camera::pos.y) * zm;
+                const float x2 = (static_cast<float>(p2.x) - Camera::pos.x) * zm;
+                const float y2 = (static_cast<float>(p2.y) - Camera::pos.y) * zm;
+                SDL_RenderDrawLineF(renderer, x1, y1, x2, y2);
             }
         }
     }
-    // =================================================================
 
-    // Volta para Vermelho para desenhar os Círculos
-    SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-
-    // 3. Desenha Círculos de verdade
-    for (auto& c : circleColliders) {
-        int cx = c.center.x - (int)Camera::pos.x;
-        int cy = c.center.y - (int)Camera::pos.y;
-        int r = c.radius;
-
-        // Desenhamos 36 linhas curtas para formar um círculo suave
-        const int kSeg = 36; 
+    SDL_SetRenderDrawColor(renderer, 255, 140, 80, 230);
+    for (const auto& c : circleColliders) {
+        const float cx = (static_cast<float>(c.center.x) - Camera::pos.x) * zm;
+        const float cy = (static_cast<float>(c.center.y) - Camera::pos.y) * zm;
+        const float rad = static_cast<float>(c.radius) * zm;
+        const int kSeg = 36;
         for (int i = 0; i < kSeg; i++) {
-            float a0 = ((float)i / kSeg) * 2.0f * M_PI;
-            float a1 = ((float)(i + 1) / kSeg) * 2.0f * M_PI;
-            
-            SDL_RenderDrawLine(renderer, 
-                cx + (int)(cos(a0) * r), cy + (int)(sin(a0) * r), 
-                cx + (int)(cos(a1) * r), cy + (int)(sin(a1) * r));
-        }        
+            const float a0 = ((float)i / kSeg) * 2.0f * static_cast<float>(M_PI);
+            const float a1 = ((float)(i + 1) / kSeg) * 2.0f * static_cast<float>(M_PI);
+            SDL_RenderDrawLineF(renderer, cx + std::cos(a0) * rad, cy + std::sin(a0) * rad, cx + std::cos(a1) * rad,
+                                cy + std::sin(a1) * rad);
+        }
     }
+
+    SDL_SetRenderDrawBlendMode(renderer, oldBlend);
+    SDL_SetRenderDrawColor(renderer, dr, dg, db, da);
+}
+
+void LevelManager::RenderDebug(SDL_Renderer* renderer) {
+#ifdef DEBUG
+    RenderCollisionOverlay(renderer);
 #endif
 }

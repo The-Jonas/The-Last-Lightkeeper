@@ -54,6 +54,8 @@ public:
 
     void RenderBackground(SDL_Renderer* renderer);
     void RenderDebug(SDL_Renderer* renderer);
+    /// Map collision from Tiled (runtime; not tied to DEBUG preprocessor).
+    void RenderCollisionOverlay(SDL_Renderer* renderer) const;
 
     // Getters para o sistema de colisão usar depois
     std::vector<SDL_Rect>& GetRectColliders();
