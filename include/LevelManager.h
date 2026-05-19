@@ -30,7 +30,10 @@ struct ImageLayer {
 // Guarda a "receita" de qualquer entidade do jogo
 struct EntitySpawn {
     std::string type;
+    std::string name;   
     float x, y;
+    float w = 0.0f;
+    float h = 0.0f;
     bool isStatic;
     int z;
 };
@@ -44,10 +47,10 @@ public:
     void LoadLevel(std::string path, SDL_Renderer* renderer);
 
     // A função principal que o Player vai chamar
-    bool CheckCollision(const SDL_Rect& entityBox);
+    bool CheckCollision(const SDL_Rect& entityBox, bool isElevated = false);
 
     // Permite testar a colisão enviando um Círculo ao invés de um Retângulo!
-    bool CheckCollision(const Circle& entityCircle);
+    bool CheckCollision(const Circle& entityCircle, bool isElevated = false);
 
     void RenderBackground(SDL_Renderer* renderer);
     void RenderDebug(SDL_Renderer* renderer);
@@ -59,6 +62,8 @@ public:
 
     // Lista de Spawns
     std::vector<EntitySpawn> entitySpawns;
+
+    bool escadaConsertada = false;
 
 private:
     // Vetor pra guardar todas as imagens na ordem certa
@@ -73,8 +78,12 @@ private:
 
     // Listas de colisores baseadas no que o Tiled exporta
     std::vector<SDL_Rect> rectColliders;
-    std::vector<Polygon> polyColliders;
+    std::vector<Polygon> chaoNormal;
+    std::vector<Polygon> chaoEscada;
+    std::vector<Polygon> chaoBuraco;
     std::vector<Circle> circleColliders;
+
+    
 };
 
 #endif

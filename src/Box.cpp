@@ -17,7 +17,7 @@ Box::Box(GameObject& associated, bool isStatic) : Component(associated), isStati
     SpriteRenderer* sprite = new SpriteRenderer(associated, "Recursos/img/objetos/teste_caixa.png", 1, 1);
 
     //Ajuste de escala da caixa
-    sprite->SetScale(0.5f, 0.5f);
+    //sprite->SetScale(0.5f, 0.5f);
     associated.AddComponent(sprite);
 
     // Entra na lista ao nascer
@@ -32,7 +32,7 @@ Box::~Box() {
 void Box::Start() {
     // Adiciona o colisor da caixa
     // Assim como o player, nós esprememos a hitbox para ficar só na base dela (efeito 3D top-down)
-    associated.AddComponent(new Collider(associated, Vec2(0.85f, 0.4f), Vec2(0, 43)));
+    associated.AddComponent(new Collider(associated, Vec2(0.85f, 0.7f), Vec2(0, 40)));
 }
 
 void Box::Update(float dt) {

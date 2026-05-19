@@ -4,6 +4,7 @@
 #include "../include/StageState.h"
 #include "../include/Game.h"
 #include "../include/Camera.h"
+#include "../include/Character.h"
 #include <iostream>
 
 Repairable::Repairable(GameObject& associated, std::string fixedSpritePath, std::string requiredItem, std::string soundPath, float interactionDistance, Vec2 interactionOffset) 
@@ -22,15 +23,19 @@ void Repairable::Update(float dt) {
     GameObject* bigBro = stage->GetBigCharacter();
     
     if (bigBro) {
+        // Pega o componente Character do Irmãozão para podermos ler o crachá VIP dele
+        Character* bigChar = bigBro->GetComponent<Character>();
 
         // Cria o ponto exato onde o jogador tem que ficar
         Vec2 exactInteractPoint(associated.box.x + interactionOffset.x, associated.box.y + interactionOffset.y);
+        
         // Mede a distância entre o centro da escada e o centro do jogador
-
         float distance = exactInteractPoint.Distance(bigBro->box.Center());
         
-        // Se o jogador estiver perto o suficiente
-        if (distance <= interactionDistance) {
+        // A SUA TRAVA DE SEGURANÇA AQUI:
+        // O jogador precisa estar perto O SUFICIENTE e PRECISA ESTAR NA ESCADA (isElevated)
+        if (distance <= interactionDistance && bigChar != nullptr && bigChar->isElevated) {
+            
             // Aperta a tecla E
             if (InputManager::GetInstance().KeyPress(SDLK_e)) {
 
@@ -50,6 +55,10 @@ void Repairable::Update(float dt) {
 
                 // Marca como consertado para não ativar de novo
                 isRepaired = true;
+                
+                // Avisa o mapa que o buraco sumiu!
+                stage->level.escadaConsertada = true; 
+
                 std::cout << "Consertado usando: " << requiredItem << std::endl;
             }
         }
@@ -57,38 +66,36 @@ void Repairable::Update(float dt) {
 }
 
 void Repairable::Render() {
-    // Se a escada já foi consertada, não precisa fazer mais nada
+// Se a escada já foi consertada, some
     if (isRepaired) return;
 
-// Toda essa parte de baixo só vai existir se o jogo for compilado em modo Debug!
 #ifdef DEBUG
 
-    // Pega o renderizador da engine
+    // AVISO: Removi o #ifdef DEBUG propositalmente para forçar a renderização aparecer!
+    
     SDL_Renderer* renderer = Game::GetInstance().GetRenderer();
 
-    // Calcula o ponto exato no mundo
+    // 1. Ponto exato no mundo
     Vec2 exactInteractPoint(associated.box.x + interactionOffset.x, associated.box.y + interactionOffset.y);
 
-    // [IMPORTANTE]: Se o seu jogo tiver uma Câmera, aplique a subtração aqui:
+    // 2. Subtrai a câmera para desenhar no lugar certo da tela
     float renderX = exactInteractPoint.x - Camera::pos.x;
     float renderY = exactInteractPoint.y - Camera::pos.y;
-    //float renderX = exactInteractPoint.x; 
-    //float renderY = exactInteractPoint.y;
 
-    // Define a cor do pincel para AMARELO (R: 255, G: 255, B: 0, Alpha: 255)
+    // 3. Define a cor como AMARELO
     SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
 
-    // Desenha uma CRUZ (+) exatamente no pixel do Offset
+    // 4. Desenha a Cruz
     SDL_RenderDrawLine(renderer, renderX - 10, renderY, renderX + 10, renderY);
     SDL_RenderDrawLine(renderer, renderX, renderY - 10, renderX, renderY + 10);
 
-    // Desenha a "Área de Interação"
+    // 5. Desenha o Quadrado da Área
     SDL_Rect debugRect;
     debugRect.x = (int)(renderX - interactionDistance);
     debugRect.y = (int)(renderY - interactionDistance);
     debugRect.w = (int)(interactionDistance * 2);
     debugRect.h = (int)(interactionDistance * 2);
-
+    
     SDL_RenderDrawRect(renderer, &debugRect);
 
 #endif

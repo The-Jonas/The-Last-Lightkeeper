@@ -21,6 +21,7 @@
 #include "../include/Box.h"
 #include "../include/FadeEffect.h"
 #include "../include/Repairable.h"
+#include "../include/StairTrigger.h"
 #include <iostream>
 #include <fstream> 
 #include <algorithm>
@@ -408,20 +409,34 @@ void StageState::LoadAssets() {
             ladderObj->z = spawn.z;
             ladderObj->AddComponent(new SpriteRenderer(*ladderObj, "Recursos/img/cenario/escada_quebrada.png"));
             
-            ladderObj->AddComponent(new FadeEffect(*ladderObj));
+            ladderObj->AddComponent(new FadeEffect(*ladderObj, true));
 
             ladderObj->AddComponent(new Repairable(*ladderObj,
             "Recursos/img/cenario/escada_inteira.png",
             "Tabua de Madeira",
             "Recursos/audio/Hit0.wav",
             80.0f,
-            Vec2(0, 0)
+            Vec2(1780, 1050)
             ));
 
             ladderObj->box.x = spawn.x;
             ladderObj->box.y = spawn.y - ladderObj->box.h;
 
             AddObject(ladderObj);
+        }
+        else if (spawn.type == "StairTrigger") {
+            GameObject* triggerObj = new GameObject();
+            
+            // Como é um objeto invisível desenhado no Tiled, pegamos as medidas dele
+            triggerObj->box.x = spawn.x;
+            triggerObj->box.y = spawn.y;
+            
+            triggerObj->box.w = spawn.w; 
+            triggerObj->box.h = spawn.h;
+
+            triggerObj->AddComponent(new StairTrigger(*triggerObj));
+            
+            AddObject(triggerObj);
         }
     }
 
@@ -757,14 +772,30 @@ void StageState::Render(){
     // 3. ORDENAÇÃO Z/Y SORTING
     // ============================
     auto compareObjects = [](const std::shared_ptr<GameObject>& a, const std::shared_ptr<GameObject>& b) {
-        if (a->z != b->z) return a->z < b->z;
         
+        // Extrai o Z original configurado no Tiled
+        int zA = a->z;
+        int zB = b->z;
+        
+        // Z-Boost Dinâmico
+        // Se for um personagem e estiver na escada, a engine "mente" dizendo que ele está no andar de cima.
+        Character* charA = a->GetComponent<Character>();
+        if (charA && charA->isElevated) zA += 1;
+
+        Character* charB = b->GetComponent<Character>();
+        if (charB && charB->isElevated) zB += 1;
+
+        // 1. Desempata primeiro pela profundidade de andares (agora o isElevated tem prioridade total)
+        if (zA != zB) return zA < zB;
+        
+        // 2. Se estão no mesmo andar, usa o Y-Sorting normal
         float a_bottom_y = (a->owner != nullptr) ? (a->owner->box.y + a->owner->box.h) : (a->box.y + a->box.h);
         float b_bottom_y = (b->owner != nullptr) ? (b->owner->box.y + b->owner->box.h) : (b->box.y + b->box.h);
         
         float epsilon = 0.01f; 
         if (std::abs(a_bottom_y - b_bottom_y) > epsilon) return a_bottom_y < b_bottom_y;
         
+        // 3. Fallback de sub_z para objetos no exato mesmo pixel
         return a->sub_z < b->sub_z;
     };
     std::sort(objectArray.begin(), objectArray.end(), compareObjects);

@@ -9,7 +9,7 @@
 class Repairable : public Component {
 public:
     // O construtor recebe o caminho do arquivo que representa o objeto consertado e a distância que o jogador precisa estar para interagir
-    Repairable(GameObject& associated, std::string fixedSpritePath, std::string requiredItem, std::string soundPath, float interactionDistance = 100.0f, Vec2 interactionOffset = Vec2(0, 0));
+    Repairable(GameObject& associated, std::string fixedSpritePath, std::string requiredItem, std::string soundPath, float interactionDistance = 130.0f, Vec2 interactionOffset = Vec2(0, 0));
     ~Repairable();
 
     void Update(float dt) override;

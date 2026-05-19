@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.10" tiledversion="1.12.1" orientation="orthogonal" renderorder="right-down" width="60" height="46" tilewidth="64" tileheight="64" infinite="0" nextlayerid="27" nextobjectid="191">
+<map version="1.10" tiledversion="1.12.1" orientation="orthogonal" renderorder="right-down" width="60" height="46" tilewidth="64" tileheight="64" infinite="0" nextlayerid="27" nextobjectid="652">
  <editorsettings>
   <export target="mapa_teste.json" format="json"/>
  </editorsettings>
@@ -10,6 +10,36 @@
  <imagelayer id="2" name="chao_cenario">
   <image source="../img/cenario/chao.png" width="3839" height="2881"/>
  </imagelayer>
+ <objectgroup id="3" name="Entidades">
+  <object id="167" type="Caixa" gid="1" x="2498.18" y="1123.67" width="150.091" height="232.182">
+   <properties>
+    <property name="isStatic" type="bool" value="false"/>
+    <property name="z" type="int" value="2"/>
+   </properties>
+  </object>
+  <object id="170" type="Caixa" gid="1" x="1119.39" y="1220.64" width="153.121" height="223.091">
+   <properties>
+    <property name="isStatic" type="bool" value="false"/>
+    <property name="z" type="int" value="2"/>
+   </properties>
+  </object>
+  <object id="171" type="Caixa" gid="1" x="1419.39" y="2014.58" width="153.121" height="223.091">
+   <properties>
+    <property name="isStatic" type="bool" value="true"/>
+    <property name="z" type="int" value="2"/>
+   </properties>
+  </object>
+  <object id="172" type="Caixa" gid="1" x="2567.88" y="1875.18" width="153.121" height="223.091">
+   <properties>
+    <property name="isStatic" type="bool" value="true"/>
+    <property name="z" type="int" value="2"/>
+   </properties>
+  </object>
+  <object id="173" name="pilares" type="Pilar" gid="2" x="439" y="1406" width="2847" height="1347"/>
+  <object id="190" type="Escada_Quebrada" gid="3" x="1188.77" y="886.182" width="2497" height="1553"/>
+  <object id="236" type="StairTrigger" x="3088.67" y="882.666" width="481.333" height="59.6667"/>
+  <object id="627" gid="4" x="1190.67" y="886.333" width="2497" height="1553"/>
+ </objectgroup>
  <objectgroup id="6" name="Collision">
   <object id="107" x="2672.64" y="222.182">
    <polygon points="0,0 121,42 125,32 2,-13"/>
@@ -179,34 +209,92 @@
   <object id="176" x="1700" y="1152" width="328" height="248"/>
   <object id="184" x="449" y="1222" width="158" height="85"/>
   <object id="186" x="3120" y="1224" width="158.667" height="96"/>
-  <object id="187" x="4108" y="1260"/>
- </objectgroup>
- <objectgroup id="3" name="Entidades">
-  <object id="167" type="Caixa" gid="1" x="2498.18" y="1114.58" width="153.121" height="223.091">
-   <properties>
-    <property name="isStatic" type="bool" value="false"/>
-    <property name="z" type="int" value="2"/>
-   </properties>
+  <object id="193" x="3298.67" y="563">
+   <polygon points="0,0 -342,136 -344,128 -6,-9"/>
   </object>
-  <object id="170" type="Caixa" gid="1" x="1119.39" y="1220.64" width="153.121" height="223.091">
-   <properties>
-    <property name="isStatic" type="bool" value="false"/>
-    <property name="z" type="int" value="2"/>
-   </properties>
+  <object id="622" type="Escada" x="2901" y="45">
+   <polygon points="0,0 202,186 -94,402 -254,232"/>
   </object>
-  <object id="171" type="Caixa" gid="1" x="1419.39" y="2014.58" width="153.121" height="223.091">
-   <properties>
-    <property name="isStatic" type="bool" value="true"/>
-    <property name="z" type="int" value="2"/>
-   </properties>
+  <object id="623" type="Escada" x="3493.5" y="743">
+   <polygon points="0,0 -137,-216 -129.5,-220.5 7,-3.5"/>
   </object>
-  <object id="172" type="Caixa" gid="1" x="2567.88" y="1875.18" width="153.121" height="223.091">
-   <properties>
-    <property name="isStatic" type="bool" value="true"/>
-    <property name="z" type="int" value="2"/>
-   </properties>
+  <object id="624" type="Escada" x="3364.5" y="522">
+   <polygon points="0,0 -102.5,-119 -96.5,-124 7.5,-5.5"/>
   </object>
-  <object id="173" type="Pilar" gid="2" x="439" y="1406" width="2847" height="1347"/>
-  <object id="190" type="Escada_Quebrada" gid="3" x="1191.27" y="883.182" width="2497" height="1553"/>
+  <object id="625" type="Escada" x="3268.5" y="397">
+   <polygon points="0,0 -164.5,-167 -156.5,-173 6.5,-4.5"/>
+  </object>
+  <object id="628" type="Escada" x="3112.33" y="223.333">
+   <polygon points="0,0 -219,-180.667 -211.667,-186.667 4,-4.66667"/>
+  </object>
+  <object id="629" type="Escada" x="2901.33" y="35.6667">
+   <polygon points="0,0 -225.667,-179.333 -219,-187.667 6.66667,-4.33333"/>
+  </object>
+  <object id="630" type="Escada" x="2683.33" y="-153.333">
+   <polygon points="0,0 -153.333,-74.6667 -147.333,-90 6,-13.3333"/>
+  </object>
+  <object id="631" type="Escada" x="2536.67" y="-244.667">
+   <polygon points="0,0 -193.333,-78 -188.667,-91.3333 6,-10"/>
+  </object>
+  <object id="632" type="Escada" x="2350.67" y="-339.333">
+   <polygon points="0,0 -203.333,-72 -198,-84 5.33333,-11.3333"/>
+  </object>
+  <object id="633" type="Escada" x="2151.33" y="-422.667">
+   <polygon points="0,0 -188,-42 -183.333,-54.6667 5.33333,-12"/>
+  </object>
+  <object id="634" type="Escada" x="1968.67" y="-480">
+   <polygon points="0,0 -194,-46 -190.667,-60 2.66667,-13.3333"/>
+  </object>
+  <object id="635" type="Escada" x="1776" y="-542.667">
+   <polygon points="0,0 -246.667,-27.3333 -245.333,-41.3333 0,-9.33333"/>
+  </object>
+  <object id="636" type="Escada" x="1528.67" y="-584.667">
+   <polygon points="0,0 -175.333,-26.6667 -172.667,-44.6667 3.33333,-18"/>
+  </object>
+  <object id="637" type="Escada" x="1355.33" y="-628.667">
+   <polygon points="0,0 -162.667,6 -162,-8.66667 0.666667,-15.3333"/>
+  </object>
+  <object id="638" type="Escada" x="1192.67" y="-622.667">
+   <polygon points="0,0 136,261.333 128.667,281.333 -0.666667,34"/>
+  </object>
+  <object id="639" type="Escada" x="1326" y="-357.333">
+   <polygon points="0,0 150,3.33333 151.333,22 -6,15.3333"/>
+  </object>
+  <object id="640" type="Escada" x="1479.33" y="-334">
+   <polygon points="0,0 135.333,18 132.667,37.3333 -3.33333,16"/>
+  </object>
+  <object id="641" type="Escada" x="1612" y="-293.333">
+   <polygon points="0,0 191.333,40.6667 185.333,60 -2,14.6667"/>
+  </object>
+  <object id="642" type="Escada" x="1804" y="-232">
+   <polygon points="0,0 146,33.3333 143.333,49.3333 -3.33333,14"/>
+  </object>
+  <object id="643" type="Escada" x="1948.67" y="-176.667">
+   <polygon points="0,0 177.333,72.6667 169.333,88 -6,12"/>
+  </object>
+  <object id="644" type="Escada" x="2122" y="-88">
+   <polygon points="0,0 189,84 181,98 -10,11"/>
+  </object>
+  <object id="645" type="Escada" x="2307" y="12">
+   <polygon points="0,0 203,129 193,143 -8,12"/>
+  </object>
+  <object id="646" type="Escada" x="2506" y="158">
+   <polygon points="0,0 140,108 135,123 -9,7"/>
+  </object>
+  <object id="647" type="Escada" x="2646" y="269">
+   <polygon points="0,0 198,209 185,221 -10,13"/>
+  </object>
+  <object id="648" type="Escada" x="2830" y="490">
+   <polygon points="0,0 112,128 100,137 -13,4"/>
+  </object>
+  <object id="649" type="Escada" x="2932" y="628">
+   <polygon points="0,0 157,241 149,252 -14,6"/>
+  </object>
+  <object id="650" x="2974.67" y="694.667">
+   <polygon points="0,0 114,174.667 106.667,186.667 -15.3333,4"/>
+  </object>
+  <object id="651" type="Escada" x="3493.67" y="742.667">
+   <polygon points="0,0 118.667,180.667 123.333,176 8,-5.33333"/>
+  </object>
  </objectgroup>
 </map>

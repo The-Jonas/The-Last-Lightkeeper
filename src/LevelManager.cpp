@@ -23,7 +23,9 @@ LevelManager::~LevelManager() {
     }
     imageLayers.clear();
     rectColliders.clear();
-    polyColliders.clear();
+    chaoEscada.clear();
+    chaoNormal.clear();
+    chaoBuraco.clear();
     circleColliders.clear();
     entitySpawns.clear();
 }
@@ -47,7 +49,9 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
         }
         imageLayers.clear();
         rectColliders.clear();
-        polyColliders.clear();
+        chaoEscada.clear();
+        chaoNormal.clear();
+        chaoBuraco.clear();
         circleColliders.clear();
         entitySpawns.clear();
 
@@ -100,6 +104,9 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
                 // CAMADA DE COLISÃO FÍSICA (Paredes)
                 if (layerName == "Collision") {
                     for (auto& obj : layer["objects"]) {
+
+                        std::string type = obj.value("class", obj.value("type", ""));
+
                         float finalX = obj.value("x", 0.0f) + layerOffsetX;
                         float finalY = obj.value("y", 0.0f) + layerOffsetY;
                     
@@ -111,7 +118,15 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
                                 poly.vertices.push_back({ (int)(finalX + px), (int)(finalY + py) });
                             }
                             // Só adiciona se for um polígono válido (pelo menos um triângulo)
-                            if (poly.vertices.size() >= 3) polyColliders.push_back(poly);
+                            if (poly.vertices.size() >= 3) {
+                                if (type == "Escada") {
+                                    chaoEscada.push_back(poly);
+                                } else if (type == "Buraco") {
+                                    chaoBuraco.push_back(poly); 
+                                } else {
+                                    chaoNormal.push_back(poly);
+                                }
+                            } 
 
                         } else if (obj.contains("ellipse")) {
                             Circle c;
@@ -141,6 +156,9 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
                         spawn.type = obj.value("class", obj.value("type", ""));
                         spawn.x = obj.value("x", 0.0f) + layerOffsetX;
                         spawn.y = obj.value("y", 0.0f) + layerOffsetY;
+
+                        spawn.w = obj.value("width", 0.0f);
+                        spawn.h = obj.value("height", 0.0f);
 
                         // Valores padrão caso esqueçamos de criar no Tiled
                         spawn.isStatic = false;
@@ -172,24 +190,29 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
     }
 }
 
-bool LevelManager::CheckCollision(const SDL_Rect& entityBox) {
-    // Checagem contra retângulos (Mais fácil porque é nativa da SDL)
-    for (const auto& rectCol : rectColliders) {
-        if (SDL_HasIntersection(&entityBox, &rectCol)) {
-            return true;
+bool LevelManager::CheckCollision(const SDL_Rect& entityBox, bool isElevated) {
+    
+    // Se ele ESTÁ NO CHÃO, ele bate nas coisas normais do chão (Retângulos e Círculos)
+    if (!isElevated) {
+        // Checagem contra retângulos (Mais fácil porque é nativa da SDL)
+        for (const auto& rectCol : rectColliders) {
+            if (SDL_HasIntersection(&entityBox, &rectCol)) {
+                return true;
+            }
+        }
+
+        // Checagem contra Círculos
+        for (const auto& circleCol : circleColliders) {
+            if (CheckRectVsCircle(entityBox, circleCol)) {
+                return true;
+            }
         }
     }
 
-    // Checagem contra Círculos
-    for (const auto& circleCol : circleColliders) {
-        if (CheckRectVsCircle(entityBox, circleCol)) {
-            return true;
-        }
-    }
-
-    // Checagem contra Polígonos (SAT)
+    // ==========================================================
+    // Checagem contra Polígonos (SAT) - Essa parte roda sempre!
+    
     // Transforma-se temporariamente o SDL_React do jogador em um Polígono
-
     Polygon entityPoly;
     entityPoly.vertices = {
         {entityBox.x, entityBox.y},
@@ -198,7 +221,10 @@ bool LevelManager::CheckCollision(const SDL_Rect& entityBox) {
         {entityBox.x, entityBox.y + entityBox.h}
     };
 
-    for (const auto& polyCol : polyColliders) {
+    // Escolhe qual lista de polígonos verificar!
+    const auto& listaAtiva = isElevated ? chaoEscada : chaoNormal;
+
+    for (const auto& polyCol : listaAtiva) {
         if (CheckPolygonVsPolygon(entityPoly, polyCol)) {
             return true;
         }
@@ -290,27 +316,41 @@ void LevelManager::RenderBackground(SDL_Renderer* renderer) {
     }
 }
 
-bool LevelManager::CheckCollision(const Circle& entityCircle) {
-    // Checagem contra Retângulos do Cenário 
-    for (const auto& rectCol : rectColliders) {
-        if (CheckRectVsCircle(rectCol, entityCircle)) {
-            return true;
+bool LevelManager::CheckCollision(const Circle& entityCircle, bool isElevated) {
+    
+    // Se está na escada, checa APENAS as coisas da escada
+    if (isElevated) {
+        // 1. Checa as beiradas (Corrimões)
+        for (const auto& polyCol : chaoEscada) {
+            if (CheckPolygonVsCircle(polyCol, entityCircle)) return true;
         }
-    }
+        
+        // 2. Checa o buraco, MAS SÓ SE A ESCADA ESTIVER QUEBRADA!
+        if (!escadaConsertada) {
+            for (const auto& polyCol : chaoBuraco) {
+                if (CheckPolygonVsCircle(polyCol, entityCircle)) return true;
+            }
+        }
+    } 
+    // Se NÃO está na escada, checa as coisas normais do chão
+    else {
+        // Checagem contra Retângulos do Cenário 
+        for (const auto& rectCol : rectColliders) {
+            if (CheckRectVsCircle(rectCol, entityCircle)) return true;
+        }
 
-    // Checagem contra outros Círculos do Cenário
-    for (const auto& circleCol : circleColliders) {
-        int dx = entityCircle.center.x - circleCol.center.x;
-        int dy = entityCircle.center.y - circleCol.center.y;
-        int distSq = (dx * dx) + (dy * dy);
-        int rSum = entityCircle.radius + circleCol.radius;
-        if (distSq < (rSum * rSum)) return true;
-    }
+        // Checagem contra outros Círculos do Cenário
+        for (const auto& circleCol : circleColliders) {
+            float dx = entityCircle.center.x - circleCol.center.x;
+            float dy = entityCircle.center.y - circleCol.center.y;
+            float distSq = (dx * dx) + (dy * dy);
+            float rSum = entityCircle.radius + circleCol.radius;
+            if (distSq < (rSum * rSum)) return true;
+        }
 
-    // Checagem contra Polígonos (As paredes diagonais do Tiled)
-    for (const auto& polyCol : polyColliders) {
-        if (CheckPolygonVsCircle(polyCol, entityCircle)) {
-            return true;
+        // Checagem contra Polígonos normais do chão (As paredes de pedra)
+        for (const auto& polyCol : chaoNormal) {
+            if (CheckPolygonVsCircle(polyCol, entityCircle)) return true;
         }
     }
 
@@ -371,7 +411,7 @@ bool LevelManager::CheckPolygonVsCircle(const Polygon& poly, const Circle& circl
 
 void LevelManager::RenderDebug(SDL_Renderer* renderer){
 #ifdef DEBUG
-    // Cor vermelha para as hitbox do cenário
+    // Cor vermelha para as hitbox do cenário (Chão Normal)
     SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
 
     // 1. Desenha Retângulos
@@ -384,8 +424,8 @@ void LevelManager::RenderDebug(SDL_Renderer* renderer){
         SDL_RenderDrawRect(renderer, &screenRect);
     }
 
-    // 2. Desenha Polígonos (Linha por linha)
-    for (auto& poly : polyColliders) {
+    // 2. Desenha Polígonos do Chão Normal (Linha por linha)
+    for (auto& poly : chaoNormal) {
         for (size_t i = 0; i < poly.vertices.size(); i++) {
             SDL_Point p1 = poly.vertices[i];
             SDL_Point p2 = poly.vertices[(i + 1) % poly.vertices.size()];
@@ -394,6 +434,40 @@ void LevelManager::RenderDebug(SDL_Renderer* renderer){
                 p2.x - (int)Camera::pos.x, p2.y - (int)Camera::pos.y);
         }
     }
+
+    // =================================================================
+    // 2.5 Desenha Polígonos da Escada (Em Azul Ciano para diferenciar)
+    SDL_SetRenderDrawColor(renderer, 0, 255, 255, 255); 
+
+    for (auto& poly : chaoEscada) {
+        for (size_t i = 0; i < poly.vertices.size(); i++) {
+            SDL_Point p1 = poly.vertices[i];
+            SDL_Point p2 = poly.vertices[(i + 1) % poly.vertices.size()];
+            SDL_RenderDrawLine(renderer, 
+                p1.x - (int)Camera::pos.x, p1.y - (int)Camera::pos.y, 
+                p2.x - (int)Camera::pos.x, p2.y - (int)Camera::pos.y);
+        }
+    }
+    // =================================================================
+    
+    // 2.6 Desenha o Buraco da Escada (Roxo Magenta) - SÓ SE ESTIVER QUEBRADA!
+    if (!escadaConsertada) {
+        SDL_SetRenderDrawColor(renderer, 255, 0, 255, 255); 
+
+        for (auto& poly : chaoBuraco) {
+            for (size_t i = 0; i < poly.vertices.size(); i++) {
+                SDL_Point p1 = poly.vertices[i];
+                SDL_Point p2 = poly.vertices[(i + 1) % poly.vertices.size()];
+                SDL_RenderDrawLine(renderer, 
+                    p1.x - (int)Camera::pos.x, p1.y - (int)Camera::pos.y, 
+                    p2.x - (int)Camera::pos.x, p2.y - (int)Camera::pos.y);
+            }
+        }
+    }
+    // =================================================================
+
+    // Volta para Vermelho para desenhar os Círculos
+    SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
 
     // 3. Desenha Círculos de verdade
     for (auto& c : circleColliders) {

@@ -38,6 +38,10 @@ public:
     void SetSpeedMultiplier(float multiplier);                          // Ajusta multiplicador de velocidade do personagem
     void SetBaseSpeed(float speed);                                     // Ajusta velocidade base de movimento
 
+    bool isElevated = false;
+
+    Vec2 GetSpeed() const { return speed; }
+
 private:
     std::queue<Command> taskQueue;                                      // Fila de comando a serem executados
 
