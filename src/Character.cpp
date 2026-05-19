@@ -127,17 +127,17 @@ void Character::Update(float dt) {
         // Atualiza a posição do collider manualmente para teste futuro
         collider->Update(0);
 
-        // CRIAMOS UM CÍRCULO DINÂMICO USANDO AS MEDIDAS DO COLLIDER
         Circle playerCircleX;
-        // O raio é a metade da largura. Se a colisão ficar muito "gorda", você pode multiplicar por 0.8 aqui!
-        playerCircleX.radius = (int)(collider->box.w * 0.35f); 
-        playerCircleX.center.x = (int)(collider->box.x + (collider->box.w / 2));
-        playerCircleX.center.y = (int)(collider->box.y + collider->box.h - playerCircleX.radius);
+        // O raio é a metade da largura. Se a colisão ficar muito "gorda", pode-se mudar os valores aqui
+        playerCircleX.radius = (int)(associated.box.w * 0.25f); 
+        playerCircleX.center.x = (int)(associated.box.x + (associated.box.w / 2));
+        playerCircleX.center.y = (int)(associated.box.y + associated.box.h - playerCircleX.radius);
 
-        // Passamos o isElevated direto para a engine resolver
         if (stage->level.CheckCollision(playerCircleX, isElevated)) {
             associated.box.x = oldX;
             speed.x = 0;
+            // Update forçado para reverter o collider caso colida
+            collider->Update(0); 
         }
 
         // --- TESTE DO EIXO Y ---
@@ -147,9 +147,9 @@ void Character::Update(float dt) {
         collider->Update(0);
 
         Circle playerCircleY;
-        playerCircleY.radius = (int)(collider->box.w * 0.35f);
-        playerCircleY.center.x = (int)(collider->box.x + (collider->box.w / 2));
-        playerCircleY.center.y = (int)(collider->box.y + collider->box.h - playerCircleY.radius);
+        playerCircleY.radius = (int)(associated.box.w * 0.25f);
+        playerCircleY.center.x = (int)(associated.box.x + (associated.box.w / 2));
+        playerCircleY.center.y = (int)(associated.box.y + associated.box.h - playerCircleY.radius);
 
         // NO EIXO Y TAMBÉM:
         if (stage->level.CheckCollision(playerCircleY, isElevated)) {
@@ -211,30 +211,27 @@ void Character::NotifyCollision(GameObject& other) {
 
 void Character::Render() { 
 #ifdef DEBUG
-    Collider* collider = associated.GetComponent<Collider>();
-    if (collider) {
-        SDL_Renderer* renderer = Game::GetInstance().GetRenderer();
-        
-        // O X continua centralizado
-        int cx = (int)(collider->box.x + (collider->box.w / 2) - Camera::pos.x);
-        
-        // Em vez de usar o centro da box, usamos a base da box menos o raio,
-        // exatamente como fizemos no Update() 
-        int r = (int)(collider->box.w * 0.35f); 
-        int cy = (int)(collider->box.y + collider->box.h - r - Camera::pos.y);
+    // Agora desenhamos usando a Fonte da Verdade (associated.box)
+    SDL_Renderer* renderer = Game::GetInstance().GetRenderer();
+    
+    // O X continua centralizado na imagem real
+    int cx = (int)(associated.box.x + (associated.box.w / 2) - Camera::pos.x);
+    
+    // O raio e o Y também baseados na imagem real (idêntico ao Update)
+    int r = (int)(associated.box.w * 0.25f); 
+    int cy = (int)(associated.box.y + associated.box.h - r - Camera::pos.y);
 
-        SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255); // Cor Verde
+    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255); // Cor Verde
+    
+    // Desenha o círculo linha por linha...
+    const int kSeg = 36;
+    for (int i = 0; i < kSeg; i++) {
+        float a0 = ((float)i / kSeg) * 2.0f * M_PI;
+        float a1 = ((float)(i + 1) / kSeg) * 2.0f * M_PI;
         
-        // Desenha o círculo linha por linha...
-        const int kSeg = 36;
-        for (int i = 0; i < kSeg; i++) {
-            float a0 = ((float)i / kSeg) * 2.0f * M_PI;
-            float a1 = ((float)(i + 1) / kSeg) * 2.0f * M_PI;
-            
-            SDL_RenderDrawLine(renderer, 
-                cx + (int)(cos(a0) * r), cy + (int)(sin(a0) * r), 
-                cx + (int)(cos(a1) * r), cy + (int)(sin(a1) * r));
-        }
+        SDL_RenderDrawLine(renderer, 
+            cx + (int)(cos(a0) * r), cy + (int)(sin(a0) * r), 
+            cx + (int)(cos(a1) * r), cy + (int)(sin(a1) * r));
     }
 #endif
 }

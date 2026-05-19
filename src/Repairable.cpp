@@ -70,8 +70,6 @@ void Repairable::Render() {
     if (isRepaired) return;
 
 #ifdef DEBUG
-
-    // AVISO: Removi o #ifdef DEBUG propositalmente para forçar a renderização aparecer!
     
     SDL_Renderer* renderer = Game::GetInstance().GetRenderer();
 

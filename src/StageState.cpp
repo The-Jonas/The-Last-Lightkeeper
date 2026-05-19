@@ -415,7 +415,7 @@ void StageState::LoadAssets() {
             "Recursos/img/cenario/escada_inteira.png",
             "Tabua de Madeira",
             "Recursos/audio/Hit0.wav",
-            80.0f,
+            120.0f,
             Vec2(1780, 1050)
             ));
 
