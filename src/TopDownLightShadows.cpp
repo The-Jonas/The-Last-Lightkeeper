@@ -1,5 +1,6 @@
 #include "../include/TopDownLightShadows.h"
 #include "../include/Camera.h"
+#include "../include/LightShadowProfile.h"
 
 #include <algorithm>
 #include <cmath>
@@ -100,13 +101,18 @@ void RenderShadowVolumes(SDL_Renderer* renderer, float lightScreenX, float light
         return;
     }
 
+    Uint64 perfStart = 0;
+    if (LightShadowProfile::IsActive()) {
+        perfStart = SDL_GetPerformanceCounter();
+    }
+
     const Vec2 L(lightScreenX, lightScreenY);
     const float extend = std::max(8.0f, std::min(420.0f, shadowLengthPx));
     const int baseLayers = std::max(1, std::min(6, softnessLayers));
     const float softness01 = std::max(0.0f, std::min(1.0f, softness));
     // Add automatic feather layers so shadows look less hard-edged even with low settings.
-    const int extraFeatherLayers = 1 + static_cast<int>(std::round(softness01 * 3.0f));
-    const int layers = std::max(1, std::min(9, baseLayers + extraFeatherLayers));
+    const int extraFeatherLayers = 1 + static_cast<int>(std::round(softness01 * 2.0f));
+    const int layers = std::max(1, std::min(5, baseLayers + extraFeatherLayers));
 
     std::vector<SDL_Vertex> verts;
     std::vector<int> ind;
@@ -142,6 +148,17 @@ void RenderShadowVolumes(SDL_Renderer* renderer, float lightScreenX, float light
 
     auto drawEdgeSet = [&](const std::vector<TopDownShadowEdge>& edges) {
         for (const TopDownShadowEdge& e : edges) {
+            const Vec2 As = WorldToScreen(e.a);
+            const Vec2 Bs = WorldToScreen(e.b);
+            const float midX = (As.x + Bs.x) * 0.5f;
+            const float midY = (As.y + Bs.y) * 0.5f;
+            const float dxL = midX - L.x;
+            const float dyL = midY - L.y;
+            const float edgeLen = (Bs - As).Magnitude();
+            const float reach = extend + edgeLen * 0.5f + 120.0f;
+            if (dxL * dxL + dyL * dyL > reach * reach) {
+                continue;
+            }
             for (int i = 0; i < layers; i++) {
                 const float t = static_cast<float>(i) / static_cast<float>(std::max(1, layers - 1));
                 // Non-linear ramp keeps the contact area dark while softening far edge.
@@ -173,6 +190,13 @@ void RenderShadowVolumes(SDL_Renderer* renderer, float lightScreenX, float light
 
     SDL_SetRenderDrawBlendMode(renderer, oldBlend);
     SDL_SetRenderDrawColor(renderer, dr, dg, db, da);
+
+    if (LightShadowProfile::IsActive()) {
+        const Uint64 perfEnd = SDL_GetPerformanceCounter();
+        const double ms =
+            static_cast<double>(perfEnd - perfStart) * 1000.0 / static_cast<double>(SDL_GetPerformanceFrequency());
+        LightShadowProfile::SetVolumeShadowMs(ms);
+    }
 }
 
 } // namespace TopDownLightShadows

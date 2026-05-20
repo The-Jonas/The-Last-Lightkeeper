@@ -3,6 +3,8 @@
 #include <cmath>
 #include <vector>
 
+#include "../include/LightShadowProfile.h"
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -187,6 +189,13 @@ bool RadialLightOverlay::Init(SDL_Renderer*, int) {
     return true;
 }
 
+RadialLightOverlay::~RadialLightOverlay() {
+    if (lowResMaskTex != nullptr) {
+        SDL_DestroyTexture(lowResMaskTex);
+        lowResMaskTex = nullptr;
+    }
+}
+
 void RadialLightOverlay::Render(SDL_Renderer* renderer, int mouseX, int mouseY, int windowW, int windowH,
                                 LightMaskShape shape, const LightMaskParams& params) {
     ScreenLight light{static_cast<float>(mouseX), static_cast<float>(mouseY), shape, params};
@@ -201,6 +210,11 @@ void RadialLightOverlay::RenderMany(SDL_Renderer* renderer, int windowW, int win
     }
     if (lights.empty()) {
         return;
+    }
+
+    Uint64 perfStart = 0;
+    if (LightShadowProfile::IsActive()) {
+        perfStart = SDL_GetPerformanceCounter();
     }
 
     const float timeSec = static_cast<float>(SDL_GetTicks()) * 0.001f;
@@ -229,6 +243,7 @@ void RadialLightOverlay::RenderMany(SDL_Renderer* renderer, int windowW, int win
         float torchAx3;
         float torchAy3;
         float torchSpikeAmp;
+        float cullRadiusSq;
     };
 
     std::vector<PreparedLight> prepared;
@@ -263,7 +278,6 @@ void RadialLightOverlay::RenderMany(SDL_Renderer* renderer, int windowW, int win
         float torchAy3 = 0.7071f;
         float torchSpikeAmp = 0.0f;
         if (light.shape == LightMaskShape::Torch) {
-            // Lightweight torch: animate center/radius once per light per frame.
             const TorchAnimState anim = ComputeTorchAnim(light.params, timeSec, seed);
             evalX += anim.swayX * 0.55f;
             evalY += anim.swayY * 0.40f;
@@ -271,14 +285,12 @@ void RadialLightOverlay::RenderMany(SDL_Renderer* renderer, int windowW, int win
             evalShape = LightMaskShape::Torch;
             tintStrength = std::max(0.0f, std::min(1.0f, light.params.torchColorStrength));
             tintWarmth = std::max(0.0f, std::min(2.0f, light.params.torchColorWarmth));
-            // Per-light/per-frame randomized border distortion coefficients.
             const float warp = Clamp01f(light.params.torchWarpStrength);
             const float tt = timeSec * std::max(0.15f, light.params.torchAnimSpeed);
             torchKx = warp * 0.26f * std::sin(tt * 1.7f + seed * 13.1f);
             torchKy = warp * 0.24f * std::sin(tt * 2.1f + seed * 17.3f + 1.1f);
             torchKxy = warp * 0.20f * std::sin(tt * 2.8f + seed * 19.7f + 2.4f);
             torchKquad = warp * 0.18f * std::sin(tt * 3.5f + seed * 23.9f + 0.6f);
-            // Randomized spike axes with smooth, non-orbital changes over time.
             SmoothRandomDir(tt * 0.45f, seed, 1.3f, torchAx1, torchAy1);
             SmoothRandomDir(tt * 0.63f, seed, 7.9f, torchAx2, torchAy2);
             SmoothRandomDir(tt * 0.39f, seed, 13.7f, torchAx3, torchAy3);
@@ -297,143 +309,265 @@ void RadialLightOverlay::RenderMany(SDL_Renderer* renderer, int windowW, int win
             }
         }
 
+        float influenceR = evalRFalloff;
+        if (light.shape == LightMaskShape::Cone || evalShape == LightMaskShape::Cone) {
+            influenceR = std::max(influenceR, light.params.coneLengthPx * 0.5f + evalRFalloff * 0.35f);
+        }
+        if (light.shape == LightMaskShape::SoftRect || evalShape == LightMaskShape::SoftRect) {
+            const float hw = light.params.rectHalfWidthPx + light.params.rectSoftBandPx;
+            const float hh = light.params.rectHalfHeightPx + light.params.rectSoftBandPx;
+            influenceR = std::max(influenceR, std::sqrt(hw * hw + hh * hh));
+        }
+        if (light.shape == LightMaskShape::Torch) {
+            influenceR = std::max(influenceR, evalRFalloff * 2.0f + light.params.torchMotionRangePx * 1.2f);
+        }
+        const float margin = 32.0f + 0.25f * influenceR;
+        const float cullR = influenceR + margin;
+        const float cullRadiusSq = cullR * cullR;
+
         const float dMax =
             std::max(0.0f, std::min(255.0f, static_cast<float>(light.params.darknessMax)));
         prepared.push_back({evalX, evalY, light.shape, evalShape, light.params,
                             dMax,
                             rGeomMax, evalRFalloff, ComputeAxisRad(light), seed, tintStrength, tintWarmth,
                             torchKx, torchKy, torchKxy, torchKquad,
-                            torchAx1, torchAy1, torchAx2, torchAy2, torchAx3, torchAy3, torchSpikeAmp});
+                            torchAx1, torchAy1, torchAx2, torchAy2, torchAx3, torchAy3, torchSpikeAmp,
+                            cullRadiusSq});
     }
 
     if (prepared.empty()) {
         return;
     }
 
-    const float gridStep = std::max(12.0f, std::min(64.0f, prepared[0].params.lightGridStepPx));
-    const int gridX = std::max(20, static_cast<int>(std::ceil(static_cast<float>(windowW) / gridStep)));
-    const int gridY = std::max(12, static_cast<int>(std::ceil(static_cast<float>(windowH) / gridStep)));
-    const float stepX = static_cast<float>(windowW) / static_cast<float>(gridX);
-    const float stepY = static_cast<float>(windowH) / static_cast<float>(gridY);
+    bool halfRes = prepared[0].params.radialMaskHalfResolution;
+    switch (prepared[0].params.lightQualityPreset) {
+    case LightQualityPreset::Quality:
+        halfRes = false;
+        break;
+    case LightQualityPreset::Performance:
+        halfRes = true;
+        break;
+    default:
+        break;
+    }
+    const int lowW = std::max(1, (windowW + 1) / 2);
+    const int lowH = std::max(1, (windowH + 1) / 2);
 
-    std::vector<SDL_Vertex> verts;
-    std::vector<int> ind;
-    verts.reserve(static_cast<size_t>((gridX + 1) * (gridY + 1)));
-    ind.reserve(static_cast<size_t>(gridX * gridY * 6));
+    auto runDarknessPass = [&](int passW, int passH, const std::vector<PreparedLight>& prep) {
+        float gridStep = std::max(12.0f, std::min(64.0f, prep[0].params.lightGridStepPx));
+        switch (prep[0].params.lightQualityPreset) {
+        case LightQualityPreset::Quality:
+            gridStep = std::max(14.0f, gridStep * 0.95f);
+            break;
+        case LightQualityPreset::Balanced:
+            gridStep = std::max(20.0f, gridStep);
+            break;
+        case LightQualityPreset::Performance:
+            gridStep = std::max(28.0f, gridStep);
+            break;
+        case LightQualityPreset::Custom:
+        default:
+            break;
+        }
+        const int gridX = std::max(20, static_cast<int>(std::ceil(static_cast<float>(passW) / gridStep)));
+        const int gridY = std::max(12, static_cast<int>(std::ceil(static_cast<float>(passH) / gridStep)));
+        const float stepX = static_cast<float>(passW) / static_cast<float>(gridX);
+        const float stepY = static_cast<float>(passH) / static_cast<float>(gridY);
 
-    for (int y = 0; y <= gridY; y++) {
-        for (int x = 0; x <= gridX; x++) {
-            const float px = std::min(static_cast<float>(windowW), x * stepX);
-            const float py = std::min(static_cast<float>(windowH), y * stepY);
-            float alpha = 255.0f;
-            float torchWarm = 0.0f;
-            float torchWarmth = 0.0f;
-            for (const PreparedLight& light : prepared) {
-                const float lx = px - light.x;
-                const float ly = py - light.y;
-                float a = 255.0f;
-                if (light.shape == LightMaskShape::Torch) {
-                    const float d = std::sqrt(lx * lx + ly * ly);
-                    const float inv = 1.0f / std::max(1e-3f, d);
-                    const float nx = lx * inv;
-                    const float ny = ly * inv;
-                    const float dirWarp = light.torchKx * nx + light.torchKy * ny + light.torchKxy * (nx * ny) +
-                                          light.torchKquad * (nx * nx - ny * ny);
-                    const float s1 = std::fabs(nx * light.torchAx1 + ny * light.torchAy1);
-                    const float s2 = std::fabs(nx * light.torchAx2 + ny * light.torchAy2);
-                    const float s3 = std::fabs(nx * light.torchAx3 + ny * light.torchAy3);
-                    const float p1 = s1 * s1 * s1 * s1 * s1 * s1;
-                    const float p2 = s2 * s2 * s2 * s2 * s2 * s2;
-                    const float p3 = s3 * s3 * s3 * s3 * s3 * s3;
-                    const float spikeWarp = light.torchSpikeAmp * std::max(p1, std::max(p2, p3));
-                    const float rEff = std::max(8.0f, light.rFalloff *
-                                                        std::max(0.60f, std::min(1.65f, 1.0f + dirWarp + spikeWarp)));
-                    const float t01 = std::min(1.0f, d / rEff);
-                    const float s = FalloffShape(t01, light.params);
-                    const float inner = Clamp01f(light.params.innerLift);
-                    a = light.dMax * (inner + (1.0f - inner) * s);
-                } else {
-                    a = AlphaAt(lx, ly, light.evalShape, light.params, light.dMax, light.params.innerLift, light.rFalloff,
-                                light.axisRad, timeSec, light.seed);
+        std::vector<SDL_Vertex> verts;
+        std::vector<int> ind;
+        verts.reserve(static_cast<size_t>((gridX + 1) * (gridY + 1)));
+        ind.reserve(static_cast<size_t>(gridX * gridY * 6));
+
+        for (int y = 0; y <= gridY; y++) {
+            for (int x = 0; x <= gridX; x++) {
+                const float px = std::min(static_cast<float>(passW), x * stepX);
+                const float py = std::min(static_cast<float>(passH), y * stepY);
+                float alpha = 255.0f;
+                float torchWarm = 0.0f;
+                float torchWarmth = 0.0f;
+                for (const PreparedLight& light : prep) {
+                    const float lx = px - light.x;
+                    const float ly = py - light.y;
+                    const float distSq = lx * lx + ly * ly;
+                    if (distSq > light.cullRadiusSq) {
+                        continue;
+                    }
+                    float a = 255.0f;
+                    if (light.shape == LightMaskShape::Torch) {
+                        const float d = std::sqrt(distSq);
+                        const float inv = 1.0f / std::max(1e-3f, d);
+                        const float nx = lx * inv;
+                        const float ny = ly * inv;
+                        const float dirWarp = light.torchKx * nx + light.torchKy * ny + light.torchKxy * (nx * ny) +
+                                              light.torchKquad * (nx * nx - ny * ny);
+                        const float s1 = std::fabs(nx * light.torchAx1 + ny * light.torchAy1);
+                        const float s2 = std::fabs(nx * light.torchAx2 + ny * light.torchAy2);
+                        const float s3 = std::fabs(nx * light.torchAx3 + ny * light.torchAy3);
+                        const float p1 = s1 * s1 * s1 * s1 * s1 * s1;
+                        const float p2 = s2 * s2 * s2 * s2 * s2 * s2;
+                        const float p3 = s3 * s3 * s3 * s3 * s3 * s3;
+                        const float spikeWarp = light.torchSpikeAmp * std::max(p1, std::max(p2, p3));
+                        const float rEff = std::max(8.0f, light.rFalloff *
+                                                            std::max(0.60f, std::min(1.65f, 1.0f + dirWarp + spikeWarp)));
+                        const float t01 = std::min(1.0f, d / rEff);
+                        const float s = FalloffShape(t01, light.params);
+                        const float inner = Clamp01f(light.params.innerLift);
+                        a = light.dMax * (inner + (1.0f - inner) * s);
+                    } else {
+                        a = AlphaAt(lx, ly, light.evalShape, light.params, light.dMax, light.params.innerLift, light.rFalloff,
+                                    light.axisRad, timeSec, light.seed);
+                    }
+                    alpha = std::min(alpha, a);
+                    if (light.shape == LightMaskShape::Torch) {
+                        const float lit = 1.0f - std::max(0.0f, std::min(1.0f, a / std::max(1.0f, light.dMax)));
+                        torchWarm = std::max(torchWarm, lit * light.tintStrength);
+                        torchWarmth = std::max(torchWarmth, light.tintWarmth);
+                    }
                 }
-                alpha = std::min(alpha, a);
-                if (light.shape == LightMaskShape::Torch) {
-                    const float lit = 1.0f - std::max(0.0f, std::min(1.0f, a / std::max(1.0f, light.dMax)));
-                    torchWarm = std::max(torchWarm, lit * light.tintStrength);
-                    torchWarmth = std::max(torchWarmth, light.tintWarmth);
-                }
+                const float warm = std::max(0.0f, std::min(1.0f, torchWarm));
+                const Uint8 vr = static_cast<Uint8>(std::lround((42.0f + 36.0f * torchWarmth) * warm));
+                const Uint8 vg = static_cast<Uint8>(std::lround((12.0f + 10.0f * torchWarmth) * warm));
+                const Uint8 vb = static_cast<Uint8>(std::lround((2.0f + 4.0f * torchWarmth) * warm));
+                verts.push_back({{px, py}, {vr, vg, vb, static_cast<Uint8>(std::max(0.0f, std::min(255.0f, alpha)))}, {0, 0}});
             }
-            const float warm = std::max(0.0f, std::min(1.0f, torchWarm));
-            const Uint8 vr = static_cast<Uint8>(std::lround((42.0f + 36.0f * torchWarmth) * warm));
-            const Uint8 vg = static_cast<Uint8>(std::lround((12.0f + 10.0f * torchWarmth) * warm));
-            const Uint8 vb = static_cast<Uint8>(std::lround((2.0f + 4.0f * torchWarmth) * warm));
-            verts.push_back({{px, py}, {vr, vg, vb, static_cast<Uint8>(std::max(0.0f, std::min(255.0f, alpha)))}, {0, 0}});
         }
+
+        std::vector<SDL_Vertex> glowVerts;
+        std::vector<int> glowInd;
+        glowVerts.reserve(prep.size() * 18u);
+        glowInd.reserve(prep.size() * 48u);
+        for (const PreparedLight& light : prep) {
+            if (light.shape != LightMaskShape::Torch || light.tintStrength <= 0.001f) {
+                continue;
+            }
+            const TorchAnimState anim = ComputeTorchAnim(light.params, timeSec, light.seed);
+            const float cx = light.x + anim.swayX * 0.25f;
+            const float cy = light.y + anim.swayY * 0.18f;
+            const float rr = std::max(20.0f, light.rFalloff * (0.42f + 0.12f * (anim.radialMul - 1.0f)));
+            const float warm = light.tintWarmth;
+            const Uint8 cr = static_cast<Uint8>(std::min(255.0f, (185.0f + 48.0f * warm) * light.tintStrength));
+            const Uint8 cg = static_cast<Uint8>(std::min(235.0f, (95.0f + 30.0f * warm) * light.tintStrength));
+            const Uint8 cb = static_cast<Uint8>(std::min(140.0f, (18.0f + 20.0f * warm) * light.tintStrength));
+            const Uint8 ca = static_cast<Uint8>(std::min(140.0f, 110.0f * light.tintStrength));
+
+            const int base = static_cast<int>(glowVerts.size());
+            glowVerts.push_back({{cx, cy}, {cr, cg, cb, ca}, {0, 0}});
+            constexpr int kGlowSeg = 12;
+            for (int i = 0; i <= kGlowSeg; i++) {
+                const float a = (static_cast<float>(i) / static_cast<float>(kGlowSeg)) * 2.0f * static_cast<float>(M_PI);
+                glowVerts.push_back({{cx + std::cos(a) * rr, cy + std::sin(a) * rr}, {cr, cg, cb, 0}, {0, 0}});
+            }
+            for (int i = 0; i < kGlowSeg; i++) {
+                glowInd.push_back(base);
+                glowInd.push_back(base + 1 + i);
+                glowInd.push_back(base + 1 + i + 1);
+            }
+        }
+
+        auto idx = [&](int gx, int gy) { return gy * (gridX + 1) + gx; };
+        for (int gy = 0; gy < gridY; gy++) {
+            for (int gx = 0; gx < gridX; gx++) {
+                const int i00 = idx(gx, gy);
+                const int i10 = idx(gx + 1, gy);
+                const int i11 = idx(gx + 1, gy + 1);
+                const int i01 = idx(gx, gy + 1);
+                ind.push_back(i00); ind.push_back(i10); ind.push_back(i11);
+                ind.push_back(i00); ind.push_back(i11); ind.push_back(i01);
+            }
+        }
+
+        if (verts.empty() || ind.empty()) {
+            return;
+        }
+
+        SDL_BlendMode oldBlend;
+        SDL_GetRenderDrawBlendMode(renderer, &oldBlend);
+        Uint8 dr, dg, db, dColA;
+        SDL_GetRenderDrawColor(renderer, &dr, &dg, &db, &dColA);
+
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        SDL_RenderGeometry(renderer, nullptr, verts.data(), static_cast<int>(verts.size()), ind.data(),
+                           static_cast<int>(ind.size()));
+        if (!glowVerts.empty() && !glowInd.empty()) {
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
+            SDL_RenderGeometry(renderer, nullptr, glowVerts.data(), static_cast<int>(glowVerts.size()), glowInd.data(),
+                               static_cast<int>(glowInd.size()));
+        }
+
+        SDL_SetRenderDrawBlendMode(renderer, oldBlend);
+        SDL_SetRenderDrawColor(renderer, dr, dg, db, dColA);
+    };
+
+    if (halfRes) {
+        if (lowResMaskTex == nullptr || lowResMaskAllocW != lowW || lowResMaskAllocH != lowH) {
+            if (lowResMaskTex != nullptr) {
+                SDL_DestroyTexture(lowResMaskTex);
+                lowResMaskTex = nullptr;
+            }
+            lowResMaskTex = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, lowW, lowH);
+            if (lowResMaskTex == nullptr) {
+                runDarknessPass(windowW, windowH, prepared);
+            } else {
+                SDL_SetTextureBlendMode(lowResMaskTex, SDL_BLENDMODE_BLEND);
+                lowResMaskAllocW = lowW;
+                lowResMaskAllocH = lowH;
+            }
+        }
+
+        if (lowResMaskTex != nullptr) {
+            std::vector<PreparedLight> prepLow;
+            prepLow.reserve(prepared.size());
+            const float sx = static_cast<float>(lowW) / static_cast<float>(windowW);
+            const float sy = static_cast<float>(lowH) / static_cast<float>(windowH);
+            const float smin = std::min(sx, sy);
+            for (PreparedLight p : prepared) {
+                p.x *= sx;
+                p.y *= sy;
+                p.rFalloff *= smin;
+                p.rGeomMax *= smin;
+                p.cullRadiusSq *= smin * smin;
+                p.params.falloffRadiusPx *= smin;
+                p.params.rMaxMinimo *= smin;
+                p.params.marginExtraAlemDoCanto *= smin;
+                p.params.coneLengthPx *= smin;
+                p.params.rectHalfWidthPx *= smin;
+                p.params.rectHalfHeightPx *= smin;
+                p.params.rectSoftBandPx *= smin;
+                p.params.torchMotionRangePx *= smin;
+                prepLow.push_back(std::move(p));
+            }
+
+            SDL_Texture* prevTarget = SDL_GetRenderTarget(renderer);
+            SDL_SetRenderTarget(renderer, lowResMaskTex);
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+            SDL_RenderClear(renderer);
+
+            runDarknessPass(lowW, lowH, prepLow);
+
+            SDL_SetRenderTarget(renderer, prevTarget);
+
+            SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
+
+            SDL_BlendMode oldBlend2;
+            SDL_GetRenderDrawBlendMode(renderer, &oldBlend2);
+            Uint8 dr2, dg2, db2, da2;
+            SDL_GetRenderDrawColor(renderer, &dr2, &dg2, &db2, &da2);
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+            const SDL_FRect dst{0.0f, 0.0f, static_cast<float>(windowW), static_cast<float>(windowH)};
+            SDL_RenderCopyF(renderer, lowResMaskTex, nullptr, &dst);
+            SDL_SetRenderDrawBlendMode(renderer, oldBlend2);
+            SDL_SetRenderDrawColor(renderer, dr2, dg2, db2, da2);
+        }
+    } else {
+        runDarknessPass(windowW, windowH, prepared);
     }
 
-    // Cheap additive glow to make torch color visibly affect sprites.
-    std::vector<SDL_Vertex> glowVerts;
-    std::vector<int> glowInd;
-    glowVerts.reserve(prepared.size() * 18u);
-    glowInd.reserve(prepared.size() * 48u);
-    for (const PreparedLight& light : prepared) {
-        if (light.shape != LightMaskShape::Torch || light.tintStrength <= 0.001f) {
-            continue;
-        }
-        const TorchAnimState anim = ComputeTorchAnim(light.params, timeSec, light.seed);
-        const float cx = light.x + anim.swayX * 0.25f;
-        const float cy = light.y + anim.swayY * 0.18f;
-        const float rr = std::max(20.0f, light.rFalloff * (0.42f + 0.12f * (anim.radialMul - 1.0f)));
-        const float warm = light.tintWarmth;
-        const Uint8 cr = static_cast<Uint8>(std::min(255.0f, (185.0f + 48.0f * warm) * light.tintStrength));
-        const Uint8 cg = static_cast<Uint8>(std::min(235.0f, (95.0f + 30.0f * warm) * light.tintStrength));
-        const Uint8 cb = static_cast<Uint8>(std::min(140.0f, (18.0f + 20.0f * warm) * light.tintStrength));
-        const Uint8 ca = static_cast<Uint8>(std::min(140.0f, 110.0f * light.tintStrength));
-
-        const int base = static_cast<int>(glowVerts.size());
-        glowVerts.push_back({{cx, cy}, {cr, cg, cb, ca}, {0, 0}});
-        constexpr int kGlowSeg = 12;
-        for (int i = 0; i <= kGlowSeg; i++) {
-            const float a = (static_cast<float>(i) / static_cast<float>(kGlowSeg)) * 2.0f * static_cast<float>(M_PI);
-            glowVerts.push_back({{cx + std::cos(a) * rr, cy + std::sin(a) * rr}, {cr, cg, cb, 0}, {0, 0}});
-        }
-        for (int i = 0; i < kGlowSeg; i++) {
-            glowInd.push_back(base);
-            glowInd.push_back(base + 1 + i);
-            glowInd.push_back(base + 1 + i + 1);
-        }
+    if (LightShadowProfile::IsActive()) {
+        const Uint64 perfEnd = SDL_GetPerformanceCounter();
+        const double ms =
+            static_cast<double>(perfEnd - perfStart) * 1000.0 / static_cast<double>(SDL_GetPerformanceFrequency());
+        LightShadowProfile::SetRadialOverlayMs(ms);
     }
-
-    auto idx = [&](int x, int y) { return y * (gridX + 1) + x; };
-    for (int y = 0; y < gridY; y++) {
-        for (int x = 0; x < gridX; x++) {
-            const int i00 = idx(x, y);
-            const int i10 = idx(x + 1, y);
-            const int i11 = idx(x + 1, y + 1);
-            const int i01 = idx(x, y + 1);
-            ind.push_back(i00); ind.push_back(i10); ind.push_back(i11);
-            ind.push_back(i00); ind.push_back(i11); ind.push_back(i01);
-        }
-    }
-
-    if (verts.empty() || ind.empty()) {
-        return;
-    }
-
-    SDL_BlendMode oldBlend;
-    SDL_GetRenderDrawBlendMode(renderer, &oldBlend);
-    Uint8 dr, dg, db, dColA;
-    SDL_GetRenderDrawColor(renderer, &dr, &dg, &db, &dColA);
-
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_RenderGeometry(renderer, nullptr, verts.data(), static_cast<int>(verts.size()), ind.data(),
-                       static_cast<int>(ind.size()));
-    if (!glowVerts.empty() && !glowInd.empty()) {
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
-        SDL_RenderGeometry(renderer, nullptr, glowVerts.data(), static_cast<int>(glowVerts.size()), glowInd.data(),
-                           static_cast<int>(glowInd.size()));
-    }
-
-    SDL_SetRenderDrawBlendMode(renderer, oldBlend);
-    SDL_SetRenderDrawColor(renderer, dr, dg, db, dColA);
 }

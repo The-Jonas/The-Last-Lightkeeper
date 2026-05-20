@@ -18,7 +18,7 @@ public:
     };
 
     RadialLightOverlay() = default;
-    ~RadialLightOverlay() = default;
+    ~RadialLightOverlay();
 
     RadialLightOverlay(const RadialLightOverlay&) = delete;
     RadialLightOverlay& operator=(const RadialLightOverlay&) = delete;
@@ -31,6 +31,9 @@ public:
                     const LightOcclusionContext& occlusion = {});
 
 private:
+    SDL_Texture* lowResMaskTex = nullptr;
+    int lowResMaskAllocW = 0;
+    int lowResMaskAllocH = 0;
     static float FalloffShape(float t01, const LightMaskParams& params);
     static float AlphaAt(float dx, float dy, LightMaskShape shape, const LightMaskParams& params, float dMax,
                          float innerLift, float rFalloff, float axisRad, float timeSec, float seed);

@@ -15,6 +15,7 @@
 #include "../include/EndState.h"
 #include "../include/Text.h"
 #include "../include/TopDownLightShadows.h"
+#include "../include/LightShadowProfile.h"
 #include "../include/Item.h"
 #include "../include/ItemPickup.h"
 #include "../include/HotbarComponent.h"
@@ -200,6 +201,7 @@ bool IsFootLit(GameObject* go, const Vec2& lightScreenPos, const LightMaskParams
 
 void RenderProjectedSpriteShadow(GameObject* go, const Vec2& lightScreenPos, float lightTouch, float shadowLengthPx, Uint8 shadowAlpha,
                                  const LightMaskParams& params) {
+    (void)params;
     if (!go || lightTouch <= 0.01f || shadowLengthPx <= 1.0f) {
         return;
     }
@@ -221,7 +223,6 @@ void RenderProjectedSpriteShadow(GameObject* go, const Vec2& lightScreenPos, flo
 
     const float distance01 = Clamp01(1.0f - lightTouch); // 0 = close light, 1 = far light
     const float fastStretch = std::pow(distance01, 0.60f);
-    // Pure distance-rate sizing: no min/max user constraints.
     const float stretch = 0.82f + fastStretch * 2.35f;
     const float widen = 1.00f + fastStretch * 0.26f;
 
@@ -230,7 +231,6 @@ void RenderProjectedSpriteShadow(GameObject* go, const Vec2& lightScreenPos, flo
     shadowBox.h = std::max(2.0f, originalBox.h * stretch);
     const double angDeg = std::atan2(dir.y, dir.x) * (180.0 / M_PI) + 90.0;
     const double angRad = angDeg * (M_PI / 180.0);
-    // Lock shadow "feet" to character feet: rotate/stretch around anchored foot.
     const Vec2 footAnchor(originalBox.x + 0.5f * originalBox.w, originalBox.y + originalBox.h);
     const Vec2 localFootToCenter(0.0f, -shadowBox.h * 0.5f);
     const Vec2 rotatedFootToCenter(localFootToCenter.x * std::cos(angRad) - localFootToCenter.y * std::sin(angRad),
@@ -267,7 +267,7 @@ void DrawContactFootShadow(SDL_Renderer* renderer, const Rect& box, float contac
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
     const int seg = 24;
-    const int blurLayers = 4;
+    const int blurLayers = 2;
     const float baseAlpha = std::max(24.0f, std::min(220.0f, 255.0f * contactRate));
     for (int layer = 0; layer < blurLayers; layer++) {
         const float tLayer = static_cast<float>(layer) / static_cast<float>(std::max(1, blurLayers - 1));
@@ -1012,6 +1012,9 @@ void StageState::Render(){
     // ===================================================================
     Game& g = Game::GetInstance();
     const bool showDebugTools = (lightTweakPanel && lightTweakPanel->visible);
+    if (lightsEnabled) {
+        LightShadowProfile::BeginLightsTiming();
+    }
     const bool torchFromInventory = inventory.IsUsableLightActive();
     const bool bigCircleOnlyLight = previewLightLockedToPlayer && previewLightAnchorPlayer == bigCharacterObject;
     const bool smallCircleOnlyLight = previewLightLockedToPlayer && previewLightAnchorPlayer == smallCharacterObject;
@@ -1019,6 +1022,10 @@ void StageState::Render(){
     float smallMaxContact = 0.0f;
 
     if (lightsEnabled && shadowsEnabled) {
+        Uint64 shadowBlockStart = 0;
+        if (LightShadowProfile::IsActive()) {
+            shadowBlockStart = SDL_GetPerformanceCounter();
+        }
         struct SpriteShadowCast {
             Vec2 lightScreen;
             float touch = 0.0f;
@@ -1109,7 +1116,7 @@ void StageState::Render(){
             renderedLights++;
         }
 
-        constexpr size_t kMaxSpriteShadowsPerPlayer = 4;
+        constexpr size_t kMaxSpriteShadowsPerPlayer = 2;
         std::sort(bigShadowCasts.begin(), bigShadowCasts.end(), [](const SpriteShadowCast& a, const SpriteShadowCast& b) { return a.touch > b.touch; });
         std::sort(smallShadowCasts.begin(), smallShadowCasts.end(), [](const SpriteShadowCast& a, const SpriteShadowCast& b) { return a.touch > b.touch; });
         
@@ -1139,6 +1146,12 @@ void StageState::Render(){
         }
         if (smallCharacterObject && smallMaxContact > 0.0f) {
             DrawContactFootShadow(g.GetRenderer(), smallCharacterObject->box, smallMaxContact);
+        }
+        if (LightShadowProfile::IsActive()) {
+            const Uint64 shadowBlockEnd = SDL_GetPerformanceCounter();
+            const double ms = static_cast<double>(shadowBlockEnd - shadowBlockStart) * 1000.0 /
+                              static_cast<double>(SDL_GetPerformanceFrequency());
+            LightShadowProfile::SetSpriteShadowBlockMs(ms);
         }
     }
 
@@ -1225,6 +1238,10 @@ void StageState::Render(){
                     sl.params.shadowSoftLayers, sl.params.shadowSoftness);
             }
         }
+    }
+
+    if (lightsEnabled) {
+        LightShadowProfile::EndLightsFrame();
     }
 
     if (lightsEnabled && shadowsEnabled && showDebugTools) {

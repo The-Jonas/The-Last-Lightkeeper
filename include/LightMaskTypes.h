@@ -28,7 +28,12 @@ struct LightOcclusionContext {
     }
 };
 
+enum class LightQualityPreset { Custom, Quality, Balanced, Performance };
+
 struct LightMaskParams {
+    /// Balanced defaults; set Custom to use only the raw fields below without preset clamps.
+    LightQualityPreset lightQualityPreset = LightQualityPreset::Balanced;
+
     Uint8 darknessMax = 250;
     float falloffRadiusPx = 400.0f;
     float fatorDicaDeRaio = 1.2f;
@@ -59,7 +64,10 @@ struct LightMaskParams {
     float shadowSoftness = 0.0f;
     int shadowSoftLayers = 1;
     float lightTemporalSmoothing = 0.20f;
-    float lightGridStepPx = 12.0f;
+    /// Screen-space sampling step for the analytical radial darkness mesh (larger = faster).
+    float lightGridStepPx = 24.0f;
+    /// When true, the overlay is rendered to a half-resolution texture and upscaled (much cheaper).
+    bool radialMaskHalfResolution = true;
 
     float torchAnimSpeed = 1.0f;
     float torchMotionRangePx = 6.0f;
