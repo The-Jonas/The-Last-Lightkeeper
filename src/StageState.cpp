@@ -289,13 +289,6 @@ void DrawContactFootShadow(SDL_Renderer* renderer, const Rect& box, float contac
 
     SDL_SetRenderDrawBlendMode(renderer, oldBlend);
 }
-
-float BottomYOf(const GameObject* go) {
-    if (!go) {
-        return 0.0f;
-    }
-    return go->box.y + go->box.h;
-}
 }
 
 StageState::StageState() {
@@ -685,6 +678,7 @@ void StageState::Update(float dt){
     }
 
     UpdateArray(dt);                                                                    // Percorre o vetor de GameObjects chamando o Update de cada um
+    inventory.TickUsingDurability(dt);                                                 // slot "usando" degrada sempre, mesmo controlando o irmãozinho
     ApplyMapBoundsAndWalkability(bigCharacterObject, prevBigPos);
     ApplyMapBoundsAndWalkability(smallCharacterObject, prevSmallPos);
     if (IsPartyReady()) {

@@ -180,8 +180,6 @@ void HotbarComponent::Update(float dt) {
         toastTimer -= dt;
     }
 
-    inventory.TickUsingDurability(dt);
-
     InputManager& input = InputManager::GetInstance();
     int mx = input.GetMouseX();
     int my = input.GetMouseY();
