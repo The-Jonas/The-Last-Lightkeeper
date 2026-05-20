@@ -70,11 +70,11 @@ struct LightMaskParams {
     bool radialMaskHalfResolution = true;
 
     float torchAnimSpeed = 1.0f;
-    float torchMotionRangePx = 6.0f;
-    float torchWarpStrength = 0.30f;
-    float torchPulseStrength = 0.22f;
-    float torchColorWarmth = 1.0f;
-    float torchColorStrength = 0.85f;
+    float torchMotionRangePx = 9.0f;
+    float torchWarpStrength = 0.40f;
+    float torchPulseStrength = 0.30f;
+    float torchColorWarmth = 2.0f;
+    float torchColorStrength = 1.0f;
 };
 
 #endif

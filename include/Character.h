@@ -23,7 +23,8 @@ public:
         Vec2 pos;                                                       // A posição do alvo (para movimento ou tiro)
     };
 
-    Character(GameObject& associated, std::string spritePath);              
+    /// @param useIrmaozaoIdleStrips Só para o irmãozão: usa `irmaozao_idle/` (6 frames por direção) para idle e movimento.
+    Character(GameObject& associated, std::string spritePath, bool useIrmaozaoIdleStrips = false);
     ~Character();                                                       // Destrutor 
 
     // Métodos do ciclo de vida
@@ -60,6 +61,12 @@ private:
     
     std::string baseSpritePath;                                         // guarda o caminho base (Ex: Recursos/img/personagens(irmãozao))
 
+    bool irmaozaoIdleStrips = false;
+    float stripAnimTimer = 0.0f;
+    int stripFrameIndex = 0;
+
+    std::string IrmaozaoIdleStripPath(Direction dir, int frameIndex) const;
+    void RefreshIrmaozaoStripSprite();
 };
 
 #endif 

@@ -43,7 +43,9 @@
 #endif
 
 namespace StageOceanAudio {
-constexpr int kNominalPercent = 30; // % de MIX_MAX × master nas ondas (mais baixas que OST).
+constexpr int kNominalPercent = 100; // % de MIX_MAX × master nas ondas (relativo ao slider).
+/// Canal reservado em Game.cpp (Mix_ReserveChannels) — não usar Mix_PlayChannel(-1) aqui.
+constexpr int kAmbientWavesChannel = 0;
 }
 
 namespace {
@@ -300,17 +302,7 @@ void DrawContactFootShadow(SDL_Renderer* renderer, const Rect& box, float contac
 }
 
 StageState::StageState() {
-    levelTracks = {
-        "Recursos/audio/soundtracks/Akane's Regret.mp3",
-        "Recursos/audio/soundtracks/Last Hideout.mp3",
-        "Recursos/audio/soundtracks/dark_harmonics_Dark_Rumble_Atmos_02_191.mp3",
-    };
-
-    // randomize the current track
-    currentTrack = rand() % levelTracks.size();
-    music.Open(levelTracks[currentTrack]);
-    music.Play();
-    Mix_VolumeMusic((MIX_MAX_VOLUME * Game::masterVolumePercent) / 100); // Default: ON
+    // Música de fundo (Last Hideout) e ondas são iniciadas em LoadAssets() para ficar em sync com o carregamento do nível.
     tileSet = nullptr;                           // TileSet ativo
     dungeonTileSet.reset();
     bigCharacterObject = nullptr;                // GameObject do personagem grande (IRMÃOZÃO)
@@ -357,7 +349,18 @@ void StageState::LoadAssets() {
     // ==================================
     // OBS: TOMAR CUIDADO NA ORDEM EM QUE CARREGAMOS OS COMPONENTES, POIS MUITO PROVAVELMENTE ISSO É A CAUSA DE ESTAREM SUMINDO, UM É DESENHADO POR CIMA DO OUTRO
     // ==================================
-    
+
+    // Trilha principal (SDL_mixer music) + ambiente de ondas (canal sample) — os dois ao iniciar o nível.
+    static constexpr const char* kStageOstPath = "Recursos/audio/soundtracks/Last Hideout.mp3";
+    music.Open(kStageOstPath);
+    if (music.IsOpen()) {
+        music.Play(-1);
+    }
+    {
+        const int ostVol = (MIX_MAX_VOLUME * Game::masterVolumePercent) / 100;
+        Mix_VolumeMusic(musicMuted ? 0 : ostVol);
+    }
+
     // Carregamento do mapa livre
     level.LoadLevel("Recursos/map/mapa_1_andar.json", Game::GetInstance().GetRenderer());
     mapOrigin = Vec2(0,0);
@@ -374,7 +377,7 @@ void StageState::LoadAssets() {
     // Criação dos dois personagens controláveis
     // Personagem grande (IRMÃOZÃO)
     GameObject* bigObject = new GameObject();
-    Character* bigComp = new Character(*bigObject, "Recursos/img/personagens/Irmãozão");
+    Character* bigComp = new Character(*bigObject, "Recursos/img/personagens/Irmãozão", true);
     bigObject->AddComponent(bigComp);
     bigObject->z = 2;
     AddObject(bigObject);
@@ -506,7 +509,7 @@ void StageState::LoadAssets() {
     // Linha 1 de instruções
     hudLine1 = new GameObject();
     hudLine1->z = 100;
-    hudLine1->AddComponent(new Text(*hudLine1, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED, "TAB: trocar | E: pegar | I: inventario", hudColor));
+    hudLine1->AddComponent(new Text(*hudLine1, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED, "TAB: roda de inventario | Ctrl: trocar personagem | E: pegar", hudColor));
     AddObject(hudLine1);
 
     // Linha 2 de instruções
@@ -518,7 +521,7 @@ void StageState::LoadAssets() {
     hudLine3 = new GameObject();
     hudLine3->z = 100;
     hudLine3->AddComponent(new Text(*hudLine3, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
-                                      "K forma | C criar luz | P painel | L luz | O sombras | B mapa colisao", hudColor));
+                                      "K forma | X luz cursor | C criar luz fixa | P painel | L luz | O sombras | B mapa", hudColor));
     AddObject(hudLine3);
 
     hudFps = new GameObject();
@@ -639,9 +642,10 @@ void StageState::LoadAssets() {
         Mix_HaltChannel(oceanMixerChannel);
         oceanMixerChannel = -1;
     }
+    // Preferir OGG/WAV curtos como chunk (MP3 longo decodificado inteiro na RAM pode falhar em Mix_LoadWAV_RW).
     static constexpr const char* kOceanCandidates[] = {
-        "Recursos/audio/waves.wav",
         "Recursos/audio/waves.ogg",
+        "Recursos/audio/waves.wav",
         "Recursos/audio/waves.mp3",
     };
     oceanWavesChunk.reset();
@@ -652,8 +656,9 @@ void StageState::LoadAssets() {
         }
     }
     if (!oceanWavesChunk) {
-        std::cerr << "Ocean waves: falha ao carregar qualquer formato (waves.wav / .ogg / .mp3). "
-                     "Preferir WAV ou OGG — MP3 inteiro como chunk pode falhar ou exigir muita RAM."
+        std::cerr << "Ocean waves: falha ao carregar qualquer formato (tentou .ogg, .wav, .mp3). "
+                     "SDL_mixer só tem 1 faixa Mix_Music; o ambiente precisa de Mix_Chunk. "
+                     "MP3 muito longo como chunk pode falhar (RAM); prefira um loop OGG/WAV curto."
                   << std::endl;
     }
     EnsureOceanAmbientPlaying();
@@ -694,10 +699,12 @@ void StageState::EnsureOceanAmbientPlaying() {
         oceanMixerChannel = -1;
     }
 
-    oceanMixerChannel = Mix_PlayChannel(-1, oceanWavesChunk.get(), -1);
+    oceanMixerChannel =
+        Mix_PlayChannel(StageOceanAudio::kAmbientWavesChannel, oceanWavesChunk.get(), -1);
     if (oceanMixerChannel < 0) {
         oceanMixerChannel = -1;
-        std::cerr << "Erro ao reproduzir ambiente das ondas (Mix_PlayChannel): " << Mix_GetError() << std::endl;
+        std::cerr << "Erro ao reproduzir ambiente das ondas (Mix_PlayChannel canal "
+                    << StageOceanAudio::kAmbientWavesChannel << "): " << Mix_GetError() << std::endl;
         return;
     }
 
@@ -756,6 +763,9 @@ void StageState::Update(float dt){
     }
     if (input.KeyPress(MAP_PHYSICS_DEBUG_KEY)) {
         showMapPhysicsDebug = !showMapPhysicsDebug;
+    }
+    if (input.KeyPress(CURSOR_PREVIEW_LIGHT_TOGGLE_KEY)) {
+        cursorPreviewLightEnabled = !cursorPreviewLightEnabled;
     }
 
     if (input.KeyPress(CREATE_LIGHT_KEY) &&
@@ -858,38 +868,47 @@ void StageState::Update(float dt){
         }
     }
 
-    Vec2 targetLightScreen(static_cast<float>(input.GetMouseX()), static_cast<float>(input.GetMouseY()));
-    if (previewLightLockedToPlayer) {
-        if (!IsPartyReady() || (previewLightAnchorPlayer != bigCharacterObject && previewLightAnchorPlayer != smallCharacterObject)) {
-            previewLightLockedToPlayer = false;
-            previewLightAnchorPlayer = nullptr;
+    Vec2 targetLightScreen(smoothedDynamicLightScreenPos.x, smoothedDynamicLightScreenPos.y);
+    if (cursorPreviewLightEnabled) {
+        targetLightScreen =
+            Vec2(static_cast<float>(input.GetMouseX()), static_cast<float>(input.GetMouseY()));
+        if (previewLightLockedToPlayer) {
+            if (!IsPartyReady() ||
+                (previewLightAnchorPlayer != bigCharacterObject && previewLightAnchorPlayer != smallCharacterObject)) {
+                previewLightLockedToPlayer = false;
+                previewLightAnchorPlayer = nullptr;
+            }
         }
-    }
-    if (previewLightLockedToPlayer && previewLightAnchorPlayer) {
-        // Keep the preview light at the feet (screen space): maximizes contact shadow, avoids long body shadow.
-        const Rect& ab = previewLightAnchorPlayer->box;
-        targetLightScreen = WorldToScreen(Vec2(ab.x + 0.5f * ab.w, ab.y + ab.h));
-    }
+        if (previewLightLockedToPlayer && previewLightAnchorPlayer) {
+            // Luz presa ao jogador: origem no centro do sprite (não nos pés); sombras de contato continuam nos pés.
+            const Rect& ab = previewLightAnchorPlayer->box;
+            targetLightScreen = WorldToScreen(ab.Center());
+        }
 
-    {
-        Vec2 tw = ScreenToWorld(targetLightScreen);
-        int tx, ty;
-        if (WorldToTile(tw, tx, ty) && !IsTileWalkable(tx, ty)) {
-            int ntx, nty;
-            if (FindNearestWalkableTile(tx, ty, ntx, nty)) {
-                Vec2 clampedWorld = TileCenterToWorld(ntx, nty);
-                if (hasSmoothedDynamicLight) {
-                    Vec2 currentWorld = ScreenToWorld(smoothedDynamicLightScreenPos);
-                    if (!HasWalkableLine(currentWorld, clampedWorld)) {
-                        targetLightScreen = smoothedDynamicLightScreenPos;
+        {
+            Vec2 tw = ScreenToWorld(targetLightScreen);
+            int tx, ty;
+            if (WorldToTile(tw, tx, ty) && !IsTileWalkable(tx, ty)) {
+                int ntx, nty;
+                if (FindNearestWalkableTile(tx, ty, ntx, nty)) {
+                    Vec2 clampedWorld = TileCenterToWorld(ntx, nty);
+                    if (hasSmoothedDynamicLight) {
+                        Vec2 currentWorld = ScreenToWorld(smoothedDynamicLightScreenPos);
+                        if (!HasWalkableLine(currentWorld, clampedWorld)) {
+                            targetLightScreen = smoothedDynamicLightScreenPos;
+                        } else {
+                            targetLightScreen = WorldToScreen(clampedWorld);
+                        }
                     } else {
                         targetLightScreen = WorldToScreen(clampedWorld);
                     }
-                } else {
-                    targetLightScreen = WorldToScreen(clampedWorld);
                 }
             }
         }
+    } else if (!hasSmoothedDynamicLight) {
+        // Primeiro frame com preview desligado: inicializa a partir do rato para o smoother existir.
+        targetLightScreen =
+            Vec2(static_cast<float>(input.GetMouseX()), static_cast<float>(input.GetMouseY()));
     }
 
     if (!hasSmoothedDynamicLight) {
@@ -902,8 +921,7 @@ void StageState::Update(float dt){
     }
 
     if (inventory.IsUsableLightActive() && bigCharacterObject) {
-        const Rect& bb = bigCharacterObject->box;
-        const Vec2 targetTorchScreen = WorldToScreen(Vec2(bb.x + 0.5f * bb.w, bb.y + bb.h));
+        const Vec2 targetTorchScreen = WorldToScreen(bigCharacterObject->box.Center());
         if (!hasSmoothedTorchLight) {
             smoothedTorchLightScreenPos = targetTorchScreen;
             hasSmoothedTorchLight = true;
@@ -1016,8 +1034,10 @@ void StageState::Render(){
         LightShadowProfile::BeginLightsTiming();
     }
     const bool torchFromInventory = inventory.IsUsableLightActive();
-    const bool bigCircleOnlyLight = previewLightLockedToPlayer && previewLightAnchorPlayer == bigCharacterObject;
-    const bool smallCircleOnlyLight = previewLightLockedToPlayer && previewLightAnchorPlayer == smallCharacterObject;
+    const bool bigCircleOnlyLight =
+        cursorPreviewLightEnabled && previewLightLockedToPlayer && previewLightAnchorPlayer == bigCharacterObject;
+    const bool smallCircleOnlyLight =
+        cursorPreviewLightEnabled && previewLightLockedToPlayer && previewLightAnchorPlayer == smallCharacterObject;
     float bigMaxContact = 0.0f;
     float smallMaxContact = 0.0f;
 
@@ -1080,19 +1100,25 @@ void StageState::Render(){
             }
         };
 
-        renderShadowsForLight(smoothedDynamicLightScreenPos, lightMaskParams);
+        if (cursorPreviewLightEnabled) {
+            renderShadowsForLight(smoothedDynamicLightScreenPos, lightMaskParams);
+        }
 
         if (torchFromInventory && hasSmoothedTorchLight) {
             renderShadowsForLight(smoothedTorchLightScreenPos, lightMaskParams);
         }
 
-        if (showDebugTools) {
+        if (showDebugTools && cursorPreviewLightEnabled) {
             const float previewShadowRadius = std::max(24.0f, std::max(8.0f, lightMaskParams.falloffRadiusPx) * std::max(0.4f, lightMaskParams.fatorDicaDeRaio));
             DrawDebugCircle(g.GetRenderer(), smoothedDynamicLightScreenPos.x, smoothedDynamicLightScreenPos.y, previewShadowRadius, 255, 210, 90, 130);
             if (torchFromInventory && hasSmoothedTorchLight) {
                 DrawDebugCircle(g.GetRenderer(), smoothedTorchLightScreenPos.x, smoothedTorchLightScreenPos.y,
                                 previewShadowRadius * 0.85f, 255, 150, 70, 150);
             }
+        } else if (showDebugTools && torchFromInventory && hasSmoothedTorchLight) {
+            const float previewShadowRadius = std::max(24.0f, std::max(8.0f, lightMaskParams.falloffRadiusPx) * std::max(0.4f, lightMaskParams.fatorDicaDeRaio));
+            DrawDebugCircle(g.GetRenderer(), smoothedTorchLightScreenPos.x, smoothedTorchLightScreenPos.y,
+                            previewShadowRadius * 0.85f, 255, 150, 70, 150);
         }
 
         int renderedLights = 0;
@@ -1141,6 +1167,18 @@ void StageState::Render(){
             DrawPlayerShadowTouchDebug(g.GetRenderer(), smallCharacterObject, 130, 220, 255);
         }
 
+        if (cursorPreviewLightEnabled && previewLightLockedToPlayer && previewLightAnchorPlayer) {
+            if (bigCharacterObject && previewLightAnchorPlayer == bigCharacterObject) {
+                bigMaxContact = std::max(bigMaxContact, 0.92f);
+            }
+            if (smallCharacterObject && previewLightAnchorPlayer == smallCharacterObject) {
+                smallMaxContact = std::max(smallMaxContact, 0.92f);
+            }
+        }
+        if (torchFromInventory && hasSmoothedTorchLight && bigCharacterObject) {
+            bigMaxContact = std::max(bigMaxContact, 0.92f);
+        }
+
         if (bigCharacterObject && bigMaxContact > 0.0f) {
             DrawContactFootShadow(g.GetRenderer(), bigCharacterObject->box, bigMaxContact);
         }
@@ -1174,8 +1212,10 @@ void StageState::Render(){
         screenLights.reserve(static_cast<size_t>(maxActiveLights + 2));
         constexpr float kCursorLightBlend = 0.28f;
         constexpr float kTorchLightBlend = 0.28f;
-        screenLights.push_back({smoothedDynamicLightScreenPos.x, smoothedDynamicLightScreenPos.y, lightMaskShape,
-                                lightMaskParams, kCursorLightBlend});
+        if (cursorPreviewLightEnabled) {
+            screenLights.push_back({smoothedDynamicLightScreenPos.x, smoothedDynamicLightScreenPos.y, lightMaskShape,
+                                    lightMaskParams, kCursorLightBlend});
+        }
         if (torchFromInventory && hasSmoothedTorchLight) {
             screenLights.push_back({smoothedTorchLightScreenPos.x, smoothedTorchLightScreenPos.y, lightMaskShape,
                                     lightMaskParams, kTorchLightBlend});
@@ -1245,8 +1285,10 @@ void StageState::Render(){
     }
 
     if (lightsEnabled && shadowsEnabled && showDebugTools) {
-        const float previewShadowRadius = std::max(24.0f, std::max(8.0f, lightMaskParams.falloffRadiusPx) * std::max(0.4f, lightMaskParams.fatorDicaDeRaio));
-        DrawDebugCircle(g.GetRenderer(), smoothedDynamicLightScreenPos.x, smoothedDynamicLightScreenPos.y, previewShadowRadius, 255, 210, 90, 130);
+        if (cursorPreviewLightEnabled) {
+            const float previewShadowRadius = std::max(24.0f, std::max(8.0f, lightMaskParams.falloffRadiusPx) * std::max(0.4f, lightMaskParams.fatorDicaDeRaio));
+            DrawDebugCircle(g.GetRenderer(), smoothedDynamicLightScreenPos.x, smoothedDynamicLightScreenPos.y, previewShadowRadius, 255, 210, 90, 130);
+        }
 
         int renderedLights = 0;
         for (const LightInstance& light : lights) {
@@ -1886,7 +1928,7 @@ void StageState::SwapControlledCharacter() {
 void StageState::HandlePartyInput() {
     InputManager& input = InputManager::GetInstance();
 
-    if (input.KeyPress(TAB_KEY)) {
+    if (input.KeyPress(SDLK_LCTRL) || input.KeyPress(SDLK_RCTRL)) {
         SwapControlledCharacter();
     }
 

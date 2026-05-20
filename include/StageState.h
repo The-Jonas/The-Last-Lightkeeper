@@ -63,7 +63,7 @@ private:
     void EnforceMaxDistance();                                           // Limita distância máxima entre os dois
     void SwapControlledCharacter();                                      // Troca personagem controlado
     void RefreshCameraTargets();                                         // Atualiza alvos da câmera (dupla + principal)
-    /// Mar / ondas ao ar livre: canal reservado, volume ~30 % do MIX_MAX relativamente ao slider master + mute igual à OST.
+    /// Mar / ondas: Mix_Chunk em loop no canal 0 (reservado em Game via Mix_ReserveChannels; OST usa Mix_PlayMusic).
     void RefreshOceanAmbientVolume();
     void EnsureOceanAmbientPlaying();
     void UpdateHudInstructions();                                        // Mantém HUD no canto superior esquerdo
@@ -135,6 +135,8 @@ private:
     bool hasSmoothedTorchLight = false;
     bool previewLightLockedToPlayer = false;
     GameObject* previewLightAnchorPlayer = nullptr;
+    /// Luz de preview que segue o rato ou o jogador (ligada com botão direito). X alterna; luzes fixas no mapa e lanterna continuam.
+    bool cursorPreviewLightEnabled = true;
     int maxActiveLights = 24;
     bool lightsEnabled = true;
     bool shadowsEnabled = true;
@@ -146,15 +148,12 @@ private:
     /// Última rota planejada para o `companion` alcançar o alvo atrás do líder (só preenchido em `PartyMode::TOGETHER`).
     std::vector<Vec2> companionFollowPathWorld;
 
-    std::vector<std::string> levelTracks;
-    int currentTrack = 0;
-
     Inventory inventory;
     GameObject* hotbarObject = nullptr;
     std::vector<class ItemPickup*> itemPickups;
 
     std::shared_ptr<Mix_Chunk> oceanWavesChunk;
-    /// Canal Mixer real das ondas (-1 até o primeiro Mix_PlayChannel).
+    /// Canal das ondas (0 = ambiente dedicado, reservado para não colidir com Mix_PlayChannel(-1) dos SFX).
     int oceanMixerChannel = -1;
 };
 

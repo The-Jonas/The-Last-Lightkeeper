@@ -84,11 +84,15 @@ Game::Game(std::string title, int width, int heigh) {
     }
 
     // Inicializa SDL_Mixer
-    if (Mix_OpenAudio(MIX_DEFAULT_FREQUENCY, MIX_DEFAULT_FORMAT, MIX_DEFAULT_CHANNELS, 2048) == -1) {
+    // Buffer um pouco maior ajuda a mixar Mix_PlayMusic (OST) + Mix_PlayChannel (ambiente) sem underruns.
+    if (Mix_OpenAudio(MIX_DEFAULT_FREQUENCY, MIX_DEFAULT_FORMAT, MIX_DEFAULT_CHANNELS, 4096) == -1) {
         std::cerr << "Mix_OpenAudio falhou: " << Mix_GetError() << std::endl;
         exit(1);
     }
     Mix_AllocateChannels(32);
+    // Canais 0..N-1 não são escolhidos por Mix_PlayChannel(-1): o anel de ondas usa o canal 0 explicitamente
+    // (ver StageState). Efeitos continuam em 1+.
+    Mix_ReserveChannels(1);
     const int masterVolume = (MIX_MAX_VOLUME * masterVolumePercent) / 100;
     Mix_Volume(-1, masterVolume);
     Mix_VolumeMusic(masterVolume);

@@ -8,7 +8,7 @@
 class Inventory {
 public:
     static constexpr int kSlots = 20;
-    static constexpr int kHotbarSlots = 5;
+    static constexpr int kHotbarSlots = 6;
     static constexpr int kCols = 5;
     static constexpr int kRows = 4;
 

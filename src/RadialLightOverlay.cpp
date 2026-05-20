@@ -10,6 +10,10 @@
 #endif
 
 namespace {
+
+/// Parâmetros só para malha/grid quando não há luzes (`prepared` vazio): escurecimento uniforme.
+static const LightMaskParams kDefaultRadialGridParams{};
+
 int g_prevMx = 0;
 int g_prevMy = 0;
 bool g_hasPrevMouse = false;
@@ -208,9 +212,6 @@ void RadialLightOverlay::RenderMany(SDL_Renderer* renderer, int windowW, int win
     if (!renderer || windowW < 1 || windowH < 1) {
         return;
     }
-    if (lights.empty()) {
-        return;
-    }
 
     Uint64 perfStart = 0;
     if (LightShadowProfile::IsActive()) {
@@ -335,12 +336,10 @@ void RadialLightOverlay::RenderMany(SDL_Renderer* renderer, int windowW, int win
                             cullRadiusSq});
     }
 
-    if (prepared.empty()) {
-        return;
-    }
+    const LightMaskParams& gridRef = prepared.empty() ? kDefaultRadialGridParams : prepared[0].params;
 
-    bool halfRes = prepared[0].params.radialMaskHalfResolution;
-    switch (prepared[0].params.lightQualityPreset) {
+    bool halfRes = gridRef.radialMaskHalfResolution;
+    switch (gridRef.lightQualityPreset) {
     case LightQualityPreset::Quality:
         halfRes = false;
         break;
@@ -354,8 +353,8 @@ void RadialLightOverlay::RenderMany(SDL_Renderer* renderer, int windowW, int win
     const int lowH = std::max(1, (windowH + 1) / 2);
 
     auto runDarknessPass = [&](int passW, int passH, const std::vector<PreparedLight>& prep) {
-        float gridStep = std::max(12.0f, std::min(64.0f, prep[0].params.lightGridStepPx));
-        switch (prep[0].params.lightQualityPreset) {
+        float gridStep = std::max(12.0f, std::min(64.0f, gridRef.lightGridStepPx));
+        switch (gridRef.lightQualityPreset) {
         case LightQualityPreset::Quality:
             gridStep = std::max(14.0f, gridStep * 0.95f);
             break;
