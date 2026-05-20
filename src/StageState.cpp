@@ -357,6 +357,13 @@ void StageState::LoadAssets() {
     level.LoadLevel("Recursos/map/mapa_1_andar.json", Game::GetInstance().GetRenderer());
     mapOrigin = Vec2(0,0);
 
+    // Mapa atual: imagens + colisão no JSON — não há componente TileMap; A* usa grade sintética no mesmo espaço do `LevelManager`.
+    static constexpr float kNavWorldW = 4358.0f;
+    static constexpr float kNavWorldH = 3276.0f;
+    navTilePx = 64;
+    navGridWidthTiles = static_cast<int>(std::ceil(kNavWorldW / static_cast<float>(navTilePx)));
+    navGridHeightTiles = static_cast<int>(std::ceil(kNavWorldH / static_cast<float>(navTilePx)));
+
     //------------------------------------------
     
     // Criação dos dois personagens controláveis
@@ -1283,47 +1290,130 @@ bool StageState::IsBoxWalkableOnMapLayer(const Rect& box) const {
     return true;
 }
 
-bool StageState::IsTileWalkable(int tx, int ty) const {
-    if (!tileMapComp || !tileSet) {
-        return true;
+bool StageState::HasNavigationGrid() const {
+    return (tileMapComp != nullptr && tileSet != nullptr)
+        || (navGridWidthTiles > 0 && navGridHeightTiles > 0);
+}
+
+int StageState::NavTileWidthPx() const {
+    if (tileMapComp != nullptr && tileSet != nullptr) {
+        return tileSet->GetTileWidth();
     }
-    if (tx < 0 || ty < 0 || tx >= tileMapComp->GetWidth() || ty >= tileMapComp->GetHeight()) {
+    return navTilePx;
+}
+
+int StageState::NavTileHeightPx() const {
+    if (tileMapComp != nullptr && tileSet != nullptr) {
+        return tileSet->GetTileHeight();
+    }
+    return navTilePx;
+}
+
+bool StageState::IsTileWalkable(int tx, int ty) const {
+    if (tileMapComp != nullptr && tileSet != nullptr) {
+        if (tx < 0 || ty < 0 || tx >= tileMapComp->GetWidth() || ty >= tileMapComp->GetHeight()) {
+            return false;
+        }
+        const int tileId = tileMapComp->At(tx, ty, 1);
+        return walkableTileIds.find(tileId) != walkableTileIds.end();
+    }
+    if (navGridWidthTiles > 0 && navGridHeightTiles > 0) {
+        return tx >= 0 && ty >= 0 && tx < navGridWidthTiles && ty < navGridHeightTiles;
+    }
+    return true;
+}
+
+// Não conecta andares: usa o `isElevated` atual do agente (mesmo grafo que `Character` no chão/escada atual).
+bool StageState::IsTileNavigableFor(const GameObject* agent, int tx, int ty) const {
+    if (!agent || !IsTileWalkable(tx, ty)) {
         return false;
     }
-    const int tileId = tileMapComp->At(tx, ty, 1);
-    return walkableTileIds.find(tileId) != walkableTileIds.end();
+
+    const Vec2 tileCenter = TileCenterToWorld(tx, ty);
+    Rect probe;
+    probe.w = agent->box.w;
+    probe.h = agent->box.h;
+    probe.x = tileCenter.x - probe.w * 0.5f;
+    probe.y = tileCenter.y - probe.h * 0.5f;
+
+    const int r = std::max(1, static_cast<int>(probe.w * 0.25f));
+    Circle footCircle;
+    footCircle.radius = r;
+    footCircle.center.x = static_cast<int>(probe.x + probe.w * 0.5f);
+    footCircle.center.y = static_cast<int>(probe.y + probe.h - r);
+
+    GameObject* agentMut = const_cast<GameObject*>(agent);
+    const Character* agentChar = agentMut->GetComponent<Character>();
+    const bool elevated = agentChar ? agentChar->isElevated : false;
+    if (const_cast<LevelManager&>(level).CheckCollision(footCircle, elevated)) {
+        return false;
+    }
+
+    const float fr = static_cast<float>(r);
+    Rect footRect(probe.x + probe.w * 0.5f - fr, probe.y + probe.h - 2.0f * fr, 2.0f * fr, 2.0f * fr);
+
+    for (const auto& goPtr : objectArray) {
+        GameObject* go = goPtr.get();
+        if (!go || go == agent || go == bigCharacterObject || go == smallCharacterObject) {
+            continue;
+        }
+        Collider* col = go->GetComponent<Collider>();
+        if (!col) {
+            continue;
+        }
+        Rect a = footRect;
+        Rect b = col->box;
+        const float angleRad = static_cast<float>(go->angleDeg) * (static_cast<float>(M_PI) / 180.0f);
+        if (Collision::IsColliding(a, b, 0.0f, angleRad)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 Vec2 StageState::TileCenterToWorld(int tx, int ty) const {
-    const float tileW = tileSet ? static_cast<float>(tileSet->GetTileWidth()) : 1.0f;
-    const float tileH = tileSet ? static_cast<float>(tileSet->GetTileHeight()) : 1.0f;
+    const float tileW = static_cast<float>(std::max(1, NavTileWidthPx()));
+    const float tileH = static_cast<float>(std::max(1, NavTileHeightPx()));
     return Vec2(mapOrigin.x + (static_cast<float>(tx) + 0.5f) * tileW,
                 mapOrigin.y + (static_cast<float>(ty) + 0.5f) * tileH);
 }
 
 bool StageState::WorldToTile(const Vec2& worldPos, int& outTx, int& outTy) const {
-    if (!tileMapComp || !tileSet) {
-        return false;
+    if (tileMapComp != nullptr && tileSet != nullptr) {
+        const float tileW = static_cast<float>(std::max(1, tileSet->GetTileWidth()));
+        const float tileH = static_cast<float>(std::max(1, tileSet->GetTileHeight()));
+        outTx = static_cast<int>((worldPos.x - mapOrigin.x) / tileW);
+        outTy = static_cast<int>((worldPos.y - mapOrigin.y) / tileH);
+        return (outTx >= 0 && outTy >= 0 && outTx < tileMapComp->GetWidth() && outTy < tileMapComp->GetHeight());
     }
-    const float tileW = static_cast<float>(std::max(1, tileSet->GetTileWidth()));
-    const float tileH = static_cast<float>(std::max(1, tileSet->GetTileHeight()));
-    outTx = static_cast<int>((worldPos.x - mapOrigin.x) / tileW);
-    outTy = static_cast<int>((worldPos.y - mapOrigin.y) / tileH);
-    return (outTx >= 0 && outTy >= 0 && outTx < tileMapComp->GetWidth() && outTy < tileMapComp->GetHeight());
+    if (navGridWidthTiles > 0 && navGridHeightTiles > 0) {
+        const float tileW = static_cast<float>(std::max(1, NavTileWidthPx()));
+        const float tileH = static_cast<float>(std::max(1, NavTileHeightPx()));
+        outTx = static_cast<int>((worldPos.x - mapOrigin.x) / tileW);
+        outTy = static_cast<int>((worldPos.y - mapOrigin.y) / tileH);
+        return (outTx >= 0 && outTy >= 0 && outTx < navGridWidthTiles && outTy < navGridHeightTiles);
+    }
+    return false;
 }
 
-bool StageState::FindNearestWalkableTile(int startTx, int startTy, int& outTx, int& outTy, int maxRadius) const {
-    if (!tileMapComp) {
+bool StageState::FindNearestWalkableTile(int startTx, int startTy, int& outTx, int& outTy, int maxRadius, const GameObject* agent) const {
+    if (!HasNavigationGrid()) {
         return false;
     }
-    if (IsTileWalkable(startTx, startTy)) {
+    auto passable = [&](int x, int y) {
+        if (agent != nullptr) {
+            return IsTileNavigableFor(agent, x, y);
+        }
+        return IsTileWalkable(x, y);
+    };
+    if (passable(startTx, startTy)) {
         outTx = startTx;
         outTy = startTy;
         return true;
     }
 
-    const int w = tileMapComp->GetWidth();
-    const int h = tileMapComp->GetHeight();
+    const int w = tileMapComp ? tileMapComp->GetWidth() : navGridWidthTiles;
+    const int h = tileMapComp ? tileMapComp->GetHeight() : navGridHeightTiles;
     for (int r = 1; r <= maxRadius; ++r) {
         const int minX = std::max(0, startTx - r);
         const int maxX = std::min(w - 1, startTx + r);
@@ -1335,7 +1425,7 @@ bool StageState::FindNearestWalkableTile(int startTx, int startTy, int& outTx, i
                 if (std::abs(x - startTx) != r && std::abs(y - startTy) != r) {
                     continue;
                 }
-                if (IsTileWalkable(x, y)) {
+                if (passable(x, y)) {
                     outTx = x;
                     outTy = y;
                     return true;
@@ -1347,51 +1437,79 @@ bool StageState::FindNearestWalkableTile(int startTx, int startTy, int& outTx, i
 }
 
 bool StageState::HasWalkableLine(const Vec2& fromWorld, const Vec2& toWorld) const {
-    int x0 = 0;
-    int y0 = 0;
-    int x1 = 0;
-    int y1 = 0;
-    if (!WorldToTile(fromWorld, x0, y0) || !WorldToTile(toWorld, x1, y1)) {
-        return false;
-    }
+    return HasWalkableLine(fromWorld, toWorld, nullptr);
+}
 
-    int dx = std::abs(x1 - x0);
-    int sx = (x0 < x1) ? 1 : -1;
-    int dy = -std::abs(y1 - y0);
-    int sy = (y0 < y1) ? 1 : -1;
-    int err = dx + dy;
-
-    while (true) {
-        if (!IsTileWalkable(x0, y0)) {
+bool StageState::HasWalkableLine(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent) const {
+    if (agent == nullptr) {
+        int x0 = 0;
+        int y0 = 0;
+        int x1 = 0;
+        int y1 = 0;
+        if (!WorldToTile(fromWorld, x0, y0) || !WorldToTile(toWorld, x1, y1)) {
             return false;
         }
-        if (x0 == x1 && y0 == y1) {
-            break;
+
+        int dx = std::abs(x1 - x0);
+        int sx = (x0 < x1) ? 1 : -1;
+        int dy = -std::abs(y1 - y0);
+        int sy = (y0 < y1) ? 1 : -1;
+        int err = dx + dy;
+
+        while (true) {
+            if (!IsTileWalkable(x0, y0)) {
+                return false;
+            }
+            if (x0 == x1 && y0 == y1) {
+                break;
+            }
+            const int e2 = err * 2;
+            if (e2 >= dy) {
+                err += dy;
+                x0 += sx;
+            }
+            if (e2 <= dx) {
+                err += dx;
+                y0 += sy;
+            }
         }
-        const int e2 = err * 2;
-        if (e2 >= dy) {
-            err += dy;
-            x0 += sx;
-        }
-        if (e2 <= dx) {
-            err += dx;
-            y0 += sy;
+        return true;
+    }
+
+    // Com agente: amostra o segmento em world — Bresenham em tiles pode ignorar paredes finas entre centros.
+    const float dist = fromWorld.Distance(toWorld);
+    const float halfTile = static_cast<float>(std::max(1, NavTileWidthPx())) * 0.5f;
+    const int steps = std::max(1, static_cast<int>(std::ceil(dist / halfTile)));
+    for (int i = 0; i <= steps; ++i) {
+        const float t = static_cast<float>(i) / static_cast<float>(steps);
+        const Vec2 p = fromWorld + (toWorld - fromWorld) * t;
+        int tx = 0;
+        int ty = 0;
+        if (!WorldToTile(p, tx, ty) || !IsTileNavigableFor(agent, tx, ty)) {
+            return false;
         }
     }
     return true;
 }
 
-std::vector<Vec2> StageState::FindPathWorld(const Vec2& fromWorld, const Vec2& toWorld, int nodeBudget) const {
+std::vector<Vec2> StageState::FindPathWorld(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent, int nodeBudget) const {
     std::vector<Vec2> empty;
-    if (!tileMapComp || !tileSet) {
+    if (!HasNavigationGrid()) {
         return empty;
     }
 
-    const int w = tileMapComp->GetWidth();
-    const int h = tileMapComp->GetHeight();
+    const int w = tileMapComp ? tileMapComp->GetWidth() : navGridWidthTiles;
+    const int h = tileMapComp ? tileMapComp->GetHeight() : navGridHeightTiles;
     if (w <= 0 || h <= 0) {
         return empty;
     }
+
+    auto passable = [&](int tx, int ty) {
+        if (agent != nullptr) {
+            return IsTileNavigableFor(agent, tx, ty);
+        }
+        return IsTileWalkable(tx, ty);
+    };
 
     int sx = 0;
     int sy = 0;
@@ -1401,19 +1519,19 @@ std::vector<Vec2> StageState::FindPathWorld(const Vec2& fromWorld, const Vec2& t
         return empty;
     }
 
-    if (!IsTileWalkable(sx, sy)) {
+    if (!passable(sx, sy)) {
         int nearestX = sx;
         int nearestY = sy;
-        if (!FindNearestWalkableTile(sx, sy, nearestX, nearestY)) {
+        if (!FindNearestWalkableTile(sx, sy, nearestX, nearestY, 8, agent)) {
             return empty;
         }
         sx = nearestX;
         sy = nearestY;
     }
-    if (!IsTileWalkable(gx, gy)) {
+    if (!passable(gx, gy)) {
         int nearestX = gx;
         int nearestY = gy;
-        if (!FindNearestWalkableTile(gx, gy, nearestX, nearestY)) {
+        if (!FindNearestWalkableTile(gx, gy, nearestX, nearestY, 8, agent)) {
             return empty;
         }
         gx = nearestX;
@@ -1450,7 +1568,7 @@ std::vector<Vec2> StageState::FindPathWorld(const Vec2& fromWorld, const Vec2& t
     static const std::array<Vec2, 4> kDirs = {
         Vec2(1.0f, 0.0f), Vec2(-1.0f, 0.0f), Vec2(0.0f, 1.0f), Vec2(0.0f, -1.0f)};
 
-    while (!open.empty() && expanded < std::max(64, nodeBudget)) {
+    while (!open.empty() && expanded < nodeBudget) {
         const Node current = open.top();
         open.pop();
 
@@ -1471,7 +1589,7 @@ std::vector<Vec2> StageState::FindPathWorld(const Vec2& fromWorld, const Vec2& t
             if (nx < 0 || ny < 0 || nx >= w || ny >= h) {
                 continue;
             }
-            if (!IsTileWalkable(nx, ny)) {
+            if (!passable(nx, ny)) {
                 continue;
             }
 
@@ -1649,8 +1767,8 @@ void StageState::IssueFollowCommand(Character* follower, GameObject* followerObj
         follower->SetSpeedMultiplier(1.55f);
     }
     Vec2 followTarget = targetPos;
-    if (tileMapComp && tileSet && !HasWalkableLine(followerCenter, targetPos)) {
-        const std::vector<Vec2> path = FindPathWorld(followerCenter, targetPos);
+    if (HasNavigationGrid() && !HasWalkableLine(followerCenter, targetPos, followerObject)) {
+        const std::vector<Vec2> path = FindPathWorld(followerCenter, targetPos, followerObject);
         companionFollowPathWorld = path;
         if (!companionFollowPathWorld.empty()) {
             if ((companionFollowPathWorld.front() - followerCenter).Magnitude() > 3.0f) {

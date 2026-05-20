@@ -70,11 +70,20 @@ private:
     void ApplyMapBoundsAndWalkability(GameObject* characterObject, const Vec2& previousPos);
     bool IsBoxWalkableOnMapLayer(const Rect& box) const;
     bool IsTileWalkable(int tx, int ty) const;
+    /// Tile walkability + cenário (`LevelManager`) + colliders dinâmicos; `agent nullptr` não é usado aqui (usar `IsTileWalkable`).
+    bool IsTileNavigableFor(const GameObject* agent, int tx, int ty) const;
     bool HasWalkableLine(const Vec2& fromWorld, const Vec2& toWorld) const;
+    bool HasWalkableLine(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent) const;
     Vec2 TileCenterToWorld(int tx, int ty) const;
     bool WorldToTile(const Vec2& worldPos, int& outTx, int& outTy) const;
-    bool FindNearestWalkableTile(int startTx, int startTy, int& outTx, int& outTy, int maxRadius = 8) const;
-    std::vector<Vec2> FindPathWorld(const Vec2& fromWorld, const Vec2& toWorld, int nodeBudget = 4096) const;
+    bool FindNearestWalkableTile(int startTx, int startTy, int& outTx, int& outTy, int maxRadius = 8,
+                                   const GameObject* agent = nullptr) const;
+    std::vector<Vec2> FindPathWorld(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent = nullptr,
+                                    int nodeBudget = 4096) const;
+    /// Grade A* disponível: matriz de tiles OU grade sintética (`LoadAssets` sem `TileMap` em cena).
+    bool HasNavigationGrid() const;
+    int NavTileWidthPx() const;
+    int NavTileHeightPx() const;
     bool IsPartyReady() const;                                           // Confere se referências da dupla são válidas
     void RenderGameplayCollisionDebug(SDL_Renderer* renderer) const;     // Com showMapPhysicsDebug: colliders + foot circles
     void RenderCompanionFollowPathDebug(SDL_Renderer* renderer) const;   // Com showMapPhysicsDebug: polylinha do seguidor (modo junto)
@@ -104,6 +113,10 @@ private:
     std::unique_ptr<LightTweakPanel> lightTweakPanel;
     std::vector<LightInstance> lights;
     TileMap* tileMapComp = nullptr;
+    /// Quando não há `TileMap`, A* usa esta grade (mundo do estágio ≈ spawn em `LoadAssets`).
+    int navTilePx = 64;
+    int navGridWidthTiles = 0;
+    int navGridHeightTiles = 0;
     std::unordered_set<int> walkableTileIds{0, 1, 2, 7, 8, 9, 31, 37, 38};
     std::vector<TopDownShadowEdge> staticShadowEdges;
     bool staticShadowEdgesBuilt = false;
