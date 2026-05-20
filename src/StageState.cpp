@@ -350,16 +350,10 @@ void StageState::LoadAssets() {
     // OBS: TOMAR CUIDADO NA ORDEM EM QUE CARREGAMOS OS COMPONENTES, POIS MUITO PROVAVELMENTE ISSO É A CAUSA DE ESTAREM SUMINDO, UM É DESENHADO POR CIMA DO OUTRO
     // ==================================
 
-    // Trilha principal (SDL_mixer music) + ambiente de ondas (canal sample) — os dois ao iniciar o nível.
+    // Carrega a OST; o Play fica em Start() para não tocar durante LoadingState::LoadAssets.
     static constexpr const char* kStageOstPath = "Recursos/audio/soundtracks/Last Hideout.mp3";
     music.Open(kStageOstPath);
-    if (music.IsOpen()) {
-        music.Play(-1);
-    }
-    {
-        const int ostVol = (MIX_MAX_VOLUME * Game::masterVolumePercent) / 100;
-        Mix_VolumeMusic(musicMuted ? 0 : ostVol);
-    }
+    Mix_VolumeMusic(0);
 
     // Carregamento do mapa livre
     level.LoadLevel("Recursos/map/mapa_1_andar.json", Game::GetInstance().GetRenderer());
@@ -622,7 +616,7 @@ void StageState::LoadAssets() {
         }
     }
 
-    inventory.SetUsing(ItemInstance{kFlashlight, 100});
+    inventory.SetUsing(ItemInstance{kFlashlight, 50});
 
     GameObject* hotbarObj = new GameObject();
     hotbarObj->AddComponent(new HotbarComponent(*hotbarObj, inventory, bigCharacter,
@@ -663,15 +657,7 @@ void StageState::LoadAssets() {
     }
     EnsureOceanAmbientPlaying();
 
-    // Ost (Mix_PlayMusic) e ambiente (canal Sample) coexistem — após Decode pesado Mix_PlayMusic pode
-    // ficar halted brevemente; garantir que a faixa volte antes do primeiro Update.
-    {
-        const int ostVol = (MIX_MAX_VOLUME * Game::masterVolumePercent) / 100;
-        Mix_VolumeMusic(musicMuted ? 0 : ostVol);
-        if (music.IsOpen() && !musicMuted && Mix_PlayingMusic() == 0) {
-            music.Play(-1);
-        }
-    }
+    levelContentLoaded = true;
 }
 
 void StageState::RefreshOceanAmbientVolume() {
@@ -1400,9 +1386,19 @@ void StageState::RenderCompanionFollowPathDebug(SDL_Renderer* renderer) const {
 }
 
 void StageState::Start() {
-    LoadAssets();
+    if (!levelContentLoaded) {
+        LoadAssets();
+    }
     StartArray();                                                   // Chama Start() de todos os objetos
     SetMouseConfinedToWindow(true);
+    // OST só após o nível estar carregado e empilhado (não durante o loading screen).
+    if (music.IsOpen()) {
+        const int ostVol = (MIX_MAX_VOLUME * Game::masterVolumePercent) / 100;
+        Mix_VolumeMusic(musicMuted ? 0 : ostVol);
+        if (!musicMuted) {
+            music.Play(-1);
+        }
+    }
     started = true;
 }
 

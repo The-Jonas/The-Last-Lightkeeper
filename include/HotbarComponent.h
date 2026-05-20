@@ -58,8 +58,8 @@ private:
     /// Anel extra em torno do círculo dos pés: mesmo alcance para o prompt e para pegar (E).
     static constexpr float kPickupPromptFootRadiusExtra = 18.0f;
 
-    /// 6 slots no anel (inventário 0..5) + centro = uso (índice 6 no hit test).
-    static constexpr int kWheelRingSlots = 6;
+    /// Anel = slots 0..kSlots-1 no inventário (mesmo número que Inventory::kSlots).
+    static constexpr int kWheelRingSlots = Inventory::kHotbarSlots;
     static constexpr int kWheelCenterIndex = 6;
 
     static constexpr float kWheelRadiusPx = 118.0f;

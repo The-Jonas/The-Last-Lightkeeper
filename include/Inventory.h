@@ -7,10 +7,11 @@
 
 class Inventory {
 public:
-    static constexpr int kSlots = 20;
+    /// Slots de inventário usados pelo hotbar (anel); separado do slot "em uso".
+    static constexpr int kSlots = 6;
     static constexpr int kHotbarSlots = 6;
-    static constexpr int kCols = 5;
-    static constexpr int kRows = 4;
+    static constexpr int kCols = 3;
+    static constexpr int kRows = 2;
 
     bool AddItem(const ItemDef& def, int durability);
     void RemoveItem(int slot);

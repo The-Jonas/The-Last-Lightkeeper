@@ -1,5 +1,5 @@
 #include "../include/TitleState.h"
-#include "../include/StageState.h" 
+#include "../include/LoadingState.h"
 #include "../include/Game.h"
 #include "../include/GameObject.h"
 #include "../include/SpriteRenderer.h"
@@ -83,7 +83,7 @@ void TitleState::Update(float dt) {
     }
 
     if (input.KeyPress(SPACE_KEY)) {
-        Game::GetInstance().Push(new StageState());
+        Game::GetInstance().Push(new LoadingState());
         // Game::GetInstance().Push(new CutsceneState(
         // "Recursos/video/video_cutscene.mpg",
         // "Recursos/audio/audio_cutscene.wav",

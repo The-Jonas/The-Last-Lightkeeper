@@ -13,7 +13,7 @@ class State;
 
 class Game {
 public:
-    static constexpr int MASTER_VOLUME_PERCENT = 5;
+    static constexpr int MASTER_VOLUME_PERCENT = 20;
     static int masterVolumePercent;
     static void LoadEnvVolume();
     static void SetMasterVolume(int percent);
