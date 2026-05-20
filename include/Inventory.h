@@ -21,8 +21,21 @@ public:
     const ItemInstance* GetSlot(int slot) const;
     void MoveItem(int from, int to);
 
+    // Hand / "using" slot (separate from backpack slots 0–19).
+    const ItemInstance* GetUsing() const;
+    bool IsUsingEmpty() const;
+    void ClearUsing();
+    void SetUsing(ItemInstance item);
+    void SwapUsingAndSlot(int slot);
+    std::optional<ItemInstance> TakeUsing();
+
+    bool IsUsableLightActive() const;
+    void TickUsingDurability(float dt);
+
 private:
     std::optional<ItemInstance> slots[kSlots];
+    std::optional<ItemInstance> usingSlot;
+    float usingDrainAccum = 0.0f;
 };
 
 #endif

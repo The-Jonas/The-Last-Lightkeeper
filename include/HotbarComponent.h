@@ -64,10 +64,15 @@ private:
     void RecalcInvRect();
     int HitTestHotbarSlot(int mouseX, int mouseY) const;
     int HitTestInvSlot(int mouseX, int mouseY) const;
+    bool HitTestUsingSlot(int mouseX, int mouseY) const;
     void RenderInvPopup(SDL_Renderer* renderer);
-    void HandleDragRelease(int targetSlot);
+    void HandleDragRelease(int targetSlot, bool targetUsing);
     void UpdateSlotSprites();
     void ClearSlotSprites();
+
+    SDL_Rect usingSlotRect{0, 0, 0, 0};
+    bool dragFromUsing = false;
+    static constexpr int kUsingHotbarGap = 12;
 };
 
 #endif

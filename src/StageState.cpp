@@ -531,8 +531,19 @@ void StageState::LoadAssets() {
     lightTweakPanel = std::make_unique<LightTweakPanel>(lightMaskParams, lightMaskShape);
 
     ItemDef kApple{"Apple", "Recursos/img/items/apple.png", -1, false, 1, {}};
-    ItemDef kBrokenFlashlight{"Broken Flashlight", "Recursos/img/items/flashlight_broken.png", 0, false, 2, {}};
+    ItemDef kBrokenFlashlight{"Broken Flashlight",
+                              "Recursos/img/items/flashlight_broken.png",
+                              100,
+                              true,
+                              2,
+                              {{ItemProperty::LIGHT_SOURCE, 1.0f}}};
     ItemDef kOilGallon{"Oil Gallon", "Recursos/img/items/oil_gallon.png", 100, false, 3, {}};
+    ItemDef kFlashlight{"Flashlight",
+                        "Recursos/img/items/flashlight_broken.png",
+                        100,
+                        true,
+                        0,
+                        {{ItemProperty::LIGHT_SOURCE, 1.0f}}};
     ItemDef itemDefs[3] = {kApple, kBrokenFlashlight, kOilGallon};
 
     levelWorldW = kNavWorldW;
@@ -592,13 +603,18 @@ void StageState::LoadAssets() {
             Vec2 tl(worldPos.x - kItemPickupHalf, worldPos.y - kItemPickupHalf);
             tl = ClampPickupTopLeft(tl, kItemPickupSize, kItemPickupSize);
             const ItemDef& def = itemDefs[i % 3];
-            ItemPickup* pickup = ItemPickup::Spawn(tl.x, tl.y,
-                                                     def, def.maxDurability, itemPickups);
+            int spawnDurability = def.maxDurability;
+            if (def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
+                spawnDurability = 1 + (rand() % 100);
+            }
+            ItemPickup* pickup = ItemPickup::Spawn(tl.x, tl.y, def, spawnDurability, itemPickups);
             if (pickup) {
                 AddObject(&pickup->GetAssociated());
             }
         }
     }
+
+    inventory.SetUsing(ItemInstance{kFlashlight, 100});
 
     GameObject* hotbarObj = new GameObject();
     hotbarObj->AddComponent(new HotbarComponent(*hotbarObj, inventory, bigCharacter,
@@ -799,6 +815,22 @@ void StageState::Update(float dt){
         smoothedDynamicLightScreenPos = smoothedDynamicLightScreenPos + (targetLightScreen - smoothedDynamicLightScreenPos) * lerpA;
     }
 
+    if (inventory.IsUsableLightActive() && bigCharacterObject) {
+        const Rect& bb = bigCharacterObject->box;
+        const Vec2 targetTorchScreen = WorldToScreen(Vec2(bb.x + 0.5f * bb.w, bb.y + bb.h));
+        if (!hasSmoothedTorchLight) {
+            smoothedTorchLightScreenPos = targetTorchScreen;
+            hasSmoothedTorchLight = true;
+        } else {
+            const float s = std::max(0.01f, std::min(0.95f, lightMaskParams.lightTemporalSmoothing));
+            const float lerpA = 1.0f - std::pow(1.0f - s, dt * 60.0f);
+            smoothedTorchLightScreenPos =
+                smoothedTorchLightScreenPos + (targetTorchScreen - smoothedTorchLightScreenPos) * lerpA;
+        }
+    } else {
+        hasSmoothedTorchLight = false;
+    }
+
     // Loop duplo para testar pares de objetos
     for (size_t i = 0; i < objectArray.size(); i++) {
         // Para garantir que um par só é testado uma vez, usamos 'j' começando em 'i + 1'
@@ -894,6 +926,7 @@ void StageState::Render(){
     // ===================================================================
     Game& g = Game::GetInstance();
     const bool showDebugTools = (lightTweakPanel && lightTweakPanel->visible);
+    const bool torchFromInventory = inventory.IsUsableLightActive();
     const bool bigCircleOnlyLight = previewLightLockedToPlayer && previewLightAnchorPlayer == bigCharacterObject;
     const bool smallCircleOnlyLight = previewLightLockedToPlayer && previewLightAnchorPlayer == smallCharacterObject;
     float bigMaxContact = 0.0f;
@@ -955,10 +988,18 @@ void StageState::Render(){
         };
 
         renderShadowsForLight(smoothedDynamicLightScreenPos, lightMaskParams);
-        
+
+        if (torchFromInventory && hasSmoothedTorchLight) {
+            renderShadowsForLight(smoothedTorchLightScreenPos, lightMaskParams);
+        }
+
         if (showDebugTools) {
             const float previewShadowRadius = std::max(24.0f, std::max(8.0f, lightMaskParams.falloffRadiusPx) * std::max(0.4f, lightMaskParams.fatorDicaDeRaio));
             DrawDebugCircle(g.GetRenderer(), smoothedDynamicLightScreenPos.x, smoothedDynamicLightScreenPos.y, previewShadowRadius, 255, 210, 90, 130);
+            if (torchFromInventory && hasSmoothedTorchLight) {
+                DrawDebugCircle(g.GetRenderer(), smoothedTorchLightScreenPos.x, smoothedTorchLightScreenPos.y,
+                                previewShadowRadius * 0.85f, 255, 150, 70, 150);
+            }
         }
 
         int renderedLights = 0;
@@ -1031,8 +1072,15 @@ void StageState::Render(){
 
     if (lightsEnabled && radialGeometry != nullptr) {
         std::vector<RadialLightOverlay::ScreenLight> screenLights;
-        screenLights.reserve(static_cast<size_t>(maxActiveLights + 1));
-        screenLights.push_back({smoothedDynamicLightScreenPos.x, smoothedDynamicLightScreenPos.y, lightMaskShape, lightMaskParams, 0.317f});
+        screenLights.reserve(static_cast<size_t>(maxActiveLights + 2));
+        constexpr float kCursorLightBlend = 0.28f;
+        constexpr float kTorchLightBlend = 0.28f;
+        screenLights.push_back({smoothedDynamicLightScreenPos.x, smoothedDynamicLightScreenPos.y, lightMaskShape,
+                                lightMaskParams, kCursorLightBlend});
+        if (torchFromInventory && hasSmoothedTorchLight) {
+            screenLights.push_back({smoothedTorchLightScreenPos.x, smoothedTorchLightScreenPos.y, lightMaskShape,
+                                    lightMaskParams, kTorchLightBlend});
+        }
         
         int renderedLights = 0;
         for (LightInstance& light : lights) {
@@ -1067,7 +1115,7 @@ void StageState::Render(){
 
         if (shadowsEnabled && staticShadowEdgesBuilt && !staticShadowEdges.empty()) {
             const std::vector<TopDownShadowEdge> noDynamic;
-            const int maxShadowVolumes = shadowsEnabled ? 4 : 0;
+            const int maxShadowVolumes = shadowsEnabled ? 8 : 0;
             for (int si = 0; si < static_cast<int>(screenLights.size()) && si < maxShadowVolumes; si++) {
                 const RadialLightOverlay::ScreenLight& sl = screenLights[si];
 

@@ -14,6 +14,15 @@ struct ItemDef {
     bool durabilityDecreases;
     int sortOrder;
     std::vector<std::pair<ItemProperty, float>> properties;
+
+    bool HasProperty(ItemProperty p) const {
+        for (const auto& pr : properties) {
+            if (pr.first == p) {
+                return true;
+            }
+        }
+        return false;
+    }
 };
 
 struct ItemInstance {

@@ -62,3 +62,65 @@ void Inventory::MoveItem(int from, int to) {
     slots[to] = std::move(slots[from]);
     slots[from].reset();
 }
+
+const ItemInstance* Inventory::GetUsing() const {
+    if (!usingSlot.has_value()) {
+        return nullptr;
+    }
+    return &usingSlot.value();
+}
+
+bool Inventory::IsUsingEmpty() const {
+    return !usingSlot.has_value();
+}
+
+void Inventory::ClearUsing() {
+    usingSlot.reset();
+    usingDrainAccum = 0.0f;
+}
+
+void Inventory::SetUsing(ItemInstance item) {
+    usingSlot = std::move(item);
+    usingDrainAccum = 0.0f;
+}
+
+void Inventory::SwapUsingAndSlot(int slot) {
+    if (slot < 0 || slot >= kSlots) {
+        return;
+    }
+    std::swap(usingSlot, slots[slot]);
+    usingDrainAccum = 0.0f;
+}
+
+std::optional<ItemInstance> Inventory::TakeUsing() {
+    if (!usingSlot.has_value()) {
+        return std::nullopt;
+    }
+    ItemInstance out = std::move(usingSlot.value());
+    usingSlot.reset();
+    usingDrainAccum = 0.0f;
+    return out;
+}
+
+bool Inventory::IsUsableLightActive() const {
+    if (!usingSlot.has_value()) {
+        return false;
+    }
+    const ItemInstance& u = usingSlot.value();
+    return u.durability > 0 && u.def.HasProperty(ItemProperty::LIGHT_SOURCE);
+}
+
+void Inventory::TickUsingDurability(float dt) {
+    if (!usingSlot.has_value()) {
+        return;
+    }
+    ItemInstance& u = usingSlot.value();
+    if (u.def.maxDurability <= 0 || u.durability <= 0) {
+        return;
+    }
+    usingDrainAccum += dt;
+    while (usingDrainAccum >= 1.0f && u.durability > 0) {
+        u.durability -= 1;
+        usingDrainAccum -= 1.0f;
+    }
+}

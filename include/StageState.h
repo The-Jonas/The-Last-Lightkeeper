@@ -127,6 +127,8 @@ private:
     bool renderStaticTileShadows = false;
     Vec2 smoothedDynamicLightScreenPos{0.0f, 0.0f};
     bool hasSmoothedDynamicLight = false;
+    Vec2 smoothedTorchLightScreenPos{0.0f, 0.0f};
+    bool hasSmoothedTorchLight = false;
     bool previewLightLockedToPlayer = false;
     GameObject* previewLightAnchorPlayer = nullptr;
     int maxActiveLights = 24;

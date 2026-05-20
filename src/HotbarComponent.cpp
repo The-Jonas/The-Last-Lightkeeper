@@ -1,4 +1,5 @@
 #include "../include/HotbarComponent.h"
+#include "../include/Item.h"
 #include "../include/Camera.h"
 #include "../include/Character.h"
 #include "../include/Game.h"
@@ -11,6 +12,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <functional>
+#include <algorithm>
 
 namespace {
 const char* kPickupSounds[] = {
@@ -35,6 +37,60 @@ void PlayRandomPickupSound() {
     }
     int idx = rand() % kPickupSoundCount;
     gPickupSounds[idx].Play();
+}
+
+bool ShowDurabilityOverlay(const ItemDef& def) {
+    return def.HasProperty(ItemProperty::LIGHT_SOURCE);
+}
+
+float DurabilityRatio(const ItemInstance& item) {
+    if (item.def.maxDurability <= 0) {
+        return item.durability > 0 ? 1.0f : 0.0f;
+    }
+    const float t = static_cast<float>(item.durability) / static_cast<float>(item.def.maxDurability);
+    return std::max(0.0f, std::min(1.0f, t));
+}
+
+void RenderItemInSlot(SDL_Renderer* renderer, const SDL_Rect& slotRect, const ItemInstance* item) {
+    if (!renderer || !item) {
+        return;
+    }
+    constexpr int kPad = 4;
+    SDL_Rect inner{slotRect.x + kPad, slotRect.y + kPad, slotRect.w - kPad * 2, slotRect.h - kPad * 2};
+
+    if (!ShowDurabilityOverlay(item->def)) {
+        auto texOnly = Resources::GetImage(item->def.spritePath);
+        if (texOnly) {
+            SDL_RenderCopy(renderer, texOnly.get(), nullptr, &inner);
+        }
+        return;
+    }
+
+    const float ratio = DurabilityRatio(*item);
+    const int fillH = static_cast<int>(static_cast<float>(inner.h) * ratio);
+
+    if (ratio > 0.001f) {
+        SDL_Rect fill{inner.x, inner.y + inner.h - fillH, inner.w, fillH};
+        const float s = 1.0f - ratio;
+        const Uint8 cr = static_cast<Uint8>(30.0f + s * 120.0f);
+        const Uint8 cg = static_cast<Uint8>(140.0f + (1.0f - s) * 90.0f);
+        const Uint8 cb = static_cast<Uint8>(45.0f + s * 40.0f);
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer, cr, cg, cb, 200);
+        SDL_RenderFillRect(renderer, &fill);
+    }
+
+    auto tex = Resources::GetImage(item->def.spritePath);
+    if (tex) {
+        SDL_Rect dst = inner;
+        SDL_RenderCopy(renderer, tex.get(), nullptr, &dst);
+    }
+
+    if (ratio <= 0.001f) {
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer, 200, 60, 60, 140);
+        SDL_RenderFillRect(renderer, &inner);
+    }
 }
 }
 
@@ -79,9 +135,8 @@ bool HotbarComponent::BlocksLightPointerUnlock(int mx, int my) const {
     SDL_Point pt{mx, my};
     const int screenW = Game::GetInstance().GetWindowsWidth();
     const int screenH = Game::GetInstance().GetWindowsHeight();
-    constexpr int kSlotSize = 48;
-    constexpr int kSlotGap = 4;
-    const int totalW = Inventory::kHotbarSlots * kSlotSize + (Inventory::kHotbarSlots - 1) * kSlotGap;
+    const int hotbarStripW = Inventory::kHotbarSlots * kSlotSize + (Inventory::kHotbarSlots - 1) * kSlotGap;
+    const int totalW = kSlotSize + kUsingHotbarGap + hotbarStripW;
     const int barH = kSlotSize + 12;
     const int startX = (screenW - totalW) / 2;
     const int startY = screenH - barH;
@@ -113,6 +168,7 @@ void HotbarComponent::Update(float dt) {
         if (isDragging) {
             isDragging = false;
             dragSourceSlot = -1;
+            dragFromUsing = false;
             if (dragSprite) {
                 dragSprite->Open("");
             }
@@ -123,6 +179,8 @@ void HotbarComponent::Update(float dt) {
     if (toastTimer > 0.0f) {
         toastTimer -= dt;
     }
+
+    inventory.TickUsingDurability(dt);
 
     InputManager& input = InputManager::GetInstance();
     int mx = input.GetMouseX();
@@ -151,7 +209,7 @@ void HotbarComponent::Update(float dt) {
         if (closest) {
             if (!inventory.IsFull()) {
                 const ItemDef& def = *closest->GetDef();
-                inventory.AddItem(def, def.maxDurability);
+                inventory.AddItem(def, closest->GetDurability());
                 for (auto& p : itemPickups) {
                     if (p == closest) { p = nullptr; break; }
                 }
@@ -168,79 +226,126 @@ void HotbarComponent::Update(float dt) {
 
     if (isDragging) {
         if (!input.IsMouseDown(SDL_BUTTON_LEFT)) {
+            const bool targetUsing = HitTestUsingSlot(mx, my);
             int targetSlot = -1;
-            if (inventoryOpen) {
-                targetSlot = HitTestInvSlot(mx, my);
-                if (targetSlot < 0) {
+            if (!targetUsing) {
+                if (inventoryOpen) {
+                    targetSlot = HitTestInvSlot(mx, my);
+                    if (targetSlot < 0) {
+                        targetSlot = HitTestHotbarSlot(mx, my);
+                    }
+                } else {
                     targetSlot = HitTestHotbarSlot(mx, my);
                 }
-            } else {
-                targetSlot = HitTestHotbarSlot(mx, my);
             }
-            HandleDragRelease(targetSlot);
+            HandleDragRelease(targetSlot, targetUsing);
         }
     } else {
         if (input.MousePress(SDL_BUTTON_LEFT)) {
-            int slot = -1;
-            if (inventoryOpen) {
-                slot = HitTestInvSlot(mx, my);
-                if (slot < 0) slot = HitTestHotbarSlot(mx, my);
-            } else {
-                slot = HitTestHotbarSlot(mx, my);
-            }
-            if (slot >= 0 && !inventory.IsEmpty(slot)) {
-                dragSourceSlot = slot;
+            if (HitTestUsingSlot(mx, my) && !inventory.IsUsingEmpty()) {
+                dragFromUsing = true;
+                dragSourceSlot = -1;
                 isDragging = true;
-                const ItemInstance* item = inventory.GetSlot(slot);
-                if (item && dragSprite) {
-                    dragSprite->Open(item->def.spritePath);
+                const ItemInstance* u = inventory.GetUsing();
+                if (u && dragSprite) {
+                    dragSprite->Open(u->def.spritePath);
+                }
+            } else {
+                int slot = -1;
+                if (inventoryOpen) {
+                    slot = HitTestInvSlot(mx, my);
+                    if (slot < 0) slot = HitTestHotbarSlot(mx, my);
+                } else {
+                    slot = HitTestHotbarSlot(mx, my);
+                }
+                if (slot >= 0 && !inventory.IsEmpty(slot)) {
+                    dragFromUsing = false;
+                    dragSourceSlot = slot;
+                    isDragging = true;
+                    const ItemInstance* item = inventory.GetSlot(slot);
+                    if (item && dragSprite) {
+                        dragSprite->Open(item->def.spritePath);
+                    }
                 }
             }
         }
     }
 }
 
-void HotbarComponent::HandleDragRelease(int targetSlot) {
-    if (targetSlot >= 0 && targetSlot != dragSourceSlot) {
-        if (!inventory.IsEmpty(targetSlot)) {
-            inventory.SwapSlots(dragSourceSlot, targetSlot);
-        } else {
-            inventory.MoveItem(dragSourceSlot, targetSlot);
+void HotbarComponent::HandleDragRelease(int targetSlot, bool targetUsing) {
+    const int mx = InputManager::GetInstance().GetMouseX();
+    const int my = InputManager::GetInstance().GetMouseY();
+    SDL_Point pt{mx, my};
+
+    if (targetUsing) {
+        if (!dragFromUsing) {
+            inventory.SwapUsingAndSlot(dragSourceSlot);
+            PlayRandomPickupSound();
         }
-        PlayRandomPickupSound();
-    } else if (targetSlot < 0) {
-        bool outsideBar = true;
-        if (!inventoryOpen) {
-            SDL_Rect bar;
-            bar.x = static_cast<int>(associated.box.x);
-            bar.y = static_cast<int>(associated.box.y);
-            bar.w = static_cast<int>(associated.box.w);
-            bar.h = static_cast<int>(associated.box.h);
-            SDL_Point pt{InputManager::GetInstance().GetMouseX(), InputManager::GetInstance().GetMouseY()};
-            outsideBar = !SDL_PointInRect(&pt, &bar);
+    } else if (targetSlot >= 0) {
+        if (dragFromUsing) {
+            inventory.SwapUsingAndSlot(targetSlot);
+            PlayRandomPickupSound();
+        } else if (targetSlot != dragSourceSlot) {
+            if (!inventory.IsEmpty(targetSlot)) {
+                inventory.SwapSlots(dragSourceSlot, targetSlot);
+            } else {
+                inventory.MoveItem(dragSourceSlot, targetSlot);
+            }
+            PlayRandomPickupSound();
         }
-        if (outsideBar) {
-            const ItemInstance* item = inventory.GetSlot(dragSourceSlot);
-            if (item && bigCharacter) {
-                constexpr float kPickW = 48.0f;
-                constexpr float kPickH = 48.0f;
-                Vec2 tl = bigCharacter->GetCenter();
-                tl.x -= kPickW * 0.5f;
-                tl.y -= kPickH * 0.5f;
-                if (clampPickupTopLeft) {
-                    tl = clampPickupTopLeft(tl, kPickW, kPickH);
+    } else {
+        SDL_Rect barBounds;
+        barBounds.x = static_cast<int>(associated.box.x);
+        barBounds.y = static_cast<int>(associated.box.y);
+        barBounds.w = static_cast<int>(associated.box.w);
+        barBounds.h = static_cast<int>(associated.box.h);
+        const bool inBar = SDL_PointInRect(&pt, &barBounds) == SDL_TRUE;
+        const bool inInv = inventoryOpen && (SDL_PointInRect(&pt, &invBgRect) == SDL_TRUE);
+        if (!inBar && !inInv) {
+            constexpr float kPickW = 48.0f;
+            constexpr float kPickH = 48.0f;
+            if (dragFromUsing) {
+                std::optional<ItemInstance> taken = inventory.TakeUsing();
+                if (taken.has_value() && bigCharacter) {
+                    Vec2 tl = bigCharacter->GetCenter();
+                    tl.x -= kPickW * 0.5f;
+                    tl.y -= kPickH * 0.5f;
+                    if (clampPickupTopLeft) {
+                        tl = clampPickupTopLeft(tl, kPickW, kPickH);
+                    }
+                    ItemInstance item = std::move(taken.value());
+                    ItemPickup* dropped =
+                        ItemPickup::Spawn(tl.x, tl.y, item.def, item.durability, itemPickups);
+                    if (dropped && addObjectToState) {
+                        addObjectToState(&dropped->GetAssociated());
+                    }
+                    PlayRandomPickupSound();
                 }
-                ItemPickup* dropped = ItemPickup::Spawn(tl.x, tl.y, item->def, item->durability, itemPickups);
-                if (dropped && addObjectToState) {
-                    addObjectToState(&dropped->GetAssociated());
+            } else {
+                const ItemInstance* item = inventory.GetSlot(dragSourceSlot);
+                if (item && bigCharacter) {
+                    Vec2 tl = bigCharacter->GetCenter();
+                    tl.x -= kPickW * 0.5f;
+                    tl.y -= kPickH * 0.5f;
+                    if (clampPickupTopLeft) {
+                        tl = clampPickupTopLeft(tl, kPickW, kPickH);
+                    }
+                    ItemPickup* dropped =
+                        ItemPickup::Spawn(tl.x, tl.y, item->def, item->durability, itemPickups);
+                    if (dropped && addObjectToState) {
+                        addObjectToState(&dropped->GetAssociated());
+                    }
+                    inventory.DropItem(dragSourceSlot);
+                    PlayRandomPickupSound();
                 }
-                inventory.DropItem(dragSourceSlot);
-                PlayRandomPickupSound();
             }
         }
     }
+
     isDragging = false;
     dragSourceSlot = -1;
+    dragFromUsing = false;
     if (dragSprite) {
         dragSprite->Open("");
     }
@@ -268,6 +373,14 @@ void HotbarComponent::Render() {
     SDL_SetRenderDrawColor(renderer, 20, 20, 20, 180);
     SDL_RenderFillRect(renderer, &barRect);
 
+    SDL_SetRenderDrawColor(renderer, 220, 180, 40, 230);
+    SDL_RenderDrawRect(renderer, &usingSlotRect);
+
+    if (!inventory.IsUsingEmpty()) {
+        const ItemInstance* u = inventory.GetUsing();
+        RenderItemInSlot(renderer, usingSlotRect, u);
+    }
+
     for (int i = 0; i < Inventory::kHotbarSlots; i++) {
         const SDL_Rect& r = hotbarRects[i];
         if (inventory.IsEmpty(i)) {
@@ -279,12 +392,7 @@ void HotbarComponent::Render() {
 
         const ItemInstance* item = inventory.GetSlot(i);
         if (item) {
-            auto tex = Resources::GetImage(item->def.spritePath);
-            if (tex) {
-                int pad = 4;
-                SDL_Rect dst = {r.x + pad, r.y + pad, r.w - pad * 2, r.h - pad * 2};
-                SDL_RenderCopy(renderer, tex.get(), nullptr, &dst);
-            }
+            RenderItemInSlot(renderer, r, item);
         }
     }
 
@@ -366,12 +474,7 @@ void HotbarComponent::RenderInvPopup(SDL_Renderer* renderer) {
 
         const ItemInstance* item = inventory.GetSlot(i);
         if (item) {
-            auto tex = Resources::GetImage(item->def.spritePath);
-            if (tex) {
-                int pad = 4;
-                SDL_Rect dst = {r.x + pad, r.y + pad, r.w - pad * 2, r.h - pad * 2};
-                SDL_RenderCopy(renderer, tex.get(), nullptr, &dst);
-            }
+            RenderItemInSlot(renderer, r, item);
         }
     }
 }
@@ -379,18 +482,25 @@ void HotbarComponent::RenderInvPopup(SDL_Renderer* renderer) {
 void HotbarComponent::RecalcSlotRects() {
     int screenW = Game::GetInstance().GetWindowsWidth();
     int screenH = Game::GetInstance().GetWindowsHeight();
-    int totalW = Inventory::kHotbarSlots * kSlotSize + (Inventory::kHotbarSlots - 1) * kSlotGap;
+    const int hotbarStripW = Inventory::kHotbarSlots * kSlotSize + (Inventory::kHotbarSlots - 1) * kSlotGap;
+    const int totalBarW = kSlotSize + kUsingHotbarGap + hotbarStripW;
     int barH = kSlotSize + 12;
-    int startX = (screenW - totalW) / 2;
+    int startX = (screenW - totalBarW) / 2;
     int startY = screenH - barH;
+
+    usingSlotRect.x = startX;
+    usingSlotRect.y = startY + 6;
+    usingSlotRect.w = kSlotSize;
+    usingSlotRect.h = kSlotSize;
 
     associated.box.x = static_cast<float>(startX - 4);
     associated.box.y = static_cast<float>(startY - 6);
-    associated.box.w = static_cast<float>(totalW + 8);
+    associated.box.w = static_cast<float>(totalBarW + 8);
     associated.box.h = static_cast<float>(barH + 2);
 
+    const int hotbarStartX = startX + kSlotSize + kUsingHotbarGap;
     for (int i = 0; i < Inventory::kHotbarSlots; i++) {
-        hotbarRects[i].x = startX + i * (kSlotSize + kSlotGap);
+        hotbarRects[i].x = hotbarStartX + i * (kSlotSize + kSlotGap);
         hotbarRects[i].y = startY + 6;
         hotbarRects[i].w = kSlotSize;
         hotbarRects[i].h = kSlotSize;
@@ -429,6 +539,11 @@ int HotbarComponent::HitTestHotbarSlot(int mouseX, int mouseY) const {
         }
     }
     return -1;
+}
+
+bool HotbarComponent::HitTestUsingSlot(int mouseX, int mouseY) const {
+    SDL_Point pt{mouseX, mouseY};
+    return SDL_PointInRect(&pt, &usingSlotRect) == SDL_TRUE;
 }
 
 int HotbarComponent::HitTestInvSlot(int mouseX, int mouseY) const {
