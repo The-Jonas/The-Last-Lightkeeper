@@ -2,6 +2,20 @@
 #include "../include/Game.h"
 #include <iostream>
 
+namespace {
+
+void EnsureMixerDecodersForChunks() {
+    static bool codecsWarmedUp = false;
+    if (codecsWarmedUp) {
+        return;
+    }
+    codecsWarmedUp = true;
+    const int wanted = MIX_INIT_MP3 | MIX_INIT_OGG | MIX_INIT_FLAC | MIX_INIT_WAVPACK | MIX_INIT_MOD;
+    Mix_Init(wanted);
+}
+
+} // namespace
+
 // Definição e inicialização dos membros estáticos (se não dá erro por confundir o linker)
 
 std::unordered_map<std::string, std::shared_ptr<SDL_Texture>> Resources::imageTable;
@@ -52,24 +66,35 @@ void Resources::ClearImages() {
 //------------------------------- SOUND -------------------------------------//
 //---------------------------------------------------------------------------//
 
-std::shared_ptr<Mix_Chunk> Resources::GetSound(const std::string file) {         
+std::shared_ptr<Mix_Chunk> Resources::GetDecodedChunk(const std::string file) {
     if (soundTable.find(file) != soundTable.end()) {
         return soundTable[file];
     }
 
-    Mix_Chunk* chunk = Mix_LoadWAV(file.c_str());
-    if (chunk == nullptr) {
-        std::cerr << "Erro ao carregar som: " << Mix_GetError() << std::endl;
+    EnsureMixerDecodersForChunks();
+
+    SDL_RWops* rw = SDL_RWFromFile(file.c_str(), "rb");
+    if (!rw) {
+        std::cerr << "Erro ao abrir som \"" << file << "\": " << SDL_GetError() << std::endl;
         return nullptr;
     }
 
-    // Deleter customizado para som
+    Mix_Chunk* chunk = Mix_LoadWAV_RW(rw, SDL_TRUE);
+    if (chunk == nullptr) {
+        std::cerr << "Erro ao decodificar som \"" << file << "\": " << Mix_GetError() << std::endl;
+        return nullptr;
+    }
+
     std::shared_ptr<Mix_Chunk> shared(chunk, [](Mix_Chunk* snd) {
         Mix_FreeChunk(snd);
     });
 
     soundTable.emplace(file, shared);
     return shared;
+}
+
+std::shared_ptr<Mix_Chunk> Resources::GetSound(const std::string file) {
+    return GetDecodedChunk(file);
 }
 
 void Resources::ClearSounds() {
@@ -90,6 +115,8 @@ std::shared_ptr<Mix_Music> Resources::GetMusic(const std::string file) {
     if (musicTable.find(file) != musicTable.end()) {
         return musicTable[file];
     }
+
+    EnsureMixerDecodersForChunks();
 
     Mix_Music* music = Mix_LoadMUS(file.c_str());
     if (music == nullptr) {

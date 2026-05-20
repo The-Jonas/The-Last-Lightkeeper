@@ -72,8 +72,19 @@ Game::Game(std::string title, int width, int heigh) {
         exit(1);
     }
 
+    // Codec DLLs/formatos antes de Mix_OpenAudio ajudam Mix_LoadWAV_RW a aceitar mp3/ogg/flac como chunk.
+    {
+        const int wantFormats = MIX_INIT_MP3 | MIX_INIT_OGG | MIX_INIT_FLAC | MIX_INIT_WAVPACK | MIX_INIT_MOD;
+        const int loaded = Mix_Init(wantFormats);
+        if ((loaded & MIX_INIT_MP3) == 0 || (loaded & MIX_INIT_OGG) == 0) {
+            std::cerr << "Aviso: Mix_Init codecs (mp3=" << ((loaded & MIX_INIT_MP3) != 0)
+                      << ", ogg=" << ((loaded & MIX_INIT_OGG) != 0) << ") — " << Mix_GetError()
+                      << std::endl;
+        }
+    }
+
     // Inicializa SDL_Mixer
-    if (Mix_OpenAudio(MIX_DEFAULT_FREQUENCY, MIX_DEFAULT_FORMAT, MIX_DEFAULT_CHANNELS, 1024) == -1) {
+    if (Mix_OpenAudio(MIX_DEFAULT_FREQUENCY, MIX_DEFAULT_FORMAT, MIX_DEFAULT_CHANNELS, 2048) == -1) {
         std::cerr << "Mix_OpenAudio falhou: " << Mix_GetError() << std::endl;
         exit(1);
     }

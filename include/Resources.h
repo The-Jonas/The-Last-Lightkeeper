@@ -26,7 +26,9 @@ public:
     
     // Obtém um som. Se ele já estiver em memória, retorna o ponteiro existente.
     // Se não, carrega, armazena e retorna o ponteiro.
-    static std::shared_ptr<Mix_Chunk> GetSound (const std::string file);    
+    static std::shared_ptr<Mix_Chunk> GetSound(const std::string file);
+    /// Carrega WAV/OGG/MP3/FLAC… para chunk (decodificado na RAM). Preferir arquivo curto ou leve para ambiente loop.
+    static std::shared_ptr<Mix_Chunk> GetDecodedChunk(const std::string file);
     static void ClearSounds();                                                          // Libera todos os sons da memória
 
     // Obtém uma fonte. Se ela já estiver na memória, retorna o ponteiro existente

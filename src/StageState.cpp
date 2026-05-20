@@ -22,6 +22,7 @@
 #include "../include/FadeEffect.h"
 #include "../include/Repairable.h"
 #include "../include/StairTrigger.h"
+#include "../include/Resources.h"
 #include <iostream>
 #include <fstream> 
 #include <algorithm>
@@ -40,7 +41,14 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+namespace StageOceanAudio {
+constexpr int kNominalPercent = 30; // % de MIX_MAX × master nas ondas (mais baixas que OST).
+}
+
 namespace {
+
+float gStageOstSilenceRecover = 0.0f; // Debounce Mix_PlayMusic — Mix_PlayMusic a cada frame atrasa chunks.
+
 void SetMouseConfinedToWindow(bool shouldConfine) {
     SDL_Window* window = Game::GetInstance().GetWindow();
     if (!window) {
@@ -332,6 +340,10 @@ StageState::StageState() {
 }
 
 StageState::~StageState(){                                
+    if (oceanMixerChannel >= 0) {
+        Mix_HaltChannel(oceanMixerChannel);
+        oceanMixerChannel = -1;
+    }
     // O destrutor de State cuida de limpar o objectArray
     // A música é limpa pelo destrutor de Music
     SetMouseConfinedToWindow(false);
@@ -622,10 +634,95 @@ void StageState::LoadAssets() {
 
     RefreshCameraTargets(); // Atualiza alvos da câmera (dupla + principal)
 
+    // Ondas (fora do mapa): primeiro andar jogável em diante. Tenta WAV/OGG e depois MP3 (decoded chunk).
+    if (oceanMixerChannel >= 0) {
+        Mix_HaltChannel(oceanMixerChannel);
+        oceanMixerChannel = -1;
+    }
+    static constexpr const char* kOceanCandidates[] = {
+        "Recursos/audio/waves.wav",
+        "Recursos/audio/waves.ogg",
+        "Recursos/audio/waves.mp3",
+    };
+    oceanWavesChunk.reset();
+    for (const char* path : kOceanCandidates) {
+        oceanWavesChunk = Resources::GetDecodedChunk(path);
+        if (oceanWavesChunk) {
+            break;
+        }
+    }
+    if (!oceanWavesChunk) {
+        std::cerr << "Ocean waves: falha ao carregar qualquer formato (waves.wav / .ogg / .mp3). "
+                     "Preferir WAV ou OGG — MP3 inteiro como chunk pode falhar ou exigir muita RAM."
+                  << std::endl;
+    }
+    EnsureOceanAmbientPlaying();
+
+    // Ost (Mix_PlayMusic) e ambiente (canal Sample) coexistem — após Decode pesado Mix_PlayMusic pode
+    // ficar halted brevemente; garantir que a faixa volte antes do primeiro Update.
+    {
+        const int ostVol = (MIX_MAX_VOLUME * Game::masterVolumePercent) / 100;
+        Mix_VolumeMusic(musicMuted ? 0 : ostVol);
+        if (music.IsOpen() && !musicMuted && Mix_PlayingMusic() == 0) {
+            music.Play(-1);
+        }
+    }
+}
+
+void StageState::RefreshOceanAmbientVolume() {
+    if (!oceanWavesChunk || oceanMixerChannel < 0) {
+        return;
+    }
+    const int nominalCap = (MIX_MAX_VOLUME * StageOceanAudio::kNominalPercent) / 100;
+    int v = (nominalCap * Game::masterVolumePercent) / 100;
+    if (musicMuted) {
+        v = 0;
+    }
+    Mix_Volume(oceanMixerChannel, v);
+}
+
+void StageState::EnsureOceanAmbientPlaying() {
+    if (!oceanWavesChunk) {
+        return;
+    }
+    if (oceanMixerChannel >= 0 && Mix_Playing(oceanMixerChannel)) {
+        return;
+    }
+
+    if (oceanMixerChannel >= 0) {
+        Mix_HaltChannel(oceanMixerChannel);
+        oceanMixerChannel = -1;
+    }
+
+    oceanMixerChannel = Mix_PlayChannel(-1, oceanWavesChunk.get(), -1);
+    if (oceanMixerChannel < 0) {
+        oceanMixerChannel = -1;
+        std::cerr << "Erro ao reproduzir ambiente das ondas (Mix_PlayChannel): " << Mix_GetError() << std::endl;
+        return;
+    }
+
+    RefreshOceanAmbientVolume();
 }
 
 void StageState::Update(float dt){
+    // Chamadas a Mix_PlayMusic em todo frame fazem SDL_mixer reorganizar música e pode matar/samples atrasarem ondas.
+    if (!musicMuted && music.IsOpen() && Mix_PlayingMusic() == 0) {
+        gStageOstSilenceRecover += dt;
+        if (gStageOstSilenceRecover >= 0.5f) {
+            music.Play(-1);
+            gStageOstSilenceRecover = 0.f;
+        }
+    } else {
+        gStageOstSilenceRecover = 0.f;
+    }
+
     InputManager& input = InputManager::GetInstance();
+
+    if (oceanWavesChunk) {
+        EnsureOceanAmbientPlaying();
+        RefreshOceanAmbientVolume();
+    }
+
     Vec2 prevBigPos(0.0f, 0.0f);
     Vec2 prevSmallPos(0.0f, 0.0f);
     if (bigCharacterObject) {
@@ -655,15 +752,10 @@ void StageState::Update(float dt){
         musicMuted = !musicMuted;
         const int masterVolume = (MIX_MAX_VOLUME * Game::masterVolumePercent) / 100;
         Mix_VolumeMusic(musicMuted ? 0 : masterVolume);
+        RefreshOceanAmbientVolume();
     }
     if (input.KeyPress(MAP_PHYSICS_DEBUG_KEY)) {
         showMapPhysicsDebug = !showMapPhysicsDebug;
-    }
-
-    if (!Mix_PlayingMusic() && !musicMuted && !levelTracks.empty()) {
-        currentTrack = (currentTrack + 1) % static_cast<int>(levelTracks.size());
-        music.Open(levelTracks[currentTrack]);
-        music.Play();
     }
 
     if (input.KeyPress(CREATE_LIGHT_KEY) &&

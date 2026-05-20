@@ -2,6 +2,7 @@
 #define STAGESTATE_H
 
 #define INCLUDE_SDL
+#define INCLUDE_SDL_MIXER
 #include "SDL_include.h"
 
 #include "State.h"
@@ -62,6 +63,9 @@ private:
     void EnforceMaxDistance();                                           // Limita distância máxima entre os dois
     void SwapControlledCharacter();                                      // Troca personagem controlado
     void RefreshCameraTargets();                                         // Atualiza alvos da câmera (dupla + principal)
+    /// Mar / ondas ao ar livre: canal reservado, volume ~30 % do MIX_MAX relativamente ao slider master + mute igual à OST.
+    void RefreshOceanAmbientVolume();
+    void EnsureOceanAmbientPlaying();
     void UpdateHudInstructions();                                        // Mantém HUD no canto superior esquerdo
     void UpdateControlledCharacterVisuals();                             // Destaca visualmente quem está sob controle
     void CreateLightAtCursor();
@@ -148,6 +152,10 @@ private:
     Inventory inventory;
     GameObject* hotbarObject = nullptr;
     std::vector<class ItemPickup*> itemPickups;
+
+    std::shared_ptr<Mix_Chunk> oceanWavesChunk;
+    /// Canal Mixer real das ondas (-1 até o primeiro Mix_PlayChannel).
+    int oceanMixerChannel = -1;
 };
 
 #endif
