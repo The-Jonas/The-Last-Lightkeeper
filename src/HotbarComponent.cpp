@@ -41,10 +41,11 @@ void PlayRandomPickupSound() {
 HotbarComponent::HotbarComponent(GameObject& associated, Inventory& inventory,
                                  Character* bigChar, Character** controlledChar,
                                  std::vector<ItemPickup*>& pickups,
-                                 std::function<void(GameObject*)> addObjFn)
+                                 std::function<void(GameObject*)> addObjFn,
+                                 std::function<Vec2(Vec2, float, float)> clampFn)
     : Component(associated), inventory(inventory), bigCharacter(bigChar),
       controlledCharacterPtr(controlledChar), itemPickups(pickups),
-      addObjectToState(addObjFn),
+      addObjectToState(addObjFn), clampPickupTopLeft(std::move(clampFn)),
       inventoryOpen(false), dragSourceSlot(-1), isDragging(false),
       dragSprite(nullptr), toastTimer(0.0f) {
     for (int i = 0; i < Inventory::kSlots; i++) {
@@ -63,7 +64,18 @@ void HotbarComponent::Start() {
     dragSprite->SetTint(255, 255, 255, 180);
 }
 
+float HotbarComponent::GetPickupReachRadius() const {
+    if (!bigCharacter) {
+        return 0.0f;
+    }
+    return bigCharacter->GetFootCircleRadius() + kPickupPromptFootRadiusExtra;
+}
+
 bool HotbarComponent::BlocksLightPointerUnlock(int mx, int my) const {
+    if (!bigCharacter || !controlledCharacterPtr || !*controlledCharacterPtr ||
+        *controlledCharacterPtr != bigCharacter) {
+        return false;
+    }
     SDL_Point pt{mx, my};
     const int screenW = Game::GetInstance().GetWindowsWidth();
     const int screenH = Game::GetInstance().GetWindowsHeight();
@@ -91,7 +103,20 @@ bool HotbarComponent::BlocksLightPointerUnlock(int mx, int my) const {
 }
 
 void HotbarComponent::Update(float dt) {
-    if (!controlledCharacterPtr || *controlledCharacterPtr != bigCharacter) {
+    if (!controlledCharacterPtr || !*controlledCharacterPtr || !bigCharacter) {
+        return;
+    }
+    if (*controlledCharacterPtr != bigCharacter) {
+        if (inventoryOpen) {
+            inventoryOpen = false;
+        }
+        if (isDragging) {
+            isDragging = false;
+            dragSourceSlot = -1;
+            if (dragSprite) {
+                dragSprite->Open("");
+            }
+        }
         return;
     }
 
@@ -109,14 +134,15 @@ void HotbarComponent::Update(float dt) {
 
     if (input.KeyPress(SDLK_e)) {
         ItemPickup* closest = nullptr;
-        float closestDist = kPickupRange;
-        Vec2 bigCenter = bigCharacter->GetCenter();
+        float closestDist = 1e30f;
+        const Vec2 footCenter = bigCharacter->GetFootCircleCenter();
+        const float reachR = GetPickupReachRadius();
 
         for (ItemPickup* p : itemPickups) {
             if (!p || p->GetAssociated().IsDead()) continue;
             Vec2 pCenter = p->GetCenter();
-            float d = bigCenter.Distance(pCenter);
-            if (d < closestDist) {
+            float d = footCenter.Distance(pCenter);
+            if (d <= reachR && d < closestDist) {
                 closestDist = d;
                 closest = p;
             }
@@ -195,9 +221,16 @@ void HotbarComponent::HandleDragRelease(int targetSlot) {
         }
         if (outsideBar) {
             const ItemInstance* item = inventory.GetSlot(dragSourceSlot);
-            if (item) {
-                Vec2 dropPos = bigCharacter->GetCenter();
-                ItemPickup* dropped = ItemPickup::Spawn(dropPos.x, dropPos.y, item->def, item->durability, itemPickups);
+            if (item && bigCharacter) {
+                constexpr float kPickW = 48.0f;
+                constexpr float kPickH = 48.0f;
+                Vec2 tl = bigCharacter->GetCenter();
+                tl.x -= kPickW * 0.5f;
+                tl.y -= kPickH * 0.5f;
+                if (clampPickupTopLeft) {
+                    tl = clampPickupTopLeft(tl, kPickW, kPickH);
+                }
+                ItemPickup* dropped = ItemPickup::Spawn(tl.x, tl.y, item->def, item->durability, itemPickups);
                 if (dropped && addObjectToState) {
                     addObjectToState(&dropped->GetAssociated());
                 }
@@ -214,7 +247,8 @@ void HotbarComponent::HandleDragRelease(int targetSlot) {
 }
 
 void HotbarComponent::Render() {
-    if (!controlledCharacterPtr || *controlledCharacterPtr != bigCharacter) {
+    if (!controlledCharacterPtr || !*controlledCharacterPtr || !bigCharacter ||
+        *controlledCharacterPtr != bigCharacter) {
         return;
     }
 
@@ -255,11 +289,12 @@ void HotbarComponent::Render() {
     }
 
     auto font = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 14);
-    Vec2 bigCenter = bigCharacter->GetCenter();
+    const Vec2 footCenter = bigCharacter->GetFootCircleCenter();
+    const float promptR = GetPickupReachRadius();
     for (ItemPickup* p : itemPickups) {
         if (!p || p->GetAssociated().IsDead()) continue;
-        float d = bigCenter.Distance(p->GetCenter());
-        if (d <= kPickupRange) {
+        float d = footCenter.Distance(p->GetCenter());
+        if (d <= promptR) {
             Vec2 worldPos = p->GetCenter();
             float sx = (worldPos.x - Camera::pos.x) * Camera::GetZoom();
             float sy = (worldPos.y - Camera::pos.y) * Camera::GetZoom();

@@ -35,6 +35,9 @@ public:
     void Issue(Command task);                                           // Adiciona um comando a fila de tarefas      
     static Character* player;                                           // Ponteiro estático para a instância do jogador principal
     Vec2 GetCenter();                                                   // Para pegar o centro do personagem
+    /// Círculo dos pés (mesmo de colisão com chão / desenho DEBUG): raio = largura * 0.25, centro nos pés.
+    Vec2 GetFootCircleCenter() const;
+    float GetFootCircleRadius() const;
     void SetSpeedMultiplier(float multiplier);                          // Ajusta multiplicador de velocidade do personagem
     void SetBaseSpeed(float speed);                                     // Ajusta velocidade base de movimento
 

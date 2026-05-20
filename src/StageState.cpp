@@ -535,12 +535,42 @@ void StageState::LoadAssets() {
     ItemDef kOilGallon{"Oil Gallon", "Recursos/img/items/oil_gallon.png", 100, false, 3, {}};
     ItemDef itemDefs[3] = {kApple, kBrokenFlashlight, kOilGallon};
 
-    std::vector<std::pair<int,int>> walkablePositions;
+    levelWorldW = kNavWorldW;
+    levelWorldH = kNavWorldH;
+    if (tileMapComp != nullptr && tileSet != nullptr) {
+        const int tileWPx = std::max(1, tileSet->GetTileWidth());
+        const int tileHPx = std::max(1, tileSet->GetTileHeight());
+        levelWorldW = static_cast<float>(tileMapComp->GetWidth() * tileWPx);
+        levelWorldH = static_cast<float>(tileMapComp->GetHeight() * tileHPx);
+    }
+
+    constexpr float kItemPickupSize = 48.0f;
+    constexpr float kItemPickupHalf = kItemPickupSize * 0.5f;
+
+    std::vector<std::pair<int, int>> walkablePositions;
     if (tileMapComp) {
         for (int ty = 0; ty < tileMapComp->GetHeight(); ty++) {
             for (int tx = 0; tx < tileMapComp->GetWidth(); tx++) {
                 int tid = tileMapComp->At(tx, ty, 1);
                 if (walkableTileIds.count(tid)) {
+                    Vec2 c = TileCenterToWorld(tx, ty);
+                    if (c.x >= mapOrigin.x + kItemPickupHalf && c.x <= mapOrigin.x + levelWorldW - kItemPickupHalf &&
+                        c.y >= mapOrigin.y + kItemPickupHalf && c.y <= mapOrigin.y + levelWorldH - kItemPickupHalf) {
+                        walkablePositions.push_back({tx, ty});
+                    }
+                }
+            }
+        }
+    } else if (navGridWidthTiles > 0 && navGridHeightTiles > 0 && bigCharacterObject) {
+        // Mapa só com imagens + JSON: usa a grade de navegação e o mesmo teste de passagem que o personagem.
+        for (int ty = 0; ty < navGridHeightTiles; ty++) {
+            for (int tx = 0; tx < navGridWidthTiles; tx++) {
+                Vec2 c = TileCenterToWorld(tx, ty);
+                if (c.x < mapOrigin.x + kItemPickupHalf || c.x > mapOrigin.x + levelWorldW - kItemPickupHalf ||
+                    c.y < mapOrigin.y + kItemPickupHalf || c.y > mapOrigin.y + levelWorldH - kItemPickupHalf) {
+                    continue;
+                }
+                if (IsTileNavigableFor(bigCharacterObject, tx, ty)) {
                     walkablePositions.push_back({tx, ty});
                 }
             }
@@ -559,8 +589,10 @@ void StageState::LoadAssets() {
             int tx = walkablePositions[i].first;
             int ty = walkablePositions[i].second;
             Vec2 worldPos = TileCenterToWorld(tx, ty);
+            Vec2 tl(worldPos.x - kItemPickupHalf, worldPos.y - kItemPickupHalf);
+            tl = ClampPickupTopLeft(tl, kItemPickupSize, kItemPickupSize);
             const ItemDef& def = itemDefs[i % 3];
-            ItemPickup* pickup = ItemPickup::Spawn(worldPos.x - 32.0f, worldPos.y - 32.0f,
+            ItemPickup* pickup = ItemPickup::Spawn(tl.x, tl.y,
                                                      def, def.maxDurability, itemPickups);
             if (pickup) {
                 AddObject(&pickup->GetAssociated());
@@ -571,7 +603,10 @@ void StageState::LoadAssets() {
     GameObject* hotbarObj = new GameObject();
     hotbarObj->AddComponent(new HotbarComponent(*hotbarObj, inventory, bigCharacter,
                                                   &controlledCharacter, itemPickups,
-                                                  [this](GameObject* obj) { AddObject(obj); }));
+                                                  [this](GameObject* obj) { AddObject(obj); },
+                                                  [this](Vec2 tl, float w, float h) {
+                                                      return ClampPickupTopLeft(tl, w, h);
+                                                  }));
     hotbarObj->z = 200;
     AddObject(hotbarObj);
     hotbarObject = hotbarObj;
@@ -1376,6 +1411,17 @@ Vec2 StageState::TileCenterToWorld(int tx, int ty) const {
     const float tileH = static_cast<float>(std::max(1, NavTileHeightPx()));
     return Vec2(mapOrigin.x + (static_cast<float>(tx) + 0.5f) * tileW,
                 mapOrigin.y + (static_cast<float>(ty) + 0.5f) * tileH);
+}
+
+Vec2 StageState::ClampPickupTopLeft(Vec2 topLeft, float itemW, float itemH) const {
+    if (levelWorldW <= 1.0f || levelWorldH <= 1.0f) {
+        return topLeft;
+    }
+    const float minX = mapOrigin.x;
+    const float minY = mapOrigin.y;
+    const float maxX = mapOrigin.x + levelWorldW - itemW;
+    const float maxY = mapOrigin.y + levelWorldH - itemH;
+    return Vec2(std::clamp(topLeft.x, minX, maxX), std::clamp(topLeft.y, minY, maxY));
 }
 
 bool StageState::WorldToTile(const Vec2& worldPos, int& outTx, int& outTy) const {

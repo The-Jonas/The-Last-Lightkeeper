@@ -19,9 +19,10 @@ ItemPickup* ItemPickup::Spawn(float worldX, float worldY, const ItemDef& def, in
     GameObject* obj = new GameObject();
     obj->box.x = worldX;
     obj->box.y = worldY;
-    obj->z = 3;
-
-    obj->AddComponent(new SpriteRenderer(*obj, def.spritePath));
+    // Mesma camada que personagens/props (z=2): profundidade vem do Y-sort em `StageState::Render`.
+    obj->z = 2;
+    // Com mesmo `bottom_y`, desenhar o item atrás do personagem (empate de ordenação).
+    obj->sub_z = -1;    obj->AddComponent(new SpriteRenderer(*obj, def.spritePath));
     obj->box.w = 48.0f;
     obj->box.h = 48.0f;
 

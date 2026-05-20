@@ -75,6 +75,8 @@ private:
     bool HasWalkableLine(const Vec2& fromWorld, const Vec2& toWorld) const;
     bool HasWalkableLine(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent) const;
     Vec2 TileCenterToWorld(int tx, int ty) const;
+    /// Retângulo jogável em coordenadas de mundo (para itens não nascerem fora do mapa).
+    Vec2 ClampPickupTopLeft(Vec2 topLeft, float itemW, float itemH) const;
     bool WorldToTile(const Vec2& worldPos, int& outTx, int& outTy) const;
     bool FindNearestWalkableTile(int startTx, int startTy, int& outTx, int& outTy, int maxRadius = 8,
                                    const GameObject* agent = nullptr) const;
@@ -92,6 +94,8 @@ private:
     TileSet* tileSet;                                                   // TileSet atualmente ativo no mapa
     std::unique_ptr<TileSet> dungeonTileSet;
     Vec2 mapOrigin{0.0f, 0.0f};
+    float levelWorldW = 0.0f;
+    float levelWorldH = 0.0f;
     GameObject* bigCharacterObject;                                      // GameObject do personagem grande (IRMÃOZÃO)
     GameObject* smallCharacterObject;                                    // GameObject do personagem pequeno (IRMÃOZINHO)
     Character* bigCharacter;                                             // Componente Character do grande (IRMÃOZÃO)

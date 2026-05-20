@@ -240,6 +240,15 @@ Vec2 Character::GetCenter() {
     return associated.box.Center();
 }
 
+float Character::GetFootCircleRadius() const {
+    return associated.box.w * 0.25f;
+}
+
+Vec2 Character::GetFootCircleCenter() const {
+    const float r = GetFootCircleRadius();
+    return Vec2(associated.box.x + associated.box.w * 0.5f, associated.box.y + associated.box.h - r);
+}
+
 void Character::Issue(Command task) {                       // Adiciona comando na fila
     taskQueue.push(task);
 }

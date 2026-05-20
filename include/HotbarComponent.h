@@ -8,6 +8,7 @@
 #include "Inventory.h"
 #include "Item.h"
 #include "Sprite.h"
+#include "Vec2.h"
 
 #include <functional>
 #include <string>
@@ -21,7 +22,8 @@ public:
     HotbarComponent(GameObject& associated, Inventory& inventory,
                     Character* bigChar, Character** controlledChar,
                     std::vector<ItemPickup*>& pickups,
-                    std::function<void(GameObject*)> addObjFn);
+                    std::function<void(GameObject*)> addObjFn,
+                    std::function<Vec2(Vec2 topLeft, float itemW, float itemH)> clampPickupTopLeft = {});
 
     /// Screen-space: hotbar bar or open inventory panel (used so UI clicks don't unlock the preview light).
     bool BlocksLightPointerUnlock(int screenX, int screenY) const;
@@ -36,6 +38,7 @@ private:
     Character** controlledCharacterPtr;
     std::vector<ItemPickup*>& itemPickups;
     std::function<void(GameObject*)> addObjectToState;
+    std::function<Vec2(Vec2, float, float)> clampPickupTopLeft;
 
     Sprite* slotSprites[Inventory::kSlots];
     SDL_Rect hotbarRects[Inventory::kHotbarSlots];
@@ -52,7 +55,10 @@ private:
 
     static constexpr int kSlotSize = 48;
     static constexpr int kSlotGap = 4;
-    static constexpr float kPickupRange = 48.0f;
+    /// Anel extra em torno do círculo dos pés: mesmo alcance para o prompt e para pegar (E).
+    static constexpr float kPickupPromptFootRadiusExtra = 18.0f;
+
+    float GetPickupReachRadius() const;
 
     void RecalcSlotRects();
     void RecalcInvRect();
