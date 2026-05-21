@@ -1,0 +1,47 @@
+{
+  "ostPath": "Recursos/audio/soundtracks/Last Hideout.mp3",
+  "levelPath": "Recursos/map/mapa_1_andar.json",
+  "navWorld": { "w": 4358, "h": 3276 },
+  "navTilePx": 64,
+  "itemPickupCount": 35,
+  "startingFlashlightDurability": 50,
+  "startingFlashlight": {
+    "name": "Flashlight",
+    "spritePath": "Recursos/img/items/flashlight_broken.png",
+    "maxDurability": 100,
+    "durabilityDecreases": true,
+    "sortOrder": 0,
+    "properties": [{ "prop": "LIGHT_SOURCE", "value": 1.0 }]
+  },
+  "pickupCycle": [
+    {
+      "name": "Apple",
+      "spritePath": "Recursos/img/items/apple.png",
+      "maxDurability": -1,
+      "durabilityDecreases": false,
+      "sortOrder": 1,
+      "properties": []
+    },
+    {
+      "name": "Broken Flashlight",
+      "spritePath": "Recursos/img/items/flashlight_broken.png",
+      "maxDurability": 100,
+      "durabilityDecreases": true,
+      "sortOrder": 2,
+      "properties": [{ "prop": "LIGHT_SOURCE", "value": 1.0 }]
+    },
+    {
+      "name": "Oil Gallon",
+      "spritePath": "Recursos/img/items/oil_gallon.png",
+      "maxDurability": 100,
+      "durabilityDecreases": false,
+      "sortOrder": 3,
+      "properties": []
+    }
+  ],
+  "oceanChunkCandidates": [
+    "Recursos/audio/waves.ogg",
+    "Recursos/audio/waves.wav",
+    "Recursos/audio/waves.mp3"
+  ]
+}

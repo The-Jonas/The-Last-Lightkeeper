@@ -18,11 +18,11 @@ SRC_PATH = src
 BIN_PATH = bin
 DEP_PATH = dep
 
-CPP_FILES = $(wildcard $(SRC_PATH)/*.cpp)
-INC_FILES = $(wildcard $(SRC_PATH)/*.hpp)
-FILE_NAMES = $(sort $(notdir $(CPP_FILES:.cpp=)) $(notdir $(INC_FILES:.h=)))
-DEP_FILES = $(addprefix $(DEP_PATH)/,$(addsuffix .d,$(FILE_NAMES)))
-OBJ_FILES = $(addprefix $(BIN_PATH)/,$(notdir $(CPP_FILES:.cpp=.o)))
+CPP_FILES = $(wildcard $(SRC_PATH)/*.cpp) \
+            $(wildcard $(SRC_PATH)/*/*.cpp) \
+            $(wildcard $(SRC_PATH)/*/*/*.cpp)
+OBJ_FILES = $(patsubst $(SRC_PATH)/%.cpp,$(BIN_PATH)/%.o,$(CPP_FILES))
+DEP_FILES = $(patsubst $(SRC_PATH)/%.cpp,$(DEP_PATH)/%.d,$(CPP_FILES))
 
 EXEC = JOGO
 
@@ -56,21 +56,38 @@ endif
 
 DIST_DIR := dist
 
+RELEASE_RUNTIME_LINK_FLAGS :=
+ifeq ($(OS),Windows_NT)
+ifneq ($(filter release package ship dist,$(MAKECMDGOALS)),)
+RELEASE_RUNTIME_LINK_FLAGS := -static-libgcc -static-libstdc++
+endif
+endif
+
 .PRECIOUS: $(DEP_FILES)
 .PHONY: release debug clean folders help package ship dist all
 
 all: $(EXEC)
 
 $(EXEC): $(OBJ_FILES)
-	$(COMPILER) -o $@ $^ $(LINK_PATH) $(LIBS) $(FLAGS)
+	$(COMPILER) -o $@ $^ $(LINK_PATH) $(LIBS) $(FLAGS) $(RELEASE_RUNTIME_LINK_FLAGS)
 ifeq ($(OS),Windows_NT)
 	@copy /Y "SDL2\bin\*.dll" . > nul
 endif
 
-$(BIN_PATH)/%.o: $(DEP_PATH)/%.d | folders
-	$(COMPILER) $(INC_PATHS) $(addprefix $(SRC_PATH)/,$(notdir $(<:.d=.cpp))) -c $(FLAGS) -o $@
+$(BIN_PATH)/%.o: $(SRC_PATH)/%.cpp $(DEP_PATH)/%.d | folders
+ifeq ($(OS),Windows_NT)
+	@if not exist "$(subst /,\,$(dir $@))" mkdir "$(subst /,\,$(dir $@))"
+else
+	@mkdir -p $(dir $@)
+endif
+	$(COMPILER) $(INC_PATHS) -c $(FLAGS) -o $@ $<
 
 $(DEP_PATH)/%.d: $(SRC_PATH)/%.cpp | folders
+ifeq ($(OS),Windows_NT)
+	@if not exist "$(subst /,\,$(dir $@))" mkdir "$(subst /,\,$(dir $@))"
+else
+	@mkdir -p $(dir $@)
+endif
 	$(COMPILER) $(INC_PATHS) $< $(DEP_FLAGS) $(FLAGS)
 
 clean:
@@ -114,11 +131,11 @@ dist:
 ship: dist
 
 folders:
-ifeq ($(OS), Windows_NT)
-	@if NOT exist $(DEP_PATH) (mkdir $(DEP_PATH))
-	@if NOT exist $(BIN_PATH) (mkdir $(BIN_PATH))
-	@if NOT exist $(INC_PATH) (mkdir $(INC_PATH))
-	@if NOT exist $(SRC_PATH) (mkdir $(SRC_PATH))
+ifeq ($(OS),Windows_NT)
+	@if NOT exist $(DEP_PATH) mkdir $(DEP_PATH)
+	@if NOT exist $(BIN_PATH) mkdir $(BIN_PATH)
+	@if NOT exist $(INC_PATH) mkdir $(INC_PATH)
+	@if NOT exist $(SRC_PATH) mkdir $(SRC_PATH)
 else
 	@mkdir -p $(DEP_PATH) $(BIN_PATH) $(INC_PATH) $(SRC_PATH)
 endif

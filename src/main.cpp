@@ -1,7 +1,6 @@
-#include "../include/Game.h"
-#include "../include/TitleState.h"
+#include "core/Game.h"
+#include "states/TitleState.h"
 #include <iostream>
-#include <filesystem>
 
 int main(int argc, char** argv) {
     Game& game = Game::GetInstance();       // Pega a instância única do jogo
