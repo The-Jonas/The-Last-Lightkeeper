@@ -6,4 +6,6 @@ SDL2_ttf.dll
 bin/
 dep/
 dist/
+game.zip
+*.zip
 .env
