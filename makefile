@@ -54,8 +54,10 @@ LIBS = -lm -framework SDL2 -framework SDL2_image -framework SDL2_mixer -framewor
 endif
 endif
 
+DIST_DIR := dist
+
 .PRECIOUS: $(DEP_FILES)
-.PHONY: release debug clean folders help
+.PHONY: release debug clean folders help package ship dist all
 
 all: $(EXEC)
 
@@ -85,6 +87,32 @@ release: $(EXEC)
 debug: FLAGS += $(DFLAGS)
 debug: $(EXEC)
 
+## Pasta pronta para distribuir: JOGO.exe + DLLs SDL + Recursos. Uso: mingw32-make dist
+package: release
+ifeq ($(OS),Windows_NT)
+	@if exist "$(DIST_DIR)" $(RMDIR) "$(DIST_DIR)"
+	@mkdir "$(DIST_DIR)" 2> nul
+	@copy /Y "$(EXEC)" "$(DIST_DIR)\\" > nul
+	@copy /Y "SDL2\bin\*.dll" "$(DIST_DIR)\\" > nul
+	@xcopy /E /I /Q /Y "Recursos" "$(DIST_DIR)\\Recursos\\" > nul
+	@echo.
+	@echo Bundle pronto em .\\$(DIST_DIR)\\$(EXEC)  — execute dentro dessa pasta.
+else
+	mkdir -p "$(DIST_DIR)"
+	cp -f "$(EXEC)" "$(DIST_DIR)/"
+	cp -r Recursos "$(DIST_DIR)/"
+ifneq ($(wildcard SDL2/bin/*.dll),)
+	cp -f SDL2/bin/*.dll "$(DIST_DIR)/"
+endif
+	@echo Bundle pronto em $(DIST_DIR)/$(EXEC)
+endif
+
+dist:
+	@$(MAKE) clean
+	@$(MAKE) package
+
+ship: dist
+
 folders:
 ifeq ($(OS), Windows_NT)
 	@if NOT exist $(DEP_PATH) (mkdir $(DEP_PATH))
@@ -102,8 +130,10 @@ ifeq ($(OS), Windows_NT)
 	echo.
 endif
 	@echo Available targets:
-	@echo - release: Builds the release version
-	@echo - debug: Builds the debug version
+	@echo - release: Builds the release optimized build next to the makefile
+	@echo - debug: Builds the debug build
+	@echo - package / ship: release + copies $(EXEC), SDL DLLs, Recursos into $(DIST_DIR)
+	@echo - dist: clean + package (recommended before sharing the game)
 	@echo - clean: Cleans generated files
 	@echo - folders: Generates project directories
 	@echo - help: Show help
