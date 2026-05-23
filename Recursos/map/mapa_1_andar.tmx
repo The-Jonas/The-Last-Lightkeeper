@@ -212,7 +212,7 @@
   <object id="193" x="3298.67" y="563">
    <polygon points="0,0 -342,136 -344,128 -6,-9"/>
   </object>
-  <object id="622" type="Escada" x="2901" y="45">
+  <object id="622" type="Buraco" x="2901" y="45">
    <polygon points="0,0 202,186 -94,402 -254,232"/>
   </object>
   <object id="623" type="Escada" x="3493.5" y="743">

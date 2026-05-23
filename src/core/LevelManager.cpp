@@ -174,6 +174,9 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
                                 else if (pName == "z" && prop.contains("value")) {
                                     if (prop["value"].is_number()) spawn.z = prop["value"].get<int>();
                                 }
+                                else if (pName == "itemName" && prop.contains("value")) {
+                                    if (prop["value"].is_string()) spawn.customString = prop["value"].get<std::string>();
+                                }
                             }    
                         }
 

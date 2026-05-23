@@ -30,12 +30,13 @@ struct ImageLayer {
 // Guarda a "receita" de qualquer entidade do jogo
 struct EntitySpawn {
     std::string type;
-    std::string name;   
+    std::string name;       
     float x, y;
     float w = 0.0f;
     float h = 0.0f;
     bool isStatic;
     int z;
+    std::string customString;
 };
 
 class LevelManager {

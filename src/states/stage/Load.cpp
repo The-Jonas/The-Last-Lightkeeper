@@ -143,16 +143,27 @@ void StageState::LoadAssets() {
     const float centerX = cfg.navWorldW / 2.0f;
     const float centerY = cfg.navWorldH / 2.0f;
 
-    if (bigObject) {
-        bigObject->box.x = centerX - (bigObject->box.w * 0.5f);
-        bigObject->box.y = centerY - (bigObject->box.h * 0.5f);
+    // Fallback para caso seja mal posicionado no TILED ou se esquecer de colocar no TILED
+    float bigSpawnX = centerX - (bigObject->box.w * 0.5f);
+    float bigSpawnY = centerY - (bigObject->box.h * 0.5f);
+    float smallSpawnX = bigSpawnX - std::max(40.0f, smallObject->box.w * 1.2f);
+    float smallSpawnY = bigSpawnY;
+    
+    // Lê os pontos do Tiled se existirem
+    for (const auto& spawn : level.entitySpawns) {
+        if (spawn.type == "PlayerSpawn_Big") {
+            bigSpawnX = spawn.x;
+            bigSpawnY = spawn.y - bigObject->box.h;  
+        } else if (spawn.type == "PlayerSpawn_Small") {
+            smallSpawnX = spawn.x;
+            smallSpawnY = spawn.y - smallObject->box.h;
+        }
     }
 
-    if (smallObject) {
-        // O irmãozinho nasce um pouco pro lado para não nascerem grudados
-        smallObject->box.x = bigObject->box.x - std::max(40.0f, smallObject->box.w * 1.2f);
-        smallObject->box.y = centerY - (smallObject->box.h * 0.5f);
-    }
+    bigObject->box.x = bigSpawnX;
+    bigObject->box.y = bigSpawnY;
+    smallObject->box.x = smallSpawnX;
+    smallObject->box.y = smallSpawnY;
 
     // ==========================================
     // SPAWN AUTOMÁTICO DAS ENTIDADES (TILED)
@@ -225,6 +236,43 @@ void StageState::LoadAssets() {
             
             AddObject(triggerObj);
         }
+        else if (spawn.type == "ItemSpawn") {
+            // A classe chama ItemSpawn
+            // Porém precisa também da propriedade string "itemName" = "Oil Gallon" (ou qualquer outro item do jogo)
+            const ItemDef* foundDef = nullptr;
+            for (const auto& def : cfg.pickupCycle) {
+                if (def.name == spawn.customString) {
+                    foundDef = &def;
+                    break;
+                }   
+            }
+
+            // Também aceita a lanterna inicial pelo nome
+            if (!foundDef && cfg.startingFlashlight.name == spawn.customString) {
+                foundDef = &cfg.startingFlashlight;
+            }
+
+            if (foundDef) {
+                int spawnDurability = foundDef->maxDurability;
+                if (foundDef->HasProperty(ItemProperty::LIGHT_SOURCE)) {
+                    spawnDurability = 1 + (rand() % 100);
+                }
+                const float itemSize = 48.0f;
+                Vec2 tl(spawn.x - itemSize * 0.5f, spawn.y - itemSize);
+                tl = ClampPickupTopLeft(tl, itemSize, itemSize);
+                ItemPickup* pickup = ItemPickup::Spawn(tl.x, tl.y, *foundDef, spawnDurability, itemPickups);
+                if (pickup) {
+                    AddObject(&pickup->GetAssociated());
+                } 
+            }
+            else {
+                std::cerr << "[ItemSpawn] Item nao encontrado no pickupCycle: '" 
+                << spawn.customString << "'. Verifique a propriedade itemName no Tiled." << std::endl;
+                }
+        }
+        else if (spawn.type == "PlayerSpawn_Big" || spawn.type == "PlayerSpawn_Small") {
+            // Já foi processado lá em cima...
+        }
     }
 
     previewLightLockedToPlayer = true;
@@ -283,65 +331,6 @@ void StageState::LoadAssets() {
         const int tileHPx = std::max(1, tileSet->GetTileHeight());
         levelWorldW = static_cast<float>(tileMapComp->GetWidth() * tileWPx);
         levelWorldH = static_cast<float>(tileMapComp->GetHeight() * tileHPx);
-    }
-
-    constexpr float kItemPickupSize = 48.0f;
-    constexpr float kItemPickupHalf = kItemPickupSize * 0.5f;
-
-    std::vector<std::pair<int, int>> walkablePositions;
-    if (tileMapComp) {
-        for (int ty = 0; ty < tileMapComp->GetHeight(); ty++) {
-            for (int tx = 0; tx < tileMapComp->GetWidth(); tx++) {
-                int tid = tileMapComp->At(tx, ty, 1);
-                if (walkableTileIds.count(tid)) {
-                    Vec2 c = TileCenterToWorld(tx, ty);
-                    if (c.x >= mapOrigin.x + kItemPickupHalf && c.x <= mapOrigin.x + levelWorldW - kItemPickupHalf &&
-                        c.y >= mapOrigin.y + kItemPickupHalf && c.y <= mapOrigin.y + levelWorldH - kItemPickupHalf) {
-                        walkablePositions.push_back({tx, ty});
-                    }
-                }
-            }
-        }
-    } else if (navGridWidthTiles > 0 && navGridHeightTiles > 0 && bigCharacterObject) {
-        // Mapa só com imagens + JSON: usa a grade de navegação e o mesmo teste de passagem que o personagem.
-        for (int ty = 0; ty < navGridHeightTiles; ty++) {
-            for (int tx = 0; tx < navGridWidthTiles; tx++) {
-                Vec2 c = TileCenterToWorld(tx, ty);
-                if (c.x < mapOrigin.x + kItemPickupHalf || c.x > mapOrigin.x + levelWorldW - kItemPickupHalf ||
-                    c.y < mapOrigin.y + kItemPickupHalf || c.y > mapOrigin.y + levelWorldH - kItemPickupHalf) {
-                    continue;
-                }
-                if (IsTileNavigableFor(bigCharacterObject, tx, ty)) {
-                    walkablePositions.push_back({tx, ty});
-                }
-            }
-        }
-    }
-
-    const int itemPickupTargetCount = cfg.itemPickupCount;
-    if (static_cast<int>(walkablePositions.size()) >= itemPickupTargetCount) {
-        srand(static_cast<unsigned>(time(nullptr)));
-        for (int i = static_cast<int>(walkablePositions.size()) - 1; i > 0; i--) {
-            int j = rand() % (i + 1);
-            std::swap(walkablePositions[i], walkablePositions[j]);
-        }
-
-        for (int i = 0; i < itemPickupTargetCount && i < static_cast<int>(walkablePositions.size()); i++) {
-            int tx = walkablePositions[i].first;
-            int ty = walkablePositions[i].second;
-            Vec2 worldPos = TileCenterToWorld(tx, ty);
-            Vec2 tl(worldPos.x - kItemPickupHalf, worldPos.y - kItemPickupHalf);
-            tl = ClampPickupTopLeft(tl, kItemPickupSize, kItemPickupSize);
-            const ItemDef& def = cfg.pickupCycle[static_cast<size_t>(i) % cfg.pickupCycle.size()];
-            int spawnDurability = def.maxDurability;
-            if (def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
-                spawnDurability = 1 + (rand() % 100);
-            }
-            ItemPickup* pickup = ItemPickup::Spawn(tl.x, tl.y, def, spawnDurability, itemPickups);
-            if (pickup) {
-                AddObject(&pickup->GetAssociated());
-            }
-        }
     }
 
     inventory.SetUsing(ItemInstance{cfg.startingFlashlight, cfg.startingFlashlightDurability});
