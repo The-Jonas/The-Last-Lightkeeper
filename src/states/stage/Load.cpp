@@ -135,35 +135,16 @@ void StageState::LoadAssets() {
     //}
     //smallComp->SetBaseSpeed(275.0f);
 
-    // ==========================================
-    // SPAWN FIXO DOS IRMÃOS NO CENTRO DO MAPA
-    // ==========================================
-    // Sabendo que o mapa tem 4500x4000, o centro é a metade disso.
 
+    // ==========================================
+    // SPAWN DOS IRMÃOS: posição vem do Tiled, com fallback pro centro
+    // ==========================================
     const float centerX = cfg.navWorldW / 2.0f;
     const float centerY = cfg.navWorldH / 2.0f;
 
-    // Fallback para caso seja mal posicionado no TILED ou se esquecer de colocar no TILED
-    float bigSpawnX = centerX - (bigObject->box.w * 0.5f);
-    float bigSpawnY = centerY - (bigObject->box.h * 0.5f);
-    float smallSpawnX = bigSpawnX - std::max(40.0f, smallObject->box.w * 1.2f);
-    float smallSpawnY = bigSpawnY;
-    
-    // Lê os pontos do Tiled se existirem
-    for (const auto& spawn : level.entitySpawns) {
-        if (spawn.type == "PlayerSpawn_Big") {
-            bigSpawnX = spawn.x;
-            bigSpawnY = spawn.y - bigObject->box.h;  
-        } else if (spawn.type == "PlayerSpawn_Small") {
-            smallSpawnX = spawn.x;
-            smallSpawnY = spawn.y - smallObject->box.h;
-        }
-    }
-
-    bigObject->box.x = bigSpawnX;
-    bigObject->box.y = bigSpawnY;
-    smallObject->box.x = smallSpawnX;
-    smallObject->box.y = smallSpawnY;
+    float bigSpawnX = 0, bigSpawnY = 0;
+    float smallSpawnX = 0, smallSpawnY = 0;
+    bool bigFoundInTiled = false, smallFoundInTiled = false;
 
     // ==========================================
     // SPAWN AUTOMÁTICO DAS ENTIDADES (TILED)
@@ -270,10 +251,32 @@ void StageState::LoadAssets() {
                 << spawn.customString << "'. Verifique a propriedade itemName no Tiled." << std::endl;
                 }
         }
-        else if (spawn.type == "PlayerSpawn_Big" || spawn.type == "PlayerSpawn_Small") {
-            // Já foi processado lá em cima...
+        else if (spawn.type == "PlayerSpawn_Big") {
+            bigSpawnX = spawn.x;
+            bigSpawnY = spawn.y - bigObject->box.h;
+            bigFoundInTiled = true;
+        }
+        else if (spawn.type == "PlayerSpawn_Small") {
+            smallSpawnX = spawn.x;
+            smallSpawnY = spawn.y - smallObject->box.h;
+            smallFoundInTiled = true;
         }
     }
+
+    // Fallback só entra se o Tiled não tinha os pontos
+    if (!bigFoundInTiled) {
+        bigSpawnX = centerX - bigObject->box.w * 0.5f;
+        bigSpawnY = centerY - bigObject->box.h;
+    }
+    if (!smallFoundInTiled) {
+        smallSpawnX = bigSpawnX - std::max(40.0f, smallObject->box.w * 1.2f);
+        smallSpawnY = bigSpawnY;
+    }
+
+    bigObject->box.x = bigSpawnX;
+    bigObject->box.y = bigSpawnY;
+    smallObject->box.x = smallSpawnX;
+    smallObject->box.y = smallSpawnY;
 
     previewLightLockedToPlayer = true;
     previewLightAnchorPlayer = bigCharacterObject;

@@ -156,6 +156,7 @@ private:
     int oceanMixerChannel = -1;
     /// Set true at end of LoadAssets(); LoadingState may call LoadAssets before Start() — Start skips a second load.
     bool levelContentLoaded = false;
+    int companionStartDelay = 0;
 };
 
 #endif

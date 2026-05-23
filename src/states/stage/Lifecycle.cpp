@@ -49,6 +49,8 @@ void StageState::Start() {
         LoadAssets();
     }
     StartArray();                                                   // Chama Start() de todos os objetos
+    companionStartDelay = 2;
+
     SetMouseConfinedToWindow(true);
     // OST só após o nível estar carregado e empilhado (não durante o loading screen).
     if (music.IsOpen()) {

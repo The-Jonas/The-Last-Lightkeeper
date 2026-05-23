@@ -109,8 +109,12 @@ void StageState::Update(float dt){
     if (IsPartyReady()) {
         HandlePartyInput();
         IssueMovementFromInput(controlledCharacter, controlledCharacterObject);
+        if (companionStartDelay > 0) {
+            companionStartDelay--;
+            return;
+        }
         UpdateCompanionBehavior();
-    }
+    }    
 
     UpdateArray(dt);                                                                    // Percorre o vetor de GameObjects chamando o Update de cada um
     inventory.TickUsingDurability(dt);                                                 // slot "usando" degrada sempre, mesmo controlando o irmãozinho
