@@ -20,9 +20,12 @@ public:
     static ItemPickup* Spawn(float worldX, float worldY, const ItemDef& def, int durability,
                       std::vector<ItemPickup*>& outList);
 
+    void SetHeightLevel(int heightlevel);
+
 private:
     ItemDef def;
     int durability;
+    int HeightLevel;
 };
 
 #endif

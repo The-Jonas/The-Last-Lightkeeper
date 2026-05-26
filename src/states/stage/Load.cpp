@@ -124,15 +124,6 @@ void StageState::LoadAssets() {
     smallObject->z = 2;
     AddObject(smallObject);
 
-    // Configurações do personagem pequeno (IRMÃOZINHO)
-    //SpriteRenderer* smallSprite = smallObject->GetComponent<SpriteRenderer>();
-    //if (smallSprite) {
-    //    smallSprite->SetScale(0.72f, 0.72f);
-    //    smallSprite->SetTint(150, 200, 255, 240);
-    //}
-    //smallComp->SetBaseSpeed(275.0f);
-
-
     // ==========================================
     // SPAWN DOS IRMÃOS: posição vem do Tiled, com fallback pro centro
     // ==========================================

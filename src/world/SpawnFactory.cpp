@@ -38,6 +38,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
     else if (spawn.type == "Escada_Quebrada") {
         GameObject* ladderObj = new GameObject();
         ladderObj->z = spawn.z;
+        ladderObj->isStairs= true;
         ladderObj->AddComponent(new SpriteRenderer(*ladderObj, "Recursos/img/cenario/escada_quebrada.png"));
         
         ladderObj->AddComponent(new FadeEffect(*ladderObj, true));
@@ -85,13 +86,26 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
                 spawnDurability = 1 + (rand() % 100);
             }
             const float itemSize = 48.0f;
+
+            // Posição base (como se estivesse no chão)
             Vec2 tl(spawn.x - itemSize * 0.5f, spawn.y - itemSize);
-            
-            // Chamando funções internas da instância do stage
             tl = stage.ClampPickupTopLeft(tl, itemSize, itemSize);
+
+            // Cria o Pickup
             ItemPickup* pickup = ItemPickup::Spawn(tl.x, tl.y, *foundDef, spawnDurability, stage.itemPickups);
+            
             if (pickup) {
-                stage.AddObject(&pickup->GetAssociated());
+            GameObject& itemObj = pickup->GetAssociated();
+
+            // A MECÂNICA (Passamos o 0, 1 ou 2 para ditar qual animação rodar depois) 
+            int itemHeightLevel = spawn.customInt;
+            pickup->SetHeightLevel(itemHeightLevel);
+
+            // O VISUAL (Aplicamos o pixel exato para o Y-Sort não bugar)
+            itemObj.z = spawn.z; // Fica no mesmo andar
+            itemObj.depthOffset = spawn.customFloat; 
+
+            stage.AddObject(&pickup->GetAssociated());
             } 
         }
         else {

@@ -37,6 +37,8 @@ struct EntitySpawn {
     bool isStatic;
     int z;
     std::string customString;
+    int customInt;
+    float customFloat;
 };
 
 class LevelManager {

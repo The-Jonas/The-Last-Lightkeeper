@@ -60,29 +60,37 @@ void StageState::Render(){
     // ============================
     auto compareObjects = [](const std::shared_ptr<GameObject>& a, const std::shared_ptr<GameObject>& b) {
         
-        // Extrai o Z original configurado no Tiled
-        int zA = a->z;
-        int zB = b->z;
-        
-        // Z-Boost Dinâmico
-        // Se for um personagem e estiver na escada, a engine "mente" dizendo que ele está no andar de cima.
+        // 1. Z-Sort Absoluto: Só desempata se forem de andares ou escopos visuais completamente diferentes (Chão vs UI)
+        if (a->z != b->z) return a->z < b->z;
+
+        // --- 2. EXCEÇÃO DINÂMICA DA ESCADA CURVA ---
         Character* charA = a->GetComponent<Character>();
-        if (charA && charA->isElevated) zA += 1;
-
         Character* charB = b->GetComponent<Character>();
-        if (charB && charB->isElevated) zB += 1;
-
-        // 1. Desempata primeiro pela profundidade de andares (agora o isElevated tem prioridade total)
-        if (zA != zB) return zA < zB;
         
-        // 2. Se estão no mesmo andar, usa o Y-Sorting normal
-        float a_bottom_y = (a->owner != nullptr) ? (a->owner->box.y + a->owner->box.h) : (a->box.y + a->box.h);
-        float b_bottom_y = (b->owner != nullptr) ? (b->owner->box.y + b->owner->box.h) : (b->box.y + b->box.h);
+        bool a_elevated = (charA && charA->isElevated);
+        bool b_elevated = (charB && charB->isElevated);
+        
+        // Se 'a' é o jogador subindo e 'b' é a escada: 'a' SEMPRE desenha por cima (Retorna falso para 'a' vir depois)
+        if (a_elevated && b->isStairs) return false; 
+        
+        // Se 'b' é o jogador subindo e 'a' é a escada: 'b' SEMPRE desenha por cima
+        if (b_elevated && a->isStairs) return true;
+
+        //============================================
+        
+        // 3. Y-Sort Relativo (Calcula a base real do objeto + o Deslocamento Fantasma)
+        float base_a = (a->owner != nullptr) ? (a->owner->box.y + a->owner->box.h) : (a->box.y + a->box.h);
+        float base_b = (b->owner != nullptr) ? (b->owner->box.y + b->owner->box.h) : (b->box.y + b->box.h);
+        
+        float sortingY_a = base_a + a->depthOffset;
+        float sortingY_b = base_b + b->depthOffset;
         
         float epsilon = 0.01f; 
-        if (std::abs(a_bottom_y - b_bottom_y) > epsilon) return a_bottom_y < b_bottom_y;
+        if (std::abs(sortingY_a - sortingY_b) > epsilon) {
+            return sortingY_a < sortingY_b;
+        }
         
-        // 3. Fallback de sub_z para objetos no exato mesmo pixel
+        // 4. Fallback para objetos no exato mesmo pixel de profundidade
         return a->sub_z < b->sub_z;
     };
     std::sort(objectArray.begin(), objectArray.end(), compareObjects);

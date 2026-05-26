@@ -36,6 +36,8 @@ public:
         return nullptr;                                                 // Se nenhum componente do tipo T for encontrado, retorna nullptr
     }
 
+    float depthOffset = 0.0f;
+    bool isStairs = false;
     Rect box;                                       // Posição e tamanho
     double angleDeg;                                // Para os objetos terem o ângulo em graus
 

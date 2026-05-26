@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.10" tiledversion="1.12.1" orientation="orthogonal" renderorder="right-down" width="60" height="46" tilewidth="64" tileheight="64" infinite="0" nextlayerid="27" nextobjectid="652">
+<map version="1.10" tiledversion="1.12.1" orientation="orthogonal" renderorder="right-down" width="60" height="46" tilewidth="64" tileheight="64" infinite="0" nextlayerid="28" nextobjectid="662">
  <editorsettings>
   <export target="mapa_teste.json" format="json"/>
  </editorsettings>
@@ -10,35 +10,47 @@
  <imagelayer id="2" name="chao_cenario">
   <image source="../img/cenario/chao.png" width="3839" height="2881"/>
  </imagelayer>
- <objectgroup id="3" name="Entidades">
-  <object id="167" type="Caixa" gid="1" x="2498.18" y="1123.67" width="150.091" height="232.182">
-   <properties>
-    <property name="isStatic" type="bool" value="false"/>
-    <property name="z" type="int" value="2"/>
-   </properties>
-  </object>
-  <object id="170" type="Caixa" gid="1" x="1119.39" y="1220.64" width="153.121" height="223.091">
-   <properties>
-    <property name="isStatic" type="bool" value="false"/>
-    <property name="z" type="int" value="2"/>
-   </properties>
-  </object>
-  <object id="171" type="Caixa" gid="1" x="1419.39" y="2014.58" width="153.121" height="223.091">
-   <properties>
-    <property name="isStatic" type="bool" value="true"/>
-    <property name="z" type="int" value="2"/>
-   </properties>
-  </object>
-  <object id="172" type="Caixa" gid="1" x="2567.88" y="1875.18" width="153.121" height="223.091">
-   <properties>
-    <property name="isStatic" type="bool" value="true"/>
-    <property name="z" type="int" value="2"/>
-   </properties>
-  </object>
+ <objectgroup draworder="index" id="3" name="Entidades">
   <object id="173" name="pilares" type="Pilar" gid="2" x="439" y="1406" width="2847" height="1347"/>
   <object id="190" type="Escada_Quebrada" gid="3" x="1188.77" y="886.182" width="2497" height="1553"/>
   <object id="236" type="StairTrigger" x="3088.67" y="882.666" width="481.333" height="59.6667"/>
   <object id="627" gid="4" x="1190.67" y="886.333" width="2497" height="1553"/>
+  <object id="658" type="itemSpawn" gid="8" x="1278" y="1988" width="64" height="112">
+   <properties>
+    <property name="itemName" value="Oil Gallon"/>
+   </properties>
+  </object>
+  <object id="656" type="Caixa" gid="1" x="972" y="1169" width="241" height="314">
+   <properties>
+    <property name="isStatic" type="bool" value="true"/>
+    <property name="z" type="int" value="2"/>
+   </properties>
+  </object>
+  <object id="654" type="Caixa" gid="1" x="1242" y="1825" width="241" height="314">
+   <properties>
+    <property name="isStatic" type="bool" value="true"/>
+    <property name="z" type="int" value="2"/>
+   </properties>
+  </object>
+  <object id="659" type="itemSpawn" gid="9" x="1376.67" y="1658" width="68" height="80">
+   <properties>
+    <property name="heightLevel" type="int" value="1"/>
+    <property name="itemName" value="Apple"/>
+   </properties>
+  </object>
+  <object id="661" type="itemSpawn" gid="7" x="1273.33" y="1663.67" width="64" height="62">
+   <properties>
+    <property name="heightLevel" type="int" value="0"/>
+    <property name="itemName" value="Broken Flashlight"/>
+   </properties>
+  </object>
+  <object id="653" type="PlayerSpawn_Small" gid="6" x="1945" y="2465" width="126" height="274"/>
+  <object id="652" type="PlayerSpawn_Big" gid="5" x="1697" y="2453" width="127" height="353"/>
+  <object id="660" type="itemSpawn" gid="7" x="1860" y="2033.67" width="64" height="62">
+   <properties>
+    <property name="itemName" value="Broken Flashlight"/>
+   </properties>
+  </object>
  </objectgroup>
  <objectgroup id="6" name="Collision">
   <object id="107" x="2672.64" y="222.182">
@@ -207,8 +219,8 @@
    <polygon points="0,0 215.5,62.5 217.5,49 3.25,-8.25"/>
   </object>
   <object id="176" x="1700" y="1152" width="328" height="248"/>
-  <object id="184" x="449" y="1222" width="158" height="85"/>
-  <object id="186" x="3120" y="1224" width="158.667" height="96"/>
+  <object id="184" x="449" y="1222" width="158" height="129"/>
+  <object id="186" x="3120" y="1224" width="158.667" height="122"/>
   <object id="193" x="3298.67" y="563">
    <polygon points="0,0 -342,136 -344,128 -6,-9"/>
   </object>

@@ -32,3 +32,7 @@ ItemPickup* ItemPickup::Spawn(float worldX, float worldY, const ItemDef& def, in
     outList.push_back(pickup);
     return pickup;
 }
+
+void ItemPickup::SetHeightLevel(int level){
+    this->HeightLevel = level;
+}
