@@ -184,8 +184,8 @@
                  "type":"PlayerSpawn_Small",
                  "visible":true,
                  "width":126,
-                 "x":63,
-                 "y":1453
+                 "x":85,
+                 "y":1471
                 }, 
                 {
                  "gid":5,
@@ -204,6 +204,25 @@
                  "gid":7,
                  "height":48,
                  "id":657,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"itemName",
+                         "type":"string",
+                         "value":"Broken Flashlight"
+                        }],
+                 "rotation":0,
+                 "type":"ItemSpawn",
+                 "visible":true,
+                 "width":52,
+                 "x":2258,
+                 "y":1627
+                }, 
+                {
+                 "gid":7,
+                 "height":48,
+                 "id":660,
                  "name":"",
                  "opacity":1,
                  "properties":[
@@ -2748,7 +2767,7 @@
          "y":0
         }],
  "nextlayerid":27,
- "nextobjectid":660,
+ "nextobjectid":661,
  "orientation":"orthogonal",
  "renderorder":"right-down",
  "tiledversion":"1.12.1",

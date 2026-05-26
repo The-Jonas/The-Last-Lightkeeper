@@ -26,6 +26,7 @@ class GameObject;
 class TileMap;
 
 class StageState : public State {
+friend class SpawnFactory;
 public:
     StageState();                                                       // Construtor
     ~StageState();                                                      // Destrutor

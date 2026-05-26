@@ -1,3 +1,4 @@
+#include "world/SpawnFactory.h"
 #include "states/stage/StageState.h"
 #include "states/stage/FirstLoadData.h"
 #include "states/stage/InternalHelpers.h"
@@ -21,10 +22,6 @@
 #include "gameplay/Item.h"
 #include "gameplay/ItemPickup.h"
 #include "gameplay/HotbarComponent.h"
-#include "gameplay/Box.h"
-#include "ui/FadeEffect.h"
-#include "gameplay/Repairable.h"
-#include "gameplay/StairTrigger.h"
 #include "core/Resources.h"
 #include <iostream>
 #include <fstream>
@@ -151,107 +148,8 @@ void StageState::LoadAssets() {
     // ==========================================
     for (const auto& spawn : level.entitySpawns) {
         
-        if (spawn.type == "Caixa") {
-            GameObject* boxObj = new GameObject();
-            boxObj->z = spawn.z; 
-            // Instancia a classe Box passando a flag isStatic lida do Tiled!
-            // o SpriteRenderer carrega a imagem e ajusta a largura/altura do boxObj.
-            boxObj->AddComponent(new Box(*boxObj, spawn.isStatic));
-            // Subtrai metade da largura e metade da altura.
-            // Agora o ponto do Tiled fica exatamente no centro da caixa!
-            boxObj->box.x = spawn.x;
-            boxObj->box.y = spawn.y - (boxObj->box.h);
-            AddObject(boxObj);
-        }
-        // Exemplo de objeto que só faz parte do cenário e por isso não tem classe própria
-        else if (spawn.type == "Pilar") {
-            GameObject* pilarObj = new GameObject();
-            pilarObj->z = spawn.z;
-
-            // 1. Adiciona a arte do pilar
-            SpriteRenderer* sprite = new SpriteRenderer(*pilarObj, "Recursos/img/cenario/pilares.png");
-            pilarObj->AddComponent(sprite);
-
-            // 2. Adiciona o Efeito Transparente
-            pilarObj->AddComponent(new FadeEffect(*pilarObj));
-
-            // A colisão foi feita diretamente no Tiled por ser algo mais complexo (3 pernas)
-
-            // 3. Posicionamento do Tiled
-            pilarObj->box.x = spawn.x;
-            pilarObj->box.y = spawn.y - pilarObj->box.h;
-
-            AddObject(pilarObj);
-        }
-        else if (spawn.type == "Escada_Quebrada") {
-            GameObject* ladderObj = new GameObject();
-            ladderObj->z = spawn.z;
-            ladderObj->AddComponent(new SpriteRenderer(*ladderObj, "Recursos/img/cenario/escada_quebrada.png"));
-            
-            ladderObj->AddComponent(new FadeEffect(*ladderObj, true));
-
-            ladderObj->AddComponent(new Repairable(*ladderObj,
-            "Recursos/img/cenario/escada_inteira.png",
-            "Tabua de Madeira",
-            "Recursos/audio/Hit0.wav",
-            120.0f,
-            Vec2(1780, 1050)
-            ));
-
-            ladderObj->box.x = spawn.x;
-            ladderObj->box.y = spawn.y - ladderObj->box.h;
-
-            AddObject(ladderObj);
-        }
-        else if (spawn.type == "StairTrigger") {
-            GameObject* triggerObj = new GameObject();
-            
-            // Como é um objeto invisível desenhado no Tiled, pegamos as medidas dele
-            triggerObj->box.x = spawn.x;
-            triggerObj->box.y = spawn.y;
-            
-            triggerObj->box.w = spawn.w; 
-            triggerObj->box.h = spawn.h;
-
-            triggerObj->AddComponent(new StairTrigger(*triggerObj));
-            
-            AddObject(triggerObj);
-        }
-        else if (spawn.type == "ItemSpawn") {
-            // A classe chama ItemSpawn
-            // Porém precisa também da propriedade string "itemName" = "Oil Gallon" (ou qualquer outro item do jogo)
-            const ItemDef* foundDef = nullptr;
-            for (const auto& def : cfg.pickupCycle) {
-                if (def.name == spawn.customString) {
-                    foundDef = &def;
-                    break;
-                }   
-            }
-
-            // Também aceita a lanterna inicial pelo nome
-            if (!foundDef && cfg.startingFlashlight.name == spawn.customString) {
-                foundDef = &cfg.startingFlashlight;
-            }
-
-            if (foundDef) {
-                int spawnDurability = foundDef->maxDurability;
-                if (foundDef->HasProperty(ItemProperty::LIGHT_SOURCE)) {
-                    spawnDurability = 1 + (rand() % 100);
-                }
-                const float itemSize = 48.0f;
-                Vec2 tl(spawn.x - itemSize * 0.5f, spawn.y - itemSize);
-                tl = ClampPickupTopLeft(tl, itemSize, itemSize);
-                ItemPickup* pickup = ItemPickup::Spawn(tl.x, tl.y, *foundDef, spawnDurability, itemPickups);
-                if (pickup) {
-                    AddObject(&pickup->GetAssociated());
-                } 
-            }
-            else {
-                std::cerr << "[ItemSpawn] Item nao encontrado no pickupCycle: '" 
-                << spawn.customString << "'. Verifique a propriedade itemName no Tiled." << std::endl;
-                }
-        }
-        else if (spawn.type == "PlayerSpawn_Big") {
+        // 1. Spawns de jogador ficam aqui, pois alteram as variáveis locais do Load!
+        if (spawn.type == "PlayerSpawn_Big") {
             bigSpawnX = spawn.x;
             bigSpawnY = spawn.y - bigObject->box.h;
             bigFoundInTiled = true;
@@ -260,6 +158,10 @@ void StageState::LoadAssets() {
             smallSpawnX = spawn.x;
             smallSpawnY = spawn.y - smallObject->box.h;
             smallFoundInTiled = true;
+        }
+        // 2. Todo o resto (Inimigos, Caixas, Escadas, Itens) vai para a Factory
+        else {
+            SpawnFactory::SpawnEntity(spawn, *this, cfg); 
         }
     }
 
