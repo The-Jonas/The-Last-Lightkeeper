@@ -280,6 +280,10 @@ void HotbarComponent::Update(float dt) {
 
     RecalcLayout();
 
+    if (input.KeyPress(SDLK_q)) {
+        inventory.isLightToggledOn = !inventory.isLightToggledOn;
+    }
+
     if (input.KeyPress(SDLK_TAB)) {
         inventoryOpen = !inventoryOpen;
     }
@@ -446,6 +450,57 @@ void HotbarComponent::Update(float dt) {
 }
 
 void HotbarComponent::HandleDragRelease(int targetWheelIndex) {
+
+    // ============================================================
+    // SISTEMA DE REABASTECIMENTO (ARRASTAR COMBUSTÍVEL PARA LUZ)
+    // ============================================================
+
+    bool isTargetingSlot = (targetWheelIndex >= 0 && targetWheelIndex < HotbarComponent::kWheelRingSlots);
+    bool isTargetingUsing = (targetWheelIndex == kWheelCenterIndex);
+
+    if (isTargetingSlot || isTargetingUsing) {
+        // Pegamos os ponteiros mutáveis para podermos alterar a durabilidade
+        ItemInstance* draggedItem = dragFromUsing ? inventory.GetUsingMutable() : inventory.GetSlotMutable(dragSourceSlot);
+        ItemInstance* targetItem = isTargetingUsing ? inventory.GetUsingMutable() : inventory.GetSlotMutable(targetWheelIndex);
+        
+        if (draggedItem && targetItem && draggedItem != targetItem) {
+            bool draggedIsFuel = draggedItem->def.HasProperty(ItemProperty::FUEL);
+            bool targetIsLight = targetItem->def.HasProperty(ItemProperty::LIGHT_SOURCE);
+            
+            if (draggedIsFuel && targetIsLight) {
+                // Descobre quanto de combustível esse galão dá (ex: 50.0)
+                float fuelValue = 50.0f; 
+                for (const auto& p : draggedItem->def.properties) {
+                    if (p.first == ItemProperty::FUEL) fuelValue = p.second;
+                }
+                
+                // Reabastece a luz alvo e limita para não passar da carga máxima (100)
+                targetItem->durability += static_cast<int>(fuelValue);
+                if (targetItem->durability > targetItem->def.maxDurability) {
+                    targetItem->durability = targetItem->def.maxDurability;
+                }
+                
+                // Destroi o galão de combustível do inventário
+                if (dragFromUsing) inventory.ClearUsing();
+                else inventory.RemoveItem(dragSourceSlot);
+                
+                PlayRandomPickupSound(); // No futuro por um som de glub glub
+                
+                // Limpa o estado do cursor e sai (para não rodar a lógica de trocar os itens de lugar)
+                isDragging = false;
+                dragSourceSlot = -1;
+                dragFromUsing = false;
+                if (dragSprite) dragSprite->Open("");
+                return; 
+            }
+        }
+    }
+
+
+    // ============================================================
+    // SISTEMA NORMAL DE TROCA E DROP 
+    // ============================================================
+
     if (targetWheelIndex == kWheelCenterIndex) {
         if (!dragFromUsing) {
             inventory.SwapUsingAndSlot(dragSourceSlot);

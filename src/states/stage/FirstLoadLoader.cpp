@@ -61,7 +61,7 @@ StageFirstLoadData EmbeddedDefaults() {
                              true,
                              2,
                              {{ItemProperty::LIGHT_SOURCE, 1.0f}}};
-    ItemDef oil{"Oil Gallon", "Recursos/img/items/oil_gallon.png", 100, false, 3, {}};
+    ItemDef oil{"Oil Gallon", "Recursos/img/items/oil_gallon.png", 1, false, 3, {{ItemProperty::FUEL, 50.0f}}};
     d.pickupCycle = {apple, brokenFlashlight, oil};
 
     d.startingFlashlight =
@@ -89,54 +89,6 @@ bool TryReadJsonFile(const char* path, json& out) {
         return false;
     }
 }
-
-static const char kEmbeddedStageFirstLoadJson[] = R"json({
-  "ostPath": "Recursos/audio/soundtracks/Last Hideout.mp3",
-  "levelPath": "Recursos/map/mapa_1_andar.json",
-  "navWorld": { "w": 4358, "h": 3276 },
-  "navTilePx": 64,
-  "itemPickupCount": 35,
-  "startingFlashlightDurability": 50,
-  "startingFlashlight": {
-    "name": "Flashlight",
-    "spritePath": "Recursos/img/items/Isqueiro.png",
-    "maxDurability": 100,
-    "durabilityDecreases": true,
-    "sortOrder": 0,
-    "properties": [{ "prop": "LIGHT_SOURCE", "value": 1.0 }]
-  },
-  "pickupCycle": [
-    {
-      "name": "Apple",
-      "spritePath": "Recursos/img/items/apple.png",
-      "maxDurability": -1,
-      "durabilityDecreases": false,
-      "sortOrder": 1,
-      "properties": []
-    },
-    {
-      "name": "Broken Flashlight",
-      "spritePath": "Recursos/img/items/Isqueiro.png",
-      "maxDurability": 100,
-      "durabilityDecreases": true,
-      "sortOrder": 2,
-      "properties": [{ "prop": "LIGHT_SOURCE", "value": 1.0 }]
-    },
-    {
-      "name": "Oil Gallon",
-      "spritePath": "Recursos/img/items/oil_gallon.png",
-      "maxDurability": 100,
-      "durabilityDecreases": false,
-      "sortOrder": 3,
-      "properties": []
-    }
-  ],
-  "oceanChunkCandidates": [
-    "Recursos/audio/waves.ogg",
-    "Recursos/audio/waves.wav",
-    "Recursos/audio/waves.mp3"
-  ]
-})json";
 
 StageFirstLoadData ParseFromJsonRoot(const json& j) {
     StageFirstLoadData d = EmbeddedDefaults();
@@ -203,29 +155,27 @@ StageFirstLoadData SanitizeLists(StageFirstLoadData d) {
 StageFirstLoadData LoadStageFirstLoadDataDispatch() {
     json j;
     const char* path = "Recursos/data/stage_first_load.json";
-    if (!TryReadJsonFile(path, j)) {
+
+    // TENTA LER O ARQUIVO EXTERNO
+
+    if (TryReadJsonFile(path, j)) {
         try {
-            j = json::parse(kEmbeddedStageFirstLoadJson);
+            return SanitizeLists(ParseFromJsonRoot(j));
         } catch (const std::exception& ex) {
-            std::cerr << "stage_first_load: fallback embutido invalido (!): " << ex.what() << std::endl;
-            return SanitizeLists(EmbeddedDefaults());
+            std::cerr << "stage_first_load: Erro grave ao interpretar as chaves do JSON externo: " << ex.what() << std::endl;
+            std::cerr << ">> Usando o esqueleto padrão do C++ como salva-vidas." << std::endl;
         }
         return SanitizeLists(ParseFromJsonRoot(j));
+    }
+    else {
+        std::cerr << "stage_first_load: Arquivo '" << path << "' nao encontrado." << std::endl;
+        std::cerr << ">> Usando o esqueleto padrão do C++ como salva-vidas." << std::endl;
     }
 
-    try {
-        return SanitizeLists(ParseFromJsonRoot(j));
-    } catch (const std::exception& ex) {
-        std::cerr << "stage_first_load: erro ao aplicar \"" << path << "\" — usando fallback embutido: " << ex.what()
-                  << std::endl;
-        try {
-            json fb = json::parse(kEmbeddedStageFirstLoadJson);
-            return SanitizeLists(ParseFromJsonRoot(fb));
-        } catch (const std::exception& ex2) {
-            std::cerr << "stage_first_load: fallback embutido falhou: " << ex2.what() << std::endl;
-            return SanitizeLists(EmbeddedDefaults());
-        }
-    }
+    // SE NÃO ACHOU O ARQUIVO OU DEU ERRO GRAVE, USA OS DEFAULTS
+    return SanitizeLists(EmbeddedDefaults());
+
+    
 }
 
 } // namespace

@@ -106,6 +106,11 @@ bool Inventory::IsUsableLightActive() const {
     if (!usingSlot.has_value()) {
         return false;
     }
+
+    if (!isLightToggledOn) {
+        return false;
+    }
+    
     const ItemInstance& u = usingSlot.value();
     return u.durability > 0 && u.def.HasProperty(ItemProperty::LIGHT_SOURCE);
 }
@@ -123,4 +128,14 @@ void Inventory::TickUsingDurability(float dt) {
         u.durability -= 1;
         usingDrainAccum -= 1.0f;
     }
+}
+
+ItemInstance* Inventory::GetSlotMutable(int slot) {
+    if (slot < 0 || slot >= kSlots || !slots[slot].has_value()) return nullptr;
+    return &slots[slot].value();
+}
+
+ItemInstance* Inventory::GetUsingMutable() {
+    if (!usingSlot.has_value()) return nullptr;
+    return &usingSlot.value();
 }

@@ -117,7 +117,11 @@ void StageState::Update(float dt){
     }    
 
     UpdateArray(dt);                                                                    // Percorre o vetor de GameObjects chamando o Update de cada um
-    inventory.TickUsingDurability(dt);                                                 // slot "usando" degrada sempre, mesmo controlando o irmãozinho
+    
+    if (inventory.IsUsableLightActive()) {                                              // slot "usando" degrada sempre, mesmo controlando o irmãozinho
+        inventory.TickUsingDurability(dt); 
+    }
+    
     ApplyMapBoundsAndWalkability(bigCharacterObject, prevBigPos);
     ApplyMapBoundsAndWalkability(smallCharacterObject, prevSmallPos);
     if (IsPartyReady()) {

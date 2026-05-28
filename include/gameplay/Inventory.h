@@ -33,6 +33,11 @@ public:
     bool IsUsableLightActive() const;
     void TickUsingDurability(float dt);
 
+    bool isLightToggledOn = false;
+    
+    ItemInstance* GetSlotMutable(int slot);
+    ItemInstance* GetUsingMutable();
+
 private:
     std::optional<ItemInstance> slots[kSlots];
     std::optional<ItemInstance> usingSlot;

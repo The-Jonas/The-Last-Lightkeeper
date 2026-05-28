@@ -97,7 +97,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
             if (pickup) {
             GameObject& itemObj = pickup->GetAssociated();
 
-            // A MECÂNICA (Passamos o 0, 1 ou 2 para ditar qual animação rodar depois) 
+            // A MECÂNICA (Passamos o 0, 1 ou 2 para ditar qual o comportamento da altura do item) 
             int itemHeightLevel = spawn.customInt;
             pickup->SetHeightLevel(itemHeightLevel);
 
