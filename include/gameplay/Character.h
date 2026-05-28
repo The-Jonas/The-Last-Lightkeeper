@@ -41,6 +41,7 @@ public:
     float GetFootCircleRadius() const;
     void SetSpeedMultiplier(float multiplier);                          // Ajusta multiplicador de velocidade do personagem
     void SetBaseSpeed(float speed);                                     // Ajusta velocidade base de movimento
+    SDL_Rect GetInteractionRect(int targetHeightLevel = 0) const;                                 // Retorna a caixa de iteração projetada na frente do personagem
 
     bool isElevated = false;
 

@@ -286,20 +286,38 @@ void HotbarComponent::Update(float dt) {
     if (input.KeyPress(SDLK_e)) {
         ItemPickup* closest = nullptr;
         float closestDist = 1e30f;
-        const Vec2 footCenter = bigCharacter->GetFootCircleCenter();
-        const float reachR = GetPickupReachRadius();
 
+        // Pega a Mão projetada do personagem
+        Vec2 playerCenter = bigCharacter->GetCenter();
+
+        // Procura os Itens
         for (ItemPickup* p : itemPickups) {
             if (!p || p->GetAssociated().IsDead()) {
                 continue;
             }
-            Vec2 pCenter = p->GetCenter();
-            float d = footCenter.Distance(pCenter);
-            if (d <= reachR && d < closestDist) {
-                closestDist = d;
-                closest = p;
+
+            // Descobre a altura DESTE item especifico
+            int itemHeight = p->GetHeightLevel();
+
+            // Pede pro personagem gerar a mão EXATAMENTE pra essa altura
+            SDL_Rect reachBox = Character::player->GetInteractionRect(itemHeight);
+
+            GameObject& itemObj = p->GetAssociated();
+            SDL_Rect itemRect = {
+                static_cast<int>(itemObj.box.x),
+                static_cast<int>(itemObj.box.y),
+                static_cast<int>(itemObj.box.w),
+                static_cast<int>(itemObj.box.h)
+            };
+            
+            if (SDL_HasIntersection(&reachBox, &itemRect)) {
+                float d = playerCenter.Distance(p->GetCenter());
+                if (d < closestDist) {
+                    closestDist = d;
+                    closest = p;
+                }
             }
-        }
+        }   
 
         if (closest) {
             if (!inventory.IsFull()) {
@@ -478,15 +496,26 @@ void HotbarComponent::Render() {
     }
 
     auto font = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 14);
-    const Vec2 footCenter = bigCharacter->GetFootCircleCenter();
-    const float promptR = GetPickupReachRadius();
+
     for (ItemPickup* p : itemPickups) {
-        if (!p || p->GetAssociated().IsDead()) {
-            continue;
-        }
-        float d = footCenter.Distance(p->GetCenter());
-        if (d <= promptR) {
+        if (!p || p->GetAssociated().IsDead()) continue;
+                
+        int itemHeight = p->GetHeightLevel();
+
+        // Pede pro personagem gerar a mão EXATAMENTE pra essa altura
+        SDL_Rect reachBox = Character::player->GetInteractionRect(itemHeight);
+
+        GameObject& itemObj = p->GetAssociated();
+        SDL_Rect itemRect = {
+            static_cast<int>(itemObj.box.x),
+            static_cast<int>(itemObj.box.y),
+            static_cast<int>(itemObj.box.w),
+            static_cast<int>(itemObj.box.h)
+        };
+        
+        if (SDL_HasIntersection(&reachBox, &itemRect)) {
             Vec2 worldPos = p->GetCenter();
+        
             float sx = (worldPos.x - Camera::pos.x) * Camera::GetZoom();
             float sy = (worldPos.y - Camera::pos.y) * Camera::GetZoom();
             const char* label = "Press E";
@@ -553,4 +582,31 @@ void HotbarComponent::Render() {
             }
         }
     }
+
+#ifdef DEBUG
+    // Desenha as Hitboxes de Interação (Níveis 0, 1 e 2) para teste
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+    for (int h = 0; h <= 2; h++) {
+        SDL_Rect rBox = bigCharacter->GetInteractionRect(h);
+        
+        SDL_FRect screenReachBox = {
+            (rBox.x - Camera::pos.x) * Camera::GetZoom(),
+            (rBox.y - Camera::pos.y) * Camera::GetZoom(),
+            rBox.w * Camera::GetZoom(),
+            rBox.h * Camera::GetZoom()
+        };
+
+        // Vamos colorir cada andar de uma cor para ficar fácil de entender:
+        if (h == 0) {
+            SDL_SetRenderDrawColor(renderer, 0, 255, 0, 150); // Verde (Chão)
+        } else if (h == 1) {
+            SDL_SetRenderDrawColor(renderer, 255, 255, 0, 150); // Amarelo (Mesa/Peito)
+        } else {
+            SDL_SetRenderDrawColor(renderer, 255, 0, 0, 150); // Vermelho (Armário/Cabeça)
+        }
+
+        SDL_RenderDrawRectF(renderer, &screenReachBox);
+    }
+#endif
 }

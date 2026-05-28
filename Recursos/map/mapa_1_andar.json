@@ -86,6 +86,16 @@
                  "opacity":1,
                  "properties":[
                         {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":0
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":0
+                        }, 
+                        {
                          "name":"itemName",
                          "type":"string",
                          "value":"Oil Gallon"
@@ -155,7 +165,7 @@
                         {
                          "name":"depthOffset",
                          "type":"float",
-                         "value":220
+                         "value":180
                         }, 
                         {
                          "name":"heightLevel",
@@ -184,7 +194,7 @@
                         {
                          "name":"depthOffset",
                          "type":"float",
-                         "value":220
+                         "value":180
                         }, 
                         {
                          "name":"heightLevel",
@@ -244,7 +254,7 @@
                         {
                          "name":"heightLevel",
                          "type":"int",
-                         "value":1
+                         "value":0
                         }, 
                         {
                          "name":"itemName",
@@ -273,7 +283,7 @@
                         {
                          "name":"heightLevel",
                          "type":"int",
-                         "value":1
+                         "value":0
                         }, 
                         {
                          "name":"itemName",
@@ -302,7 +312,7 @@
                         {
                          "name":"heightLevel",
                          "type":"int",
-                         "value":1
+                         "value":0
                         }, 
                         {
                          "name":"itemName",
@@ -331,7 +341,7 @@
                         {
                          "name":"heightLevel",
                          "type":"int",
-                         "value":1
+                         "value":0
                         }, 
                         {
                          "name":"itemName",
@@ -360,7 +370,7 @@
                         {
                          "name":"heightLevel",
                          "type":"int",
-                         "value":1
+                         "value":0
                         }, 
                         {
                          "name":"itemName",

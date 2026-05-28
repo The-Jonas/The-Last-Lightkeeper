@@ -30,9 +30,13 @@ Box::~Box() {
 }
 
 void Box::Start() {
-    // Adiciona o colisor da caixa
-    // Assim como o player, nós esprememos a hitbox para ficar só na base dela (efeito 3D top-down)
-    associated.AddComponent(new Collider(associated, Vec2(0.85f, 0.7f), Vec2(0, 40)));
+    // Escala da base de madeira (ex: 85% da largura da imagem, 15% da altura)
+    Vec2 scale(0.85f, 0.50f);
+
+    // Cálculo automático para colar a hitbox no chão da caixa
+    float offsetY = (associated.box.h / 2.0f) * (1.0f - scale.y);
+
+    associated.AddComponent(new Collider(associated, scale, Vec2(0, offsetY)));
 }
 
 void Box::Update(float dt) {

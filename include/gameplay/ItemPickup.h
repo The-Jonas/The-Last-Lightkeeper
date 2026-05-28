@@ -21,6 +21,7 @@ public:
                       std::vector<ItemPickup*>& outList);
 
     void SetHeightLevel(int heightlevel);
+    int GetHeightLevel() const {return HeightLevel;}
 
 private:
     ItemDef def;

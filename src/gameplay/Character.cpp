@@ -141,7 +141,12 @@ Character::~Character() {
 }
 
 void Character::Start() {
-    associated.AddComponent(new Collider(associated, Vec2(0.45f, 0.1f), Vec2(0,80)));                      // Cria o colisor aqui para evitar delay de posição
+    // Define o tamanho proporcional da HitBox (Na sola do pé)
+    Vec2 scale(0.45f, 0.12f);
+    // Calculo automatico do deslocamento Y
+    float offsetY = (associated.box.h / 2.0f) * (1.0f - scale.y);
+    // Adiciona o colisor
+    associated.AddComponent(new Collider(associated, scale, Vec2(0,offsetY)));          // Cria o colisor aqui para evitar delay de posição
 }
 
 void Character::Update(float dt) {
@@ -293,6 +298,52 @@ void Character::Update(float dt) {
 
 
 void Character::NotifyCollision(GameObject& other) {
+}
+
+SDL_Rect Character::GetInteractionRect(int targetHeightLevel) const {
+    int reachDistance = 50;                                                 // o quão longe o braço chega
+    int boxSize = 60;                                                       // o tamanho da "mão" que vai checar a colisão
+    
+    int centerX = associated.box.x + (associated.box.w / 2);
+    int footY = associated.box.y + associated.box.h;
+
+    // FAZENDO A MÁGICA DA ALTURA (EIXO Z FALSO)
+    int zOffset = 0;
+    if (targetHeightLevel == 1) {
+        zOffset = 140;
+    }
+    else if (targetHeightLevel == 2) {
+        zOffset = 260;
+    }
+
+    // Centraliza a caixa de interação no pé inicialmente
+    SDL_Rect interactBox = { 
+        centerX - (boxSize / 2), 
+        (footY - (boxSize / 2)) - zOffset, 
+        boxSize, 
+        boxSize 
+    };
+
+    // Desloca a caixa para a frente baseado na direção já existente!
+    switch (currentDirection) {
+        case Direction::UP:
+            interactBox.y -= reachDistance;
+            interactBox.h += 20;
+            break;
+        case Direction::DOWN:
+            interactBox.y += reachDistance;
+            break;
+        case Direction::LEFT:
+            interactBox.x -= reachDistance;
+            interactBox.y -= 20;
+            break;
+        case Direction::RIGHT:
+            interactBox.x += reachDistance;
+            interactBox.y -= 20;
+            break;
+    }
+
+    return interactBox;
 }
 
 
