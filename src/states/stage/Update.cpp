@@ -132,6 +132,37 @@ void StageState::Update(float dt){
         RefreshCameraTargets();
     }
     Camera::Update(dt);                                                                 // Atualizando a camera cada iteração do gameloop
+
+    // ============================================================
+    // EFEITO DE NÁUSEA / VERTIGEM DA SANIDADE LOW
+    // (Aplicado por cima da posição final calculada pela câmera)
+    // ============================================================
+    if (Character::player) {
+        float lowestSanity = 100.0f;
+        
+        // Descobre quem está com mais medo (Irmãozão ou Irmãozinho)
+        if (Character::player) lowestSanity = std::min(lowestSanity, Character::player->sanity);
+        if (Character::littleBrother) lowestSanity = std::min(lowestSanity, Character::littleBrother->sanity);
+        
+        if (lowestSanity < 60.0f) {
+            float intensity = 1.0f - (lowestSanity / 60.0f); 
+
+            // Multiplicador de tempo bem menor para um balanço LENTO e arrastado
+            float time = SDL_GetTicks() * 0.0012f; 
+
+            // Reduzimos a força para no máximo 8 pixels (sutil, mas dá vertigem)
+            float maxSway = 6.0f; 
+
+            // Mistura ondas senoidais e cosseno em velocidades diferentes para criar um padrão de "oito" orgânico
+            float swayX = std::sin(time) * std::cos(time * 0.7f);
+            float swayY = std::cos(time * 0.8f) * std::sin(time * 1.1f);
+
+            Camera::pos.x += swayX * maxSway * intensity;
+            Camera::pos.y += swayY * maxSway * intensity;
+        }
+    }
+    // ============================================================
+
     UpdateHudInstructions();
 
     if (lightTweakPanel) {

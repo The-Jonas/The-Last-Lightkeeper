@@ -72,7 +72,7 @@ StageFirstLoadData EmbeddedDefaults() {
                 0,
                 {{ItemProperty::LIGHT_SOURCE, 1.0f}}};
 
-    d.oceanChunkCandidates = {"Recursos/audio/waves.ogg", "Recursos/audio/waves.wav", "Recursos/audio/waves.mp3"};
+    d.oceanChunkCandidates = {"Recursos/audio/waves.mp3"};
     return d;
 }
 

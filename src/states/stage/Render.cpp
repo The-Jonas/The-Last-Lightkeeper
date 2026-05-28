@@ -110,6 +110,8 @@ void StageState::Render(){
         cursorPreviewLightEnabled && previewLightLockedToPlayer && previewLightAnchorPlayer == smallCharacterObject;
     float bigMaxContact = 0.0f;
     float smallMaxContact = 0.0f;
+    float bigMaxTouch = 0.0f;
+    float smallMaxTouch = 0.0f;
 
     if (lightsEnabled && shadowsEnabled) {
         Uint64 shadowBlockStart = 0;
@@ -157,6 +159,10 @@ void StageState::Render(){
             const float smallContact = (dSmallPx <= smallContactRadiusPx) ? Clamp01(1.0f - dSmallPx / smallContactRadiusPx) : 0.0f;
             bigMaxContact = std::max(bigMaxContact, bigContact);
             smallMaxContact = std::max(smallMaxContact, smallContact);
+
+            // Captura o nível real de luz batendo no sprite
+            bigMaxTouch = std::max(bigMaxTouch, touchBig);
+            smallMaxTouch = std::max(smallMaxTouch, touchSmall);
 
             if (touchBig > 0.0f) {
                 const float shadowLengthPx = params.shadowMaxLengthPx * distBig;
@@ -348,6 +354,13 @@ void StageState::Render(){
                     sl.params.shadowSoftLayers, sl.params.shadowSoftness);
             }
         }
+
+        bigLightContact = bigMaxContact;
+        smallLightContact = smallMaxContact;
+
+        // Salva a iluminação real para o sistema de Sanidade ler!
+        this->bigIlluminationLevel = bigMaxTouch;
+        this->smallIlluminationLevel = smallMaxTouch;
     }
 
     if (lightsEnabled) {
@@ -394,6 +407,56 @@ void StageState::Render(){
             go->Render();
         }
     }
+
+    // ============================================================
+    // HUD MINIMALISTA DE SANIDADE (Barras Flutuantes)
+    // ============================================================
+
+    // Criamos uma função rápida (Lambda) para desenhar a barra de qualquer personagem
+    auto DrawSanityBar = [&](Character* c) {
+        if (!c || c->sanity >= Character::kMaxSanity) return; // Se tá cheio, fica invisível
+
+        float percent = c->sanity / Character::kMaxSanity;
+        
+        // Tamanho da barra flutuante (menorzinha para caber acima da cabeça)
+        int barW = 60;
+        int barH = 6;
+
+        // Calcula a posição na tela (Box do personagem - Câmera)
+        int screenX = static_cast<int>(c->GetAssociated().box.x - Camera::pos.x);
+        int screenY = static_cast<int>(c->GetAssociated().box.y - Camera::pos.y);
+
+        // Centraliza acima da cabeça (ajuste o -20 se ficar muito colado)
+        int posX = screenX + (static_cast<int>(c->GetAssociated().box.w) / 2) - (barW / 2);
+        int posY = screenY - 20;
+
+        SDL_Rect bgRect = { posX, posY, barW, barH };
+        SDL_Rect fgRect = { posX, posY, static_cast<int>(barW * percent), barH };
+
+        // 1. Fundo Escuro
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer, 20, 20, 20, 180);
+        SDL_RenderFillRect(renderer, &bgRect);
+
+        // 2. Cor da barra baseada no desespero
+        if (percent > 0.6f) {
+            SDL_SetRenderDrawColor(renderer, 220, 220, 230, 220); // Estável (Branco)
+        } else if (percent > 0.25f) {
+            SDL_SetRenderDrawColor(renderer, 190, 170, 60, 220);  // Tensão (Amarelo)
+        } else {
+            SDL_SetRenderDrawColor(renderer, 150, 40, 40, 220);   // Pânico (Vermelho)
+        }
+        
+        SDL_RenderFillRect(renderer, &fgRect);
+        
+        // Limpa as configurações de cor da engine
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    };
+
+    // Aplica a regra para os dois irmãos independentemente
+    DrawSanityBar(Character::player);
+    DrawSanityBar(Character::littleBrother);
 }
 
 void StageState::RenderGameplayCollisionDebug(SDL_Renderer* renderer) const {

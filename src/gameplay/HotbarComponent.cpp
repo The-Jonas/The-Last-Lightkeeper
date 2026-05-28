@@ -280,7 +280,7 @@ void HotbarComponent::Update(float dt) {
 
     RecalcLayout();
 
-    if (input.KeyPress(SDLK_q)) {
+    if (input.KeyPress(SDLK_f)) {
         inventory.isLightToggledOn = !inventory.isLightToggledOn;
     }
 

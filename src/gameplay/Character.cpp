@@ -10,6 +10,7 @@
 #include "gameplay/StairTrigger.h"
 #include <cmath>
 #include <string>
+#include <iostream>
 
 namespace {
 constexpr int kFootCollisionSkinPx = 1;
@@ -314,6 +315,44 @@ void Character::Update(float dt) {
             }
 
             sprite->SetFrameCount(1, 1);
+        }
+    }
+
+    // ============================================================
+    // SISTEMA DE SANIDADE (BASEADO NO CONTATO REAL COM A LUZ)
+    // ============================================================
+
+    StageState* stage = Game::TryGetStageState();
+    float myLightContact = 1.0f;
+
+    if (stage) {
+        // Puxa a variável correta dependendo de qual irmão é
+        if (irmaozaoIdleStrips) {
+            myLightContact = stage->bigIlluminationLevel;
+        } else {
+            myLightContact = stage->smallIlluminationLevel;
+        }
+    }
+
+    const float darknessThreshold = 0.1f;   // Abaixo de 10% de luz é escuridão
+    const float sanityDrainRate = 8.0f;     // Perde 8 pontos de sanidade por segundo
+    const float sanityRegenRate = 12.0f;    // Recupera 12 pontos de sanidade por segundo
+
+    if (myLightContact < darknessThreshold) {
+        // Tá escuro, drena a sanidade...
+        sanity -= sanityDrainRate * dt;
+
+        if (sanity <= 0.0f) {
+            sanity = 0.0f;
+            std::cout << "[GAME OVER] O personagem foi engolido pela escuridao!" << std::endl;
+            std::cout << "[GAME OVER] Sanidade atual: "<< sanity << std::endl;
+        }
+    }
+    else {
+        // Tá claro, recupera...
+        sanity += sanityRegenRate * dt;
+        if (sanity > kMaxSanity) {
+            sanity = kMaxSanity;            // Trava no 100, nunca ultrapassa
         }
     }
 }

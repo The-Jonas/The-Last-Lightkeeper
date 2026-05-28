@@ -43,6 +43,14 @@ public:
     GameObject* GetBigCharacter() { return bigCharacterObject; }
     GameObject* GetSmallCharacter() { return smallCharacterObject; }
 
+    // Verifica se a luz está no range dos pés dos personagens
+    float bigLightContact = 0.0f;
+    float smallLightContact = 0.0f;
+    
+    // Verifica a intensidade da luz nos personagens
+    float bigIlluminationLevel = 0.0f;
+    float smallIlluminationLevel = 0.0f;
+
 private:
 
     struct LightInstance {

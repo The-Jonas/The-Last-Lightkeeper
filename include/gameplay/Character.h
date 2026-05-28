@@ -48,6 +48,11 @@ public:
     SDL_Rect GetInteractionRect(int targetHeightLevel = 0) const;       // Retorna a caixa de iteração projetada na frente do personagem
     bool isElevated = false;                                            // Flag pra saber se o personagem está acima de algo Exemplo: Andando sob a escada.
 
+
+    // Sistema de Sanidade (medo da escuridão)
+    float sanity = 100.0f;          
+    constexpr static float kMaxSanity = 100.0f;
+
     // Círculo dos pés (mesmo de colisão com chão / desenho DEBUG): raio = largura * 0.25, centro nos pés.
     Vec2 GetFootCircleCenter() const;
     float GetFootCircleRadius() const;

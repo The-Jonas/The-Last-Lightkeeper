@@ -197,7 +197,7 @@ void StageState::LoadAssets() {
     // Linha 2 de instruções
     hudLine2 = new GameObject();
     hudLine2->z = 100;
-    hudLine2->AddComponent(new Text(*hudLine2, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED, "F: alternar entre junto e independente", hudColor));
+    hudLine2->AddComponent(new Text(*hudLine2, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED, " F: Ligar/Desligar luz | Q: alternar entre junto e independente", hudColor));
     AddObject(hudLine2);
 
     hudLine3 = new GameObject();
