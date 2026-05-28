@@ -56,7 +56,7 @@ StageFirstLoadData EmbeddedDefaults() {
 
     ItemDef apple{"Apple", "Recursos/img/items/apple.png", -1, false, 1, {}};
     ItemDef brokenFlashlight{"Broken Flashlight",
-                             "Recursos/img/items/flashlight_broken.png",
+                             "Recursos/img/items/Isqueiro.png",
                              100,
                              true,
                              2,
@@ -66,7 +66,7 @@ StageFirstLoadData EmbeddedDefaults() {
 
     d.startingFlashlight =
         ItemDef{"Flashlight",
-                "Recursos/img/items/flashlight_broken.png",
+                "Recursos/img/items/Isqueiro.png",
                 100,
                 true,
                 0,
@@ -99,7 +99,7 @@ static const char kEmbeddedStageFirstLoadJson[] = R"json({
   "startingFlashlightDurability": 50,
   "startingFlashlight": {
     "name": "Flashlight",
-    "spritePath": "Recursos/img/items/flashlight_broken.png",
+    "spritePath": "Recursos/img/items/Isqueiro.png",
     "maxDurability": 100,
     "durabilityDecreases": true,
     "sortOrder": 0,
@@ -116,7 +116,7 @@ static const char kEmbeddedStageFirstLoadJson[] = R"json({
     },
     {
       "name": "Broken Flashlight",
-      "spritePath": "Recursos/img/items/flashlight_broken.png",
+      "spritePath": "Recursos/img/items/Isqueiro.png",
       "maxDurability": 100,
       "durabilityDecreases": true,
       "sortOrder": 2,

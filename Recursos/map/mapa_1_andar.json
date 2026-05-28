@@ -210,8 +210,37 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":52,
-                 "x":1286.66666666667,
-                 "y":1663.66666666667
+                 "x":1280,
+                 "y":1664
+                }, 
+                {
+                 "gid":7,
+                 "height":48.6666666666667,
+                 "id":666,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":180
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":2
+                        }, 
+                        {
+                         "name":"itemName",
+                         "type":"string",
+                         "value":"Broken Flashlight"
+                        }],
+                 "rotation":0,
+                 "type":"ItemSpawn",
+                 "visible":true,
+                 "width":52,
+                 "x":1110,
+                 "y":1008
                 }, 
                 {
                  "gid":6,
@@ -2875,7 +2904,7 @@
          "y":0
         }],
  "nextlayerid":28,
- "nextobjectid":666,
+ "nextobjectid":667,
  "orientation":"orthogonal",
  "renderorder":"right-down",
  "tiledversion":"1.12.1",

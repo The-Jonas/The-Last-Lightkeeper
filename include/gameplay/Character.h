@@ -44,6 +44,7 @@ public:
 
     void SetSpeedMultiplier(float multiplier);                          // Ajusta multiplicador de velocidade do personagem
     void SetBaseSpeed(float speed);                                     // Ajusta velocidade base de movimento
+    void PositionForCoop(Character* leader);                            // Pra pegar a posição de onde os irmãos estão olhando
     SDL_Rect GetInteractionRect(int targetHeightLevel = 0) const;       // Retorna a caixa de iteração projetada na frente do personagem
     bool isElevated = false;                                            // Flag pra saber se o personagem está acima de algo Exemplo: Andando sob a escada.
 
@@ -51,6 +52,7 @@ public:
     Vec2 GetFootCircleCenter() const;
     float GetFootCircleRadius() const;
 
+    GameObject& GetAssociated() { return associated; }
     Vec2 GetSpeed() const { return speed; }
     Vec2 GetCenter();                                                   // Para pegar o centro do personagem
 

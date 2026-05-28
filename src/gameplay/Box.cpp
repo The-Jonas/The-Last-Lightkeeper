@@ -14,10 +14,8 @@ static std::vector<Box*> globalBoxList;
 
 Box::Box(GameObject& associated, bool isStatic) : Component(associated), isStatic(isStatic) {
     // Carrega a arte da caixa
-    SpriteRenderer* sprite = new SpriteRenderer(associated, "Recursos/img/objetos/teste_caixa.png", 1, 1);
+    SpriteRenderer* sprite = new SpriteRenderer(associated, "Recursos/img/objetos/Caixa.png", 1, 1);
 
-    //Ajuste de escala da caixa
-    //sprite->SetScale(0.5f, 0.5f);
     associated.AddComponent(sprite);
 
     // Entra na lista ao nascer
@@ -31,7 +29,7 @@ Box::~Box() {
 
 void Box::Start() {
     // Escala da base de madeira (ex: 85% da largura da imagem, 15% da altura)
-    Vec2 scale(0.85f, 0.50f);
+    Vec2 scale(0.85f, 0.40f);
 
     // Cálculo automático para colar a hitbox no chão da caixa
     float offsetY = (associated.box.h / 2.0f) * (1.0f - scale.y);

@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <functional>
 #include <vector>
+#include <iostream>
 
 namespace {
 
@@ -320,19 +321,82 @@ void HotbarComponent::Update(float dt) {
         }   
 
         if (closest) {
-            if (!inventory.IsFull()) {
-                const ItemDef& def = *closest->GetDef();
-                inventory.AddItem(def, closest->GetDurability());
-                for (auto& p : itemPickups) {
-                    if (p == closest) {
-                        p = nullptr;
-                        break;
+            int hLevel = closest->GetHeightLevel();
+
+            // =====================================
+            // NÍVEIS 0 e 1: O Irmãozão pega sozinho
+            // =====================================
+
+            if (hLevel == 0 || hLevel == 1) {
+                std::cout << "PEGANDO SOZINHO: Altura lida foi " << hLevel << std::endl;
+                if (!inventory.IsFull()) {
+                    const ItemDef& def = *closest->GetDef();
+                    inventory.AddItem(def, closest->GetDurability());
+                    for (auto& p : itemPickups) {
+                        if (p == closest) {
+                            p = nullptr;
+                            break;
+                        }
+                    }
+                    closest->Destroy();
+                    PlayRandomPickupSound();
+
+                    // Congela o Irmãozão rapidinho pra animação de pegar (0.2 segundos)
+                    Character::player->currentState = Character::ActionState::INTERACTING;
+                    Character::player->interactTimer = 0.2f;
+                }
+                else {
+                    // Inventário cheio
+                    toastTimer = kToastDuration;
+                }
+            }
+
+            // =====================================
+            // NÍVEL 2: Precisamos do Irmãozinho
+            // =====================================
+
+            else if (hLevel == 2) {
+                if (Character::littleBrother) {
+                    // Checa a distância entre os dois irmãos
+                    float distBrothers = Character::player->GetFootCircleCenter().Distance(Character::littleBrother->GetFootCircleCenter());
+
+                    if (distBrothers <= 170.0f) {
+                        if (!inventory.IsFull()) {
+
+                            // Congela os dois personagens pelo tempo da animação (1.5 segundos)
+                            Character::player->currentState = Character::ActionState::INTERACTING;
+                            Character::player->interactTimer = 1.5f;
+                            
+                            Character::littleBrother->currentState = Character::ActionState::INTERACTING;
+                            Character::littleBrother->interactTimer = 1.5f;
+
+                            // Alinha o irmãozinho na frente do irmãozão (Teleporte leve)
+                            Character::littleBrother->PositionForCoop(Character::player);
+
+                            // Pega o item e bota no inventário do Irmãozão
+                            const ItemDef& def = *closest->GetDef();
+                            inventory.AddItem(def, closest->GetDurability());
+
+                            for (auto& p : itemPickups) {
+                                if (p == closest) {
+                                    p = nullptr;
+                                    break;
+                                }
+                            }
+                            closest->Destroy();
+                            PlayRandomPickupSound();
+                            std::cout << "[CO-OP] Irmaos trabalharam juntos e pegaram o item no alto!" << std::endl;
+                        }
+                        else { 
+                            toastTimer = kToastDuration;
+                        }
+                    }
+                    else {
+                        // FALHA: Irmãozinho muito longe
+                        std::cout << "[FALHA] O irmaozinho esta muito longe para ajudar!" << std::endl;
+                        std::cout << "Distancia entre os irmaos: " << distBrothers << std::endl;
                     }
                 }
-                closest->Destroy();
-                PlayRandomPickupSound();
-            } else {
-                toastTimer = kToastDuration;
             }
         }
     }

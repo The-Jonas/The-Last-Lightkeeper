@@ -95,6 +95,9 @@ Character::Character(GameObject& associated, std::string spritePath, bool useIrm
     if (player == nullptr) {
         player = this;
     }
+    if (littleBrother == this) {
+        littleBrother = nullptr;
+    }
 
     speed = Vec2(0, 0);
     targetSpeed = Vec2(0, 0);
@@ -144,6 +147,9 @@ Character::~Character() {
     if (player == this) {                                                               // Se este era o jogador principal, define o ponteiro estático como nulo.
         player = nullptr;
     }
+    if (littleBrother == this) {
+        littleBrother = nullptr;
+    }
 }
 
 void Character::Start() {
@@ -156,6 +162,20 @@ void Character::Start() {
 }
 
 void Character::Update(float dt) {
+    // ==========================================
+    // SE ESTIVER INTERAGINDO, CONGELA TUDO
+    // ==========================================
+    if (currentState == ActionState::INTERACTING) {
+        speed = Vec2(0, 0); // Para o personagem na hora
+        targetSpeed = Vec2(0, 0);
+        
+        interactTimer -= dt;
+        if (interactTimer <= 0.0f) {
+            currentState = ActionState::NORMAL; // Libera o movimento quando o tempo acaba
+        }
+        return; // Sai do Update prematuramente para não processar movimento!
+    }
+
     //Animator* animator = associated.GetComponent<Animator>();
     bool hasMoveCommand = false;
 
@@ -190,10 +210,6 @@ void Character::Update(float dt) {
     float maxDelta = changeRate * dt;
     speed.x = approach(speed.x, targetSpeed.x, maxDelta);
     speed.y = approach(speed.y, targetSpeed.y, maxDelta);
-
-    //Atualiza a posição do GameObject com base na velocidade e dt
-    // associated.box.x += speed.x * dt;
-    // associated.box.y += speed.y * dt;
 
     // REFATORANDO COM A LÓGICA DE MOVIMENTAÇÃO COM SLIDE COLLISION
 
@@ -350,6 +366,49 @@ SDL_Rect Character::GetInteractionRect(int targetHeightLevel) const {
     }
 
     return interactBox;
+}
+
+void Character::PositionForCoop(Character* leader) {
+    if (!leader) return;
+
+    // Lê a mente do líder: Copia a direção pra olharem pro mesmo lado
+    this->currentDirection = leader-> currentDirection;
+
+    // Atualiza a arte a força
+    SpriteRenderer* sprite = associated.GetComponent<SpriteRenderer>();
+    if (sprite && !irmaozaoIdleStrips) {
+        if (currentDirection == Direction::UP) sprite->Open(baseSpritePath + " trás.png");
+        else if (currentDirection == Direction::DOWN) sprite->Open(baseSpritePath + " frente.png");
+        else if (currentDirection == Direction::LEFT) sprite->Open(baseSpritePath + " esquerda.png");
+        else if (currentDirection == Direction::RIGHT) sprite->Open(baseSpritePath + " direita.png");
+    }
+
+    // POSIÇÃO:
+    float distance = 45.0f; // O quão longe o Irmãozinho fica na frente (ajuste no olho)
+
+    // Alinha os centros no eixo X perfeitamente
+    this->associated.box.x = leader->associated.box.x + (leader->associated.box.w / 2.0f) - (this->associated.box.w / 2.0f);
+
+    // Alinha a base dos pés no eixo Y perfeitamente
+    float leaderFootY = leader->associated.box.y + leader->associated.box.h;
+    float myFootY = this->associated.box.y + this->associated.box.h;
+    this->associated.box.y += (leaderFootY - myFootY);
+
+    // Move para a direção que estão olhando
+    switch (leader->currentDirection) {
+        case Direction::UP:
+            this->associated.box.y -= distance;
+            break;
+        case Direction::DOWN:
+            this->associated.box.y += distance;
+            break;
+        case Direction::LEFT:
+            this->associated.box.x -= distance;
+            break;
+        case Direction::RIGHT:
+            this->associated.box.x += distance;
+            break;
+    }
 }
 
 
