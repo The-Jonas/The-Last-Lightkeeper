@@ -64,10 +64,10 @@ Character::Command::Command(CommandType type, float x, float y): type(type), pos
 
 // Implementação do Character
 Character* Character::player = nullptr;
+Character* Character::littleBrother = nullptr;
 
 Character::Character(GameObject& associated, std::string spritePath, bool useIrmaozaoIdleStrips)
-    : Component(associated),
-      irmaozaoIdleStrips(useIrmaozaoIdleStrips) {
+    : Component(associated), irmaozaoIdleStrips(useIrmaozaoIdleStrips) {
     // Definições das animações (modo clássico: spritesheet)
     constexpr int PLAYER_FRAMES_PER_ROW = 1;
     constexpr int PLAYER_ROWS = 1;
@@ -98,6 +98,12 @@ Character::Character(GameObject& associated, std::string spritePath, bool useIrm
 
     speed = Vec2(0, 0);
     targetSpeed = Vec2(0, 0);
+
+    if (useIrmaozaoIdleStrips) {
+        if (player == nullptr) player = this; 
+    } else {
+        if (littleBrother == nullptr) littleBrother = this; 
+    }
 }
 
 std::string Character::IrmaozaoIdleStripPath(Direction dir, int frameIndex) const {

@@ -32,9 +32,8 @@ void LayoutTitleScreen(GameObject* background, GameObject* title,
     }
 
     const float textW = pressSpace->box.w;
-    const float textH = pressSpace->box.h;
     pressSpace->box.x = Camera::pos.x + (windowW - textW) * 0.5f;
-    pressSpace->box.y = Camera::pos.y + windowH - std::max(120.0f, textH + 56.0f);
+    pressSpace->box.y = Camera::pos.y + 480.0f;
 }
 }
 #include "states/CutsceneState.h"
@@ -48,7 +47,7 @@ TitleState::~TitleState() {
 
 void TitleState::LoadAssets() {
     GameObject* titleGo = new GameObject();
-    SpriteRenderer* titleSprite = new SpriteRenderer(*titleGo, "Recursos/img/main_title.png");
+    SpriteRenderer* titleSprite = new SpriteRenderer(*titleGo, "Recursos/img/Title.png");
     titleGo->AddComponent(titleSprite);
     titleSprite->SetCameraFollower(true);
     titleGo->box.x = Camera::pos.x;
@@ -56,18 +55,18 @@ void TitleState::LoadAssets() {
     AddObject(titleGo);
     titleBackground = titleGo;
 
-    GameObject* nameGO = new GameObject();
-    nameGO->z = 10;
-    SDL_Color titleColor = {255, 255, 255, 0};
-    Text* nameText = new Text(*nameGO, "Recursos/font/alcotton.ttf", 48, Text::BLENDED, "The Last LightKeeper", titleColor);
-    nameGO->AddComponent(nameText);
-    AddObject(nameGO);
-    titleText = nameGO;
+    //GameObject* nameGO = new GameObject();
+    //nameGO->z = 10;
+    //SDL_Color titleColor = {255, 255, 255, 0};
+    //Text* nameText = new Text(*nameGO, "Recursos/font/alcotton.ttf", 48, Text::BLENDED, "The Last LightKeeper", titleColor);
+    //nameGO->AddComponent(nameText);
+    //AddObject(nameGO);
+    //titleText = nameGO;
 
     GameObject* textGO = new GameObject();
     textGO->z = 10;
-    SDL_Color white = {255, 255, 255, 0};
-    Text* pressText = new Text(*textGO, "Recursos/font/TradeWinds-Regular.ttf", 40, Text::BLENDED, "Press Space to continue", white);
+    SDL_Color white = {0, 0, 0, 0};
+    Text* pressText = new Text(*textGO, "Recursos/font/times.ttf", 52, Text::BLENDED, "Press Space to continue", white);
     textGO->AddComponent(pressText);
     AddObject(textGO);
     pressSpaceText = textGO;
@@ -128,7 +127,16 @@ void TitleState::Update(float dt) {
     if (pressSpaceText) {
         Text* text = pressSpaceText->GetComponent<Text>();
         if (text) {
-            text->SetColor({255, 255, 255, a});
+            if (t >= 1.0f) {
+                pulseTimer += dt;  
+                float s = (std::sin(pulseTimer * 1.5f) + 1.0f) * 0.5f;
+                // Nunca zerar o s pra não ter o efeito de piscar.
+                float pulse = 40.0f + s * 215.0f;
+                Uint8 pulseAlpha = static_cast<Uint8>(pulse);
+                text->SetColor({0, 0, 0, pulseAlpha});
+            } else {
+                text->SetColor({0, 0, 0, a});
+            }
         }
     }
 

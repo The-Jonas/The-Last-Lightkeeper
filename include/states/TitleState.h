@@ -26,6 +26,7 @@ private:
     Timer fadeTimer;
     float fadeAlpha = 0.0f;
     static constexpr float kFadeDuration = 3.0f;
+    float pulseTimer = 0.0f;
 
     GameObject* titleBackground = nullptr;
     GameObject* titleText = nullptr;
