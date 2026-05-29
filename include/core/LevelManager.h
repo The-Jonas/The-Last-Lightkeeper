@@ -36,9 +36,8 @@ struct EntitySpawn {
     float h = 0.0f;
     bool isStatic;
     int z;
-    std::string customString;
-    int customInt;
-    float customFloat;
+
+    std::unordered_map<std::string, json> properties;
 };
 
 class LevelManager {

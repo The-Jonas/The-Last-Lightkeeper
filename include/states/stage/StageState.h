@@ -43,6 +43,10 @@ public:
     GameObject* GetBigCharacter() { return bigCharacterObject; }
     GameObject* GetSmallCharacter() { return smallCharacterObject; }
 
+    // Funções para controle de luzes dinâmicas de cenário
+    int CreateStaticLight(Vec2 pos, bool startsLit);
+    void SetLightEnabled(int lightId, bool enabled);
+
     // Verifica se a luz está no range dos pés dos personagens
     float bigLightContact = 0.0f;
     float smallLightContact = 0.0f;
@@ -50,6 +54,8 @@ public:
     // Verifica a intensidade da luz nos personagens
     float bigIlluminationLevel = 0.0f;
     float smallIlluminationLevel = 0.0f;
+
+    Inventory& GetInventory() { return inventory; }
 
 private:
 

@@ -40,8 +40,6 @@
     }
   ],
   "oceanChunkCandidates": [
-    "Recursos/audio/waves.ogg",
-    "Recursos/audio/waves.wav",
     "Recursos/audio/waves.mp3"
   ]
 }

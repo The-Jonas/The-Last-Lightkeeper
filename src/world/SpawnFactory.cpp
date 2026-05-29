@@ -5,6 +5,7 @@
 #include "engine/GameObject.h"
 #include "engine/SpriteRenderer.h"
 #include "gameplay/Box.h"
+#include "gameplay/CandleStick.h"
 #include "ui/FadeEffect.h"
 #include "gameplay/Repairable.h"
 #include "gameplay/StairTrigger.h"
@@ -67,16 +68,26 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         stage.AddObject(triggerObj);
     }
     else if (spawn.type == "ItemSpawn") {
+
+        std:: string itemName = "";
+        if (spawn.properties.count("itemName")) itemName = spawn.properties.at("itemName").get<std::string>();
+
+        int itemHeightLevel = 0;
+        if (spawn.properties.count("heightLevel")) itemHeightLevel = spawn.properties.at("heightLevel").get<int>();
+
+        float itemDepthOffset = 0.0f;
+        if (spawn.properties.count("depthOffset")) itemDepthOffset = spawn.properties.at("depthOffset").get<float>();
+
         const ItemDef* foundDef = nullptr;
         // Acessando o 'cfg' de dentro da instância do stage passada por referência
         for (const auto& def : cfg.pickupCycle) {
-            if (def.name == spawn.customString) {
+            if (def.name == itemName) {
                 foundDef = &def;
                 break;
             }   
         }
 
-        if (!foundDef && cfg.startingFlashlight.name == spawn.customString) {
+        if (!foundDef && cfg.startingFlashlight.name == itemName) {
             foundDef = &cfg.startingFlashlight;
         }
 
@@ -88,7 +99,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
             const float itemSize = 48.0f;
 
             // Posição base (como se estivesse no chão)
-            Vec2 tl(spawn.x - itemSize * 0.5f, spawn.y - itemSize);
+            Vec2 tl(spawn.x, spawn.y - itemSize);;
             tl = stage.ClampPickupTopLeft(tl, itemSize, itemSize);
 
             // Cria o Pickup
@@ -98,19 +109,79 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
             GameObject& itemObj = pickup->GetAssociated();
 
             // A MECÂNICA (Passamos o 0, 1 ou 2 para ditar qual o comportamento da altura do item) 
-            int itemHeightLevel = spawn.customInt;
             pickup->SetHeightLevel(itemHeightLevel);
 
             // O VISUAL (Aplicamos o pixel exato para o Y-Sort não bugar)
             itemObj.z = spawn.z; // Fica no mesmo andar
-            itemObj.depthOffset = spawn.customFloat; 
+            itemObj.depthOffset = itemDepthOffset; 
 
             stage.AddObject(&pickup->GetAssociated());
             } 
         }
         else {
             std::cerr << "[ItemSpawn] Item nao encontrado no pickupCycle: '" 
-                      << spawn.customString << "'. Verifique a propriedade itemName no Tiled." << std::endl;
+                      << itemName << "'. Verifique a propriedade itemName no Tiled." << std::endl;
         }
+    }
+    else if (spawn.type == "Castical") {
+        std::string dir = "frente";
+        if (spawn.properties.count("direction")) dir = spawn.properties.at("direction").get<std::string>();
+        
+        bool startsLit = false;
+        if (spawn.properties.count("startsLit")) startsLit = spawn.properties.at("startsLit").get<bool>();
+
+        float depthOff = 0.0f;
+        if (spawn.properties.count("depthOffset")) depthOff = spawn.properties.at("depthOffset").get<float>();
+
+        GameObject* candleObj = new GameObject();
+        candleObj->z = spawn.z;
+        candleObj->depthOffset = depthOff;
+        candleObj->AddComponent(new Candlestick(*candleObj, startsLit, dir));
+        
+        // ADICIONADO O FADE EFFECT
+        candleObj->AddComponent(new FadeEffect(*candleObj));
+
+        candleObj->box.x = spawn.x;
+        candleObj->box.y = spawn.y - candleObj->box.h;
+        stage.AddObject(candleObj);
+    }
+    else if (spawn.type == "CaixasAmontoadas") {
+        GameObject* caixasObj = new GameObject();
+        caixasObj->z = spawn.z;
+
+        // Suporte a depthOffset caso precise ajustar a profundidade delas no mapa
+        float depthOff = 0.0f;
+        if (spawn.properties.count("depthOffset")) depthOff = spawn.properties.at("depthOffset").get<float>();
+        caixasObj->depthOffset = depthOff;
+
+        caixasObj->AddComponent(new SpriteRenderer(*caixasObj, "Recursos/img/objetos/Amontoado_caixas.png"));
+        
+        // Adiciona o FadeEffect para ficar transparente se o jogador for para trás
+        // caixasObj->AddComponent(new FadeEffect(*caixasObj));
+
+        caixasObj->box.x = spawn.x;
+        caixasObj->box.y = spawn.y - caixasObj->box.h;
+        
+        // COLISÃO FÍSICA AUTOMÁTICA
+        SDL_Rect colBox;
+        
+        // 1. LARGURA: Reduz a largura da colisão (ex: 96% do tamanho da imagem)
+        // para o jogador não esbarrar no ar transparente das laterais.
+        colBox.w = caixasObj->box.w * 0.96f; 
+
+        // 2. ALTURA: Define a grossura da parede invisível (35% da imagem)
+        colBox.h = caixasObj->box.h * 0.35f; 
+
+        // 3. EIXO X: Centraliza a colisão encolhida no meio da imagem
+        colBox.x = caixasObj->box.x + (caixasObj->box.w - colBox.w) / 2.0f;
+
+        // 4. EIXO Y : Move a colisão "mais pra frente" da imagem.
+        // O "+ 50" ali no final empurra a parede invisível 50 pixels para cima
+        colBox.y = caixasObj->box.y + (caixasObj->box.h - colBox.h) - 50; 
+
+        // Injeta a parede invisível direto no cérebro do LevelManager
+        stage.level.GetRectColliders().push_back(colBox);
+
+        stage.AddObject(caixasObj);
     }    
 }

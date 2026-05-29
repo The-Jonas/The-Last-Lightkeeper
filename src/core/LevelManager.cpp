@@ -163,8 +163,6 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
                         // Valores padrão caso esqueçamos de criar no Tiled
                         spawn.isStatic = false;
                         spawn.z = 2;
-                        spawn.customInt = 0;
-                        spawn.customFloat = 0.0f;
 
                         // Lendo agora as propriedades customizadas
                         if (obj.contains("properties")) {
@@ -176,14 +174,8 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
                                 else if (pName == "z" && prop.contains("value")) {
                                     if (prop["value"].is_number()) spawn.z = prop["value"].get<int>();
                                 }
-                                else if (pName == "itemName" && prop.contains("value")) {
-                                    if (prop["value"].is_string()) spawn.customString = prop["value"].get<std::string>();
-                                }
-                                else if (pName == "heightLevel" && prop.contains("value")) {
-                                    if (prop["value"].is_number()) spawn.customInt = prop["value"].get<int>();
-                                }
-                                else if (pName == "depthOffset" && prop.contains("value")) {
-                                    if (prop["value"].is_number()) spawn.customFloat = prop["value"].get<float>();
+                                else if (prop.contains("value")) {
+                                    spawn.properties[pName] = prop["value"];
                                 }
                             }    
                         }
@@ -496,6 +488,22 @@ void LevelManager::RenderCollisionOverlay(SDL_Renderer* renderer) const {
 
     SDL_SetRenderDrawBlendMode(renderer, oldBlend);
     SDL_SetRenderDrawColor(renderer, dr, dg, db, da);
+}
+
+// ==========================================================
+// GETTERS DAS LISTAS DE COLISÃO
+// ==========================================================
+
+std::vector<SDL_Rect>& LevelManager::GetRectColliders() {
+    return rectColliders;
+}
+
+std::vector<Polygon>& LevelManager::GetPolyColliders() {
+    return chaoNormal; 
+}
+
+std::vector<Circle>& LevelManager::GetCircleColliders() {
+    return circleColliders;
 }
 
 void LevelManager::RenderDebug(SDL_Renderer* renderer) {

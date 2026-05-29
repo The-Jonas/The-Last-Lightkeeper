@@ -102,3 +102,29 @@ void StageState::CreateLightAtCursor() {
         lights.erase(lights.begin(), lights.begin() + (lights.size() - static_cast<size_t>(maxActiveLights * 2)));
     }
 }
+
+int StageState::CreateStaticLight(Vec2 pos, bool startsLit) {
+    LightInstance light;
+    light.worldPos = pos;
+    light.shape = lightMaskShape;   // Usa o formato base da fase
+    light.params = lightMaskParams; // Usa as cores/sombras base
+    
+    // Opcional: Se quiser que a luz do castiçal seja um pouco menor que a do poste:
+    // light.params.falloffRadiusPx = 300.0f; 
+    
+    light.enabled = startsLit;
+    
+    // Semente aleatória para o fogo "tremer" de forma independente
+    static std::uint32_t sSeed = 100;
+    sSeed = sSeed * 1664525u + 1013904223u;
+    light.animationSeed = static_cast<float>(sSeed & 0xFFFFu) / 65535.0f;
+    
+    lights.push_back(light);
+    return lights.size() - 1; // Retorna o ID (posição no vetor)
+}
+
+void StageState::SetLightEnabled(int lightId, bool enabled) {
+    if (lightId >= 0 && lightId < lights.size()) {
+        lights[lightId].enabled = enabled;
+    }
+}

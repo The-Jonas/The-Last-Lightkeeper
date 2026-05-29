@@ -104,143 +104,8 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":40,
-                 "x":2274,
-                 "y":1866
-                }, 
-                {
-                 "gid":1,
-                 "height":314,
-                 "id":656,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"isStatic",
-                         "type":"bool",
-                         "value":true
-                        }, 
-                        {
-                         "name":"z",
-                         "type":"int",
-                         "value":2
-                        }],
-                 "rotation":0,
-                 "type":"Caixa",
-                 "visible":true,
-                 "width":241,
-                 "x":972,
-                 "y":1169
-                }, 
-                {
-                 "gid":1,
-                 "height":314,
-                 "id":654,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"isStatic",
-                         "type":"bool",
-                         "value":true
-                        }, 
-                        {
-                         "name":"z",
-                         "type":"int",
-                         "value":2
-                        }],
-                 "rotation":0,
-                 "type":"Caixa",
-                 "visible":true,
-                 "width":241,
-                 "x":1242,
-                 "y":1825
-                }, 
-                {
-                 "gid":9,
-                 "height":62.6666666666665,
-                 "id":659,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":180
-                        }, 
-                        {
-                         "name":"heightLevel",
-                         "type":"int",
-                         "value":1
-                        }, 
-                        {
-                         "name":"itemName",
-                         "type":"string",
-                         "value":"Apple"
-                        }],
-                 "rotation":0,
-                 "type":"ItemSpawn",
-                 "visible":true,
-                 "width":48,
-                 "x":1368.66666666667,
-                 "y":1663.33333333333
-                }, 
-                {
-                 "gid":7,
-                 "height":48.6666666666667,
-                 "id":661,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":180
-                        }, 
-                        {
-                         "name":"heightLevel",
-                         "type":"int",
-                         "value":1
-                        }, 
-                        {
-                         "name":"itemName",
-                         "type":"string",
-                         "value":"Broken Flashlight"
-                        }],
-                 "rotation":0,
-                 "type":"ItemSpawn",
-                 "visible":true,
-                 "width":52,
-                 "x":1280,
-                 "y":1664
-                }, 
-                {
-                 "gid":7,
-                 "height":48.6666666666667,
-                 "id":666,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":180
-                        }, 
-                        {
-                         "name":"heightLevel",
-                         "type":"int",
-                         "value":2
-                        }, 
-                        {
-                         "name":"itemName",
-                         "type":"string",
-                         "value":"Broken Flashlight"
-                        }],
-                 "rotation":0,
-                 "type":"ItemSpawn",
-                 "visible":true,
-                 "width":52,
-                 "x":1110,
-                 "y":1008
+                 "x":2264,
+                 "y":1814
                 }, 
                 {
                  "gid":6,
@@ -294,8 +159,8 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":53.3333333333333,
-                 "x":1910,
-                 "y":1892.33333333333
+                 "x":1886,
+                 "y":1768.33333333333
                 }, 
                 {
                  "gid":7,
@@ -323,8 +188,8 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":53.3333333333333,
-                 "x":2260,
-                 "y":900.333333333333
+                 "x":2250,
+                 "y":1000.33333333333
                 }, 
                 {
                  "gid":7,
@@ -352,8 +217,8 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":53.3333333333333,
-                 "x":2520,
-                 "y":1112.33333333333
+                 "x":2502,
+                 "y":1170.33333333333
                 }, 
                 {
                  "gid":7,
@@ -381,8 +246,8 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":53.3333333333333,
-                 "x":2184,
-                 "y":1192.33333333333
+                 "x":2142,
+                 "y":1322.33333333333
                 }, 
                 {
                  "gid":7,
@@ -410,8 +275,431 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":53.3333333333333,
-                 "x":2386,
-                 "y":1458.33333333333
+                 "x":2446,
+                 "y":1554.33333333333
+                }, 
+                {
+                 "gid":12,
+                 "height":95,
+                 "id":669,
+                 "name":"castical_frente_aceso",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":200
+                        }, 
+                        {
+                         "name":"direction",
+                         "type":"string",
+                         "value":"frente"
+                        }, 
+                        {
+                         "name":"startsLit",
+                         "type":"bool",
+                         "value":true
+                        }],
+                 "rotation":0,
+                 "type":"Castical",
+                 "visible":true,
+                 "width":48,
+                 "x":1836.9696969697,
+                 "y":1229.21212121212
+                }, 
+                {
+                 "gid":13,
+                 "height":99,
+                 "id":670,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"direction",
+                         "type":"string",
+                         "value":"esquerda"
+                        }, 
+                        {
+                         "name":"startsLit",
+                         "type":"bool",
+                         "value":false
+                        }],
+                 "rotation":0,
+                 "type":"Castical",
+                 "visible":true,
+                 "width":55,
+                 "x":200.272727272727,
+                 "y":692.424242424242
+                }, 
+                {
+                 "gid":15,
+                 "height":99,
+                 "id":671,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"direction",
+                         "type":"string",
+                         "value":"direita"
+                        }, 
+                        {
+                         "name":"startsLit",
+                         "type":"bool",
+                         "value":false
+                        }],
+                 "rotation":0,
+                 "type":"Castical",
+                 "visible":true,
+                 "width":55,
+                 "x":3654.81818181818,
+                 "y":895.454545454545
+                }, 
+                {
+                 "gid":1,
+                 "height":265,
+                 "id":673,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"isStatic",
+                         "type":"bool",
+                         "value":true
+                        }, 
+                        {
+                         "name":"z",
+                         "type":"int",
+                         "value":2
+                        }],
+                 "rotation":0,
+                 "type":"Caixa",
+                 "visible":true,
+                 "width":188,
+                 "x":1012.66666666667,
+                 "y":1173
+                }, 
+                {
+                 "gid":1,
+                 "height":265,
+                 "id":679,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"isStatic",
+                         "type":"bool",
+                         "value":false
+                        }, 
+                        {
+                         "name":"z",
+                         "type":"int",
+                         "value":2
+                        }],
+                 "rotation":0,
+                 "type":"Caixa",
+                 "visible":true,
+                 "width":188,
+                 "x":2608.66666666667,
+                 "y":1487
+                }, 
+                {
+                 "gid":1,
+                 "height":265,
+                 "id":678,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"isStatic",
+                         "type":"bool",
+                         "value":true
+                        }, 
+                        {
+                         "name":"z",
+                         "type":"int",
+                         "value":2
+                        }],
+                 "rotation":0,
+                 "type":"Caixa",
+                 "visible":true,
+                 "width":188,
+                 "x":1159.33333333333,
+                 "y":1779.66666666667
+                }, 
+                {
+                 "gid":7,
+                 "height":48.6666666666667,
+                 "id":661,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":220
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":1
+                        }, 
+                        {
+                         "name":"itemName",
+                         "type":"string",
+                         "value":"Broken Flashlight"
+                        }],
+                 "rotation":0,
+                 "type":"ItemSpawn",
+                 "visible":true,
+                 "width":52,
+                 "x":1221.66666666667,
+                 "y":1568
+                }, 
+                {
+                 "gid":8,
+                 "height":86,
+                 "id":667,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":180
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":1
+                        }, 
+                        {
+                         "name":"itemName",
+                         "type":"string",
+                         "value":"Oil Gallon"
+                        }],
+                 "rotation":0,
+                 "type":"ItemSpawn",
+                 "visible":true,
+                 "width":40,
+                 "x":1293.33333333333,
+                 "y":1630.66666666667
+                }, 
+                {
+                 "gid":8,
+                 "height":86,
+                 "id":682,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":180
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":1
+                        }, 
+                        {
+                         "name":"itemName",
+                         "type":"string",
+                         "value":"Oil Gallon"
+                        }],
+                 "rotation":0,
+                 "type":"ItemSpawn",
+                 "visible":true,
+                 "width":40,
+                 "x":1131.33333333333,
+                 "y":1008.66666666667
+                }, 
+                {
+                 "gid":8,
+                 "height":86,
+                 "id":681,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":180
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":1
+                        }, 
+                        {
+                         "name":"itemName",
+                         "type":"string",
+                         "value":"Oil Gallon"
+                        }],
+                 "rotation":0,
+                 "type":"ItemSpawn",
+                 "visible":true,
+                 "width":40,
+                 "x":1047.33333333333,
+                 "y":1012.66666666667
+                }, 
+                {
+                 "gid":8,
+                 "height":86,
+                 "id":668,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":190
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":1
+                        }, 
+                        {
+                         "name":"itemName",
+                         "type":"string",
+                         "value":"Oil Gallon"
+                        }],
+                 "rotation":0,
+                 "type":"ItemSpawn",
+                 "visible":true,
+                 "width":40,
+                 "x":1183.66666666667,
+                 "y":1626.66666666667
+                }, 
+                {
+                 "gid":10,
+                 "height":596,
+                 "id":680,
+                 "name":"",
+                 "opacity":1,
+                 "rotation":0,
+                 "type":"CaixasAmontoadas",
+                 "visible":true,
+                 "width":443,
+                 "x":1103,
+                 "y":962
+                }, 
+                {
+                 "gid":9,
+                 "height":62.6666666666665,
+                 "id":659,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":400
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":2
+                        }, 
+                        {
+                         "name":"itemName",
+                         "type":"string",
+                         "value":"Apple"
+                        }],
+                 "rotation":0,
+                 "type":"ItemSpawn",
+                 "visible":true,
+                 "width":48,
+                 "x":1111,
+                 "y":583.33333333333
+                }, 
+                {
+                 "gid":7,
+                 "height":48.6666666666667,
+                 "id":672,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":270
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":2
+                        }, 
+                        {
+                         "name":"itemName",
+                         "type":"string",
+                         "value":"Broken Flashlight"
+                        }],
+                 "rotation":0,
+                 "type":"ItemSpawn",
+                 "visible":true,
+                 "width":52,
+                 "x":1419.33333333333,
+                 "y":692.666666666667
+                }, 
+                {
+                 "gid":7,
+                 "height":48.6666666666667,
+                 "id":666,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":250
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":2
+                        }, 
+                        {
+                         "name":"itemName",
+                         "type":"string",
+                         "value":"Broken Flashlight"
+                        }],
+                 "rotation":0,
+                 "type":"ItemSpawn",
+                 "visible":true,
+                 "width":52,
+                 "x":1351.33333333333,
+                 "y":723.333333333334
+                }, 
+                {
+                 "gid":11,
+                 "height":95,
+                 "id":683,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":150
+                        }, 
+                        {
+                         "name":"direction",
+                         "type":"string",
+                         "value":"frente"
+                        }, 
+                        {
+                         "name":"startsLit",
+                         "type":"bool",
+                         "value":false
+                        }],
+                 "rotation":0,
+                 "type":"Castical",
+                 "visible":true,
+                 "width":48,
+                 "x":1425.33333333333,
+                 "y":30
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -2028,7 +2316,7 @@
                  "type":"",
                  "visible":true,
                  "width":328,
-                 "x":1700,
+                 "x":1698.66666666667,
                  "y":1152
                 }, 
                 {
@@ -2904,7 +3192,7 @@
          "y":0
         }],
  "nextlayerid":28,
- "nextobjectid":667,
+ "nextobjectid":684,
  "orientation":"orthogonal",
  "renderorder":"right-down",
  "tiledversion":"1.12.1",
