@@ -55,6 +55,8 @@ void TryNudgeOutOfStaticGeometry(StageState* stage, GameObject& go, Collider* co
     }
 }
 constexpr const char* kIrmaozaoIdleRoot = "Recursos/img/personagens/irmaozao_idle/";
+constexpr const char* kIrmaozaoIdleLighterRoot = "Recursos/img/personagens/irmaozao_idle_lighter/";
+
 constexpr int kIrmaozaoStripFrameCount = 6;
 constexpr float kIrmaozaoStripFrameSeconds = 0.11f;
 } // namespace
@@ -110,23 +112,27 @@ Character::Character(GameObject& associated, std::string spritePath, bool useIrm
     }
 }
 
-std::string Character::IrmaozaoIdleStripPath(Direction dir, int frameIndex) const {
+std::string Character::IrmaozaoIdleStripPath(Direction dir, int frameIndex, bool holdingLighter) const {
     int fi = frameIndex % kIrmaozaoStripFrameCount;
     if (fi < 0) {
         fi += kIrmaozaoStripFrameCount;
     }
     const int n = fi + 1;
+    
+    // Escolhe a pasta raiz baseada no isqueiro!
+    std::string root = holdingLighter ? kIrmaozaoIdleLighterRoot : kIrmaozaoIdleRoot;
+
     switch (dir) {
     case Direction::UP:
-        return std::string(kIrmaozaoIdleRoot) + "Idle trás/FRAME_" + std::to_string(n) + ".png";
+        return root + "trás/FRAME_" + std::to_string(n) + ".png";
     case Direction::DOWN:
-        return std::string(kIrmaozaoIdleRoot) + "Idle frente/FRAME_" + std::to_string(n) + ".png";
+        return root + "frente/FRAME_" + std::to_string(n) + ".png";
     case Direction::LEFT:
-        return std::string(kIrmaozaoIdleRoot) + "Idle L/FRAME_" + std::to_string(n) + ".png";
+        return root + "esquerda/FRAME_" + std::to_string(n) + ".png";
     case Direction::RIGHT:
-        return std::string(kIrmaozaoIdleRoot) + "Idle R/frame " + std::to_string(n) + ".png";
+        return root + "direita/FRAME_" + std::to_string(n) + ".png";
     }
-    return std::string(kIrmaozaoIdleRoot) + "Idle frente/FRAME_1.png";
+    return root + "frente/FRAME_1.png";
 }
 
 void Character::RefreshIrmaozaoStripSprite() {
@@ -134,8 +140,20 @@ void Character::RefreshIrmaozaoStripSprite() {
     if (!sprite) {
         return;
     }
+    
+    // Verifica se o isqueiro tá equipado
+    bool holdingLighter = false;
+    StageState* stage = Game::TryGetStageState();
+    // Usa a função pra saber se a luz está na mão
+    if (stage && stage->GetInventory().IsUsableLightActive()) {
+        holdingLighter = true;
+    }
+
     const Vec2 center = associated.box.Center();
-    const std::string path = IrmaozaoIdleStripPath(currentDirection, stripFrameIndex);
+    
+    // Passa a variável para o construtor do caminho
+    const std::string path = IrmaozaoIdleStripPath(currentDirection, stripFrameIndex, holdingLighter);
+    
     sprite->Open(path);
     sprite->SetFrameCount(1, 1);
     sprite->SetFrame(0);

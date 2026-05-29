@@ -80,7 +80,7 @@ private:
     float stripAnimTimer = 0.0f;
     int stripFrameIndex = 0;
 
-    std::string IrmaozaoIdleStripPath(Direction dir, int frameIndex) const;
+    std::string IrmaozaoIdleStripPath(Direction dir, int frameIndex, bool holdingLighter = false) const;
     void RefreshIrmaozaoStripSprite();
 };
 
