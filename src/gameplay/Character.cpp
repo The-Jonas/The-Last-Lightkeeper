@@ -290,16 +290,20 @@ void Character::Update(float dt) {
 
     Direction newDirection = currentDirection;
 
-    if (std::abs(speed.x) > std::abs(speed.y)) {
+    // PRIORIDADE HORIZONTAL: Se houver movimento lateral significativo, sempre olha para o lado.
+    // Isso garante que nas diagonais ele sempre exiba o sprite lateral!
+    if (std::abs(speed.x) > 0.1f) {
         if (speed.x > 0.1f) {
             newDirection = Direction::RIGHT;
-        } else if (speed.x < -0.1f) {
+        } else {
             newDirection = Direction::LEFT;
         }
-    } else {
+    } 
+    // Só olha para cima/baixo se estivermos andando estritamente na vertical
+    else if (std::abs(speed.y) > 0.1f) {
         if (speed.y > 0.1f) {
             newDirection = Direction::DOWN; // Y cresce para baixo na tela
-        } else if (speed.y < -0.1f) {
+        } else {
             newDirection = Direction::UP;
         }
     }

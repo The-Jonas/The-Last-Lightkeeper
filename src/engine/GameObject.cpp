@@ -10,6 +10,7 @@ GameObject::GameObject() {                                                      
     isDead = false;
     started = false;
     angleDeg = 0.0f;
+    depthOffset = 0.0f;
     z = 0;                                                                          // Lembrar de definir para os objetos quando forem criados (ordem de quem fica na frente)
     sub_z = 0;                                                                      // Padrão é a camada base
     owner = nullptr;                                                                // Padrão é não ter dono

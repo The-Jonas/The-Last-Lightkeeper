@@ -244,6 +244,7 @@ void StageState::LoadAssets() {
 
     RefreshCameraTargets(); // Atualiza alvos da câmera (dupla + principal)
 
+
     // Ondas (fora do mapa): primeiro andar jogável em diante. Tenta WAV/OGG e depois MP3 (decoded chunk).
     if (oceanMixerChannel >= 0) {
         Mix_HaltChannel(oceanMixerChannel);
