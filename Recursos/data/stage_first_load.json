@@ -1,5 +1,5 @@
 {
-  "ostPath": "Recursos/audio/soundtracks/Last Hideout.mp3",
+  "ostPath": "Recursos/audio/soundtracks/Ambientacao.mp3",
   "levelPath": "Recursos/map/mapa_1_andar.json",
   "navWorld": { "w": 4358, "h": 3276 },
   "navTilePx": 64,
