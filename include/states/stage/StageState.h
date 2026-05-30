@@ -154,6 +154,9 @@ private:
     bool lightsEnabled = true;
     bool shadowsEnabled = true;
     bool musicMuted = false;
+    
+    // Tentar criar o shader olho de peixe
+    SDL_Texture* renderTarget = nullptr;
 
     /// B: map collision / collider debug + caminho A* ou linha reta do parceiro que segue até o outro (modo dupla junto).
     bool showMapPhysicsDebug = false;

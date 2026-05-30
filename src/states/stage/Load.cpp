@@ -71,6 +71,13 @@ StageState::StageState() {
     previewLightLockedToPlayer = false;
     previewLightAnchorPlayer = nullptr;
     oceanAmbient_.Bind(&oceanWavesChunk, &oceanMixerChannel, &musicMuted);
+
+    SDL_Renderer* renderer = Game::GetInstance().GetRenderer();
+    int winW = Game::GetInstance().GetWindowsWidth();
+    int winH = Game::GetInstance().GetWindowsHeight();
+    
+    // Cria uma textura vazia para ser a nossa "Tela de Cinema"
+    renderTarget = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, winW, winH);
 }
 
 StageState::~StageState(){                                

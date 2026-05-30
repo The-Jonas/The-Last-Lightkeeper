@@ -314,25 +314,6 @@ void StageState::Update(float dt){
         }
     }
 
-    // ============================================================
-    // EFEITO VERTIGO (ZOOM PULSANTE DA SANIDADE)
-    // ============================================================
-    if (Character::player) {
-        float lowestSanity = 100.0f;
-        if (Character::player) lowestSanity = std::min(lowestSanity, Character::player->sanity);
-        if (Character::littleBrother) lowestSanity = std::min(lowestSanity, Character::littleBrother->sanity);
-
-        if (lowestSanity < 60.0f) {
-            float intensity = 1.0f - (lowestSanity / 60.0f);
-            float time = SDL_GetTicks() * 0.003f; // Pulsação rítmica
-            
-            // Faz a tela expandir e contrair suavemente em até 8%
-            Camera::SetZoomOffset(std::sin(time) * 0.08f * intensity); 
-        } else {
-            Camera::SetZoomOffset(0.0f);
-        }
-    }
-
     // VERIFICAÇÃO DE FIM DE JOGO
 
     // 1. Derrota: Jogador morreu

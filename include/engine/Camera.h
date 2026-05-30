@@ -15,7 +15,6 @@ public:
     void static ClearPairFollow();                  // Limpa o modo de enquadramento de dupla
     void static Update(float dt);                   // Define a abordagem a ser usada para a câmera durante o jogo
     static float GetZoom();                         // Retorna zoom atual da câmera
-    static void SetZoomOffset(float offset);        // Permite injetar o efeito de vertigem
 
     Vec2 static pos;                                // Posição da câmera 
     Vec2 static speed;                              // Velocidade da câmera
@@ -26,7 +25,6 @@ private:
     static GameObject* pairB;                       // Segundo alvo do modo de dupla
     static GameObject* pairPrimary;                 // Alvo controlado (peso maior no enquadramento)
     static float zoom;                              // Fator de zoom aplicado no render
-    static float zoomOffset;                        // Camada de distorção visual
 };
 
 #endif

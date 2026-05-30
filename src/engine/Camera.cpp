@@ -13,7 +13,6 @@ GameObject* Camera::pairA = nullptr;
 GameObject* Camera::pairB = nullptr;
 GameObject* Camera::pairPrimary = nullptr;
 float Camera::zoom = 1.0f;
-float Camera::zoomOffset = 0.0f;
 
 void Camera::Follow(GameObject* newFocus) {             // Seta um novo foco
     focus = newFocus;
@@ -37,12 +36,10 @@ void Camera::ClearPairFollow() {
     pairPrimary = nullptr;
 }
 
-void Camera::SetZoomOffset(float offset) {
-    zoomOffset = offset;
-}
+
 
 float Camera::GetZoom() {
-    return zoom + zoomOffset;
+    return zoom;
 }
 
 void Camera::Update(float dt) { 
