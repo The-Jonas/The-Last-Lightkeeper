@@ -4,7 +4,7 @@
 #include "gameplay/Character.h"
 #include <iostream>
 
-StairTrigger::StairTrigger(GameObject& associated) : Component(associated) {
+StairTrigger::StairTrigger(GameObject& associated, float anchorY) : Component(associated), anchorY(anchorY) {
 }
 
 StairTrigger::~StairTrigger() {}
@@ -34,7 +34,13 @@ void StairTrigger::Update(float dt) {
             // Catraca de Entrada: Indo para cima e está no chão
             if (character->GetSpeed().y < -5.0f && !character->isElevated) {
                 character->isElevated = true;
-                std::cout << "Subiu na escada!" << std::endl; // Debug
+
+                // ====================================================
+                // O personagem anota qual é a base dessa escada!
+                // ====================================================
+                character->stairAnchorY = this->anchorY;
+
+                std::cout << "Subiu na escada!" << std::endl; // Debug  
             }
             // Catraca de Saída: Indo para baixo e está na escada
             else if (character->GetSpeed().y > 5.0f && character->isElevated) {

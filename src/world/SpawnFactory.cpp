@@ -58,12 +58,21 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
     }
     else if (spawn.type == "StairTrigger") {
         GameObject* triggerObj = new GameObject();
+
+        // Define um valor padrão de segurança caso se esqueça de colocar no Tiled
+        float myAnchor = 886.18f;
+
+        // Lê o que tá no Tiled
+        if (spawn.properties.count("anchorY")) {
+            myAnchor = spawn.properties.at("anchorY").get<float>();
+        }
+
+        triggerObj->AddComponent(new StairTrigger(*triggerObj, myAnchor));
+
         triggerObj->box.x = spawn.x;
         triggerObj->box.y = spawn.y;
         triggerObj->box.w = spawn.w; 
         triggerObj->box.h = spawn.h;
-
-        triggerObj->AddComponent(new StairTrigger(*triggerObj));
         
         stage.AddObject(triggerObj);
     }

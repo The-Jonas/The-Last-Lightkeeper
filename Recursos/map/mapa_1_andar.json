@@ -71,6 +71,12 @@
                  "id":236,
                  "name":"",
                  "opacity":1,
+                 "properties":[
+                        {
+                         "name":"anchorY",
+                         "type":"float",
+                         "value":886.182
+                        }],
                  "rotation":0,
                  "type":"StairTrigger",
                  "visible":true,

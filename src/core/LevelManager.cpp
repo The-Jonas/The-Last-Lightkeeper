@@ -74,7 +74,6 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
                 imgLayer.w = layer.value("imagewidth", 0);
                 imgLayer.h = layer.value("imageheight", 0);
 
-                // O Tiled salva como "../img/...". Nossa engine precisa de "Recursos/img/..."
                 std::string imagePath = layer.value("image", "");
                 if (imagePath != "") {
                     size_t pos = imagePath.find("../");
@@ -187,7 +186,7 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
             }
         }
     } 
-    catch (const std::exception& e) { // <-- CORREÇÃO AQUI
+    catch (const std::exception& e) { 
         std::cout << "Erro Fatal ao processar o JSON: " << e.what() << std::endl;
         return;
     }
@@ -305,14 +304,16 @@ bool LevelManager::CheckPolygonVsPolygon(const Polygon& p1, const Polygon& p2) {
 }
 
 void LevelManager::RenderBackground(SDL_Renderer* renderer) {
+    float zoom = Camera::GetZoom();
     // Como o vetor guardou as imagens na ordem do JSON (Parede -> Chão),
     // ele vai desenhar automaticamente na ordem certa!
     for (const auto& imgLayer : imageLayers) {
         if (imgLayer.texture != nullptr) {
             SDL_Rect destRect = { 
-                (int)(-Camera::pos.x + imgLayer.x), 
-                (int)(-Camera::pos.y + imgLayer.y), 
-                imgLayer.w, imgLayer.h
+                (int)((imgLayer.x - Camera::pos.x) * zoom), 
+                (int)((imgLayer.y - Camera::pos.y) * zoom), 
+                (int)(imgLayer.w * zoom), 
+                (int)(imgLayer.h * zoom)
             };
             SDL_RenderCopy(renderer, imgLayer.texture, nullptr, &destRect);
         }

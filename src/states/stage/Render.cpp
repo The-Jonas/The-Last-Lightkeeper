@@ -60,37 +60,32 @@ void StageState::Render(){
     // ============================
     auto compareObjects = [](const std::shared_ptr<GameObject>& a, const std::shared_ptr<GameObject>& b) {
         
-        // 1. Z-Sort Absoluto: Só desempata se forem de andares ou escopos visuais completamente diferentes (Chão vs UI)
+        // 1. Z-Sort Absoluto
         if (a->z != b->z) return a->z < b->z;
 
-        // --- 2. EXCEÇÃO DINÂMICA DA ESCADA CURVA ---
-        Character* charA = a->GetComponent<Character>();
-        Character* charB = b->GetComponent<Character>();
-        
-        bool a_elevated = (charA && charA->isElevated);
-        bool b_elevated = (charB && charB->isElevated);
-        
-        // Se 'a' é o jogador subindo e 'b' é a escada: 'a' SEMPRE desenha por cima (Retorna falso para 'a' vir depois)
-        if (a_elevated && b->isStairs) return false; 
-        
-        // Se 'b' é o jogador subindo e 'a' é a escada: 'b' SEMPRE desenha por cima
-        if (b_elevated && a->isStairs) return true;
-
-        //============================================
-        
-        // 3. Y-Sort Relativo (Calcula a base real do objeto + o Deslocamento Fantasma)
+        // 2. Y-Sort Relativo (Calcula a base real)
         float base_a = (a->owner != nullptr) ? (a->owner->box.y + a->owner->box.h) : (a->box.y + a->box.h);
         float base_b = (b->owner != nullptr) ? (b->owner->box.y + b->owner->box.h) : (b->box.y + b->box.h);
         
         float sortingY_a = base_a + a->depthOffset;
         float sortingY_b = base_b + b->depthOffset;
+
+        // =========================================================
+        // A MÁGICA ISOMÉTRICA (ANCORAGEM DE PROFUNDIDADE)
+        // =========================================================
+        Character* charA = a->GetComponent<Character>();
+        Character* charB = b->GetComponent<Character>();
         
+        // Força a profundidade do personagem para a exata base do Asset que ele vai subir
+        if (charA && charA->isElevated) sortingY_a = charA->stairAnchorY; 
+        if (charB && charB->isElevated) sortingY_b = charB->stairAnchorY;
+
         float epsilon = 0.01f; 
         if (std::abs(sortingY_a - sortingY_b) > epsilon) {
             return sortingY_a < sortingY_b;
         }
         
-        // 4. Fallback para objetos no exato mesmo pixel de profundidade
+        // 3. Fallback
         return a->sub_z < b->sub_z;
     };
     std::sort(objectArray.begin(), objectArray.end(), compareObjects);
@@ -401,7 +396,35 @@ void StageState::Render(){
         RenderCompanionFollowPathDebug(dbgR);
     }
 
+    // ====================================
     // 7. HUD FICA ACIMA DE TUDO (Z >= 100)
+    // ====================================
+
+    
+    // SHADER DE CORES DA SANIDADE (Tintura Doentia)
+    if (Character::player) {
+        float lowestSanity = std::min(Character::player->sanity, Character::littleBrother ? Character::littleBrother->sanity : 100.0f);
+        
+        if (lowestSanity < 60.0f) {
+            float intensity = 1.0f - (lowestSanity / 60.0f);
+            float time = SDL_GetTicks() * 0.002f;
+
+            float wave = std::abs(std::sin(time));
+            float inverseWave = 1.0f - wave;
+
+            Uint8 r = static_cast<Uint8>(255 - (160 * intensity * inverseWave));
+            Uint8 b = static_cast<Uint8>(255 - (160 * intensity * inverseWave));
+            Uint8 g = static_cast<Uint8>(255 - (160 * intensity * wave));
+
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_MOD);
+            SDL_SetRenderDrawColor(renderer, r, g, b, 255);
+            SDL_Rect screenRect = {0, 0, Game::GetInstance().GetWindowsWidth(), Game::GetInstance().GetWindowsHeight()};
+            SDL_RenderFillRect(renderer, &screenRect);
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+        }
+    }
+
+
     for (const auto& go : objectArray) {
         if (go->z >= kHudZ) {
             go->Render();
@@ -417,18 +440,22 @@ void StageState::Render(){
         if (!c || c->sanity >= Character::kMaxSanity) return; // Se tá cheio, fica invisível
 
         float percent = c->sanity / Character::kMaxSanity;
+        float zoom = Camera::GetZoom(); // Pega a pulsação da vertigem!
         
-        // Tamanho da barra flutuante (menorzinha para caber acima da cabeça)
-        int barW = 60;
-        int barH = 6;
+        // Tamanho da barra acompanhando o tamanho da lente
+        int barW = static_cast<int>(60 * zoom);
+        int barH = static_cast<int>(6 * zoom);
 
         // Calcula a posição na tela (Box do personagem - Câmera)
-        int screenX = static_cast<int>(c->GetAssociated().box.x - Camera::pos.x);
-        int screenY = static_cast<int>(c->GetAssociated().box.y - Camera::pos.y);
+        int screenX = static_cast<int>((c->GetAssociated().box.x - Camera::pos.x) * zoom);
+        int screenY = static_cast<int>((c->GetAssociated().box.y - Camera::pos.y) * zoom);
+        
+        // A largura da caixa do personagem também sofre zoom na tela, então multiplicamos 
+        int charScreenW = static_cast<int>(c->GetAssociated().box.w * zoom);
 
-        // Centraliza acima da cabeça (ajuste o -20 se ficar muito colado)
-        int posX = screenX + (static_cast<int>(c->GetAssociated().box.w) / 2) - (barW / 2);
-        int posY = screenY - 20;
+        // Centraliza acima da cabeça 
+        int posX = screenX + (charScreenW / 2) - (barW / 2);
+        int posY = screenY - static_cast<int>(20 * zoom);
 
         SDL_Rect bgRect = { posX, posY, barW, barH };
         SDL_Rect fgRect = { posX, posY, static_cast<int>(barW * percent), barH };
