@@ -149,7 +149,7 @@ private:
     bool previewLightLockedToPlayer = false;
     GameObject* previewLightAnchorPlayer = nullptr;
     /// Luz de preview que segue o rato ou o jogador (ligada com botão direito). X alterna; luzes fixas no mapa e lanterna continuam.
-    bool cursorPreviewLightEnabled = true;
+    bool cursorPreviewLightEnabled = false;
     int maxActiveLights = 24;
     bool lightsEnabled = true;
     bool shadowsEnabled = true;

@@ -38,7 +38,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
     }
     else if (spawn.type == "Escada_Quebrada") {
         GameObject* ladderObj = new GameObject();
-        ladderObj->z = 1;
+        ladderObj->z = spawn.z;
         ladderObj->isStairs= true;
         ladderObj->AddComponent(new SpriteRenderer(*ladderObj, "Recursos/img/cenario/escada_quebrada.png"));
         

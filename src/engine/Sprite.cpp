@@ -22,6 +22,7 @@ Sprite::Sprite(){                               // Inicializa como padrão
 
 Sprite::Sprite(const std::string file, int frameCountW, int frameCountH) : frameCountW(frameCountW), frameCountH(frameCountH) {        // Construtor que carrega imagem
     texture = nullptr;
+    cameraFollower = false; 
     scale = Vec2(1.0f, 1.0f);
     flip = SDL_FLIP_NONE;
     tintR = 255;
