@@ -4,6 +4,8 @@
 #include "core/State.h"
 #include "audio/Music.h"
 
+class GameObject;
+
 class EndState : public State {
 public:
     EndState();
@@ -19,6 +21,8 @@ public:
 
 private:
     Music backgroundMusic;
+    GameObject* gameOverTitle = nullptr;
+    GameObject* continuePrompt = nullptr;
 };
 
 #endif

@@ -28,6 +28,7 @@ LevelManager::~LevelManager() {
     chaoBuraco.clear();
     circleColliders.clear();
     entitySpawns.clear();
+    levelTransitionZones.clear();
 }
 
 void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
@@ -54,9 +55,20 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
         chaoBuraco.clear();
         circleColliders.clear();
         entitySpawns.clear();
+        levelTransitionZones.clear();
+        levelLabel.clear();
 
         // Se o JSON estiver vazio, aborta com seguranca
         if (!j.contains("layers")) return;
+
+        if (j.contains("properties") && j["properties"].is_array()) {
+            for (auto& prop : j["properties"]) {
+                const std::string pName = prop.value("name", "");
+                if (pName == "levelLabel" && prop.contains("value")) {
+                    levelLabel = prop["value"].get<std::string>();
+                }
+            }
+        }
 
         // Lemos as camadas na ordem em que o Tiled exportou!
         for (auto& layer : j["layers"]) {
@@ -136,12 +148,34 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
                             if (c.radius > 0) circleColliders.push_back(c);
 
                         } else {
-                            SDL_Rect r;
-                            r.x = (int)finalX;
-                            r.y = (int)finalY;
-                            r.w = obj.value("width", 0.0f);
-                            r.h = obj.value("height", 0.0f);
-                            if (r.w > 0 && r.h > 0) rectColliders.push_back(r);
+                            const std::string objName = obj.value("name", "");
+                            if (objName == "move_levels") {
+                                EntitySpawn zone;
+                                zone.name = objName;
+                                zone.tiledId = obj.value("id", -1);
+                                zone.x = finalX;
+                                zone.y = finalY;
+                                zone.w = obj.value("width", 0.0f);
+                                zone.h = obj.value("height", 0.0f);
+                                if (obj.contains("properties")) {
+                                    for (auto& prop : obj["properties"]) {
+                                        const std::string pName = prop.value("name", "");
+                                        if (prop.contains("value")) {
+                                            zone.properties[pName] = prop["value"];
+                                        }
+                                    }
+                                }
+                                if (zone.w > 0.0f && zone.h > 0.0f) {
+                                    levelTransitionZones.push_back(zone);
+                                }
+                            } else {
+                                SDL_Rect r;
+                                r.x = (int)finalX;
+                                r.y = (int)finalY;
+                                r.w = obj.value("width", 0.0f);
+                                r.h = obj.value("height", 0.0f);
+                                if (r.w > 0 && r.h > 0) rectColliders.push_back(r);
+                            }
                         }
                     }
                 }
@@ -153,6 +187,8 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
 
                         // O Tiled pode ler tanto "type" ou "class". Usarei as duas por segurança
                         spawn.type = obj.value("class", obj.value("type", ""));
+                        spawn.name = obj.value("name", "");
+                        spawn.tiledId = obj.value("id", -1);
                         spawn.x = obj.value("x", 0.0f) + layerOffsetX;
                         spawn.y = obj.value("y", 0.0f) + layerOffsetY;
 

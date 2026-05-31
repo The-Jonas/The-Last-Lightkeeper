@@ -1,6 +1,18 @@
 {
   "ostPath": "Recursos/audio/soundtracks/Ambientacao.mp3",
   "levelPath": "Recursos/map/mapa_1_andar.json",
+  "levels": [
+    {
+      "label": "level_1",
+      "mapPath": "Recursos/map/mapa_1_andar.json",
+      "displayNumber": 1
+    },
+    {
+      "label": "level_2",
+      "mapPath": "Recursos/map/mapa_2_andar.json",
+      "displayNumber": 2
+    }
+  ],
   "navWorld": { "w": 4358, "h": 3276 },
   "navTilePx": 64,
   "itemPickupCount": 35,
@@ -39,7 +51,5 @@
       "properties": [{ "prop": "FUEL", "value": 50.0}]
     }
   ],
-  "oceanChunkCandidates": [
-    "Recursos/audio/waves.mp3"
-  ]
+  "oceanChunkCandidates": []
 }

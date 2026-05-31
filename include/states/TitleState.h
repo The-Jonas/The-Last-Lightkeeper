@@ -30,7 +30,16 @@ private:
 
     GameObject* titleBackground = nullptr;
     GameObject* titleText = nullptr;
-    GameObject* pressSpaceText = nullptr;
+    GameObject* continueMenuText = nullptr;
+    GameObject* newGameMenuText = nullptr;
+
+    bool hasContinueSave = false;
+    int menuSelection = 1;
+
+    void LayoutMenuOptions();
+    void StartNewGame();
+    void StartContinue();
+    void ActivateMenuSelection();
 
     bool draggingSlider = false;
     int sliderVolume = Game::MASTER_VOLUME_PERCENT;

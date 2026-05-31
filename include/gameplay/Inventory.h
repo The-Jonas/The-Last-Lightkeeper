@@ -33,6 +33,10 @@ public:
     bool IsUsableLightActive() const;
     void TickUsingDurability(float dt);
 
+    void WriteToSave(struct SaveGameState& state) const;
+    void ReadFromSave(const struct SaveGameState& state,
+                      const std::vector<ItemDef>& itemCatalog);
+
     bool isLightToggledOn = false;
     
     ItemInstance* GetSlotMutable(int slot);

@@ -30,7 +30,8 @@ struct ImageLayer {
 // Guarda a "receita" de qualquer entidade do jogo
 struct EntitySpawn {
     std::string type;
-    std::string name;       
+    std::string name;
+    int tiledId = -1;
     float x, y;
     float w = 0.0f;
     float h = 0.0f;
@@ -66,8 +67,10 @@ public:
 
     // Lista de Spawns
     std::vector<EntitySpawn> entitySpawns;
+    std::vector<EntitySpawn> levelTransitionZones;
 
     bool escadaConsertada = false;
+    std::string levelLabel;
 
 private:
     // Vetor pra guardar todas as imagens na ordem certa

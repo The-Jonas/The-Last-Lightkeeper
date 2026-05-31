@@ -542,6 +542,9 @@ void StageState::Render(){
     // Aplica a regra para os dois irmãos independentemente
     DrawSanityBar(Character::player);
     DrawSanityBar(Character::littleBrother);
+
+    RenderLevelTitleBanner(renderer);
+    RenderQuitConfirmModal(renderer);
 }
 
 void StageState::RenderGameplayCollisionDebug(SDL_Renderer* renderer) const {

@@ -6,6 +6,12 @@
 #include <string>
 #include <vector>
 
+struct LevelDef {
+    std::string label;
+    std::string mapPath;
+    int displayNumber = 1;
+};
+
 /// Runtime configuration for `StageState::LoadAssets` (JSON under `Recursos/data/` + embedded fallback).
 struct StageFirstLoadData {
     std::string ostPath;
@@ -18,7 +24,11 @@ struct StageFirstLoadData {
     ItemDef startingFlashlight;
     std::vector<ItemDef> pickupCycle;
     std::vector<std::string> oceanChunkCandidates;
+    std::vector<LevelDef> levels;
 };
+
+int GetLevelCount(const StageFirstLoadData& cfg);
+const LevelDef& GetLevelDef(const StageFirstLoadData& cfg, int index);
 
 /// Loads `Recursos/data/stage_first_load.json` when valid; otherwise logs and returns embedded defaults (parity).
 StageFirstLoadData LoadStageFirstLoadData();

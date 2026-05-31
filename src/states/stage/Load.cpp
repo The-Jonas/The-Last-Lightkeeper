@@ -42,8 +42,8 @@
 #endif
 
 using namespace stage_internal;
-StageState::StageState() {
-    // Música de fundo (Last Hideout) e ondas são iniciadas em LoadAssets() para ficar em sync com o carregamento do nível.
+StageState::StageState(LoadMode mode) : loadMode(mode) {
+    // Música de fundo (Ambientacao) carregada em LoadAssets(); ondas opcionais via oceanChunkCandidates.
     tileSet = nullptr;                           // TileSet ativo
     dungeonTileSet.reset();
     bigCharacterObject = nullptr;                // GameObject do personagem grande (IRMÃOZÃO)
@@ -97,135 +97,35 @@ void StageState::LoadAssets() {
 
     const StageFirstLoadData cfg = LoadStageFirstLoadData();
 
-    // ==================================
-    // OBS: TOMAR CUIDADO NA ORDEM EM QUE CARREGAMOS OS COMPONENTES, POIS MUITO PROVAVELMENTE ISSO É A CAUSA DE ESTAREM SUMINDO, UM É DESENHADO POR CIMA DO OUTRO
-    // ==================================
+    if (!music.IsOpen()) {
+        music.Open(cfg.ostPath.c_str());
+        Mix_VolumeMusic(0);
+    }
 
-    // Carrega a OST; o Play fica em Start() para não tocar durante LoadingState::LoadAssets.
-    music.Open(cfg.ostPath.c_str());
-    Mix_VolumeMusic(0);
-
-    // Carregamento do mapa livre
-    level.LoadLevel(cfg.levelPath, Game::GetInstance().GetRenderer());
+    const LevelDef& levelDef = GetLevelDef(cfg, currentLevelIndex);
+    level.LoadLevel(levelDef.mapPath, Game::GetInstance().GetRenderer());
     mapOrigin = Vec2(0,0);
 
-    // Mapa atual: imagens + colisão no JSON — não há componente TileMap; A* usa grade sintética no mesmo espaço do `LevelManager`.
     navTilePx = cfg.navTilePx;
     navGridWidthTiles = static_cast<int>(std::ceil(cfg.navWorldW / static_cast<float>(navTilePx)));
     navGridHeightTiles = static_cast<int>(std::ceil(cfg.navWorldH / static_cast<float>(navTilePx)));
 
-    //------------------------------------------
-    
-    // Criação dos dois personagens controláveis
-    // Personagem grande (IRMÃOZÃO)
-    GameObject* bigObject = new GameObject();
-    Character* bigComp = new Character(*bigObject, "Recursos/img/personagens/Irmãozão", true);
-    bigObject->AddComponent(bigComp);
-    bigObject->z = 2;
-    AddObject(bigObject);
+    const bool resetInventory = !inventoryInitialized && loadMode == LoadMode::NewGame;
+    BuildLevelWorld(cfg, resetInventory);
+    inventoryInitialized = true;
 
-    // Personagem pequeno (IRMÃOZINHO)
-    GameObject* smallObject = new GameObject();
-    Character* smallComp = new Character(*smallObject, "Recursos/img/personagens/irmãozinho");
-    smallObject->AddComponent(smallComp);
-    smallObject->z = 2;
-    AddObject(smallObject);
-
-    // ==========================================
-    // SPAWN DOS IRMÃOS: posição vem do Tiled, com fallback pro centro
-    // ==========================================
-    const float centerX = cfg.navWorldW / 2.0f;
-    const float centerY = cfg.navWorldH / 2.0f;
-
-    float bigSpawnX = 0, bigSpawnY = 0;
-    float smallSpawnX = 0, smallSpawnY = 0;
-    bool bigFoundInTiled = false, smallFoundInTiled = false;
-
-    // ==========================================
-    // SPAWN AUTOMÁTICO DAS ENTIDADES (TILED)
-    // ==========================================
-    for (const auto& spawn : level.entitySpawns) {
-        
-        // 1. Spawns de jogador ficam aqui, pois alteram as variáveis locais do Load!
-        if (spawn.type == "PlayerSpawn_Big") {
-            bigSpawnX = spawn.x;
-            bigSpawnY = spawn.y - bigObject->box.h;
-            bigFoundInTiled = true;
-        }
-        else if (spawn.type == "PlayerSpawn_Small") {
-            smallSpawnX = spawn.x;
-            smallSpawnY = spawn.y - smallObject->box.h;
-            smallFoundInTiled = true;
-        }
-        // 2. Todo o resto (Inimigos, Caixas, Escadas, Itens) vai para a Factory
-        else {
-            SpawnFactory::SpawnEntity(spawn, *this, cfg); 
+    if (radialGeometry == nullptr) {
+        Game& gameRef = Game::GetInstance();
+        radialGeometry = new RadialLightOverlay();
+        if (!radialGeometry->Init(gameRef.GetRenderer())) {
+            delete radialGeometry;
+            radialGeometry = nullptr;
         }
     }
 
-    // Fallback só entra se o Tiled não tinha os pontos
-    if (!bigFoundInTiled) {
-        bigSpawnX = centerX - bigObject->box.w * 0.5f;
-        bigSpawnY = centerY - bigObject->box.h;
+    if (!lightTweakPanel) {
+        lightTweakPanel = std::make_unique<LightTweakPanel>(lightMaskParams, lightMaskShape);
     }
-    if (!smallFoundInTiled) {
-        smallSpawnX = bigSpawnX - std::max(40.0f, smallObject->box.w * 1.2f);
-        smallSpawnY = bigSpawnY;
-    }
-
-    bigObject->box.x = bigSpawnX;
-    bigObject->box.y = bigSpawnY;
-    smallObject->box.x = smallSpawnX;
-    smallObject->box.y = smallSpawnY;
-
-    previewLightLockedToPlayer = true;
-    previewLightAnchorPlayer = bigCharacterObject;
-
-    bigCharacterObject = bigObject;
-    smallCharacterObject = smallObject;
-    bigCharacter = bigComp;
-    smallCharacter = smallComp;
-    controlledCharacterObject = bigCharacterObject;
-    controlledCharacter = bigCharacter;
-    companionCharacterObject = smallCharacterObject;
-    companionCharacter = smallCharacter;
-
-    // Modo default: dupla andando juntos
-    partyMode = PartyMode::TOGETHER;
-
-    SDL_Color hudColor = {230, 230, 230, 220}; // Cor do texto do HUD
-
-    // Linha 1 de instruções
-    hudLine1 = new GameObject();
-    hudLine1->z = 100;
-    hudLine1->AddComponent(new Text(*hudLine1, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED, "TAB: roda de inventario | Ctrl: trocar personagem | E: pegar", hudColor));
-    AddObject(hudLine1);
-
-    // Linha 2 de instruções
-    hudLine2 = new GameObject();
-    hudLine2->z = 100;
-    hudLine2->AddComponent(new Text(*hudLine2, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED, " F: Ligar/Desligar luz | Q: alternar entre junto e independente", hudColor));
-    AddObject(hudLine2);
-
-    hudLine3 = new GameObject();
-    hudLine3->z = 100;
-    hudLine3->AddComponent(new Text(*hudLine3, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
-                                      "K forma | X luz cursor | C criar luz fixa | P painel | L luz | O sombras | B mapa", hudColor));
-    AddObject(hudLine3);
-
-    hudFps = new GameObject();
-    hudFps->z = 100;
-    hudFps->AddComponent(new Text(*hudFps, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED, "FPS: 60", hudColor));
-    AddObject(hudFps);
-
-    Game& gameRef = Game::GetInstance();
-    radialGeometry = new RadialLightOverlay();
-    if (!radialGeometry->Init(gameRef.GetRenderer())) {
-        delete radialGeometry;
-        radialGeometry = nullptr;
-    }
-
-    lightTweakPanel = std::make_unique<LightTweakPanel>(lightMaskParams, lightMaskShape);
 
     levelWorldW = cfg.navWorldW;
     levelWorldH = cfg.navWorldH;
@@ -236,23 +136,6 @@ void StageState::LoadAssets() {
         levelWorldH = static_cast<float>(tileMapComp->GetHeight() * tileHPx);
     }
 
-    inventory.SetUsing(ItemInstance{cfg.startingFlashlight, cfg.startingFlashlightDurability});
-
-    GameObject* hotbarObj = new GameObject();
-    hotbarObj->AddComponent(new HotbarComponent(*hotbarObj, inventory, bigCharacter,
-                                                  &controlledCharacter, itemPickups,
-                                                  [this](GameObject* obj) { AddObject(obj); },
-                                                  [this](Vec2 tl, float w, float h) {
-                                                      return ClampPickupTopLeft(tl, w, h);
-                                                  }));
-    hotbarObj->z = 200;
-    AddObject(hotbarObj);
-    hotbarObject = hotbarObj;
-
-    RefreshCameraTargets(); // Atualiza alvos da câmera (dupla + principal)
-
-
-    // Ondas (fora do mapa): primeiro andar jogável em diante. Tenta WAV/OGG e depois MP3 (decoded chunk).
     if (oceanMixerChannel >= 0) {
         Mix_HaltChannel(oceanMixerChannel);
         oceanMixerChannel = -1;
@@ -265,13 +148,14 @@ void StageState::LoadAssets() {
             break;
         }
     }
-    if (!oceanWavesChunk) {
+    if (oceanWavesChunk) {
+        oceanAmbient_.EnsurePlaying();
+    } else if (!cfg.oceanChunkCandidates.empty()) {
         std::cerr << "Ocean waves: falha ao carregar qualquer formato (tentou .ogg, .wav, .mp3). "
                      "SDL_mixer só tem 1 faixa Mix_Music; o ambiente precisa de Mix_Chunk. "
                      "MP3 muito longo como chunk pode falhar (RAM); prefira um loop OGG/WAV curto."
                   << std::endl;
     }
-    oceanAmbient_.EnsurePlaying();
 
     levelContentLoaded = true;
 }

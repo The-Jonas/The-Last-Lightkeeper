@@ -38,6 +38,7 @@ public:
 
     float depthOffset = 0.0f;
     bool isStairs = false;
+    int tiledId = -1;
     Rect box;                                       // Posição e tamanho
     double angleDeg;                                // Para os objetos terem o ângulo em graus
 

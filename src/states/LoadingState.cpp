@@ -1,5 +1,7 @@
 #include "states/LoadingState.h"
 #include "core/Game.h"
+#include "core/SaveManager.h"
+#include "core/SaveData.h"
 #include "engine/GameObject.h"
 #include "core/InputManager.h"
 #include "engine/Camera.h"
@@ -23,7 +25,7 @@ void LayoutCenteredLabel(GameObject* label) {
 }
 }
 
-LoadingState::LoadingState() = default;
+LoadingState::LoadingState(StageState::LoadMode mode) : loadMode(mode) {}
 
 LoadingState::~LoadingState() = default;
 
@@ -66,8 +68,23 @@ void LoadingState::Update(float /*dt*/) {
     const int masterVol = (MIX_MAX_VOLUME * Game::masterVolumePercent) / 100;
     Mix_Volume(-1, 0);
 
-    StageState* stage = new StageState();
+    StageState* stage = new StageState(loadMode);
+
+    if (loadMode == StageState::LoadMode::Continue) {
+        SaveFile saveFile;
+        if (SaveManager::Load(saveFile)) {
+            stage->SetInitialLevelIndex(saveFile.levelIndex);
+        }
+    }
+
     stage->LoadAssets();
+
+    if (loadMode == StageState::LoadMode::Continue) {
+        SaveFile saveFile;
+        if (SaveManager::Load(saveFile)) {
+            stage->ApplySaveState(saveFile.current);
+        }
+    }
 
     Mix_Volume(-1, masterVol);
 

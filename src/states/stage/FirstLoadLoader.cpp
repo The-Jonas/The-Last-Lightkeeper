@@ -7,6 +7,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <unordered_map>
+#include <algorithm>
 
 namespace {
 
@@ -46,7 +47,7 @@ ItemDef ParseItemDef(const json& j) {
 
 StageFirstLoadData EmbeddedDefaults() {
     StageFirstLoadData d;
-    d.ostPath = "Recursos/audio/soundtracks/Last Hideout.mp3";
+    d.ostPath = "Recursos/audio/soundtracks/Ambientacao.mp3";
     d.levelPath = "Recursos/map/mapa_1_andar.json";
     d.navWorldW = 4358.0f;
     d.navWorldH = 3276.0f;
@@ -72,7 +73,11 @@ StageFirstLoadData EmbeddedDefaults() {
                 0,
                 {{ItemProperty::LIGHT_SOURCE, 1.0f}}};
 
-    d.oceanChunkCandidates = {"Recursos/audio/waves.mp3"};
+    d.oceanChunkCandidates = {};
+    d.levels = {
+        {"level_1", "Recursos/map/mapa_1_andar.json", 1},
+        {"level_2", "Recursos/map/mapa_2_andar.json", 2},
+    };
     return d;
 }
 
@@ -138,6 +143,22 @@ StageFirstLoadData ParseFromJsonRoot(const json& j) {
             d.oceanChunkCandidates = std::move(paths);
         }
     }
+    if (j.contains("levels") && j["levels"].is_array()) {
+        std::vector<LevelDef> levels;
+        for (const auto& lv : j["levels"]) {
+            LevelDef def;
+            def.label = lv.value("label", "");
+            def.mapPath = lv.value("mapPath", "");
+            def.displayNumber = lv.value("displayNumber", 1);
+            if (!def.mapPath.empty()) {
+                levels.push_back(std::move(def));
+            }
+        }
+        if (!levels.empty()) {
+            d.levels = std::move(levels);
+            d.levelPath = d.levels.front().mapPath;
+        }
+    }
 
     return d;
 }
@@ -146,8 +167,11 @@ StageFirstLoadData SanitizeLists(StageFirstLoadData d) {
     if (d.pickupCycle.empty()) {
         d.pickupCycle = EmbeddedDefaults().pickupCycle;
     }
-    if (d.oceanChunkCandidates.empty()) {
-        d.oceanChunkCandidates = EmbeddedDefaults().oceanChunkCandidates;
+    if (d.levels.empty()) {
+        d.levels = EmbeddedDefaults().levels;
+    }
+    if (d.levelPath.empty() && !d.levels.empty()) {
+        d.levelPath = d.levels.front().mapPath;
     }
     return d;
 }
@@ -182,4 +206,23 @@ StageFirstLoadData LoadStageFirstLoadDataDispatch() {
 
 StageFirstLoadData LoadStageFirstLoadData() {
     return LoadStageFirstLoadDataDispatch();
+}
+
+int GetLevelCount(const StageFirstLoadData& cfg) {
+    if (!cfg.levels.empty()) {
+        return static_cast<int>(cfg.levels.size());
+    }
+    return 1;
+}
+
+const LevelDef& GetLevelDef(const StageFirstLoadData& cfg, int index) {
+    static LevelDef fallback;
+    if (!cfg.levels.empty()) {
+        const int clamped = std::max(0, std::min(index, static_cast<int>(cfg.levels.size()) - 1));
+        return cfg.levels[static_cast<size_t>(clamped)];
+    }
+    fallback.label = "level_1";
+    fallback.mapPath = cfg.levelPath;
+    fallback.displayNumber = index + 1;
+    return fallback;
 }

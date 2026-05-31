@@ -4,6 +4,7 @@
 #include "gameplay/Character.h"
 #include "core/Game.h"
 #include "core/InputManager.h"
+#include "states/stage/StageState.h"
 #include "gameplay/ItemPickup.h"
 #include "core/Resources.h"
 #include "audio/Sound.h"
@@ -344,6 +345,9 @@ void HotbarComponent::Update(float dt) {
                     }
                     closest->Destroy();
                     PlayRandomPickupSound();
+                    if (StageState* stage = Game::TryGetStageState()) {
+                        stage->SaveCurrentProgress();
+                    }
 
                     // Congela o Irmãozão rapidinho pra animação de pegar (0.2 segundos)
                     Character::player->currentState = Character::ActionState::INTERACTING;
@@ -389,6 +393,9 @@ void HotbarComponent::Update(float dt) {
                             }
                             closest->Destroy();
                             PlayRandomPickupSound();
+                            if (StageState* stage = Game::TryGetStageState()) {
+                                stage->SaveCurrentProgress();
+                            }
                             std::cout << "[CO-OP] Irmaos trabalharam juntos e pegaram o item no alto!" << std::endl;
                         }
                         else { 

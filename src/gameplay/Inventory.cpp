@@ -1,4 +1,5 @@
 #include "gameplay/Inventory.h"
+#include "core/SaveData.h"
 
 bool Inventory::AddItem(const ItemDef& def, int durability) {
     for (int i = 0; i < kSlots; i++) {
@@ -138,4 +139,58 @@ ItemInstance* Inventory::GetSlotMutable(int slot) {
 ItemInstance* Inventory::GetUsingMutable() {
     if (!usingSlot.has_value()) return nullptr;
     return &usingSlot.value();
+}
+
+namespace {
+
+const ItemDef* FindItemDefByName(const std::string& name, const std::vector<ItemDef>& catalog) {
+    for (const ItemDef& def : catalog) {
+        if (def.name == name) {
+            return &def;
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
+
+void Inventory::WriteToSave(SaveGameState& state) const {
+    state.lightOn = isLightToggledOn;
+    state.usingItem.reset();
+    if (usingSlot.has_value()) {
+        state.usingItem = SavedItemSlot{usingSlot->def.name, usingSlot->durability};
+    }
+    state.slots.clear();
+    state.slots.resize(kSlots);
+    for (int i = 0; i < kSlots; ++i) {
+        if (slots[i].has_value()) {
+            state.slots[i] = SavedItemSlot{slots[i]->def.name, slots[i]->durability};
+        }
+    }
+}
+
+void Inventory::ReadFromSave(const SaveGameState& state, const std::vector<ItemDef>& itemCatalog) {
+    isLightToggledOn = state.lightOn;
+    usingSlot.reset();
+    usingDrainAccum = 0.0f;
+    for (int i = 0; i < kSlots; ++i) {
+        slots[i].reset();
+    }
+
+    if (state.usingItem.has_value()) {
+        const ItemDef* def = FindItemDefByName(state.usingItem->name, itemCatalog);
+        if (def) {
+            usingSlot = ItemInstance{*def, state.usingItem->durability};
+        }
+    }
+
+    for (int i = 0; i < kSlots && i < static_cast<int>(state.slots.size()); ++i) {
+        if (!state.slots[i].has_value()) {
+            continue;
+        }
+        const ItemDef* def = FindItemDefByName(state.slots[i]->name, itemCatalog);
+        if (def) {
+            slots[i] = ItemInstance{*def, state.slots[i]->durability};
+        }
+    }
 }

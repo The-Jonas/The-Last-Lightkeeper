@@ -16,6 +16,7 @@ public:
 
     // Função pública caso o vento (ou um monstro) apague o castiçal no futuro
     void SetLit(bool lit);
+    bool IsLit() const { return isLit; }
 
 private:
     bool isLit;

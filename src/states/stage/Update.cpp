@@ -13,6 +13,7 @@
 #include "world/Collider.h"
 #include "world/Collision.h"
 #include "core/GameData.h"
+#include "core/SaveManager.h"
 #include "states/EndState.h"
 #include "ui/Text.h"
 #include "lighting/TopDownLightShadows.h"
@@ -77,9 +78,23 @@ void StageState::Update(float dt){
         quitRequested = true;
     }
 
-    // ESC -> Volta para o menu
+    if (quitConfirmOpen) {
+        HandleQuitConfirmInput();
+        return;
+    }
+
+    if (levelTitleTimer > 0.0f) {
+        levelTitleTimer -= dt;
+        if (levelTitleTimer < 0.0f) {
+            levelTitleTimer = 0.0f;
+        }
+    }
+
+    // ESC -> Abre confirmação de saída
     if (input.KeyPress(ESCAPE_KEY)) {
-        popRequested = true;
+        quitConfirmOpen = true;
+        quitConfirmSelection = 0;
+        return;
     }
 
     if (input.KeyPress(LIGHTS_TOGGLE_KEY)) {
@@ -316,12 +331,16 @@ void StageState::Update(float dt){
 
     // VERIFICAÇÃO DE FIM DE JOGO
 
-    // 1. Derrota: Jogador morreu
-    if (!IsPartyReady()) {
-        GameData::playerVictory = false;                        // Se o ponteiro é nulo, o jogador morreu
+    const bool sanityDefeat =
+        (bigCharacter && bigCharacter->sanity <= 0.0f) ||
+        (smallCharacter && smallCharacter->sanity <= 0.0f);
 
-        // Empilha a tela de fim e pausa a fase atual
-        popRequested = true;                                    // Remove o StageState atual
+    // Derrota: sanidade zerou ou personagem destruído
+    if (sanityDefeat || !IsPartyReady()) {
+        SaveManager::RevertCurrentToCheckpoint();
+        GameData::playerVictory = false;
+
+        popRequested = true;
         Game::GetInstance().Push(new EndState());
     }
 }

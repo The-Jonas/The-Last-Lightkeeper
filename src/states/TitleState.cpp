@@ -1,5 +1,7 @@
 #include "states/TitleState.h"
 #include "states/LoadingState.h"
+#include "core/SaveManager.h"
+#include "states/stage/StageState.h"
 #include "core/Game.h"
 #include "engine/GameObject.h"
 #include "engine/SpriteRenderer.h"
@@ -11,9 +13,8 @@
 
 namespace {
 
-void LayoutTitleScreen(GameObject* background, GameObject* title,
-                       GameObject* pressSpace) {
-    if (!background || !pressSpace) {
+void LayoutTitleScreen(GameObject* background, GameObject* title) {
+    if (!background) {
         return;
     }
     Game& game = Game::GetInstance();
@@ -30,12 +31,18 @@ void LayoutTitleScreen(GameObject* background, GameObject* title,
         title->box.x = Camera::pos.x + (windowW - tw) * 0.5f;
         title->box.y = Camera::pos.y + 120.0f;
     }
+}
 
-    const float textW = pressSpace->box.w;
-    pressSpace->box.x = Camera::pos.x + (windowW - textW) * 0.5f;
-    pressSpace->box.y = Camera::pos.y + 480.0f;
+void LayoutMenuOption(GameObject* option, float centerY) {
+    if (!option) {
+        return;
+    }
+    const float windowW = static_cast<float>(Game::GetInstance().GetWindowsWidth());
+    option->box.x = Camera::pos.x + (windowW - option->box.w) * 0.5f;
+    option->box.y = Camera::pos.y + centerY;
 }
-}
+
+} // namespace
 #include "states/CutsceneState.h"
 
 TitleState::TitleState() : State() {
@@ -63,31 +70,90 @@ void TitleState::LoadAssets() {
     //AddObject(nameGO);
     //titleText = nameGO;
 
-    GameObject* textGO = new GameObject();
-    textGO->z = 10;
-    SDL_Color white = {0, 0, 0, 0};
-    Text* pressText = new Text(*textGO, "Recursos/font/times.ttf", 52, Text::BLENDED, "Press Space to continue", white);
-    textGO->AddComponent(pressText);
-    AddObject(textGO);
-    pressSpaceText = textGO;
+    GameObject* continueGO = new GameObject();
+    continueGO->z = 10;
+    SDL_Color menuColor = {0, 0, 0, 0};
+    Text* continueText = new Text(*continueGO, "Recursos/font/times.ttf", 40, Text::BLENDED,
+                                  "1 Continue", menuColor);
+    continueGO->AddComponent(continueText);
+    AddObject(continueGO);
+    continueMenuText = continueGO;
 
-    LayoutTitleScreen(titleBackground, titleText, pressSpaceText);
+    GameObject* newGameGO = new GameObject();
+    newGameGO->z = 10;
+    Text* newGameText = new Text(*newGameGO, "Recursos/font/times.ttf", 40, Text::BLENDED,
+                                 "2 New Game", menuColor);
+    newGameGO->AddComponent(newGameText);
+    AddObject(newGameGO);
+    newGameMenuText = newGameGO;
+
+    hasContinueSave = SaveManager::HasSave();
+    menuSelection = hasContinueSave ? 0 : 1;
+
+    LayoutTitleScreen(titleBackground, titleText);
+    LayoutMenuOptions();
+}
+
+void TitleState::LayoutMenuOptions() {
+    hasContinueSave = SaveManager::HasSave();
+    if (!hasContinueSave && menuSelection == 0) {
+        menuSelection = 1;
+    }
+
+    constexpr float kNewGameY = 500.0f;
+    constexpr float kContinueY = 440.0f;
+
+    LayoutMenuOption(continueMenuText, kContinueY);
+    LayoutMenuOption(newGameMenuText, kNewGameY);
+}
+
+void TitleState::StartNewGame() {
+    SaveManager::DeleteSave();
+    Game::GetInstance().Push(new LoadingState(StageState::LoadMode::NewGame));
+}
+
+void TitleState::StartContinue() {
+    if (!SaveManager::HasSave()) {
+        return;
+    }
+    Game::GetInstance().Push(new LoadingState(StageState::LoadMode::Continue));
+}
+
+void TitleState::ActivateMenuSelection() {
+    if (menuSelection == 0 && hasContinueSave) {
+        StartContinue();
+    } else {
+        StartNewGame();
+    }
 }
 
 void TitleState::Update(float dt) {
     InputManager& input = InputManager::GetInstance();
 
+    hasContinueSave = SaveManager::HasSave();
+    if (!hasContinueSave && menuSelection == 0) {
+        menuSelection = 1;
+    }
+
     if (input.QuitRequested() || input.KeyPress(ESCAPE_KEY)) {
         quitRequested = true;
     }
 
-    if (input.KeyPress(SPACE_KEY)) {
-        Game::GetInstance().Push(new LoadingState());
-        // Game::GetInstance().Push(new CutsceneState(
-        // "Recursos/video/video_cutscene.mpg",
-        // "Recursos/audio/audio_cutscene.wav",
-        // new StageState()
-        // ));                 
+    if (input.KeyPress(SDLK_UP) || input.KeyPress(SDLK_w)) {
+        if (hasContinueSave) {
+            menuSelection = 0;
+        }
+    }
+    if (input.KeyPress(SDLK_DOWN) || input.KeyPress(SDLK_s)) {
+        menuSelection = 1;
+    }
+
+    if (input.KeyPress(SPACE_KEY) || input.KeyPress(SDLK_RETURN)) {
+        ActivateMenuSelection();
+    } else if (hasContinueSave && (input.KeyPress(SDLK_1) || input.KeyPress(SDLK_c))) {
+        StartContinue();
+    } else if (input.KeyPress(SDLK_2) || input.KeyPress(SDLK_n)) {
+        StartNewGame();
     }
 
     fadeTimer.Update(dt);
@@ -124,23 +190,41 @@ void TitleState::Update(float dt) {
         }
     }
 
-    if (pressSpaceText) {
-        Text* text = pressSpaceText->GetComponent<Text>();
+    auto applyMenuColor = [&](GameObject* option, bool selected) {
+        if (!option) {
+            return;
+        }
+        Text* text = option->GetComponent<Text>();
+        if (!text) {
+            return;
+        }
+        if (t < 1.0f) {
+            text->SetColor({0, 0, 0, a});
+            return;
+        }
+        if (selected) {
+            pulseTimer += dt;
+            float s = (std::sin(pulseTimer * 1.5f) + 1.0f) * 0.5f;
+            Uint8 pulseAlpha = static_cast<Uint8>(40.0f + s * 215.0f);
+            text->SetColor({0, 0, 0, pulseAlpha});
+        } else {
+            text->SetColor({0, 0, 0, 120});
+        }
+    };
+
+    applyMenuColor(newGameMenuText, menuSelection == 1);
+    if (hasContinueSave) {
+        applyMenuColor(continueMenuText, menuSelection == 0);
+    } else if (continueMenuText) {
+        Text* text = continueMenuText->GetComponent<Text>();
         if (text) {
-            if (t >= 1.0f) {
-                pulseTimer += dt;  
-                float s = (std::sin(pulseTimer * 1.5f) + 1.0f) * 0.5f;
-                // Nunca zerar o s pra não ter o efeito de piscar.
-                float pulse = 40.0f + s * 215.0f;
-                Uint8 pulseAlpha = static_cast<Uint8>(pulse);
-                text->SetColor({0, 0, 0, pulseAlpha});
-            } else {
-                text->SetColor({0, 0, 0, a});
-            }
+            const Uint8 alpha = t < 1.0f ? a : static_cast<Uint8>(90);
+            text->SetColor({100, 100, 100, alpha});
         }
     }
 
-    LayoutTitleScreen(titleBackground, titleText, pressSpaceText);
+    LayoutTitleScreen(titleBackground, titleText);
+    LayoutMenuOptions();
     UpdateArray(dt);
 }
 
@@ -162,6 +246,10 @@ void TitleState::Pause() {
 
 void TitleState::Resume() {
     Camera::pos = Vec2(0, 0);
+    hasContinueSave = SaveManager::HasSave();
+    if (!hasContinueSave) {
+        menuSelection = 1;
+    }
 }
 
 void TitleState::RecalcSlider() {

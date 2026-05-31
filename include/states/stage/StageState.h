@@ -14,6 +14,8 @@
 #include "lighting/TopDownLightShadows.h"
 #include "gameplay/Inventory.h"
 #include "core/LevelManager.h"
+#include "core/SaveData.h"
+#include "states/stage/FirstLoadData.h"
 #include "states/stage/OceanAmbientController.h"
 #include "math/Vec2.h"
 
@@ -28,7 +30,12 @@ class TileMap;
 class StageState : public State {
 friend class SpawnFactory;
 public:
-    StageState();                                                       // Construtor
+    enum class LoadMode {
+        NewGame,
+        Continue
+    };
+
+    StageState(LoadMode mode = LoadMode::NewGame);                  // Construtor
     ~StageState();                                                      // Destrutor
 
     LevelManager level;
@@ -56,6 +63,19 @@ public:
     float smallIlluminationLevel = 0.0f;
 
     Inventory& GetInventory() { return inventory; }
+    LoadMode GetLoadMode() const { return loadMode; }
+
+    SaveGameState CaptureSaveState() const;
+    void ApplySaveState(const SaveGameState& state);
+    bool SaveCurrentProgress();
+    bool SaveLevelCheckpoint();
+
+    void SetInitialLevelIndex(int index);
+    void TransitionToLevel(int targetLevelIndex);
+    int GetCurrentLevelIndex() const { return currentLevelIndex; }
+
+    void RenderQuitConfirmModal(SDL_Renderer* renderer);
+    void RenderLevelTitleBanner(SDL_Renderer* renderer);
 
 private:
 
@@ -104,6 +124,10 @@ private:
     int NavTileWidthPx() const;
     int NavTileHeightPx() const;
     bool IsPartyReady() const;                                           // Confere se referências da dupla são válidas
+    bool HandleQuitConfirmInput();                                       // Modal ESC: save and quit / cancel
+    void ClearGameplayWorld();
+    void BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInventory);
+    void ShowLevelTitleBanner();
     void RenderGameplayCollisionDebug(SDL_Renderer* renderer) const;     // Com showMapPhysicsDebug: colliders + foot circles
     void RenderCompanionFollowPathDebug(SDL_Renderer* renderer) const;   // Com showMapPhysicsDebug: polylinha do seguidor (modo junto)
 
@@ -174,7 +198,17 @@ private:
     int oceanMixerChannel = -1;
     /// Set true at end of LoadAssets(); LoadingState may call LoadAssets before Start() — Start skips a second load.
     bool levelContentLoaded = false;
+    LoadMode loadMode = LoadMode::NewGame;
+    bool quitConfirmOpen = false;
+    int quitConfirmSelection = 0;
+    SDL_Rect quitConfirmSaveBtn{0, 0, 0, 0};
+    SDL_Rect quitConfirmCancelBtn{0, 0, 0, 0};
     int companionStartDelay = 0;
+    int currentLevelIndex = 0;
+    float levelTitleTimer = 0.0f;
+    int levelTitleNumber = 1;
+    bool inventoryInitialized = false;
+    static constexpr float kLevelTitleDuration = 3.0f;
 };
 
 #endif

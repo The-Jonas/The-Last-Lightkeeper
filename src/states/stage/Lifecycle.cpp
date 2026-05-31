@@ -25,6 +25,7 @@
 #include "gameplay/Repairable.h"
 #include "gameplay/StairTrigger.h"
 #include "core/Resources.h"
+#include "core/SaveManager.h"
 #include <iostream>
 #include <fstream>
 #include <algorithm>
@@ -60,6 +61,12 @@ void StageState::Start() {
             music.Play(-1);
         }
     }
+
+    if (loadMode == LoadMode::NewGame) {
+        SaveLevelCheckpoint();
+    }
+
+    ShowLevelTitleBanner();
     started = true;
 }
 

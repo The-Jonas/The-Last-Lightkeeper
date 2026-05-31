@@ -15,6 +15,9 @@ public:
     void Update(float dt) override;
     void Render() override;
 
+    bool IsRepaired() const { return isRepaired; }
+    void ApplyRepairedState();
+
 private:
     std::string fixedSpritePath;
     std::string requiredItem;

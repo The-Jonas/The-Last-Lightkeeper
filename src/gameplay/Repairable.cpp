@@ -21,6 +21,21 @@ Repairable::Repairable(GameObject& associated, std::string fixedSpritePath, std:
 Repairable::~Repairable() {
 }
 
+void Repairable::ApplyRepairedState() {
+    if (isRepaired) {
+        return;
+    }
+    SpriteRenderer* sprite = associated.GetComponent<SpriteRenderer>();
+    if (sprite) {
+        sprite->Open(fixedSpritePath);
+    }
+    isRepaired = true;
+    StageState* stage = Game::TryGetStageState();
+    if (stage) {
+        stage->level.escadaConsertada = true;
+    }
+}
+
 void Repairable::Update(float dt) {
     // Se já consertou, não precisa fazer mais nada
     if (isRepaired) return;

@@ -9,6 +9,7 @@
 #include "ui/FadeEffect.h"
 #include "gameplay/Repairable.h"
 #include "gameplay/StairTrigger.h"
+#include "gameplay/LevelTransition.h"
 #include "gameplay/ItemPickup.h"
 #include <iostream>
 #include <cstdlib> 
@@ -17,6 +18,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
     
     if (spawn.type == "Caixa") {
         GameObject* boxObj = new GameObject();
+        boxObj->tiledId = spawn.tiledId;
         boxObj->z = spawn.z; 
         boxObj->AddComponent(new Box(*boxObj, spawn.isStatic));
         boxObj->box.x = spawn.x;
@@ -25,6 +27,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
     }
     else if (spawn.type == "Pilar") {
         GameObject* pilarObj = new GameObject();
+        pilarObj->tiledId = spawn.tiledId;
         pilarObj->z = spawn.z;
 
         SpriteRenderer* sprite = new SpriteRenderer(*pilarObj, "Recursos/img/cenario/pilares.png");
@@ -38,6 +41,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
     }
     else if (spawn.type == "Escada_Quebrada") {
         GameObject* ladderObj = new GameObject();
+        ladderObj->tiledId = spawn.tiledId;
         ladderObj->z = spawn.z;
         ladderObj->isStairs= true;
         ladderObj->AddComponent(new SpriteRenderer(*ladderObj, "Recursos/img/cenario/escada_quebrada.png"));
@@ -58,6 +62,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
     }
     else if (spawn.type == "StairTrigger") {
         GameObject* triggerObj = new GameObject();
+        triggerObj->tiledId = spawn.tiledId;
 
         // Define um valor padrão de segurança caso se esqueça de colocar no Tiled
         float myAnchor = 886.18f;
@@ -75,6 +80,22 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         triggerObj->box.h = spawn.h;
         
         stage.AddObject(triggerObj);
+    }
+    else if (spawn.type == "LevelTransition") {
+        int targetLevel = 1;
+        if (spawn.properties.count("targetLevelIndex")) {
+            targetLevel = spawn.properties.at("targetLevelIndex").get<int>();
+        }
+
+        GameObject* transitionObj = new GameObject();
+        transitionObj->tiledId = spawn.tiledId;
+        transitionObj->AddComponent(new LevelTransition(*transitionObj, targetLevel));
+        transitionObj->box.x = spawn.x;
+        transitionObj->box.y = spawn.y;
+        transitionObj->box.w = spawn.w;
+        transitionObj->box.h = spawn.h;
+
+        stage.AddObject(transitionObj);
     }
     else if (spawn.type == "ItemSpawn") {
 
@@ -116,6 +137,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
             
             if (pickup) {
             GameObject& itemObj = pickup->GetAssociated();
+            itemObj.tiledId = spawn.tiledId;
 
             // A MECÂNICA (Passamos o 0, 1 ou 2 para ditar qual o comportamento da altura do item) 
             pickup->SetHeightLevel(itemHeightLevel);
@@ -143,6 +165,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         if (spawn.properties.count("depthOffset")) depthOff = spawn.properties.at("depthOffset").get<float>();
 
         GameObject* candleObj = new GameObject();
+        candleObj->tiledId = spawn.tiledId;
         candleObj->z = spawn.z;
         candleObj->depthOffset = depthOff;
         candleObj->AddComponent(new Candlestick(*candleObj, startsLit, dir));
@@ -156,6 +179,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
     }
     else if (spawn.type == "CaixasAmontoadas") {
         GameObject* caixasObj = new GameObject();
+        caixasObj->tiledId = spawn.tiledId;
         caixasObj->z = spawn.z;
 
         // Suporte a depthOffset caso precise ajustar a profundidade delas no mapa
