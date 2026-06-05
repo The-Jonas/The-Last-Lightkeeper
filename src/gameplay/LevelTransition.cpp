@@ -33,7 +33,7 @@ void LevelTransition::Update(float dt) {
     }
 
     cooldownTimer = 1.0f;
-    stage->TransitionToLevel(targetLevelIndex);
+    stage->BeginLevelTransition(targetLevelIndex);
 }
 
 void LevelTransition::Render() {

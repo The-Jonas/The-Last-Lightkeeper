@@ -74,6 +74,7 @@ public:
     bool SaveLevelCheckpoint();
 
     void SetInitialLevelIndex(int index);
+    void BeginLevelTransition(int targetLevelIndex);
     void TransitionToLevel(int targetLevelIndex);
     int GetCurrentLevelIndex() const { return currentLevelIndex; }
 

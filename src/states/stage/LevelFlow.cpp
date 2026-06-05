@@ -10,6 +10,7 @@
 #include "gameplay/HotbarComponent.h"
 #include "gameplay/Item.h"
 #include "states/EndState.h"
+#include "states/LevelTransitionLoadingState.h"
 #include "ui/Text.h"
 #include "world/SpawnFactory.h"
 
@@ -189,6 +190,10 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
 
     RefreshCameraTargets();
     UpdateControlledCharacterVisuals();
+}
+
+void StageState::BeginLevelTransition(int targetLevelIndex) {
+    Game::GetInstance().Push(new LevelTransitionLoadingState(this, targetLevelIndex));
 }
 
 void StageState::TransitionToLevel(int targetLevelIndex) {
