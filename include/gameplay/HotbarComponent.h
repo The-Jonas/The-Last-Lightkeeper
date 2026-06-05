@@ -74,8 +74,10 @@ private:
     float closedUseCenterY = 0.0f;
 
     bool dragFromUsing = false;
+    ItemPickup* reachablePickup = nullptr;
 
     float GetPickupReachRadius() const;
+    ItemPickup* FindClosestReachablePickup() const;
 
     void RecalcLayout();
     /// Fechado: só slot de uso (retorna kWheelCenterIndex). Aberto: 0..5 anel, 6 centro, -1 fora.

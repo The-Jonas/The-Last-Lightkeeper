@@ -43,7 +43,7 @@ Sprite::~Sprite(){                              // Destrutor
 }
 
 void Sprite::Open(std::string file){
-
+    sourceFile = file;
     texture = Resources::GetImage(file);                                // Chamando Resources::GetImage em vez de IMG_LoadTexture
 
     if (!texture) {
@@ -79,6 +79,51 @@ void Sprite::SetTint(Uint8 r, Uint8 g, Uint8 b, Uint8 a) {
     tintG = g;
     tintB = b;
     tintA = a;
+}
+
+void Sprite::RenderTintedScaled(int x, int y, int w, int h, double angleDeg, Uint8 tr, Uint8 tg, Uint8 tb,
+                                Uint8 ta, float scaleMul) const {
+    SDL_Texture* drawTexture = nullptr;
+    std::shared_ptr<SDL_Texture> whiteMask;
+    if (!sourceFile.empty()) {
+        whiteMask = Resources::GetWhiteMaskImage(sourceFile);
+        if (whiteMask) {
+            drawTexture = whiteMask.get();
+        }
+    }
+    if (!drawTexture) {
+        if (!texture) {
+            return;
+        }
+        drawTexture = texture.get();
+    }
+
+    const float zoom = cameraFollower ? 1.0f : Camera::GetZoom();
+    const float screenW = static_cast<float>(w) * zoom * scaleMul;
+    const float screenH = static_cast<float>(h) * zoom * scaleMul;
+    const float worldCenterX = static_cast<float>(x) + static_cast<float>(w) * 0.5f;
+    const float worldCenterY = static_cast<float>(y) + static_cast<float>(h) * 0.5f;
+    const float centerX = cameraFollower ? worldCenterX : (worldCenterX - Camera::pos.x) * zoom;
+    const float centerY = cameraFollower ? worldCenterY : (worldCenterY - Camera::pos.y) * zoom;
+
+    SDL_FRect dstRect = {
+        centerX - screenW * 0.5f,
+        centerY - screenH * 0.5f,
+        screenW,
+        screenH,
+    };
+
+    SDL_SetTextureColorMod(drawTexture, tr, tg, tb);
+    SDL_SetTextureAlphaMod(drawTexture, ta);
+    SDL_SetTextureBlendMode(drawTexture, SDL_BLENDMODE_BLEND);
+    SDL_RenderCopyExF(
+        Game::GetInstance().GetRenderer(),
+        drawTexture,
+        &clipRect,
+        &dstRect,
+        angleDeg,
+        nullptr,
+        flip);
 }
 
 void Sprite::Render(int x, int y, int w, int h, double angleDeg) {

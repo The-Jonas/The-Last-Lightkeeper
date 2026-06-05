@@ -6,6 +6,7 @@
 #include "core/InputManager.h"
 #include "states/stage/StageState.h"
 #include "gameplay/ItemPickup.h"
+#include "gameplay/Box.h"
 #include "core/Resources.h"
 #include "audio/Sound.h"
 #include "math/Vec2.h"
@@ -177,6 +178,44 @@ float HotbarComponent::GetPickupReachRadius() const {
     return bigCharacter->GetFootCircleRadius() + kPickupPromptFootRadiusExtra;
 }
 
+ItemPickup* HotbarComponent::FindClosestReachablePickup() const {
+    if (!bigCharacter || !Character::player) {
+        return nullptr;
+    }
+
+    ItemPickup* closest = nullptr;
+    float closestDist = 1e30f;
+    const Vec2 playerCenter = bigCharacter->GetCenter();
+
+    for (ItemPickup* p : itemPickups) {
+        if (!p || p->GetAssociated().IsDead()) {
+            continue;
+        }
+
+        const int itemHeight = p->GetHeightLevel();
+        const SDL_Rect reachBox = Character::player->GetInteractionRect(itemHeight);
+        const GameObject& itemObj = p->GetAssociated();
+        const SDL_Rect itemRect = {
+            static_cast<int>(itemObj.box.x),
+            static_cast<int>(itemObj.box.y),
+            static_cast<int>(itemObj.box.w),
+            static_cast<int>(itemObj.box.h),
+        };
+
+        if (!SDL_HasIntersection(&reachBox, &itemRect)) {
+            continue;
+        }
+
+        const float d = playerCenter.Distance(p->GetCenter());
+        if (d < closestDist) {
+            closestDist = d;
+            closest = p;
+        }
+    }
+
+    return closest;
+}
+
 bool HotbarComponent::PointInCircle(int mx, int my, float cx, float cy, float radius) const {
     const float dx = static_cast<float>(mx) - cx;
     const float dy = static_cast<float>(my) - cy;
@@ -254,9 +293,11 @@ int HotbarComponent::HitTestInventorySlot(int mx, int my) const {
 
 void HotbarComponent::Update(float dt) {
     if (!controlledCharacterPtr || !*controlledCharacterPtr || !bigCharacter) {
+        reachablePickup = nullptr;
         return;
     }
     if (*controlledCharacterPtr != bigCharacter) {
+        reachablePickup = nullptr;
         if (inventoryOpen) {
             inventoryOpen = false;
         }
@@ -289,126 +330,101 @@ void HotbarComponent::Update(float dt) {
         inventoryOpen = !inventoryOpen;
     }
 
-    if (input.KeyPress(SDLK_e)) {
-        ItemPickup* closest = nullptr;
-        float closestDist = 1e30f;
+    reachablePickup = FindClosestReachablePickup();
 
-        // Pega a Mão projetada do personagem
-        Vec2 playerCenter = bigCharacter->GetCenter();
+    if (input.KeyPress(SDLK_e) && reachablePickup) {
+        StageState* stage = Game::TryGetStageState();
+        Box* pushBox = stage ? stage->GetReachablePushBox() : nullptr;
+        const bool boxWins =
+            stage && pushBox && stage->IsPushBoxCloserThanItem(reachablePickup, pushBox);
+        const bool jornalWins =
+            stage && stage->GetReachableJornal() &&
+            stage->IsJornalCloserThanItemAndBox(stage->GetReachableJornal(), reachablePickup, pushBox);
 
-        // Procura os Itens
-        for (ItemPickup* p : itemPickups) {
-            if (!p || p->GetAssociated().IsDead()) {
-                continue;
-            }
+        if (!boxWins && !jornalWins) {
+        ItemPickup* closest = reachablePickup;
+        const int hLevel = closest->GetHeightLevel();
 
-            // Descobre a altura DESTE item especifico
-            int itemHeight = p->GetHeightLevel();
+        // =====================================
+        // NÍVEIS 0 e 1: O Irmãozão pega sozinho
+        // =====================================
 
-            // Pede pro personagem gerar a mão EXATAMENTE pra essa altura
-            SDL_Rect reachBox = Character::player->GetInteractionRect(itemHeight);
-
-            GameObject& itemObj = p->GetAssociated();
-            SDL_Rect itemRect = {
-                static_cast<int>(itemObj.box.x),
-                static_cast<int>(itemObj.box.y),
-                static_cast<int>(itemObj.box.w),
-                static_cast<int>(itemObj.box.h)
-            };
-            
-            if (SDL_HasIntersection(&reachBox, &itemRect)) {
-                float d = playerCenter.Distance(p->GetCenter());
-                if (d < closestDist) {
-                    closestDist = d;
-                    closest = p;
-                }
-            }
-        }   
-
-        if (closest) {
-            int hLevel = closest->GetHeightLevel();
-
-            // =====================================
-            // NÍVEIS 0 e 1: O Irmãozão pega sozinho
-            // =====================================
-
-            if (hLevel == 0 || hLevel == 1) {
-                std::cout << "PEGANDO SOZINHO: Altura lida foi " << hLevel << std::endl;
-                if (!inventory.IsFull()) {
-                    const ItemDef& def = *closest->GetDef();
-                    inventory.AddItem(def, closest->GetDurability());
-                    for (auto& p : itemPickups) {
-                        if (p == closest) {
-                            p = nullptr;
-                            break;
-                        }
+        if (hLevel == 0 || hLevel == 1) {
+            std::cout << "PEGANDO SOZINHO: Altura lida foi " << hLevel << std::endl;
+            if (!inventory.IsFull()) {
+                const ItemDef& def = *closest->GetDef();
+                inventory.AddItem(def, closest->GetDurability());
+                for (auto& p : itemPickups) {
+                    if (p == closest) {
+                        p = nullptr;
+                        break;
                     }
-                    closest->Destroy();
-                    PlayRandomPickupSound();
-                    if (StageState* stage = Game::TryGetStageState()) {
-                        stage->SaveCurrentProgress();
-                    }
+                }
+                closest->Destroy();
+                reachablePickup = nullptr;
+                PlayRandomPickupSound();
+                if (StageState* stage = Game::TryGetStageState()) {
+                    stage->SaveCurrentProgress();
+                }
 
-                    // Congela o Irmãozão rapidinho pra animação de pegar (0.2 segundos)
-                    Character::player->currentState = Character::ActionState::INTERACTING;
-                    Character::player->interactTimer = 0.2f;
-                }
-                else {
-                    // Inventário cheio
-                    toastTimer = kToastDuration;
-                }
+                // Congela o Irmãozão rapidinho pra animação de pegar (0.2 segundos)
+                Character::player->currentState = Character::ActionState::INTERACTING;
+                Character::player->interactTimer = 0.2f;
+            } else {
+                // Inventário cheio
+                toastTimer = kToastDuration;
             }
+        }
 
-            // =====================================
-            // NÍVEL 2: Precisamos do Irmãozinho
-            // =====================================
+        // =====================================
+        // NÍVEL 2: Precisamos do Irmãozinho
+        // =====================================
 
-            else if (hLevel == 2) {
-                if (Character::littleBrother) {
-                    // Checa a distância entre os dois irmãos
-                    float distBrothers = Character::player->GetFootCircleCenter().Distance(Character::littleBrother->GetFootCircleCenter());
+        else if (hLevel == 2) {
+            if (Character::littleBrother) {
+                // Checa a distância entre os dois irmãos
+                const float distBrothers = Character::player->GetFootCircleCenter().Distance(
+                    Character::littleBrother->GetFootCircleCenter());
 
-                    if (distBrothers <= 170.0f) {
-                        if (!inventory.IsFull()) {
+                if (distBrothers <= 170.0f) {
+                    if (!inventory.IsFull()) {
+                        // Congela os dois personagens pelo tempo da animação (1.5 segundos)
+                        Character::player->currentState = Character::ActionState::INTERACTING;
+                        Character::player->interactTimer = 1.5f;
 
-                            // Congela os dois personagens pelo tempo da animação (1.5 segundos)
-                            Character::player->currentState = Character::ActionState::INTERACTING;
-                            Character::player->interactTimer = 1.5f;
-                            
-                            Character::littleBrother->currentState = Character::ActionState::INTERACTING;
-                            Character::littleBrother->interactTimer = 1.5f;
+                        Character::littleBrother->currentState = Character::ActionState::INTERACTING;
+                        Character::littleBrother->interactTimer = 1.5f;
 
-                            // Alinha o irmãozinho na frente do irmãozão (Teleporte leve)
-                            Character::littleBrother->PositionForCoop(Character::player);
+                        // Alinha o irmãozinho na frente do irmãozão (Teleporte leve)
+                        Character::littleBrother->PositionForCoop(Character::player);
 
-                            // Pega o item e bota no inventário do Irmãozão
-                            const ItemDef& def = *closest->GetDef();
-                            inventory.AddItem(def, closest->GetDurability());
+                        // Pega o item e bota no inventário do Irmãozão
+                        const ItemDef& def = *closest->GetDef();
+                        inventory.AddItem(def, closest->GetDurability());
 
-                            for (auto& p : itemPickups) {
-                                if (p == closest) {
-                                    p = nullptr;
-                                    break;
-                                }
+                        for (auto& p : itemPickups) {
+                            if (p == closest) {
+                                p = nullptr;
+                                break;
                             }
-                            closest->Destroy();
-                            PlayRandomPickupSound();
-                            if (StageState* stage = Game::TryGetStageState()) {
-                                stage->SaveCurrentProgress();
-                            }
-                            std::cout << "[CO-OP] Irmaos trabalharam juntos e pegaram o item no alto!" << std::endl;
                         }
-                        else { 
-                            toastTimer = kToastDuration;
+                        closest->Destroy();
+                        reachablePickup = nullptr;
+                        PlayRandomPickupSound();
+                        if (StageState* stage = Game::TryGetStageState()) {
+                            stage->SaveCurrentProgress();
                         }
+                        std::cout << "[CO-OP] Irmaos trabalharam juntos e pegaram o item no alto!" << std::endl;
+                    } else {
+                        toastTimer = kToastDuration;
                     }
-                    else {
-                        // FALHA: Irmãozinho muito longe
-                        std::cout << "[FALHA] O irmaozinho esta muito longe para ajudar!" << std::endl;
-                        std::cout << "Distancia entre os irmaos: " << distBrothers << std::endl;
-                    }
+                } else {
+                    // FALHA: Irmãozinho muito longe
+                    std::cout << "[FALHA] O irmaozinho esta muito longe para ajudar!" << std::endl;
+                    std::cout << "Distancia entre os irmaos: " << distBrothers << std::endl;
                 }
             }
+        }
         }
     }
 
@@ -618,46 +634,6 @@ void HotbarComponent::Render() {
         if (!inventory.IsUsingEmpty()) {
             const ItemInstance* u = inventory.GetUsing();
             RenderItemInSlot(renderer, usingSlotRect, u);
-        }
-    }
-
-    auto font = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 14);
-
-    for (ItemPickup* p : itemPickups) {
-        if (!p || p->GetAssociated().IsDead()) continue;
-                
-        int itemHeight = p->GetHeightLevel();
-
-        // Pede pro personagem gerar a mão EXATAMENTE pra essa altura
-        SDL_Rect reachBox = Character::player->GetInteractionRect(itemHeight);
-
-        GameObject& itemObj = p->GetAssociated();
-        SDL_Rect itemRect = {
-            static_cast<int>(itemObj.box.x),
-            static_cast<int>(itemObj.box.y),
-            static_cast<int>(itemObj.box.w),
-            static_cast<int>(itemObj.box.h)
-        };
-        
-        if (SDL_HasIntersection(&reachBox, &itemRect)) {
-            Vec2 worldPos = p->GetCenter();
-        
-            float sx = (worldPos.x - Camera::pos.x) * Camera::GetZoom();
-            float sy = (worldPos.y - Camera::pos.y) * Camera::GetZoom();
-            const char* label = "Press E";
-            if (font) {
-                SDL_Color col{255, 255, 255, 220};
-                SDL_Surface* s = TTF_RenderText_Blended(font.get(), label, col);
-                if (s) {
-                    SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, s);
-                    SDL_Rect dr = {static_cast<int>(sx - s->w / 2.0f), static_cast<int>(sy - 56.0f), s->w, s->h};
-                    SDL_FreeSurface(s);
-                    if (t) {
-                        SDL_RenderCopy(renderer, t, nullptr, &dr);
-                        SDL_DestroyTexture(t);
-                    }
-                }
-            }
         }
     }
 

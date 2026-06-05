@@ -17,7 +17,16 @@ public:
     // Aqui que a mágica vai acontecer quando alguém tocar em um objeto dinâmico
     void NotifyCollision(GameObject& other) override;
 
+    bool IsPushable() const { return !isStatic; }
+    GameObject& GetAssociated() { return associated; }
+    const GameObject& GetAssociated() const { return associated; }
+
+    static void SetActivePushTarget(Box* box);
+    static bool IsActivePushTarget(const Box* box);
+    bool TryMoveBy(float dx, float dy);
+
 private:
+    bool IsPositionBlocked() const;
     bool isStatic;
 };
 

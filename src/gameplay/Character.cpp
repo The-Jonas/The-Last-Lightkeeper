@@ -286,57 +286,59 @@ void Character::Update(float dt) {
     }
 
     // ==============================================
-    // Troca de sprite / animação por direção
+    // Troca de sprite / animação por direção (congelada enquanto empurra caixa)
 
-    Direction newDirection = currentDirection;
+    if (currentState != ActionState::PUSHING_BOX) {
+        Direction newDirection = currentDirection;
 
-    // PRIORIDADE HORIZONTAL: Se houver movimento lateral significativo, sempre olha para o lado.
-    // Isso garante que nas diagonais ele sempre exiba o sprite lateral!
-    if (std::abs(speed.x) > 0.1f) {
-        if (speed.x > 0.1f) {
-            newDirection = Direction::RIGHT;
-        } else {
-            newDirection = Direction::LEFT;
-        }
-    } 
-    // Só olha para cima/baixo se estivermos andando estritamente na vertical
-    else if (std::abs(speed.y) > 0.1f) {
-        if (speed.y > 0.1f) {
-            newDirection = Direction::DOWN; // Y cresce para baixo na tela
-        } else {
-            newDirection = Direction::UP;
-        }
-    }
-
-    if (irmaozaoIdleStrips) {
-        if (newDirection != currentDirection && speed.Magnitude() > 5.0f) {
-            currentDirection = newDirection;
-            stripFrameIndex = 0;
-            stripAnimTimer = 0.0f;
-            RefreshIrmaozaoStripSprite();
-        }
-        stripAnimTimer += dt;
-        while (stripAnimTimer >= kIrmaozaoStripFrameSeconds) {
-            stripAnimTimer -= kIrmaozaoStripFrameSeconds;
-            stripFrameIndex = (stripFrameIndex + 1) % kIrmaozaoStripFrameCount;
-            RefreshIrmaozaoStripSprite();
-        }
-    } else if (newDirection != currentDirection && speed.Magnitude() > 5.0f) {
-        currentDirection = newDirection;
-        SpriteRenderer* sprite = associated.GetComponent<SpriteRenderer>();
-
-        if (sprite) {
-            if (currentDirection == Direction::UP) {
-                sprite->Open(baseSpritePath + " trás.png");
-            } else if (currentDirection == Direction::DOWN) {
-                sprite->Open(baseSpritePath + " frente.png");
-            } else if (currentDirection == Direction::LEFT) {
-                sprite->Open(baseSpritePath + " esquerda.png");
-            } else if (currentDirection == Direction::RIGHT) {
-                sprite->Open(baseSpritePath + " direita.png");
+        // PRIORIDADE HORIZONTAL: Se houver movimento lateral significativo, sempre olha para o lado.
+        // Isso garante que nas diagonais ele sempre exiba o sprite lateral!
+        if (std::abs(speed.x) > 0.1f) {
+            if (speed.x > 0.1f) {
+                newDirection = Direction::RIGHT;
+            } else {
+                newDirection = Direction::LEFT;
             }
+        }
+        // Só olha para cima/baixo se estivermos andando estritamente na vertical
+        else if (std::abs(speed.y) > 0.1f) {
+            if (speed.y > 0.1f) {
+                newDirection = Direction::DOWN; // Y cresce para baixo na tela
+            } else {
+                newDirection = Direction::UP;
+            }
+        }
 
-            sprite->SetFrameCount(1, 1);
+        if (irmaozaoIdleStrips) {
+            if (newDirection != currentDirection && speed.Magnitude() > 5.0f) {
+                currentDirection = newDirection;
+                stripFrameIndex = 0;
+                stripAnimTimer = 0.0f;
+                RefreshIrmaozaoStripSprite();
+            }
+            stripAnimTimer += dt;
+            while (stripAnimTimer >= kIrmaozaoStripFrameSeconds) {
+                stripAnimTimer -= kIrmaozaoStripFrameSeconds;
+                stripFrameIndex = (stripFrameIndex + 1) % kIrmaozaoStripFrameCount;
+                RefreshIrmaozaoStripSprite();
+            }
+        } else if (newDirection != currentDirection && speed.Magnitude() > 5.0f) {
+            currentDirection = newDirection;
+            SpriteRenderer* sprite = associated.GetComponent<SpriteRenderer>();
+
+            if (sprite) {
+                if (currentDirection == Direction::UP) {
+                    sprite->Open(baseSpritePath + " trás.png");
+                } else if (currentDirection == Direction::DOWN) {
+                    sprite->Open(baseSpritePath + " frente.png");
+                } else if (currentDirection == Direction::LEFT) {
+                    sprite->Open(baseSpritePath + " esquerda.png");
+                } else if (currentDirection == Direction::RIGHT) {
+                    sprite->Open(baseSpritePath + " direita.png");
+                }
+
+                sprite->SetFrameCount(1, 1);
+            }
         }
     }
 
@@ -498,6 +500,14 @@ void Character::Render() {
             cx + (int)(cos(a1) * r), cy + (int)(sin(a1) * r));
     }
 #endif
+}
+
+void Character::ClearMovement() {
+    speed = Vec2(0.0f, 0.0f);
+    targetSpeed = Vec2(0.0f, 0.0f);
+    while (!taskQueue.empty()) {
+        taskQueue.pop();
+    }
 }
 
 Vec2 Character::GetCenter() {

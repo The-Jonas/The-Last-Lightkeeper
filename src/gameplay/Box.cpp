@@ -11,6 +11,15 @@
 
 // LISTA GLOBAL PARA AS CAIXAS SE ENXERGAREM NA FÍSICA PREDITIVA
 static std::vector<Box*> globalBoxList;
+static Box* gActivePushBox = nullptr;
+
+void Box::SetActivePushTarget(Box* box) {
+    gActivePushBox = box;
+}
+
+bool Box::IsActivePushTarget(const Box* box) {
+    return gActivePushBox == box;
+}
 
 Box::Box(GameObject& associated, bool isStatic) : Component(associated), isStatic(isStatic) {
     // Carrega a arte da caixa
@@ -23,7 +32,9 @@ Box::Box(GameObject& associated, bool isStatic) : Component(associated), isStati
 }
 
 Box::~Box() {
-    // Sai da lista ao ser destruida
+    if (gActivePushBox == this) {
+        gActivePushBox = nullptr;
+    }
     globalBoxList.erase(std::remove(globalBoxList.begin(), globalBoxList.end(), this), globalBoxList.end());
 }
 
@@ -42,6 +53,62 @@ void Box::Update(float dt) {
 }
 
 void Box::Render() {}
+
+bool Box::IsPositionBlocked() const {
+    Collider* myCol = associated.GetComponent<Collider>();
+    if (!myCol) {
+        return true;
+    }
+
+    myCol->Update(0);
+    SDL_Rect hitbox = {
+        static_cast<int>(myCol->box.x),
+        static_cast<int>(myCol->box.y),
+        static_cast<int>(myCol->box.w),
+        static_cast<int>(myCol->box.h),
+    };
+
+    StageState* stage = Game::TryGetStageState();
+    if (!stage) {
+        return true;
+    }
+
+    if (stage->level.CheckCollision(hitbox)) {
+        return true;
+    }
+
+    for (Box* b : globalBoxList) {
+        if (b == this) {
+            continue;
+        }
+
+        Collider* bCol = b->associated.GetComponent<Collider>();
+        if (bCol && Collision::IsColliding(myCol->box, bCol->box, associated.angleDeg, b->associated.angleDeg)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool Box::TryMoveBy(float dx, float dy) {
+    const float oldX = associated.box.x;
+    const float oldY = associated.box.y;
+
+    associated.box.x += dx;
+    associated.box.y += dy;
+
+    if (IsPositionBlocked()) {
+        associated.box.x = oldX;
+        associated.box.y = oldY;
+        if (Collider* myCol = associated.GetComponent<Collider>()) {
+            myCol->Update(0);
+        }
+        return false;
+    }
+
+    return true;
+}
 
 void Box::NotifyCollision(GameObject& other) {
 
@@ -104,54 +171,14 @@ void Box::NotifyCollision(GameObject& other) {
                 other.box.y -= pushVector.y * 0.5f;
             }
 
-        }else {
-            // Bati no Jogador! Ele quer me empurrar.
-            float oldX = associated.box.x;
-            float oldY = associated.box.y;
+        } else if (other.GetComponent<Character>() && IsActivePushTarget(this)) {
+            // Movimento acoplado cuida da posição relativa jogador-caixa.
+            return;
 
-            associated.box.x += pushVector.x;
-            associated.box.y += pushVector.y;
-
-            // FÍSICA PREDITIVA (Enxergar antes de teleportar)
-            // Atualizo minha hitbox no novo local e pergunto pro LevelManager se tá livre
-            myCol->Update(0);
-            SDL_Rect hitbox = { (int)myCol->box.x, (int)myCol->box.y, (int)myCol->box.w, (int)myCol->box.h };
-            StageState* stage = Game::TryGetStageState();
-            if (!stage) {
-                associated.box.x = oldX;
-                associated.box.y = oldY;
-                other.box.x -= pushVector.x;
-                other.box.y -= pushVector.y;
-                return;
-            }
-
-            bool hitWall = stage->level.CheckCollision(hitbox);
-            bool hitOtherBox = false;
-            
-            // Verifica se no novo local eu bato em outra caixa
-            for (Box* b : globalBoxList) {
-                if (b == this) continue; // Não checa contra si mesmo
-            
-                Collider* bCol = b->associated.GetComponent<Collider>();
-                if (bCol) {
-                    // Checagem precisa usando a função de colisão da própria engine
-                    if (Collision::IsColliding(myCol->box, bCol->box, associated.angleDeg, b->associated.angleDeg)) {
-                        hitOtherBox = true;
-                        break;
-                    }    
-                }
-            }
-
-            // Se eu for bater na parede do mapa OU em outra caixa
-            if (hitWall || hitOtherBox) {
-            // Cancelo o movimento da caixa
-            associated.box.x = oldX;
-            associated.box.y = oldY;
-            
-            // Cancelo o movimento do jogador (Barreira absoluta!)
+        } else {
+            // Jogador encostou sem segurar E: caixa age como parede.
             other.box.x -= pushVector.x;
             other.box.y -= pushVector.y;
-            }
         }
     }
 }

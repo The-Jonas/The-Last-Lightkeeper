@@ -274,6 +274,7 @@ void StageState::Render(){
     constexpr int kHudZ = 100;
     for (const auto& go : objectArray) {
         if (go->z < kHudZ) {
+            RenderInteractionGlowIfNeeded(*go);
             go->Render();
         }
     }
@@ -545,6 +546,7 @@ void StageState::Render(){
 
     RenderLevelTitleBanner(renderer);
     RenderQuitConfirmModal(renderer);
+    RenderJournalViewer(renderer);
 }
 
 void StageState::RenderGameplayCollisionDebug(SDL_Renderer* renderer) const {

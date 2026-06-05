@@ -11,6 +11,7 @@
 #include "gameplay/StairTrigger.h"
 #include "gameplay/LevelTransition.h"
 #include "gameplay/ItemPickup.h"
+#include "gameplay/Jornal.h"
 #include <iostream>
 #include <cstdlib> 
 
@@ -152,6 +153,35 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         else {
             std::cerr << "[ItemSpawn] Item nao encontrado no pickupCycle: '" 
                       << itemName << "'. Verifique a propriedade itemName no Tiled." << std::endl;
+        }
+    }
+    else if (spawn.type == "JornalSpawn") {
+        std::string imagePath = "Recursos/img/items/old_letter.jpg";
+        if (spawn.properties.count("imagePath")) {
+            imagePath = spawn.properties.at("imagePath").get<std::string>();
+        }
+
+        int heightLevel = 0;
+        if (spawn.properties.count("heightLevel")) {
+            heightLevel = spawn.properties.at("heightLevel").get<int>();
+        }
+
+        float depthOffset = 0.0f;
+        if (spawn.properties.count("depthOffset")) {
+            depthOffset = spawn.properties.at("depthOffset").get<float>();
+        }
+
+        const float thumbMax = 48.0f;
+        Vec2 tl(spawn.x, spawn.y - thumbMax);
+        tl = stage.ClampPickupTopLeft(tl, thumbMax, thumbMax);
+
+        Jornal* jornal = Jornal::Spawn(tl.x, tl.y, imagePath, heightLevel, stage.jornals);
+        if (jornal) {
+            GameObject& jornalObj = jornal->GetAssociated();
+            jornalObj.tiledId = spawn.tiledId;
+            jornalObj.z = spawn.z;
+            jornalObj.depthOffset = depthOffset;
+            stage.AddObject(&jornalObj);
         }
     }
     else if (spawn.type == "Castical") {

@@ -18,6 +18,8 @@ public:
     void Open(std::string file);                            // Carrega a textura a partir do arquivo
     void SetClip(int x, int y, int w, int h);               // Define a área a ser desenhada
     void Render(int x, int y, int w, int h, double angleDeg = 0.0);                      // Desenha na tela (agora recebe w e h para a box)
+    void RenderTintedScaled(int x, int y, int w, int h, double angleDeg, Uint8 tr, Uint8 tg, Uint8 tb,
+                            Uint8 ta, float scaleMul) const;
     int GetWidth();                                         // Retorna Largura
     int GetHeight();                                        // Retorna Altura
     bool IsOpen();                                          // Verifica se a imagem foi carregada
@@ -32,8 +34,10 @@ public:
 
     void SetCameraFollower(bool follow);                    // O CameraFollower vai escolher se o objeto fica fixo no mapa (false)
     bool cameraFollower;                                    // ou se ele segue a câmera (true), como por exemplo ser usado em elementos de fundo
+    const std::string& GetSourceFile() const { return sourceFile; }
 
 private:
+    std::string sourceFile;
     std::shared_ptr<SDL_Texture> texture;                                   // Ponteiro para a textura carregada
     int width, height;                                      // Dimensões da Imagem
     SDL_Rect clipRect;                                      // Área a ser desenhada (recorte da imagem)

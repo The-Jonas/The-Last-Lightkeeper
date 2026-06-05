@@ -69,6 +69,20 @@ void SpriteRenderer::Update(float dt) {
     // O documento pede para deixar essa função vazia
 }
 
+void SpriteRenderer::RenderHighlight(float scaleBoost, Uint8 r, Uint8 g, Uint8 b, Uint8 a) const {
+    sprite.RenderTintedScaled(
+        static_cast<int>(associated.box.x),
+        static_cast<int>(associated.box.y),
+        static_cast<int>(associated.box.w),
+        static_cast<int>(associated.box.h),
+        associated.angleDeg,
+        r,
+        g,
+        b,
+        a,
+        scaleBoost);
+}
+
 void SpriteRenderer::Render() {
     sprite.Render(
         associated.box.x,

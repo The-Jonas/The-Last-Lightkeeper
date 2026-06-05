@@ -171,6 +171,35 @@
                 {
                  "gid":7,
                  "height":52.6666666666665,
+                 "id":900,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":0
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":0
+                        }, 
+                        {
+                         "name":"imagePath",
+                         "type":"string",
+                         "value":"Recursos/img/items/old_letter.jpg"
+                        }],
+                 "rotation":0,
+                 "type":"JornalSpawn",
+                 "visible":true,
+                 "width":48,
+                 "x":2050,
+                 "y":1768
+                }, 
+                {
+                 "gid":7,
+                 "height":52.6666666666665,
                  "id":662,
                  "name":"",
                  "opacity":1,

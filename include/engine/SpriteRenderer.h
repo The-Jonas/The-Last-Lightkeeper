@@ -27,6 +27,7 @@ public:
     void SetTint(Uint8 r, Uint8 g, Uint8 b, Uint8 a = 255);
     
     void SetCameraFollower(bool follow);
+    void RenderHighlight(float scaleBoost, Uint8 r, Uint8 g, Uint8 b, Uint8 a = 220) const;
 
 private: 
     Sprite sprite;

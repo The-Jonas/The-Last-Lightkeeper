@@ -19,6 +19,7 @@ void EnsureMixerDecodersForChunks() {
 // Definição e inicialização dos membros estáticos (se não dá erro por confundir o linker)
 
 std::unordered_map<std::string, std::shared_ptr<SDL_Texture>> Resources::imageTable;
+std::unordered_map<std::string, std::shared_ptr<SDL_Texture>> Resources::whiteMaskTable;
 std::unordered_map<std::string, std::shared_ptr<Mix_Music>> Resources::musicTable;
 std::unordered_map<std::string, std::shared_ptr<Mix_Chunk>> Resources::soundTable;
 std::unordered_map<std::string, std::shared_ptr<TTF_Font>> Resources::fontTable;
@@ -50,11 +51,66 @@ std::shared_ptr<SDL_Texture> Resources::GetImage(const std::string file) {
     return shared;
 }
 
+std::shared_ptr<SDL_Texture> Resources::GetWhiteMaskImage(const std::string file) {
+    if (whiteMaskTable.find(file) != whiteMaskTable.end()) {
+        return whiteMaskTable[file];
+    }
+
+    SDL_Surface* loaded = IMG_Load(file.c_str());
+    if (!loaded) {
+        std::cerr << "Erro ao carregar mascara branca: " << file << " - " << SDL_GetError() << std::endl;
+        return nullptr;
+    }
+
+    SDL_Surface* rgba = SDL_ConvertSurfaceFormat(loaded, SDL_PIXELFORMAT_RGBA32, 0);
+    SDL_FreeSurface(loaded);
+    if (!rgba) {
+        return nullptr;
+    }
+
+    if (SDL_LockSurface(rgba) == 0) {
+        auto* pixels = static_cast<Uint8*>(rgba->pixels);
+        const int pitch = rgba->pitch;
+        for (int y = 0; y < rgba->h; ++y) {
+            Uint8* row = pixels + y * pitch;
+            for (int x = 0; x < rgba->w; ++x) {
+                Uint8* px = row + x * 4;
+                const Uint8 alpha = px[3];
+                px[0] = 255;
+                px[1] = 255;
+                px[2] = 255;
+                px[3] = alpha;
+            }
+        }
+        SDL_UnlockSurface(rgba);
+    }
+
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(Game::GetInstance().GetRenderer(), rgba);
+    SDL_FreeSurface(rgba);
+    if (!texture) {
+        std::cerr << "Erro ao criar textura de mascara branca: " << SDL_GetError() << std::endl;
+        return nullptr;
+    }
+
+    std::shared_ptr<SDL_Texture> shared(texture, [](SDL_Texture* txt) {
+        SDL_DestroyTexture(txt);
+    });
+    whiteMaskTable.emplace(file, shared);
+    return shared;
+}
+
 void Resources::ClearImages() {
     // Percorre a tabela e remove quem só tem 1 referência (a própria tabela)
     for (auto it = imageTable.begin(); it != imageTable.end(); ) {
         if (it->second.use_count() == 1) {
             it = imageTable.erase(it);                                  // Remove e destroi a textura automaticamente
+        } else {
+            ++it;
+        }
+    }
+    for (auto it = whiteMaskTable.begin(); it != whiteMaskTable.end(); ) {
+        if (it->second.use_count() == 1) {
+            it = whiteMaskTable.erase(it);
         } else {
             ++it;
         }

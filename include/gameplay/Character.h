@@ -38,7 +38,7 @@ public:
     static Character* littleBrother;
 
     // Máquina de estados pra ações
-    enum class ActionState {NORMAL, INTERACTING};
+    enum class ActionState {NORMAL, INTERACTING, PUSHING_BOX};
     ActionState currentState = ActionState::NORMAL;
     float interactTimer = 0.0f;
 
@@ -61,6 +61,7 @@ public:
     GameObject& GetAssociated() { return associated; }
     Vec2 GetSpeed() const { return speed; }
     Vec2 GetCenter();                                                   // Para pegar o centro do personagem
+    void ClearMovement();
 
 private:
     std::queue<Command> taskQueue;                                      // Fila de comando a serem executados

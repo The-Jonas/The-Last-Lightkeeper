@@ -5,6 +5,7 @@
 #include "core/Resources.h"
 #include "core/SaveManager.h"
 #include "engine/GameObject.h"
+#include "gameplay/Box.h"
 #include "gameplay/Character.h"
 #include "gameplay/HotbarComponent.h"
 #include "gameplay/Item.h"
@@ -47,6 +48,17 @@ void StageState::ClearGameplayWorld() {
     hudFps = nullptr;
     hotbarObject = nullptr;
     itemPickups.clear();
+    jornals.clear();
+    reachableJornal = nullptr;
+    journalViewerOpen = false;
+    journalViewerClosing = false;
+    journalAnimTimer = 0.0f;
+    journalCloseTimer = 0.0f;
+    journalViewImagePath.clear();
+    reachablePushBox = nullptr;
+    activePushBox = nullptr;
+    wasPushingLastFrame = false;
+    Box::SetActivePushTarget(nullptr);
     lights.clear();
     staticShadowEdges.clear();
     staticShadowEdgesBuilt = false;

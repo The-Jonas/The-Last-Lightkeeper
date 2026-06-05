@@ -78,6 +78,11 @@ void StageState::Update(float dt){
         quitRequested = true;
     }
 
+    if (journalViewerOpen || journalViewerClosing) {
+        UpdateJournalViewer(dt);
+        return;
+    }
+
     if (quitConfirmOpen) {
         HandleQuitConfirmInput();
         return;
@@ -129,10 +134,13 @@ void StageState::Update(float dt){
             return;
         }
         UpdateCompanionBehavior();
-    }    
+    }
+
+    UpdateBoxInteraction();
+    TryOpenJournalOnKeyPress();
 
     UpdateArray(dt);                                                                    // Percorre o vetor de GameObjects chamando o Update de cada um
-    
+
     if (inventory.IsUsableLightActive()) {                                              // slot "usando" degrada sempre, mesmo controlando o irmãozinho
         inventory.TickUsingDurability(dt); 
     }
@@ -146,6 +154,8 @@ void StageState::Update(float dt){
         UpdateControlledCharacterVisuals();
         RefreshCameraTargets();
     }
+
+    ApplyCoupledPushMovement(prevBigPos);
     Camera::Update(dt);                                                                 // Atualizando a camera cada iteração do gameloop
 
 

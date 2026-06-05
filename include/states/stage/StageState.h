@@ -26,6 +26,9 @@
 class Character;
 class GameObject;
 class TileMap;
+class Box;
+class ItemPickup;
+class Jornal;
 
 class StageState : public State {
 friend class SpawnFactory;
@@ -76,6 +79,13 @@ public:
 
     void RenderQuitConfirmModal(SDL_Renderer* renderer);
     void RenderLevelTitleBanner(SDL_Renderer* renderer);
+    void RenderJournalViewer(SDL_Renderer* renderer);
+
+    Box* GetReachablePushBox() const { return reachablePushBox; }
+    Box* GetActivePushBox() const { return activePushBox; }
+    Jornal* GetReachableJornal() const { return reachableJornal; }
+    bool IsPushBoxCloserThanItem(ItemPickup* item, Box* box) const;
+    bool IsJornalCloserThanItemAndBox(Jornal* jornal, ItemPickup* item, Box* box) const;
 
 private:
 
@@ -130,6 +140,16 @@ private:
     void ShowLevelTitleBanner();
     void RenderGameplayCollisionDebug(SDL_Renderer* renderer) const;     // Com showMapPhysicsDebug: colliders + foot circles
     void RenderCompanionFollowPathDebug(SDL_Renderer* renderer) const;   // Com showMapPhysicsDebug: polylinha do seguidor (modo junto)
+    void UpdateBoxInteraction();
+    void ApplyCoupledPushMovement(const Vec2& prevPlayerPos);
+    void RenderInteractionGlowIfNeeded(GameObject& go);
+    void TryOpenJournalOnKeyPress();
+    void OpenJournalViewer(Jornal* jornal);
+    void UpdateJournalViewer(float dt);
+    Box* FindClosestReachablePushBox() const;
+    ItemPickup* FindClosestReachableItem() const;
+    Jornal* FindClosestReachableJornal() const;
+    float GetInteractableDistance(const GameObject& obj) const;
 
     Music music;                                                        // Música de Fundo
     TileSet* tileSet;                                                   // TileSet atualmente ativo no mapa
@@ -191,6 +211,23 @@ private:
     Inventory inventory;
     GameObject* hotbarObject = nullptr;
     std::vector<class ItemPickup*> itemPickups;
+    std::vector<Jornal*> jornals;
+
+    Jornal* reachableJornal = nullptr;
+    bool journalViewerOpen = false;
+    bool journalViewerClosing = false;
+    float journalAnimTimer = 0.0f;
+    float journalCloseTimer = 0.0f;
+    std::string journalViewImagePath;
+    SDL_FRect journalSourceScreenRect{0.0f, 0.0f, 0.0f, 0.0f};
+    SDL_FRect journalTargetScreenRect{0.0f, 0.0f, 0.0f, 0.0f};
+    static constexpr float kJournalOpenDuration = 0.35f;
+    static constexpr float kJournalCloseDuration = 0.2f;
+
+    Box* reachablePushBox = nullptr;
+    Box* activePushBox = nullptr;
+    Vec2 pushBoxOffset{0.0f, 0.0f};
+    bool wasPushingLastFrame = false;
 
     std::shared_ptr<Mix_Chunk> oceanWavesChunk;
     StageOceanAmbientController oceanAmbient_;

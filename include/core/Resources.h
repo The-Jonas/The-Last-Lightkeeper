@@ -17,6 +17,8 @@ public:
     // Obtém uma textura. Se ela já estiver em memória, retorna o ponteiro existente.
     // Se não, carrega, armazena e retorna o ponteiro.
     static std::shared_ptr<SDL_Texture> GetImage(const std::string file);
+    /// RGB=255, alpha from source — for interaction highlights on colored sprites.
+    static std::shared_ptr<SDL_Texture> GetWhiteMaskImage(const std::string file);
     static void ClearImages();                                                          // Libera todas as texturas da memória
 
     // Obtém uma música. Se ela já estiver em memória, retorna o ponteiro existente.
@@ -39,6 +41,7 @@ public:
 private:
     // Tabelas agora armazenam shared_ptr
     static std::unordered_map<std::string, std::shared_ptr<SDL_Texture>> imageTable;        // Mapeamento de strings (caminho do arquivo) para ponteiros dos assets
+    static std::unordered_map<std::string, std::shared_ptr<SDL_Texture>> whiteMaskTable;
     static std::unordered_map<std::string, std::shared_ptr<Mix_Music>> musicTable;          // Eles armazenam os ativos para
     static std::unordered_map<std::string, std::shared_ptr<Mix_Chunk>> soundTable;          // evitar carregamentos duplicados
     static std::unordered_map<std::string, std::shared_ptr<TTF_Font>> fontTable;            // Tabela de fontes
