@@ -99,6 +99,9 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         stage.AddObject(transitionObj);
     }
     else if (spawn.type == "ItemSpawn") {
+        if (stage.ShouldSkipPickupSpawn(spawn.tiledId)) {
+            return;
+        }
 
         std:: string itemName = "";
         if (spawn.properties.count("itemName")) itemName = spawn.properties.at("itemName").get<std::string>();
@@ -124,7 +127,9 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
 
         if (foundDef) {
             int spawnDurability = foundDef->maxDurability;
-            if (foundDef->HasProperty(ItemProperty::LIGHT_SOURCE)) {
+            if (foundDef->name == "Lamp") {
+                spawnDurability = 0;
+            } else if (foundDef->HasProperty(ItemProperty::LIGHT_SOURCE)) {
                 spawnDurability = 1 + (rand() % 100);
             }
             const float itemSize = 48.0f;

@@ -29,6 +29,7 @@ class TileMap;
 class Box;
 class ItemPickup;
 class Jornal;
+class Candlestick;
 
 class StageState : public State {
 friend class SpawnFactory;
@@ -85,8 +86,13 @@ public:
     Box* GetReachablePushBox() const { return reachablePushBox; }
     Box* GetActivePushBox() const { return activePushBox; }
     Jornal* GetReachableJornal() const { return reachableJornal; }
+    Candlestick* GetReachableCandle() const { return reachableCandle; }
     bool IsPushBoxCloserThanItem(ItemPickup* item, Box* box) const;
     bool IsJornalCloserThanItemAndBox(Jornal* jornal, ItemPickup* item, Box* box) const;
+    bool IsCandleClosestForInteraction(Candlestick* candle) const;
+    ItemPickup* GetReachablePickup() const { return reachablePickup; }
+    bool ShouldSkipPickupSpawn(int tiledId) const;
+    bool IsPickupBlocked(ItemPickup* pickup) const;
 
 private:
 
@@ -144,12 +150,18 @@ private:
     void UpdateBoxInteraction();
     void ApplyCoupledPushMovement(const Vec2& prevPlayerPos);
     void RenderInteractionGlowIfNeeded(GameObject& go);
+    void RegisterAllCandleLights();
+    void ApplyLitCandleIds(const std::vector<int>& litIds, bool extinguishOthers = true);
+    void MarkMissedUniquePickupsOnLevelLeave();
+    void MergeSkippedPickupIds(const std::vector<int>& removed, const std::vector<int>& missed);
     void TryOpenJournalOnKeyPress();
+    void TryInteractCandleOnKeyPress();
     void OpenJournalViewer(Jornal* jornal);
     void UpdateJournalViewer(float dt);
     Box* FindClosestReachablePushBox() const;
     ItemPickup* FindClosestReachableItem() const;
     Jornal* FindClosestReachableJornal() const;
+    Candlestick* FindClosestReachableCandle() const;
     float GetInteractableDistance(const GameObject& obj) const;
 
     Music music;                                                        // Música de Fundo
@@ -215,6 +227,7 @@ private:
     std::vector<Jornal*> jornals;
 
     Jornal* reachableJornal = nullptr;
+    Candlestick* reachableCandle = nullptr;
     bool journalViewerOpen = false;
     bool journalViewerClosing = false;
     float journalAnimTimer = 0.0f;
@@ -225,6 +238,9 @@ private:
     static constexpr float kJournalOpenDuration = 0.35f;
     static constexpr float kJournalCloseDuration = 0.2f;
 
+    ItemPickup* reachablePickup = nullptr;
+    std::unordered_set<int> skippedPickupSpawnIds;
+    std::vector<int> missedUniquePickupIdsAccum;
     Box* reachablePushBox = nullptr;
     Box* activePushBox = nullptr;
     Vec2 pushBoxOffset{0.0f, 0.0f};

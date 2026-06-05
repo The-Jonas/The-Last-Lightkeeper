@@ -7,6 +7,7 @@
 #include "engine/GameObject.h"
 #include "gameplay/Box.h"
 #include "gameplay/Character.h"
+#include "gameplay/BackpackVisuals.h"
 #include "gameplay/HotbarComponent.h"
 #include "gameplay/Item.h"
 #include "states/EndState.h"
@@ -19,6 +20,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <unordered_set>
 #include <vector>
 
 void StageState::SetInitialLevelIndex(int index) {
@@ -51,6 +53,10 @@ void StageState::ClearGameplayWorld() {
     itemPickups.clear();
     jornals.clear();
     reachableJornal = nullptr;
+    reachableCandle = nullptr;
+    reachablePickup = nullptr;
+    skippedPickupSpawnIds.clear();
+    missedUniquePickupIdsAccum.clear();
     journalViewerOpen = false;
     journalViewerClosing = false;
     journalAnimTimer = 0.0f;
@@ -142,28 +148,25 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
     companionCharacter = smallCharacter;
     partyMode = PartyMode::TOGETHER;
 
+    inventory.ApplyBackpackConfig(cfg.backpackConfig);
     if (resetInventory) {
-        inventory.ClearUsing();
-        for (int i = 0; i < Inventory::kSlots; ++i) {
-            inventory.RemoveItem(i);
+        inventory.ClearAll();
+        const int lighterGroup = cfg.backpackConfig.GroupIndexForItem(cfg.startingFlashlight.name);
+        if (lighterGroup >= 0) {
+            inventory.AddItemToGroup(lighterGroup, cfg.startingFlashlight, cfg.startingFlashlightDurability);
+            inventory.SelectGroup(lighterGroup);
+            bigComp->NotifyInventoryLightChanged();
         }
         inventory.isLightToggledOn = false;
-        inventory.SetUsing(ItemInstance{cfg.startingFlashlight, cfg.startingFlashlightDurability});
     }
+    inventoryInitialized = true;
+
+    bigObject->AddComponent(new BackpackVisuals(*bigObject, inventory, bigComp));
 
     SDL_Color hudColor = {230, 230, 230, 220};
 
-    hudLine1 = new GameObject();
-    hudLine1->z = 100;
-    hudLine1->AddComponent(new Text(*hudLine1, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
-                                    "TAB: roda de inventario | Ctrl: trocar personagem | E: pegar", hudColor));
-    AddObject(hudLine1);
-
-    hudLine2 = new GameObject();
-    hudLine2->z = 100;
-    hudLine2->AddComponent(new Text(*hudLine2, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
-                                    " F: Ligar/Desligar luz | Q: alternar entre junto e independente", hudColor));
-    AddObject(hudLine2);
+    hudLine1 = nullptr;
+    hudLine2 = nullptr;
 
     hudLine3 = new GameObject();
     hudLine3->z = 100;
@@ -206,7 +209,16 @@ void StageState::TransitionToLevel(int targetLevelIndex) {
         return;
     }
 
+    MarkMissedUniquePickupsOnLevelLeave();
     SaveGameState preserved = CaptureSaveState();
+    preserved.missedUniquePickupIds = missedUniquePickupIdsAccum;
+    std::unordered_set<int> skippedForNextLevel = skippedPickupSpawnIds;
+    for (int id : preserved.removedPickupIds) {
+        skippedForNextLevel.insert(id);
+    }
+    for (int id : preserved.missedUniquePickupIds) {
+        skippedForNextLevel.insert(id);
+    }
 
     ClearGameplayWorld();
     currentLevelIndex = targetLevelIndex;
@@ -216,10 +228,16 @@ void StageState::TransitionToLevel(int targetLevelIndex) {
 
     BuildLevelWorld(cfg, false);
     StartArray();
+    ApplyLitCandleIds(preserved.litCandleIds, false);
 
     std::vector<ItemDef> catalog = cfg.pickupCycle;
     catalog.push_back(cfg.startingFlashlight);
+    inventory.ApplyBackpackConfig(cfg.backpackConfig);
     inventory.ReadFromSave(preserved, catalog);
+    skippedPickupSpawnIds = std::move(skippedForNextLevel);
+    if (bigCharacter) {
+        bigCharacter->NotifyInventoryLightChanged();
+    }
 
     if (preserved.controlled == "small") {
         if (controlledCharacter == bigCharacter) {

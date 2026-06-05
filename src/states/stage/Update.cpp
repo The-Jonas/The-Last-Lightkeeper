@@ -138,6 +138,7 @@ void StageState::Update(float dt){
 
     UpdateBoxInteraction();
     TryOpenJournalOnKeyPress();
+    TryInteractCandleOnKeyPress();
 
     UpdateArray(dt);                                                                    // Percorre o vetor de GameObjects chamando o Update de cada um
 
@@ -222,18 +223,8 @@ void StageState::Update(float dt){
             }
             previewLightLockedToPlayer = true;
         } else {
-            bool blockUnlock = false;
-            if (hotbarObject) {
-                if (HotbarComponent* hb = hotbarObject->GetComponent<HotbarComponent>()) {
-                    if (hb->BlocksLightPointerUnlock(mx, my)) {
-                        blockUnlock = true;
-                    }
-                }
-            }
-            if (!blockUnlock) {
-                previewLightLockedToPlayer = false;
-                previewLightAnchorPlayer = nullptr;
-            }
+            previewLightLockedToPlayer = false;
+            previewLightAnchorPlayer = nullptr;
         }
     }
 

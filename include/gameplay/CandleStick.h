@@ -4,6 +4,8 @@
 #include "engine/Component.h"
 #include <string>
 
+class StageState;
+
 class Candlestick : public Component {
 public:
     // Construtor recebe o estado inicial e a direção da parede ("frente", "esquerda", "direita")
@@ -15,10 +17,16 @@ public:
     void Render() override;
 
     // Função pública caso o vento (ou um monstro) apague o castiçal no futuro
+    GameObject& GetAssociated() { return associated; }
+    const GameObject& GetAssociated() const { return associated; }
+
+    void EnsureLightRegistered(StageState& stage);
     void SetLit(bool lit);
     bool IsLit() const { return isLit; }
+    const std::string& GetWallDirection() const { return direction; }
 
 private:
+    void UpdatePromptText();
     bool isLit;
     std::string direction;
     std::string basePath;
@@ -26,9 +34,8 @@ private:
     // ID da luz no StageState para podermos ligar/desligar
     int myLightId; 
 
-    // Sistema de Feedback Visual 
-    bool showPrompt;
-    GameObject* textObj;
+    bool showPrompt = false;
+    GameObject* textObj = nullptr;
 };
 
 #endif

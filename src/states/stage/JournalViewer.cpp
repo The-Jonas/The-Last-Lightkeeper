@@ -154,6 +154,10 @@ void StageState::TryOpenJournalOnKeyPress() {
         return;
     }
 
+    if (reachableCandle && IsCandleClosestForInteraction(reachableCandle)) {
+        return;
+    }
+
     ItemPickup* item = FindClosestReachableItem();
     if (!IsJornalCloserThanItemAndBox(reachableJornal, item, reachablePushBox)) {
         return;

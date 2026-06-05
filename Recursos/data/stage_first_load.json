@@ -48,7 +48,35 @@
       "maxDurability": 1,
       "durabilityDecreases": false,
       "sortOrder": 3,
-      "properties": [{ "prop": "FUEL", "value": 50.0}]
+      "properties": [{ "prop": "FUEL", "value": 100.0}]
+    },
+    {
+      "name": "Lamp",
+      "spritePath": "Recursos/img/items/0106_ASSET_LAMPARINA_PERSPECTIVA_APAGADA_FLV.png.png",
+      "maxDurability": 250,
+      "durabilityDecreases": true,
+      "sortOrder": 4,
+      "properties": [{ "prop": "LIGHT_SOURCE", "value": 1.0 }]
+    }
+  ],
+  "backpackGroups": [
+    {
+      "id": "lighter",
+      "maxItems": 3,
+      "selectKey": 1,
+      "itemNames": ["Flashlight", "Broken Flashlight"]
+    },
+    {
+      "id": "oil",
+      "maxItems": 2,
+      "selectKey": 2,
+      "itemNames": ["Oil Gallon"]
+    },
+    {
+      "id": "lamp",
+      "maxItems": 1,
+      "selectKey": 3,
+      "itemNames": ["Lamp"]
     }
   ],
   "oceanChunkCandidates": []

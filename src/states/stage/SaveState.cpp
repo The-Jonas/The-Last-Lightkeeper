@@ -59,6 +59,7 @@ SaveGameState StageState::CaptureSaveState() const {
     state.controlled = (controlledCharacter == bigCharacter) ? "big" : "small";
     state.partyMode = (partyMode == PartyMode::TOGETHER) ? "TOGETHER" : "INDEPENDENT";
     inventory.WriteToSave(state);
+    state.missedUniquePickupIds = missedUniquePickupIdsAccum;
     state.escadaConsertada = level.escadaConsertada;
 
     std::unordered_set<int> alivePickupIds;
@@ -109,13 +110,51 @@ SaveGameState StageState::CaptureSaveState() const {
     return state;
 }
 
+void StageState::RegisterAllCandleLights() {
+    for (const auto& goPtr : objectArray) {
+        GameObject* go = goPtr.get();
+        if (!go || go->IsDead()) {
+            continue;
+        }
+        if (Candlestick* candle = go->GetComponent<Candlestick>()) {
+            candle->EnsureLightRegistered(*this);
+        }
+    }
+}
+
+void StageState::ApplyLitCandleIds(const std::vector<int>& litIds, bool extinguishOthers) {
+    RegisterAllCandleLights();
+    std::unordered_set<int> litSet(litIds.begin(), litIds.end());
+    for (const auto& goPtr : objectArray) {
+        GameObject* go = goPtr.get();
+        if (!go || go->IsDead() || go->tiledId < 0) {
+            continue;
+        }
+        Candlestick* candle = go->GetComponent<Candlestick>();
+        if (!candle) {
+            continue;
+        }
+        if (litSet.count(go->tiledId) > 0) {
+            candle->SetLit(true);
+        } else if (extinguishOthers) {
+            candle->SetLit(false);
+        }
+    }
+}
+
 void StageState::ApplySaveState(const SaveGameState& state) {
     const StageFirstLoadData cfg = LoadStageFirstLoadData();
     const std::vector<ItemDef> catalog = BuildItemCatalog(cfg);
 
     ApplyCharacter(state.big, bigCharacterObject, bigCharacter);
     ApplyCharacter(state.small, smallCharacterObject, smallCharacter);
+    inventory.ApplyBackpackConfig(cfg.backpackConfig);
     inventory.ReadFromSave(state, catalog);
+    missedUniquePickupIdsAccum = state.missedUniquePickupIds;
+    MergeSkippedPickupIds(state.removedPickupIds, state.missedUniquePickupIds);
+    if (bigCharacter) {
+        bigCharacter->NotifyInventoryLightChanged();
+    }
     level.escadaConsertada = state.escadaConsertada;
 
     if (state.controlled == "small") {
@@ -130,8 +169,6 @@ void StageState::ApplySaveState(const SaveGameState& state) {
 
     std::unordered_set<int> removedIds(state.removedPickupIds.begin(), state.removedPickupIds.end());
     std::unordered_set<int> repairedIds(state.repairedIds.begin(), state.repairedIds.end());
-    std::unordered_set<int> litIds(state.litCandleIds.begin(), state.litCandleIds.end());
-
     std::unordered_map<int, SavedBoxPos> boxPosById;
     for (const SavedBoxPos& boxPos : state.boxPositions) {
         boxPosById[boxPos.tiledId] = boxPos;
@@ -145,7 +182,8 @@ void StageState::ApplySaveState(const SaveGameState& state) {
         }
 
         if (ItemPickup* pickup = go->GetComponent<ItemPickup>()) {
-            if (go->tiledId >= 0 && removedIds.count(go->tiledId) > 0) {
+            if (go->tiledId >= 0 && (removedIds.count(go->tiledId) > 0 ||
+                                      skippedPickupSpawnIds.count(go->tiledId) > 0)) {
                 pickup->Destroy();
                 ++i;
                 continue;
@@ -165,12 +203,6 @@ void StageState::ApplySaveState(const SaveGameState& state) {
             }
         }
 
-        if (Candlestick* candle = go->GetComponent<Candlestick>()) {
-            if (go->tiledId >= 0 && litIds.count(go->tiledId) > 0) {
-                candle->SetLit(true);
-            }
-        }
-
         if (Repairable* repairable = go->GetComponent<Repairable>()) {
             if (go->tiledId >= 0 && repairedIds.count(go->tiledId) > 0) {
                 repairable->ApplyRepairedState();
@@ -179,6 +211,8 @@ void StageState::ApplySaveState(const SaveGameState& state) {
 
         ++i;
     }
+
+    ApplyLitCandleIds(state.litCandleIds);
 
     itemPickups.clear();
     for (const auto& go : objectArray) {

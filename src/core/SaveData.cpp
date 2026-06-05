@@ -53,6 +53,15 @@ void from_json(const json& j, SavedBoxPos& b) {
     b.y = j.value("y", 0.0f);
 }
 
+void to_json(json& j, const SavedBackpackGroup& g) {
+    j = json{{"groupId", g.groupId}, {"items", g.items}};
+}
+
+void from_json(const json& j, SavedBackpackGroup& g) {
+    g.groupId = j.value("groupId", "");
+    g.items = j.value("items", std::vector<SavedItemSlot>{});
+}
+
 static json SerializeOptionalSlot(const std::optional<SavedItemSlot>& slot) {
     if (!slot.has_value()) {
         return nullptr;
@@ -80,10 +89,13 @@ void to_json(json& j, const SaveGameState& s) {
              {"controlled", s.controlled},
              {"partyMode", s.partyMode},
              {"lightOn", s.lightOn},
+             {"selectedBackpackGroup", s.selectedBackpackGroup},
+             {"backpackGroups", s.backpackGroups},
              {"using", SerializeOptionalSlot(s.usingItem)},
              {"slots", slots},
              {"escadaConsertada", s.escadaConsertada},
              {"removedPickupIds", s.removedPickupIds},
+             {"missedUniquePickupIds", s.missedUniquePickupIds},
              {"droppedItems", s.droppedItems},
              {"litCandleIds", s.litCandleIds},
              {"repairedIds", s.repairedIds},
@@ -100,6 +112,8 @@ void from_json(const json& j, SaveGameState& s) {
     s.controlled = j.value("controlled", "big");
     s.partyMode = j.value("partyMode", "TOGETHER");
     s.lightOn = j.value("lightOn", false);
+    s.selectedBackpackGroup = j.value("selectedBackpackGroup", 0);
+    s.backpackGroups = j.value("backpackGroups", std::vector<SavedBackpackGroup>{});
     s.usingItem = DeserializeOptionalSlot(j.value("using", json()));
     s.slots.clear();
     if (j.contains("slots") && j["slots"].is_array()) {
@@ -109,6 +123,7 @@ void from_json(const json& j, SaveGameState& s) {
     }
     s.escadaConsertada = j.value("escadaConsertada", false);
     s.removedPickupIds = j.value("removedPickupIds", std::vector<int>{});
+    s.missedUniquePickupIds = j.value("missedUniquePickupIds", std::vector<int>{});
     s.droppedItems = j.value("droppedItems", std::vector<SavedDroppedItem>{});
     s.litCandleIds = j.value("litCandleIds", std::vector<int>{});
     s.repairedIds = j.value("repairedIds", std::vector<int>{});

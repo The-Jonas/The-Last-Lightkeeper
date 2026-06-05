@@ -2,6 +2,7 @@
 #define CHARACTER_H
 
 #include "engine/Component.h"
+#include "gameplay/Inventory.h"
 #include "core/Timer.h"
 #include "math/Vec2.h"
 #include "audio/Sound.h"
@@ -63,6 +64,10 @@ public:
     Vec2 GetCenter();                                                   // Para pegar o centro do personagem
     void ClearMovement();
 
+    enum class Direction { UP, DOWN, LEFT, RIGHT };
+    Direction GetFacingDirection() const { return currentDirection; }
+    void NotifyInventoryLightChanged();
+
 private:
     std::queue<Command> taskQueue;                                      // Fila de comando a serem executados
 
@@ -73,7 +78,6 @@ private:
     float acceleration;                                                 // Taxa de aceleração em movimento
     float deceleration;                                                 // Taxa de desaceleração ao soltar input
     
-    enum class Direction {UP, DOWN, LEFT, RIGHT};                       // enum saberá onde o character está andando
     Direction currentDirection;
     
     std::string baseSpritePath;                                         // guarda o caminho base (Ex: Recursos/img/personagens(irmãozao))
@@ -82,8 +86,13 @@ private:
     float stripAnimTimer = 0.0f;
     int stripFrameIndex = 0;
 
-    std::string IrmaozaoIdleStripPath(Direction dir, int frameIndex, bool holdingLighter = false) const;
+    std::string IrmaozaoIdleStripPath(Direction dir, int frameIndex, HeldPropVisual prop = HeldPropVisual::None) const;
     void RefreshIrmaozaoStripSprite();
+    void EnsureIrmaozaoBaselineBox();
+    void RestoreIrmaozaoCollisionBox(float centerX, float footY);
+
+    float baselineBoxW = 0.0f;
+    float baselineBoxH = 0.0f;
 };
 
 #endif 

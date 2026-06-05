@@ -124,7 +124,7 @@ int StageState::CreateStaticLight(Vec2 pos, bool startsLit) {
 }
 
 void StageState::SetLightEnabled(int lightId, bool enabled) {
-    if (lightId >= 0 && lightId < lights.size()) {
-        lights[lightId].enabled = enabled;
+    if (lightId >= 0 && static_cast<size_t>(lightId) < lights.size()) {
+        lights[static_cast<size_t>(lightId)].enabled = enabled;
     }
 }

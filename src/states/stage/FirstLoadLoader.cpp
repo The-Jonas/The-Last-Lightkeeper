@@ -1,4 +1,5 @@
 #include "states/stage/FirstLoadData.h"
+#include "gameplay/BackpackConfig.h"
 #include "gameplay/Item.h"
 
 #include "nlohmann/json.hpp"
@@ -62,8 +63,14 @@ StageFirstLoadData EmbeddedDefaults() {
                              true,
                              2,
                              {{ItemProperty::LIGHT_SOURCE, 1.0f}}};
-    ItemDef oil{"Oil Gallon", "Recursos/img/items/oil_gallon.png", 1, false, 3, {{ItemProperty::FUEL, 50.0f}}};
-    d.pickupCycle = {apple, brokenFlashlight, oil};
+    ItemDef oil{"Oil Gallon", "Recursos/img/items/oil_gallon.png", 1, false, 3, {{ItemProperty::FUEL, 100.0f}}};
+    ItemDef lamp{"Lamp",
+                 "Recursos/img/items/0106_ASSET_LAMPARINA_PERSPECTIVA_APAGADA_FLV.png.png",
+                 250,
+                 true,
+                 4,
+                 {{ItemProperty::LIGHT_SOURCE, 1.0f}}};
+    d.pickupCycle = {apple, brokenFlashlight, oil, lamp};
 
     d.startingFlashlight =
         ItemDef{"Flashlight",
@@ -78,7 +85,34 @@ StageFirstLoadData EmbeddedDefaults() {
         {"level_1", "Recursos/map/mapa_1_andar.json", 1},
         {"level_2", "Recursos/map/mapa_2_andar.json", 2},
     };
+    d.backpackConfig = DefaultBackpackConfig();
     return d;
+}
+
+BackpackConfig ParseBackpackConfig(const json& j) {
+    BackpackConfig cfg = DefaultBackpackConfig();
+    if (!j.is_array()) {
+        return cfg;
+    }
+    std::vector<BackpackGroupDef> groups;
+    for (const auto& g : j) {
+        BackpackGroupDef def;
+        def.id = g.value("id", "");
+        def.maxItems = g.value("maxItems", 1);
+        def.selectKey = g.value("selectKey", 0);
+        if (g.contains("itemNames") && g["itemNames"].is_array()) {
+            for (const auto& name : g["itemNames"]) {
+                def.itemNames.push_back(name.get<std::string>());
+            }
+        }
+        if (!def.id.empty()) {
+            groups.push_back(std::move(def));
+        }
+    }
+    if (!groups.empty()) {
+        cfg.groups = std::move(groups);
+    }
+    return cfg;
 }
 
 bool TryReadJsonFile(const char* path, json& out) {
@@ -143,6 +177,9 @@ StageFirstLoadData ParseFromJsonRoot(const json& j) {
             d.oceanChunkCandidates = std::move(paths);
         }
     }
+    if (j.contains("backpackGroups") && j["backpackGroups"].is_array()) {
+        d.backpackConfig = ParseBackpackConfig(j["backpackGroups"]);
+    }
     if (j.contains("levels") && j["levels"].is_array()) {
         std::vector<LevelDef> levels;
         for (const auto& lv : j["levels"]) {
@@ -172,6 +209,9 @@ StageFirstLoadData SanitizeLists(StageFirstLoadData d) {
     }
     if (d.levelPath.empty() && !d.levels.empty()) {
         d.levelPath = d.levels.front().mapPath;
+    }
+    if (d.backpackConfig.groups.empty()) {
+        d.backpackConfig = DefaultBackpackConfig();
     }
     return d;
 }

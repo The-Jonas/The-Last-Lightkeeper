@@ -118,6 +118,40 @@
      "y": 2453
     },
     {
+     "gid": 7,
+     "height": 48,
+     "id": 950,
+     "name": "",
+     "opacity": 1,
+     "properties":[
+            {
+             "name":"depthOffset",
+             "type":"float",
+             "value":0
+            },
+            {
+             "name":"heightLevel",
+             "type":"int",
+             "value":0
+            },
+            {
+             "name":"itemName",
+             "type":"string",
+             "value":"Lamp"
+            },
+            {
+             "name":"unique",
+             "type":"bool",
+             "value":true
+            }],
+     "rotation":0,
+     "type":"ItemSpawn",
+     "visible":true,
+     "width": 48,
+     "x": 1920,
+     "y": 2453
+    },
+    {
      "gid": 12,
      "height": 95,
      "id": 669,

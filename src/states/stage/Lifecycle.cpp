@@ -50,6 +50,7 @@ void StageState::Start() {
         LoadAssets();
     }
     StartArray();                                                   // Chama Start() de todos os objetos
+    RegisterAllCandleLights();
     companionStartDelay = 2;
 
     SetMouseConfinedToWindow(true);

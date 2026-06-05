@@ -56,6 +56,7 @@ void TryNudgeOutOfStaticGeometry(StageState* stage, GameObject& go, Collider* co
 }
 constexpr const char* kIrmaozaoIdleRoot = "Recursos/img/personagens/irmaozao_idle/";
 constexpr const char* kIrmaozaoIdleLighterRoot = "Recursos/img/personagens/irmaozao_idle_lighter/";
+constexpr const char* kIrmaozaoIdleLampRoot = "Recursos/img/personagens/irmaozao_idle_lamp/";
 
 constexpr int kIrmaozaoStripFrameCount = 6;
 constexpr float kIrmaozaoStripFrameSeconds = 0.11f;
@@ -112,27 +113,58 @@ Character::Character(GameObject& associated, std::string spritePath, bool useIrm
     }
 }
 
-std::string Character::IrmaozaoIdleStripPath(Direction dir, int frameIndex, bool holdingLighter) const {
+std::string Character::IrmaozaoIdleStripPath(Direction dir, int frameIndex, HeldPropVisual prop) const {
     int fi = frameIndex % kIrmaozaoStripFrameCount;
     if (fi < 0) {
         fi += kIrmaozaoStripFrameCount;
     }
     const int n = fi + 1;
-    
-    // Escolhe a pasta raiz baseada no isqueiro!
-    std::string root = holdingLighter ? kIrmaozaoIdleLighterRoot : kIrmaozaoIdleRoot;
+
+    const char* root = kIrmaozaoIdleRoot;
+    const char* ext = ".png";
+    if (prop == HeldPropVisual::Lighter) {
+        root = kIrmaozaoIdleLighterRoot;
+    } else if (prop == HeldPropVisual::Lamp) {
+        root = kIrmaozaoIdleLampRoot;
+        ext = ".bmp";
+    }
 
     switch (dir) {
     case Direction::UP:
-        return root + "trás/FRAME_" + std::to_string(n) + ".png";
+        return std::string(root) + "trás/FRAME_" + std::to_string(n) + ext;
     case Direction::DOWN:
-        return root + "frente/FRAME_" + std::to_string(n) + ".png";
+        return std::string(root) + "frente/FRAME_" + std::to_string(n) + ext;
     case Direction::LEFT:
-        return root + "esquerda/FRAME_" + std::to_string(n) + ".png";
+        return std::string(root) + "esquerda/FRAME_" + std::to_string(n) + ext;
     case Direction::RIGHT:
-        return root + "direita/FRAME_" + std::to_string(n) + ".png";
+        return std::string(root) + "direita/FRAME_" + std::to_string(n) + ext;
     }
-    return root + "frente/FRAME_1.png";
+    return std::string(root) + "frente/FRAME_1" + ext;
+}
+
+void Character::EnsureIrmaozaoBaselineBox() {
+    if (!irmaozaoIdleStrips || baselineBoxW > 0.0f) {
+        return;
+    }
+    baselineBoxW = associated.box.w;
+    baselineBoxH = associated.box.h;
+}
+
+void Character::RestoreIrmaozaoCollisionBox(float centerX, float footY) {
+    EnsureIrmaozaoBaselineBox();
+    if (baselineBoxW <= 0.0f || baselineBoxH <= 0.0f) {
+        return;
+    }
+    associated.box.w = baselineBoxW;
+    associated.box.h = baselineBoxH;
+    associated.box.x = centerX - baselineBoxW * 0.5f;
+    associated.box.y = footY - baselineBoxH;
+}
+
+void Character::NotifyInventoryLightChanged() {
+    if (irmaozaoIdleStrips) {
+        RefreshIrmaozaoStripSprite();
+    }
 }
 
 void Character::RefreshIrmaozaoStripSprite() {
@@ -140,25 +172,21 @@ void Character::RefreshIrmaozaoStripSprite() {
     if (!sprite) {
         return;
     }
-    
-    // Verifica se o isqueiro tá equipado
-    bool holdingLighter = false;
-    StageState* stage = Game::TryGetStageState();
-    // Usa a função pra saber se a luz está na mão
-    if (stage && stage->GetInventory().IsUsableLightActive()) {
-        holdingLighter = true;
+
+    const float centerX = associated.box.x + associated.box.w * 0.5f;
+    const float footY = associated.box.y + associated.box.h;
+
+    HeldPropVisual prop = HeldPropVisual::None;
+    if (StageState* stage = Game::TryGetStageState()) {
+        prop = stage->GetInventory().GetHeldPropVisual();
     }
 
-    const Vec2 center = associated.box.Center();
-    
-    // Passa a variável para o construtor do caminho
-    const std::string path = IrmaozaoIdleStripPath(currentDirection, stripFrameIndex, holdingLighter);
-    
+    const std::string path = IrmaozaoIdleStripPath(currentDirection, stripFrameIndex, prop);
+
     sprite->Open(path);
     sprite->SetFrameCount(1, 1);
     sprite->SetFrame(0);
-    associated.box.x = center.x - associated.box.w * 0.5f;
-    associated.box.y = center.y - associated.box.h * 0.5f;
+    RestoreIrmaozaoCollisionBox(centerX, footY);
 }
 
 // Destrutor de Character
@@ -172,6 +200,8 @@ Character::~Character() {
 }
 
 void Character::Start() {
+    EnsureIrmaozaoBaselineBox();
+
     // Define o tamanho proporcional da HitBox (Na sola do pé)
     Vec2 scale(0.45f, 0.12f);
     // Calculo automatico do deslocamento Y
