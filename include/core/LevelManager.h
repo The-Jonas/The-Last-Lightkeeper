@@ -90,6 +90,10 @@ private:
     std::vector<Polygon> chaoBuraco;
     std::vector<Circle> circleColliders;
 
+    // Colisão estática de objetos do cenário (armários, caixas diagonais, etc.)
+    std::vector<Polygon>  objPolyColliders;   // Para objetos com forma irregular/diagonal
+    std::vector<SDL_Rect> objRectColliders;   // Para objetos em posição retangular padrão
+
     
 };
 

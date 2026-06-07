@@ -216,91 +216,41 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
     else if (spawn.type == "Armario") {
         std::string dir = "frente";
         if (spawn.properties.count("direction")) dir = spawn.properties.at("direction").get<std::string>();
-        
+ 
         float depthOff = 0.0f;
         if (spawn.properties.count("depthOffset")) depthOff = spawn.properties.at("depthOffset").get<float>();
-
+ 
         GameObject* closetObj = new GameObject();
         closetObj->tiledId = spawn.tiledId;
         closetObj->z = spawn.z;
         closetObj->depthOffset = depthOff;
-        
-        // Adiciona o componente (isso já carrega o SpriteRenderer, então o closetObj->box.w e h já terão o tamanho da imagem correta!)
+ 
         closetObj->AddComponent(new Closet(*closetObj, dir));
-
+ 
         closetObj->box.x = spawn.x;
         closetObj->box.y = spawn.y - closetObj->box.h;
-        
-        // --- COLISÃO ESTÁTICA CUSTOMIZADA POR DIREÇÃO ---
-        SDL_Rect colBox;
-        
-        if (dir == "frente") {
-            // Armário de Frente: A colisão é larga e fica só na base de madeira
-            colBox.w = closetObj->box.w * 0.75f; 
-            colBox.h = closetObj->box.h * 0.30f; 
-            colBox.x = closetObj->box.x + (closetObj->box.w - colBox.w) / 2.0f; // Centralizado no X
-            colBox.y = closetObj->box.y + (closetObj->box.h - colBox.h) - 70;        // Colado embaixo no Y
-        } 
-        else if (dir == "esquerda") {
-            // Armário virado para a Esquerda: A colisão é mais fina (profundidade) e mais alta
-            colBox.w = closetObj->box.w * 0.50f; // 50% da largura da imagem
-            colBox.h = closetObj->box.h * 0.85f; // Cobre quase a altura toda
-            // Empurra a colisão para a parte de trás do armário (direita da imagem)
-            colBox.x = closetObj->box.x + (closetObj->box.w - colBox.w); 
-            colBox.y = closetObj->box.y + (closetObj->box.h - colBox.h);
-        }
-        else if (dir == "direita") {
-            // Armário virado para a Direita
-            colBox.w = closetObj->box.w * 0.50f; 
-            colBox.h = closetObj->box.h * 0.85f; 
-            // Cola a colisão na parte de trás do armário (esquerda da imagem)
-            colBox.x = closetObj->box.x; 
-            colBox.y = closetObj->box.y + (closetObj->box.h - colBox.h);
-        }
-
-        // Injeta a colisão calculada direto no LevelManager
-        stage.level.GetRectColliders().push_back(colBox);
-
+ 
+        // Colisão daqui vem da camada "Collision_Obj" desenhada no Tiled. 
+ 
         stage.AddObject(closetObj);
     }
     else if (spawn.type == "CaixasAmontoadas") {
+        float depthOff = 0.0f;
+        if (spawn.properties.count("depthOffset")) depthOff = spawn.properties.at("depthOffset").get<float>();
+ 
         GameObject* caixasObj = new GameObject();
         caixasObj->tiledId = spawn.tiledId;
         caixasObj->z = spawn.z;
-
-        // Suporte a depthOffset caso precise ajustar a profundidade delas no mapa
-        float depthOff = 0.0f;
-        if (spawn.properties.count("depthOffset")) depthOff = spawn.properties.at("depthOffset").get<float>();
         caixasObj->depthOffset = depthOff;
-
+ 
         caixasObj->AddComponent(new SpriteRenderer(*caixasObj, "Recursos/img/objetos/Amontoado_caixas.png"));
-        
-        // Adiciona o FadeEffect para ficar transparente se o jogador for para trás
-        // caixasObj->AddComponent(new FadeEffect(*caixasObj));
-
+ 
         caixasObj->box.x = spawn.x;
         caixasObj->box.y = spawn.y - caixasObj->box.h;
-        
-        // COLISÃO FÍSICA AUTOMÁTICA
-        SDL_Rect colBox;
-        
-        // 1. LARGURA: Reduz a largura da colisão (ex: 96% do tamanho da imagem)
-        // para o jogador não esbarrar no ar transparente das laterais.
-        colBox.w = caixasObj->box.w * 0.96f; 
-
-        // 2. ALTURA: Define a grossura da parede invisível (35% da imagem)
-        colBox.h = caixasObj->box.h * 0.35f; 
-
-        // 3. EIXO X: Centraliza a colisão encolhida no meio da imagem
-        colBox.x = caixasObj->box.x + (caixasObj->box.w - colBox.w) / 2.0f;
-
-        // 4. EIXO Y : Move a colisão "mais pra frente" da imagem.
-        // O "+ 50" ali no final empurra a parede invisível 50 pixels para cima
-        colBox.y = caixasObj->box.y + (caixasObj->box.h - colBox.h) - 50; 
-
-        // Injeta a parede invisível direto no cérebro do LevelManager
-        stage.level.GetRectColliders().push_back(colBox);
-
+ 
+        // Colisão agora vem da camada "Collision_Obj" desenhada no Tiled.
+        // Não há mais injeção manual de SDL_Rect aqui.
+ 
         stage.AddObject(caixasObj);
-    }    
+    }   
 }

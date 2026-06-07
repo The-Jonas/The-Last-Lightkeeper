@@ -27,8 +27,11 @@ LevelManager::~LevelManager() {
     chaoNormal.clear();
     chaoBuraco.clear();
     circleColliders.clear();
+    objPolyColliders.clear();
+    objRectColliders.clear();
     entitySpawns.clear();
     levelTransitionZones.clear();
+    
 }
 
 void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
@@ -54,6 +57,8 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
         chaoNormal.clear();
         chaoBuraco.clear();
         circleColliders.clear();
+        objPolyColliders.clear();
+        objRectColliders.clear();
         entitySpawns.clear();
         levelTransitionZones.clear();
         levelLabel.clear();
@@ -179,6 +184,36 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
                         }
                     }
                 }
+                else if (layerName == "Collision_Obj") {
+                    for (auto& obj : layer["objects"]) {
+                        float finalX = obj.value("x", 0.0f) + layerOffsetX;
+                        float finalY = obj.value("y", 0.0f) + layerOffsetY;
+ 
+                        if (obj.contains("polygon")) {
+                            // Objeto com forma irregular ou diagonal → SAT
+                            Polygon poly;
+                            for (auto& p : obj["polygon"]) {
+                                poly.vertices.push_back({
+                                    (int)(finalX + p.value("x", 0.0f)),
+                                    (int)(finalY + p.value("y", 0.0f))
+                                });
+                            }
+                            if (poly.vertices.size() >= 3)
+                                objPolyColliders.push_back(poly);
+ 
+                        } else {
+                            // Objeto retangular padrão → AABB simples
+                            SDL_Rect r;
+                            r.x = (int)finalX;
+                            r.y = (int)finalY;
+                            r.w = (int)obj.value("width",  0.0f);
+                            r.h = (int)obj.value("height", 0.0f);
+                            if (r.w > 0 && r.h > 0)
+                                objRectColliders.push_back(r);
+                        }
+                    }
+                }
+                
                 
                 // CAMADA DE ENTIDADES (Spawns)
                 else if (layerName == "Entidades") {
@@ -245,6 +280,23 @@ bool LevelManager::CheckCollision(const SDL_Rect& entityBox, bool isElevated) {
                 return true;
             }
         }
+
+        // ── objetos estáticos ───────────────────────────────────────
+        for (const auto& rectCol : objRectColliders) {
+            if (SDL_HasIntersection(&entityBox, &rectCol)) return true;
+        }
+        for (const auto& polyCol : objPolyColliders) {
+            Polygon entityPoly;
+            entityPoly.vertices = {
+                {entityBox.x,              entityBox.y},
+                {entityBox.x + entityBox.w, entityBox.y},
+                {entityBox.x + entityBox.w, entityBox.y + entityBox.h},
+                {entityBox.x,              entityBox.y + entityBox.h}
+            };
+            if (CheckPolygonVsPolygon(entityPoly, polyCol)) return true;
+        }
+        // ─────────────────────────────────────────────────────────────────
+
     }
 
     // ==========================================================
@@ -392,6 +444,15 @@ bool LevelManager::CheckCollision(const Circle& entityCircle, bool isElevated) {
         for (const auto& polyCol : chaoNormal) {
             if (CheckPolygonVsCircle(polyCol, entityCircle)) return true;
         }
+
+        // ── objetos estáticos ───────────────────────────────────────
+        for (const auto& rectCol : objRectColliders) {
+            if (CheckRectVsCircle(rectCol, entityCircle)) return true;
+        }
+        for (const auto& polyCol : objPolyColliders) {
+            if (CheckPolygonVsCircle(polyCol, entityCircle)) return true;
+        }
+        // ─────────────────────────────────────────────────────────────────
     }
 
     return false; // Caminho livre!
@@ -520,6 +581,32 @@ void LevelManager::RenderCollisionOverlay(SDL_Renderer* renderer) const {
             const float a1 = ((float)(i + 1) / kSeg) * 2.0f * static_cast<float>(M_PI);
             SDL_RenderDrawLineF(renderer, cx + std::cos(a0) * rad, cy + std::sin(a0) * rad, cx + std::cos(a1) * rad,
                                 cy + std::sin(a1) * rad);
+        }
+    }
+
+    // Objetos estáticos — retângulos (verde claro)
+    SDL_SetRenderDrawColor(renderer, 80, 255, 120, 230);
+    for (const auto& r : objRectColliders) {
+        SDL_FRect screenRect = {
+            (r.x - Camera::pos.x) * zm,
+            (r.y - Camera::pos.y) * zm,
+            r.w * zm,
+            r.h * zm
+        };
+        SDL_RenderDrawRectF(renderer, &screenRect);
+    }
+ 
+    // Objetos estáticos — polígonos diagonais (verde escuro)
+    SDL_SetRenderDrawColor(renderer, 40, 200, 80, 235);
+    for (const auto& poly : objPolyColliders) {
+        for (size_t i = 0; i < poly.vertices.size(); i++) {
+            SDL_Point p1 = poly.vertices[i];
+            SDL_Point p2 = poly.vertices[(i + 1) % poly.vertices.size()];
+            SDL_RenderDrawLineF(renderer,
+                (static_cast<float>(p1.x) - Camera::pos.x) * zm,
+                (static_cast<float>(p1.y) - Camera::pos.y) * zm,
+                (static_cast<float>(p2.x) - Camera::pos.x) * zm,
+                (static_cast<float>(p2.y) - Camera::pos.y) * zm);
         }
     }
 
