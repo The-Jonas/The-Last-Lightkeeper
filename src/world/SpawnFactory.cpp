@@ -12,6 +12,7 @@
 #include "gameplay/LevelTransition.h"
 #include "gameplay/ItemPickup.h"
 #include "gameplay/Jornal.h"
+#include "gameplay/Closet.h"
 #include <iostream>
 #include <cstdlib> 
 
@@ -206,6 +207,56 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         candleObj->box.x = spawn.x;
         candleObj->box.y = spawn.y - candleObj->box.h;
         stage.AddObject(candleObj);
+    }
+    else if (spawn.type == "Armario") {
+        std::string dir = "frente";
+        if (spawn.properties.count("direction")) dir = spawn.properties.at("direction").get<std::string>();
+        
+        float depthOff = 0.0f;
+        if (spawn.properties.count("depthOffset")) depthOff = spawn.properties.at("depthOffset").get<float>();
+
+        GameObject* closetObj = new GameObject();
+        closetObj->tiledId = spawn.tiledId;
+        closetObj->z = spawn.z;
+        closetObj->depthOffset = depthOff;
+        
+        // Adiciona o componente (isso já carrega o SpriteRenderer, então o closetObj->box.w e h já terão o tamanho da imagem correta!)
+        closetObj->AddComponent(new Closet(*closetObj, dir));
+
+        closetObj->box.x = spawn.x;
+        closetObj->box.y = spawn.y - closetObj->box.h;
+        
+        // --- COLISÃO ESTÁTICA CUSTOMIZADA POR DIREÇÃO ---
+        SDL_Rect colBox;
+        
+        if (dir == "frente") {
+            // Armário de Frente: A colisão é larga e fica só na base de madeira
+            colBox.w = closetObj->box.w * 0.75f; 
+            colBox.h = closetObj->box.h * 0.30f; 
+            colBox.x = closetObj->box.x + (closetObj->box.w - colBox.w) / 2.0f; // Centralizado no X
+            colBox.y = closetObj->box.y + (closetObj->box.h - colBox.h) - 70;        // Colado embaixo no Y
+        } 
+        else if (dir == "esquerda") {
+            // Armário virado para a Esquerda: A colisão é mais fina (profundidade) e mais alta
+            colBox.w = closetObj->box.w * 0.50f; // 50% da largura da imagem
+            colBox.h = closetObj->box.h * 0.85f; // Cobre quase a altura toda
+            // Empurra a colisão para a parte de trás do armário (direita da imagem)
+            colBox.x = closetObj->box.x + (closetObj->box.w - colBox.w); 
+            colBox.y = closetObj->box.y + (closetObj->box.h - colBox.h);
+        }
+        else if (dir == "direita") {
+            // Armário virado para a Direita
+            colBox.w = closetObj->box.w * 0.50f; 
+            colBox.h = closetObj->box.h * 0.85f; 
+            // Cola a colisão na parte de trás do armário (esquerda da imagem)
+            colBox.x = closetObj->box.x; 
+            colBox.y = closetObj->box.y + (closetObj->box.h - colBox.h);
+        }
+
+        // Injeta a colisão calculada direto no LevelManager
+        stage.level.GetRectColliders().push_back(colBox);
+
+        stage.AddObject(closetObj);
     }
     else if (spawn.type == "CaixasAmontoadas") {
         GameObject* caixasObj = new GameObject();

@@ -102,7 +102,11 @@ void StageState::Render(){
     if (lightsEnabled) {
         LightShadowProfile::BeginLightsTiming();
     }
-    const bool torchFromInventory = inventory.IsUsableLightActive();
+
+    const bool playerWantsLightHidden = Character::player && Character::player->hidePersonalLight;
+    const bool torchFromInventory     = inventory.IsUsableLightActive() && !playerWantsLightHidden; // controla o VISUAL
+    const bool torchIsActuallyLit     = inventory.IsUsableLightActive();                            // controla o CONDICIONAL
+
     const bool bigCircleOnlyLight =
         cursorPreviewLightEnabled && previewLightLockedToPlayer && previewLightAnchorPlayer == bigCharacterObject;
     const bool smallCircleOnlyLight =
@@ -223,14 +227,17 @@ void StageState::Render(){
         
         if (bigShadowCasts.size() > kMaxSpriteShadowsPerPlayer) bigShadowCasts.resize(kMaxSpriteShadowsPerPlayer);
         if (smallShadowCasts.size() > kMaxSpriteShadowsPerPlayer) smallShadowCasts.resize(kMaxSpriteShadowsPerPlayer);
+
+        const bool bigHidden = Character::player && Character::player->hidePersonalLight;
+        const bool smallHidden = Character::littleBrother && Character::littleBrother->hidePersonalLight;
         
         for (const SpriteShadowCast& c : bigShadowCasts) {
-            if (!bigCircleOnlyLight && c.contact < 0.50f) {
+            if (!bigCircleOnlyLight && c.contact < 0.50f && !bigHidden) {
                 RenderProjectedSpriteShadow(bigCharacterObject, c.lightScreen, c.touch, c.lengthPx, c.alpha, lightMaskParams);
             }
         }
         for (const SpriteShadowCast& c : smallShadowCasts) {
-            if (!smallCircleOnlyLight && c.contact < 0.50f) {
+            if (!smallCircleOnlyLight && c.contact < 0.50f && !smallHidden) {
                 RenderProjectedSpriteShadow(smallCharacterObject, c.lightScreen, c.touch, c.lengthPx, c.alpha, lightMaskParams);
             }
         }
@@ -250,16 +257,21 @@ void StageState::Render(){
                 smallMaxContact = std::max(smallMaxContact, 0.92f);
             }
         }
-        if (torchFromInventory && hasSmoothedTorchLight && bigCharacterObject) {
+
+        if (torchIsActuallyLit && hasSmoothedTorchLight && bigCharacterObject) {
             bigMaxContact = std::max(bigMaxContact, 0.92f);
         }
+        if (torchIsActuallyLit && hasSmoothedTorchLight && smallCharacterObject) {
+            smallMaxContact = std::max(smallMaxContact, 0.92f);
+        }
+        
 
-        if (bigCharacterObject && bigMaxContact > 0.0f) {
-            DrawContactFootShadow(g.GetRenderer(), bigCharacterObject->box, bigMaxContact);
-        }
-        if (smallCharacterObject && smallMaxContact > 0.0f) {
-            DrawContactFootShadow(g.GetRenderer(), smallCharacterObject->box, smallMaxContact);
-        }
+    if (bigCharacterObject && bigMaxContact > 0.0f && !bigHidden) {
+        DrawContactFootShadow(g.GetRenderer(), bigCharacterObject->box, bigMaxContact);
+    }
+    if (smallCharacterObject && smallMaxContact > 0.0f && !smallHidden) {
+        DrawContactFootShadow(g.GetRenderer(), smallCharacterObject->box, smallMaxContact);
+    }
         if (LightShadowProfile::IsActive()) {
             const Uint64 shadowBlockEnd = SDL_GetPerformanceCounter();
             const double ms = static_cast<double>(shadowBlockEnd - shadowBlockStart) * 1000.0 /
@@ -359,8 +371,8 @@ void StageState::Render(){
         smallLightContact = smallMaxContact;
 
         // Salva a iluminação real para o sistema de Sanidade ler!
-        this->bigIlluminationLevel = bigMaxTouch;
-        this->smallIlluminationLevel = smallMaxTouch;
+        this->bigIlluminationLevel   = torchIsActuallyLit ? std::max(bigMaxTouch,   0.92f) : bigMaxTouch;
+        this->smallIlluminationLevel = torchIsActuallyLit ? std::max(smallMaxTouch, 0.92f) : smallMaxTouch;
     }
 
     if (lightsEnabled) {

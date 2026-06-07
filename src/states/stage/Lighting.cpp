@@ -123,8 +123,23 @@ int StageState::CreateStaticLight(Vec2 pos, bool startsLit) {
     return lights.size() - 1; // Retorna o ID (posição no vetor)
 }
 
+int StageState::CreateStaticLight(Vec2 pos, bool startsLit, LightMaskShape shape, const LightMaskParams& params) {
+    LightInstance light;
+    light.worldPos = pos;
+    light.shape = shape;
+    light.params = params;
+    light.enabled = startsLit;
+
+    static std::uint32_t sSeedCustom = 200;
+    sSeedCustom = sSeedCustom * 1664525u + 1013904223u;
+    light.animationSeed = static_cast<float>(sSeedCustom & 0xFFFFu) / 65535.0f;
+
+    lights.push_back(light);
+    return static_cast<int>(lights.size() - 1);
+}
+
 void StageState::SetLightEnabled(int lightId, bool enabled) {
-    if (lightId >= 0 && lightId < lights.size()) {
+    if (lightId >= 0 && lightId < static_cast<int>(lights.size())) {
         lights[lightId].enabled = enabled;
     }
 }

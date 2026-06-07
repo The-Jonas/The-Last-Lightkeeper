@@ -47,6 +47,7 @@ public:
     void PositionForCoop(Character* leader);                            // Pra pegar a posição de onde os irmãos estão olhando
     SDL_Rect GetInteractionRect(int targetHeightLevel = 0) const;       // Retorna a caixa de iteração projetada na frente do personagem
     bool isElevated = false;                                            // Flag pra saber se o personagem está acima de algo Exemplo: Andando sob a escada.
+    bool hidePersonalLight = false;                                     // Esconder a luz mesmo ela estando ativada
     float stairAnchorY = 0.0f;                                          // GUARDA A PROFUNDIDADE DA ESCADA DO ANDAR ATUAL
 
 

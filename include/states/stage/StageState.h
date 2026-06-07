@@ -38,7 +38,7 @@ public:
         Continue
     };
 
-    StageState(LoadMode mode = LoadMode::NewGame);                  // Construtor
+    StageState(LoadMode mode = LoadMode::NewGame);                      // Construtor
     ~StageState();                                                      // Destrutor
 
     LevelManager level;
@@ -55,6 +55,8 @@ public:
 
     // Funções para controle de luzes dinâmicas de cenário
     int CreateStaticLight(Vec2 pos, bool startsLit);
+    int CreateStaticLight(Vec2 pos, bool startsLit, LightMaskShape shape, const LightMaskParams& params); // Overload de CreateStaticLight com shape e params customizados
+
     void SetLightEnabled(int lightId, bool enabled);
 
     // Verifica se a luz está no range dos pés dos personagens
@@ -66,6 +68,7 @@ public:
     float smallIlluminationLevel = 0.0f;
 
     Inventory& GetInventory() { return inventory; }
+    const LightMaskParams& GetLightMaskParams() const { return lightMaskParams; }
     LoadMode GetLoadMode() const { return loadMode; }
 
     SaveGameState CaptureSaveState() const;
