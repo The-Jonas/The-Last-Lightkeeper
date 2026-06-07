@@ -188,7 +188,7 @@
                         {
                          "name":"imagePath",
                          "type":"string",
-                         "value":"Recursos/img/items/old_letter.jpg"
+                         "value":"Recursos\/img\/items\/old_letter.jpg"
                         }],
                  "rotation":0,
                  "type":"JornalSpawn",
@@ -735,6 +735,25 @@
                  "width":48,
                  "x":1425.33333333333,
                  "y":30
+                }, 
+                {
+                 "gid":17,
+                 "height":746,
+                 "id":686,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"direction",
+                         "type":"string",
+                         "value":"frente"
+                        }],
+                 "rotation":0,
+                 "type":"Armario",
+                 "visible":true,
+                 "width":775,
+                 "x":328.151515151515,
+                 "y":1900.27272727273
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -3239,7 +3258,7 @@
          "y":0
         }],
  "nextlayerid":28,
- "nextobjectid":685,
+ "nextobjectid":688,
  "orientation":"orthogonal",
  "properties":[
         {
@@ -3248,7 +3267,7 @@
          "value":"level_1"
         }],
  "renderorder":"right-down",
- "tiledversion":"1.12.2",
+ "tiledversion":"1.12.1",
  "tileheight":64,
  "tilesets":[
         {
