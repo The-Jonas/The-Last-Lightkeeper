@@ -46,6 +46,8 @@ public:
 
 private:
 
+    void CheckDamageCollision();
+
     // ── Máquina de estados ────────────────────────────────────────────────────
     MonsterState state = MonsterState::PATROL;
  

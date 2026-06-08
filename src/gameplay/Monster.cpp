@@ -2,6 +2,7 @@
 #include "gameplay/Character.h"
 #include "engine/SpriteRenderer.h"
 #include "states/stage/StageState.h"
+#include "engine/Camera.h"
 #include "core/Game.h"
 #include "math/Vec2.h"
 #include <cstdlib>
@@ -19,8 +20,7 @@ void Monster::Start() {
     associated.box.y -= associated.box.h;
  
     // Começa patrulhando
-    state = MonsterState::PATROL;
-    PickNextPatrolPoint();
+    TransitionTo(MonsterState::PATROL);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -53,7 +53,6 @@ void Monster::Update(float dt) {
         lastKnownPlayerPos = seenPos;
         hasMemory          = true;
         memoryDecayTimer   = 0.0f;
-        visionRevealTimer  = 0.3f;  // Irmãozinho pode ver a silhueta por 0.3s
  
         if (state != MonsterState::CHASE)
             TransitionTo(MonsterState::CHASE);
@@ -68,11 +67,44 @@ void Monster::Update(float dt) {
         case MonsterState::CAMP_CLOSET:  UpdateCampCloset(dt);  break;
         case MonsterState::FLEE_LIGHT:   UpdateFleeLigth(dt);   break;
     }
+
+    CheckDamageCollision();
 }
 
 void Monster::Render() {
     // Silhueta é desenhada pelo MonsterSilhouette (z=100, acima da escuridão)
-    // Nada aqui.
+    
+#ifdef DEBUG
+    // ── DEBUG: CAIXA DE DANO (Vermelha) ──
+    // Recalculamos a mesma caixa usada no CheckDamageCollision
+    SDL_Rect dmgBox = {
+        static_cast<int>(associated.box.x + associated.box.w * 0.1f),
+        static_cast<int>(associated.box.y + associated.box.h * 0.1f),
+        static_cast<int>(associated.box.w * 0.8f),
+        static_cast<int>(associated.box.h * 0.8f)
+    };
+
+    // Subtrai a câmera para desenhar no lugar certo da tela
+    dmgBox.x -= Camera::pos.x;
+    dmgBox.y -= Camera::pos.y;
+
+    // Desenha um retângulo vermelho translúcido
+    SDL_SetRenderDrawBlendMode(Game::GetInstance().GetRenderer(), SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(Game::GetInstance().GetRenderer(), 255, 0, 0, 100); 
+    SDL_RenderFillRect(Game::GetInstance().GetRenderer(), &dmgBox);
+    
+    // Desenha também a borda da Hitbox sólida (amarela, opcional, pra ver onde ele colide com parede)
+    SDL_Rect physBox = {
+        static_cast<int>(associated.box.x) - static_cast<int>(Camera::pos.x),
+        static_cast<int>(associated.box.y) - static_cast<int>(Camera::pos.y),
+        static_cast<int>(associated.box.w),
+        static_cast<int>(associated.box.h)
+    };
+    SDL_SetRenderDrawColor(Game::GetInstance().GetRenderer(), 255, 255, 0, 255); 
+    SDL_RenderDrawRect(Game::GetInstance().GetRenderer(), &physBox);
+#endif
+
+
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -110,6 +142,65 @@ void Monster::TransitionTo(MonsterState next) {
             if (!patrolPoints.empty())
                 RequestPath(patrolPoints[patrolIndex]);
             break;
+    }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  COLISÃO DE DANO (Customizada pelo tamanho do Sprite)
+// ─────────────────────────────────────────────────────────────────────────────
+void Monster::CheckDamageCollision() {
+    if (damageCooldown > 0.0f) return;
+
+    // Criamos uma Hitbox virtual que pega 85% do tamanho da imagem inteira do monstro
+    // (Retirando 10% das bordas para não ser injusto com os pixels transparentes do sprite)
+    SDL_Rect dmgBox = {
+        static_cast<int>(associated.box.x + associated.box.w * 0.1f),
+        static_cast<int>(associated.box.y + associated.box.h * 0.1f),
+        static_cast<int>(associated.box.w * 0.85f),
+        static_cast<int>(associated.box.h * 0.85f)
+    };
+
+    // Função lambda (interna) auxiliar para checar a intersecção contra um irmão
+    auto CheckPlayerHit = [&](Character* c) {
+        if (!c) return false;
+        SDL_Rect pBox = {
+            static_cast<int>(c->GetAssociated().box.x),
+            static_cast<int>(c->GetAssociated().box.y),
+            static_cast<int>(c->GetAssociated().box.w),
+            static_cast<int>(c->GetAssociated().box.h)
+        };
+        // Checa se os dois retângulos estão se batendo na tela
+        return SDL_HasIntersection(&dmgBox, &pBox) == SDL_TRUE;
+    };
+
+    bool hit = false;
+    
+    // Checa o Irmãozão
+    if (CheckPlayerHit(Character::player)) {
+        Character::player->sanity -= kSanityDamageOnTouch;
+        if (Character::player->sanity < 0.0f) Character::player->sanity = 0.0f;
+        lastKnownPlayerPos = Character::player->GetAssociated().box.Center();
+        hit = true;
+        std::cout << "[Monster] Dano no Irmaozao! Sanidade -= " << kSanityDamageOnTouch << "\n";
+    }
+    // Checa o Irmãozinho (só se não bateu no mais velho neste frame)
+    else if (CheckPlayerHit(Character::littleBrother)) {
+        Character::littleBrother->sanity -= kSanityDamageOnTouch;
+        if (Character::littleBrother->sanity < 0.0f) Character::littleBrother->sanity = 0.0f;
+        lastKnownPlayerPos = Character::littleBrother->GetAssociated().box.Center();
+        hit = true;
+        std::cout << "[Monster] Dano no Irmaozinho! Sanidade -= " << kSanityDamageOnTouch << "\n";
+    }
+
+    if (hit) {
+        damageCooldown = kDamageCooldownTime;
+        hasMemory      = true;
+        memoryDecayTimer = 0.0f;
+
+        // Toque no escuro → HUNT (mais agressivo)
+        if (state != MonsterState::HUNT)
+            TransitionTo(MonsterState::HUNT);
     }
 }
 
@@ -219,40 +310,9 @@ void Monster::UpdateFleeLigth(float dt) {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  COLISÃO — Dano e HUNT
-// ─────────────────────────────────────────────────────────────────────────────
 void Monster::NotifyCollision(GameObject& other) {
-    if (damageCooldown > 0.0f) return;
- 
-    auto ApplyDamage = [&](Character* c) {
-        if (!c) return;
-        c->sanity -= kSanityDamageOnTouch;
-        if (c->sanity < 0.0f) c->sanity = 0.0f;
-        std::cout << "[Monster] Tocou num irmao! Sanidade -= " << kSanityDamageOnTouch << "\n";
-    };
- 
-    bool hit = false;
-    if (Character::player && &other == &Character::player->GetAssociated()) {
-        ApplyDamage(Character::player);
-        lastKnownPlayerPos = Character::player->GetAssociated().box.Center();
-        hit = true;
-    }
-    if (Character::littleBrother && &other == &Character::littleBrother->GetAssociated()) {
-        ApplyDamage(Character::littleBrother);
-        lastKnownPlayerPos = Character::littleBrother->GetAssociated().box.Center();
-        hit = true;
-    }
- 
-    if (hit) {
-        damageCooldown = kDamageCooldownTime;
-        hasMemory      = true;
-        memoryDecayTimer = 0.0f;
- 
-        // Toque no escuro → HUNT (mais agressivo)
-        if (state != MonsterState::HUNT)
-            TransitionTo(MonsterState::HUNT);
-    }
+    // Como a checagem de dano roda na Update através da CheckDamageCollision, 
+    // a Engine de física (LevelManager) cuida apenas de impedir o monstro de atravessar a parede.
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -427,8 +427,11 @@ void Character::Update(float dt) {
 
         if (visionCooldown > 0.0f) visionCooldown -= dt;
 
+        StageState* stageCtrl = Game::TryGetStageState();
+        bool isBeingControlled = stageCtrl && stageCtrl->GetControlledCharacter() == this;
+
         // Funciona independente de quem está sendo controlado
-        if (InputManager::GetInstance().KeyPress(SDLK_e) &&
+        if (isBeingControlled && InputManager::GetInstance().KeyPress(SDLK_e) &&
             visionPowerTimer <= 0.0f && visionCooldown <= 0.0f &&
             currentState != ActionState::INTERACTING) {
 

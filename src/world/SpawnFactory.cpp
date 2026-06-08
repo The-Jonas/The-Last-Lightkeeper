@@ -42,13 +42,13 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
             }
         }
  
-        // Se não tiver waypoints definidos, usa a própria posição como âncora
+        // Se não tiver waypoints definidos, usa a própria posição como âncora  
         if (spawn.properties.count("waypoints") == 0) {
             monster->AddPatrolPoint(Vec2(spawn.x, spawn.y));
         }
  
         monsterObj->AddComponent(monster);
-        monsterObj->AddComponent(new Collider(*monsterObj, Vec2(0.3f, 0.15f), Vec2(0, monsterObj->box.h * 0.4f)));
+        monsterObj->AddComponent(new Collider(*monsterObj, Vec2(0.3f, 0.15f), Vec2(60.0f, monsterObj->box.h * 0.4f)));
  
         monsterObj->box.x = spawn.x;
         monsterObj->box.y = spawn.y;
@@ -57,8 +57,8 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
 
         // ── Objeto filho só para a silhueta (z=100, renderiza ACIMA da escuridão) ──
         GameObject* silhouetteObj = new GameObject();
-        silhouetteObj->z     = 100;
-        silhouetteObj->owner = monsterObj;   // Y-sort referencia o dono
+        silhouetteObj->z = 100;
+        silhouetteObj->owner = monsterObj;   
         silhouetteObj->AddComponent(new MonsterSilhouette(*silhouetteObj, monster));
         silhouetteObj->box = monsterObj->box;
         stage.AddObject(silhouetteObj);
