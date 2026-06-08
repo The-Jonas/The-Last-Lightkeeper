@@ -6,13 +6,14 @@
 #include "world/Collider.h"
 #include "lighting/LightMaskTypes.h"
 #include "engine/Camera.h"
+#include "gameplay/Monster.h"
 #include "ui/Text.h"
 #include "core/Game.h"
 #include <iostream>
 
 // ── Parâmetros da fresta — para manipular sempre que quiser ─────────────────────
 static constexpr float kFrestaConeLengthPx    = 300.0f; // Comprimento do cone
-static constexpr float kFrestaHalfAngleDeg    =  70.0f; // Meia-abertura do cone
+static constexpr float kFrestaHalfAngleDeg    =  80.0f; // Meia-abertura do cone
 static constexpr float kFrestaFalloffRadiusPx = 350.0f; // Raio do falloff radial
 // ────────────────────────────────────────────────────────────────────────────────
 
@@ -120,9 +121,10 @@ void Closet::Update(float dt) {
 
 void Closet::Render() {
     if (showPrompt && textObj && !isOccupied) {
-        // Exibe o texto acima do armário independentemente da direção
-        textObj->box.x = associated.box.Center().x - (textObj->box.w / 2.0f);
-        textObj->box.y = associated.box.y - 30; 
+        SDL_Rect zone = GetInteractionRect();
+        // Posiciona o texto acima da zona de interação, não acima do armário inteiro
+        textObj->box.x = zone.x + (zone.w / 2.0f) - (textObj->box.w / 2.0f);
+        textObj->box.y = zone.y - 24;
         textObj->Render();
     }
 
@@ -150,7 +152,7 @@ SDL_Rect Closet::GetInteractionRect() const {
         int w = associated.box.w * 0.5f; 
         int h = depth;
         // Subimos o Y um pouquinho (-10) para a zona de interação entrar de leve na colisão
-        return { (int)associated.box.Center().x - (w / 2), (int)(associated.box.y + associated.box.h) - 180, w, h };
+        return { (int)associated.box.Center().x - (w / 2), (int)(associated.box.y + associated.box.h) - 250, w, h };
         
     } else if (direction == "esquerda") {
         int w = depth;
@@ -189,6 +191,19 @@ void Closet::EnterCloset() {
 
     HideChar(Character::player);
     HideChar(Character::littleBrother);
+
+    // Notifica o monstro que os irmãos entraram no armário
+    StageState* stage = Game::TryGetStageState();
+    if (stage) {
+        // Percorre os objetos procurando o Monster
+        // (Você pode guardar um ponteiro para o Monster no StageState para evitar isso)
+        for (auto& go : stage->GetObjectArray()) {
+            if (Monster* m = go->GetComponent<Monster>()) {
+                m->NotifyClosetOccupied(associated.box.Center());
+                break;
+            }
+        }
+    }
 }
 
 void Closet::ExitCloset() {

@@ -97,6 +97,14 @@ public:
     bool ShouldSkipPickupSpawn(int tiledId) const;
     bool IsPickupBlocked(ItemPickup* pickup) const;
 
+    // Público pra ser reutilizado pelo monstro
+    std::vector<Vec2> FindPathWorld(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent = nullptr, int nodeBudget = 4096) const;
+    const std::vector<std::shared_ptr<GameObject>>& GetObjectArray() const { return objectArray; }
+
+
+    // Getter para saber quem está atualmente sendo controlado
+    Character* GetControlledCharacter() const { return controlledCharacter; }
+
 private:
 
     struct LightInstance {
@@ -137,8 +145,7 @@ private:
     bool WorldToTile(const Vec2& worldPos, int& outTx, int& outTy) const;
     bool FindNearestWalkableTile(int startTx, int startTy, int& outTx, int& outTy, int maxRadius = 8,
                                    const GameObject* agent = nullptr) const;
-    std::vector<Vec2> FindPathWorld(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent = nullptr,
-                                    int nodeBudget = 4096) const;
+
     /// Grade A* disponível: matriz de tiles OU grade sintética (`LoadAssets` sem `TileMap` em cena).
     bool HasNavigationGrid() const;
     int NavTileWidthPx() const;

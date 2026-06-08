@@ -3,6 +3,7 @@
 #include "states/stage/StageState.h" 
 // Incluindo os componentes e engines necessários para os spawns
 #include "engine/GameObject.h"
+#include "world/Collider.h"
 #include "engine/SpriteRenderer.h"
 #include "gameplay/Box.h"
 #include "gameplay/CandleStick.h"
@@ -13,12 +14,56 @@
 #include "gameplay/ItemPickup.h"
 #include "gameplay/Jornal.h"
 #include "gameplay/Closet.h"
+#include "gameplay/Monster.h"
+#include "ui/MonsterSilhouette.h"
 #include <iostream>
 #include <cstdlib> 
 
 void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, const StageFirstLoadData& cfg) {
     
-    if (spawn.type == "Caixa") {
+    if (spawn.type == "Monstro") {
+        GameObject* monsterObj = new GameObject();
+        monsterObj->tiledId = spawn.tiledId;
+        monsterObj->z = spawn.z;
+ 
+        Monster* monster = new Monster(*monsterObj);
+ 
+        // Lê waypoints da propriedade "waypoints" do objeto no Tiled
+        // Formato esperado: "x1,y1;x2,y2;x3,y3" (pontos separados por ;)
+        if (spawn.properties.count("waypoints")) {
+            std::string raw = spawn.properties.at("waypoints").get<std::string>();
+            // Parser simples de "x,y;x,y;..."
+            std::stringstream ss(raw);
+            std::string token;
+            while (std::getline(ss, token, ';')) {
+                float wx = 0.0f, wy = 0.0f;
+                if (sscanf(token.c_str(), "%f,%f", &wx, &wy) == 2)
+                    monster->AddPatrolPoint(Vec2(wx, wy));
+            }
+        }
+ 
+        // Se não tiver waypoints definidos, usa a própria posição como âncora
+        if (spawn.properties.count("waypoints") == 0) {
+            monster->AddPatrolPoint(Vec2(spawn.x, spawn.y));
+        }
+ 
+        monsterObj->AddComponent(monster);
+        monsterObj->AddComponent(new Collider(*monsterObj, Vec2(0.3f, 0.15f), Vec2(0, monsterObj->box.h * 0.4f)));
+ 
+        monsterObj->box.x = spawn.x;
+        monsterObj->box.y = spawn.y;
+ 
+        stage.AddObject(monsterObj);
+
+        // ── Objeto filho só para a silhueta (z=100, renderiza ACIMA da escuridão) ──
+        GameObject* silhouetteObj = new GameObject();
+        silhouetteObj->z     = 100;
+        silhouetteObj->owner = monsterObj;   // Y-sort referencia o dono
+        silhouetteObj->AddComponent(new MonsterSilhouette(*silhouetteObj, monster));
+        silhouetteObj->box = monsterObj->box;
+        stage.AddObject(silhouetteObj);
+    }
+    else if (spawn.type == "Caixa") {
         GameObject* boxObj = new GameObject();
         boxObj->tiledId = spawn.tiledId;
         boxObj->z = spawn.z; 
@@ -252,5 +297,39 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         // Não há mais injeção manual de SDL_Rect aqui.
  
         stage.AddObject(caixasObj);
-    }   
+    }
+    else if (spawn.type == "Mesa") {
+        float depthOff = 0.0f;
+        if (spawn.properties.count("depthOffset")) depthOff = spawn.properties.at("depthOffset").get<float>();
+
+        GameObject* tableObj = new GameObject();
+        tableObj->tiledId = spawn.tiledId;
+        tableObj->z = spawn.z;
+        tableObj->depthOffset = depthOff;
+
+        tableObj->AddComponent(new SpriteRenderer(*tableObj, "Recursos/img/objetos/Mesa.png"));
+        tableObj->box.x = spawn.x;
+        tableObj->box.y = spawn.y - tableObj->box.h;
+
+        // Colisão feita no tiled (objeto na diagonal)
+
+        stage.AddObject(tableObj);
+    }
+    else if (spawn.type == "Cadeira_Caida") {
+        float depthOff = 0.0f;
+        if (spawn.properties.count("depthOffset")) depthOff = spawn.properties.at("depthOffset").get<float>();
+
+        GameObject* fallenChairObj = new GameObject();
+        fallenChairObj->tiledId = spawn.tiledId;
+        fallenChairObj->z = spawn.z;
+        fallenChairObj->depthOffset = depthOff;
+
+        fallenChairObj->AddComponent(new SpriteRenderer(*fallenChairObj, "Recursos/img/objetos/Cadeira_caida.png"));
+        fallenChairObj->box.x = spawn.x;
+        fallenChairObj->box.y = spawn.y - fallenChairObj->box.h;
+
+        // Colisão feita no tiled (objeto na diagonal)
+
+        stage.AddObject(fallenChairObj);
+    }
 }

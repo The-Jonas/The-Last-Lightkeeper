@@ -2524,22 +2524,10 @@
                  "width":219,
                  "x":1312,
                  "y":-601
-                }, 
-                {
-                 "height":0,
-                 "id":700,
-                 "name":"",
-                 "opacity":1,
-                 "rotation":0,
-                 "type":"",
-                 "visible":true,
-                 "width":0,
-                 "x":3652,
-                 "y":2384
                 }],
          "opacity":1,
          "type":"objectgroup",
-         "visible":true,
+         "visible":false,
          "x":0,
          "y":0
         }, 
@@ -2605,8 +2593,8 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":40,
-                 "x":2264,
-                 "y":1814
+                 "x":1254.90909090909,
+                 "y":2077.63636363636
                 }, 
                 {
                  "gid":6,
@@ -2618,8 +2606,8 @@
                  "type":"PlayerSpawn_Small",
                  "visible":true,
                  "width":126,
-                 "x":2035.90909090909,
-                 "y":2446.81818181818
+                 "x":2071.90909090909,
+                 "y":2434.81818181818
                 }, 
                 {
                  "gid":5,
@@ -2631,8 +2619,8 @@
                  "type":"PlayerSpawn_Big",
                  "visible":true,
                  "width":127,
-                 "x":1697,
-                 "y":2453
+                 "x":1741,
+                 "y":2461
                 }, 
                 {
                  "gid":7,
@@ -2660,37 +2648,8 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":53.3333333333333,
-                 "x":1886,
-                 "y":1768.33333333333
-                }, 
-                {
-                 "gid":7,
-                 "height":52.6666666666665,
-                 "id":900,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":0
-                        }, 
-                        {
-                         "name":"heightLevel",
-                         "type":"int",
-                         "value":0
-                        }, 
-                        {
-                         "name":"imagePath",
-                         "type":"string",
-                         "value":"Recursos\/img\/items\/old_letter.jpg"
-                        }],
-                 "rotation":0,
-                 "type":"JornalSpawn",
-                 "visible":true,
-                 "width":48,
-                 "x":2050,
-                 "y":1768
+                 "x":1558.72727272727,
+                 "y":1998.63636363636
                 }, 
                 {
                  "gid":7,
@@ -2742,18 +2701,18 @@
                  "type":"Armario",
                  "visible":true,
                  "width":775,
-                 "x":590.818181818182,
-                 "y":576.030303030306
+                 "x":576.818181818182,
+                 "y":562.030303030306
                 }, 
                 {
                  "gid":2,
                  "height":1347,
                  "id":173,
-                 "name":"pilares",
+                 "name":"",
                  "opacity":1,
                  "rotation":0,
                  "type":"Pilar",
-                 "visible":false,
+                 "visible":true,
                  "width":2847,
                  "x":439,
                  "y":1406
@@ -2790,35 +2749,6 @@
                 {
                  "gid":7,
                  "height":52.6666666666665,
-                 "id":664,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":0
-                        }, 
-                        {
-                         "name":"heightLevel",
-                         "type":"int",
-                         "value":0
-                        }, 
-                        {
-                         "name":"itemName",
-                         "type":"string",
-                         "value":"Broken Flashlight"
-                        }],
-                 "rotation":0,
-                 "type":"ItemSpawn",
-                 "visible":true,
-                 "width":53.3333333333333,
-                 "x":2142,
-                 "y":1322.33333333333
-                }, 
-                {
-                 "gid":7,
-                 "height":52.6666666666665,
                  "id":665,
                  "name":"",
                  "opacity":1,
@@ -2842,14 +2772,14 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":53.3333333333333,
-                 "x":2446,
-                 "y":1554.33333333333
+                 "x":1821.75757575758,
+                 "y":2084.63636363636
                 }, 
                 {
                  "gid":12,
                  "height":95,
                  "id":669,
-                 "name":"castical_frente_aceso",
+                 "name":"",
                  "opacity":1,
                  "properties":[
                         {
@@ -2967,8 +2897,8 @@
                  "type":"Caixa",
                  "visible":true,
                  "width":188,
-                 "x":2608.66666666667,
-                 "y":1487
+                 "x":2448.06060606061,
+                 "y":2144.57575757576
                 }, 
                 {
                  "gid":1,
@@ -3050,7 +2980,7 @@
                  "visible":true,
                  "width":40,
                  "x":1293.33333333333,
-                 "y":1630.66666666667
+                 "y":1625.66666666667
                 }, 
                 {
                  "gid":8,
@@ -3136,8 +3066,8 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":40,
-                 "x":1183.66666666667,
-                 "y":1626.66666666667
+                 "x":1185.66666666667,
+                 "y":1618.66666666667
                 }, 
                 {
                  "gid":10,
@@ -3145,12 +3075,18 @@
                  "id":680,
                  "name":"",
                  "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":-200
+                        }],
                  "rotation":0,
                  "type":"CaixasAmontoadas",
                  "visible":true,
                  "width":443,
-                 "x":1103,
-                 "y":962
+                 "x":2355,
+                 "y":1090
                 }, 
                 {
                  "gid":9,
@@ -3178,8 +3114,8 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":48,
-                 "x":1111,
-                 "y":583.33333333333
+                 "x":2375,
+                 "y":736.666666666663
                 }, 
                 {
                  "gid":7,
@@ -3207,8 +3143,8 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":52,
-                 "x":1419.33333333333,
-                 "y":692.666666666667
+                 "x":2708.66666666666,
+                 "y":707.333333333334
                 }, 
                 {
                  "gid":7,
@@ -3236,8 +3172,8 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":52,
-                 "x":1351.33333333333,
-                 "y":723.333333333334
+                 "x":2600.66666666666,
+                 "y":856.666666666667
                 }, 
                 {
                  "gid":11,
@@ -3269,16 +3205,113 @@
                  "y":30
                 }, 
                 {
-                 "height":0,
-                 "id":698,
+                 "gid":18,
+                 "height":509,
+                 "id":704,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":-280
+                        }],
+                 "rotation":0,
+                 "type":"Mesa",
+                 "visible":true,
+                 "width":368,
+                 "x":1936.60606060606,
+                 "y":1798.57575757576
+                }, 
+                {
+                 "gid":7,
+                 "height":52.6666666666665,
+                 "id":900,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":170
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":1
+                        }, 
+                        {
+                         "name":"imagePath",
+                         "type":"string",
+                         "value":"Recursos\/img\/items\/old_letter.jpg"
+                        }],
+                 "rotation":0,
+                 "type":"JornalSpawn",
+                 "visible":true,
+                 "width":48,
+                 "x":2094.60606060606,
+                 "y":1637.57575757576
+                }, 
+                {
+                 "gid":7,
+                 "height":52.6666666666665,
+                 "id":664,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":160
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":1
+                        }, 
+                        {
+                         "name":"itemName",
+                         "type":"string",
+                         "value":"Broken Flashlight"
+                        }],
+                 "rotation":0,
+                 "type":"ItemSpawn",
+                 "visible":true,
+                 "width":53.3333333333333,
+                 "x":2174,
+                 "y":1618.33333333333
+                }, 
+                {
+                 "gid":19,
+                 "height":302,
+                 "id":705,
                  "name":"",
                  "opacity":1,
                  "rotation":0,
-                 "type":"",
+                 "type":"Cadeira_Caida",
                  "visible":true,
-                 "width":0,
-                 "x":3964,
-                 "y":1940
+                 "width":194,
+                 "x":2268.0303030303,
+                 "y":1572.72727272727
+                }, 
+                {
+                 "gid":20,
+                 "height":561,
+                 "id":720,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"waypoints",
+                         "type":"string",
+                         "value":"305,1913;1077,849;3061,1689"
+                        }],
+                 "rotation":0,
+                 "type":"Monstro",
+                 "visible":true,
+                 "width":574,
+                 "x":2597,
+                 "y":1749
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -3317,29 +3350,203 @@
                  "type":"",
                  "visible":true,
                  "width":0,
-                 "x":690,
-                 "y":454
+                 "x":676,
+                 "y":440
                 }, 
                 {
                  "height":0,
-                 "id":699,
+                 "id":708,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":0,
+                         "y":0
+                        }, 
+                        {
+                         "x":-181.616747181965,
+                         "y":-92.9032258064517
+                        }, 
+                        {
+                         "x":-282.666666666667,
+                         "y":-10.1612903225807
+                        }, 
+                        {
+                         "x":-105.14653784219,
+                         "y":87.0967741935484
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":2794.66666666667,
+                 "y":840.903225806452
+                }, 
+                {
+                 "height":0,
+                 "id":711,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":0,
+                         "y":0
+                        }, 
+                        {
+                         "x":-4,
+                         "y":89.7841726618706
+                        }, 
+                        {
+                         "x":-125.333333333333,
+                         "y":192
+                        }, 
+                        {
+                         "x":-126.666666666667,
+                         "y":98.0719424460433
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":2760,
+                 "y":873.333333333333
+                }, 
+                {
+                 "height":0,
+                 "id":712,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":0,
+                         "y":0
+                        }, 
+                        {
+                         "x":-2.73278236914631,
+                         "y":30.5168539325843
+                        }, 
+                        {
+                         "x":161.234159779614,
+                         "y":129.333333333334
+                        }, 
+                        {
+                         "x":162.600550964187,
+                         "y":72.6591760299627
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":2469.39944903581,
+                 "y":938.666666666667
+                }, 
+                {
+                 "height":0,
+                 "id":713,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":0,
+                         "y":0
+                        }, 
+                        {
+                         "x":18.7149758454108,
+                         "y":78.6666666666666
+                        }, 
+                        {
+                         "x":198.666666666667,
+                         "y":64
+                        }, 
+                        {
+                         "x":159.797101449275,
+                         "y":-24
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":2346.66666666667,
+                 "y":862.666666666667
+                }, 
+                {
+                 "height":0,
+                 "id":714,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":0,
+                         "y":0
+                        }, 
+                        {
+                         "x":154.441247950541,
+                         "y":429.050281378526
+                        }, 
+                        {
+                         "x":407.032074037874,
+                         "y":338.383052106082
+                        }, 
+                        {
+                         "x":235.270312298488,
+                         "y":-71.2385372854908
+                        }],
+                 "rotation":359.781780263599,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":1923.34099339353,
+                 "y":1351.99672583864
+                }, 
+                {
+                 "height":179.333333333333,
+                 "id":716,
                  "name":"",
                  "opacity":1,
                  "rotation":0,
                  "type":"",
                  "visible":true,
+                 "width":172.333333333333,
+                 "x":2280,
+                 "y":1386.66666666667
+                }, 
+                {
+                 "height":0,
+                 "id":719,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":0,
+                         "y":0
+                        }, 
+                        {
+                         "x":2,
+                         "y":102
+                        }, 
+                        {
+                         "x":102,
+                         "y":103
+                        }, 
+                        {
+                         "x":11,
+                         "y":0
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
                  "width":0,
-                 "x":3596,
-                 "y":2492
+                 "x":2300,
+                 "y":1280
                 }],
          "opacity":1,
          "type":"objectgroup",
-         "visible":true,
+         "visible":false,
          "x":0,
          "y":0
         }],
  "nextlayerid":29,
- "nextobjectid":704,
+ "nextobjectid":721,
  "orientation":"orthogonal",
  "properties":[
         {

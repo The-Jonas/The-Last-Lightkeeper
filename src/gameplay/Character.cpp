@@ -8,6 +8,8 @@
 #include "core/Game.h"
 #include "states/stage/StageState.h"
 #include "gameplay/StairTrigger.h"
+#include "core/InputManager.h"
+#include "gameplay/Monster.h"
 #include <cmath>
 #include <string>
 #include <iostream>
@@ -407,6 +409,45 @@ void Character::Update(float dt) {
         sanity += sanityRegenRate * dt;
         if (sanity > kMaxSanity) {
             sanity = kMaxSanity;            // Trava no 100, nunca ultrapassa
+        }
+    }
+
+    // ============================================================
+    // PODER DO IRMÃOZINHO — Visão do Monstro
+    // ============================================================
+    if (!irmaozaoIdleStrips) {  // Só executa para o irmãozinho
+
+        if (visionPowerTimer > 0.0f) {
+            visionPowerTimer -= dt;
+            if (visionPowerTimer <= 0.0f) {
+                visionPowerTimer = 0.0f;
+                visionCooldown = kVisionCooldown;  // Começa a recarga ao acabar
+            }
+        }
+
+        if (visionCooldown > 0.0f) visionCooldown -= dt;
+
+        // Funciona independente de quem está sendo controlado
+        if (InputManager::GetInstance().KeyPress(SDLK_e) &&
+            visionPowerTimer <= 0.0f && visionCooldown <= 0.0f &&
+            currentState != ActionState::INTERACTING) {
+
+            visionPowerTimer = kVisionDuration;
+            std::cout << "[PODER] Irmãozinho ativou visão!\n";
+
+            StageState* stage = Game::TryGetStageState();
+            if (stage) {
+                bool foundMonster = false;
+                for (auto& go : stage->GetObjectArray()) {
+                    if (Monster* m = go->GetComponent<Monster>()) {
+                        m->ActivateVision(kVisionDuration);
+                        foundMonster = true;
+                        std::cout << "[PODER] Monstro encontrado!\n";
+                    }
+                }
+            if (!foundMonster)
+                std::cout << "[PODER] Nenhum monstro!\n";
+            }
         }
     }
 }

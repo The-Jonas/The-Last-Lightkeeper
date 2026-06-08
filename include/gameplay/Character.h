@@ -69,6 +69,12 @@ public:
     Direction GetFacingDirection() const { return currentDirection; }
     void NotifyInventoryLightChanged();
 
+    // Poder do irmãozinho — visão do monstro
+    float visionPowerTimer    = 0.0f;   // Quanto tempo ainda ativa
+    float visionCooldown      = 0.0f;   // Tempo até poder usar de novo
+    static constexpr float kVisionDuration  = 3.0f;   // Duração ativa
+    static constexpr float kVisionCooldown  = 12.0f;  // Recarga
+
 private:
     std::queue<Command> taskQueue;                                      // Fila de comando a serem executados
 

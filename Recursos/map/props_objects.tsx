@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<tileset version="1.10" tiledversion="1.12.1" name="props_objects" tilewidth="2847" tileheight="1920" tilecount="17" columns="0">
+<tileset version="1.10" tiledversion="1.12.1" name="props_objects" tilewidth="2847" tileheight="1920" tilecount="19" columns="0">
  <grid orientation="orthogonal" width="1" height="1"/>
  <tile id="0" type="Caixa">
   <properties>
@@ -90,6 +90,12 @@
   <image source="../img/objetos/castical/castical_direita_aceso.png" width="55" height="99"/>
  </tile>
  <tile id="16" type="Armario">
-  <image source="../img/objetos/3005_PROP_ARMARIO_FLV.png" width="775" height="746"/>
+  <image source="../img/objetos/armario/armario_frente.png" width="775" height="746"/>
+ </tile>
+ <tile id="17" type="Mesa">
+  <image source="../img/objetos/Mesa.png" width="368" height="509"/>
+ </tile>
+ <tile id="18" type="Cadeira_Caida">
+  <image source="../img/objetos/Cadeira_caida.png" width="194" height="302"/>
  </tile>
 </tileset>
