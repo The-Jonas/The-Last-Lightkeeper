@@ -2527,7 +2527,7 @@
                 }],
          "opacity":1,
          "type":"objectgroup",
-         "visible":false,
+         "visible":true,
          "x":0,
          "y":0
         }, 
@@ -3310,8 +3310,8 @@
                  "type":"Monstro",
                  "visible":true,
                  "width":574,
-                 "x":2597,
-                 "y":1749
+                 "x":2517,
+                 "y":1693
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -3541,7 +3541,7 @@
                 }],
          "opacity":1,
          "type":"objectgroup",
-         "visible":false,
+         "visible":true,
          "x":0,
          "y":0
         }],

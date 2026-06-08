@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<tileset version="1.10" tiledversion="1.12.1" name="props_objects" tilewidth="2847" tileheight="1920" tilecount="19" columns="0">
+<tileset version="1.10" tiledversion="1.12.1" name="props_objects" tilewidth="2847" tileheight="1920" tilecount="20" columns="0">
  <grid orientation="orthogonal" width="1" height="1"/>
  <tile id="0" type="Caixa">
   <properties>
@@ -97,5 +97,11 @@
  </tile>
  <tile id="18" type="Cadeira_Caida">
   <image source="../img/objetos/Cadeira_caida.png" width="194" height="302"/>
+ </tile>
+ <tile id="19" type="Monstro">
+  <properties>
+   <property name="waypoints" value=""/>
+  </properties>
+  <image source="../img/monstro/monstro_placeholder.png" width="574" height="561"/>
  </tile>
 </tileset>
