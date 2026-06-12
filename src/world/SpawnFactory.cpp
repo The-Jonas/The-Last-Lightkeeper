@@ -95,7 +95,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         
         ladderObj->AddComponent(new FadeEffect(*ladderObj, true));
         ladderObj->AddComponent(new Repairable(*ladderObj,
-            "Recursos/img/cenario/escada_inteira.png",
+            "Recursos/img/cenario/escada_tabua.png",
             "Tabua de Madeira",
             "Recursos/audio/Hit0.wav",
             120.0f,

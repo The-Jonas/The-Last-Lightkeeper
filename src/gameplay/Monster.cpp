@@ -311,8 +311,8 @@ void Monster::UpdateFleeLigth(float dt) {
 }
 
 void Monster::NotifyCollision(GameObject& other) {
-    // Como a checagem de dano roda na Update através da CheckDamageCollision, 
-    // a Engine de física (LevelManager) cuida apenas de impedir o monstro de atravessar a parede.
+// Como a checagem de dano roda na Update através da CheckDamageCollision, 
+// a Engine de física (LevelManager) cuida apenas de impedir o monstro de atravessar a parede.
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -41,10 +41,15 @@ if (!monsterOwner) return;
     if (jitterTimer > 0.08f) {
         jitterTimer = 0.0f;
         for (int i = 0; i < NUM_STROKES; i++) {
-            s_offsetX[i] = (rand() % 15) - 7; 
-            s_offsetY[i] = (rand() % 15) - 7; 
+
+            // ── DIMINUINDO O DESLOCAMENTO (OFFSET) ──
+
+            s_offsetX[i] = (rand() % 7) - 3; 
+            s_offsetY[i] = (rand() % 7) - 3; 
             
-            s_scale[i] = 1.02f + static_cast<float>(rand() % 9) / 100.0f; 
+            // ── DIMINUINDO A ESCALA (GROSSURA) ──
+
+            s_scale[i] = 1.01f + static_cast<float>(rand() % 5) / 100.0f; 
             s_alphaMult[i] = 0.3f + static_cast<float>(rand() % 71) / 100.0f; 
 
             if (rand() % 2 == 0) {

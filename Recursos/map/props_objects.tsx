@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<tileset version="1.10" tiledversion="1.12.1" name="props_objects" tilewidth="2847" tileheight="1920" tilecount="20" columns="0">
+<tileset version="1.10" tiledversion="1.12.1" name="props_objects" tilewidth="2847" tileheight="1920" tilecount="21" columns="0">
  <grid orientation="orthogonal" width="1" height="1"/>
  <tile id="0" type="Caixa">
   <properties>
@@ -102,6 +102,9 @@
   <properties>
    <property name="waypoints" value=""/>
   </properties>
-  <image source="../img/monstro/monstro_placeholder.png" width="574" height="561"/>
+  <image source="../img/personagens/monstro/monstro_placeholder.png" width="574" height="561"/>
+ </tile>
+ <tile id="20">
+  <image source="../img/cenario/escada_tabua.png" width="2497" height="1553"/>
  </tile>
 </tileset>
