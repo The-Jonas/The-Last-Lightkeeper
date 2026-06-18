@@ -2,6 +2,7 @@
 #include "states/stage/StageState.h"
 #include "states/stage/FirstLoadData.h"
 #include "states/stage/InternalHelpers.h"
+#include "audio/GameSfx.h"
 #include "core/Game.h"
 #include "engine/GameObject.h"
 #include "engine/SpriteRenderer.h"
@@ -81,6 +82,7 @@ StageState::StageState(LoadMode mode) : loadMode(mode) {
 }
 
 StageState::~StageState(){                                
+    GameSfx::UpdateCandleProximity(false);
     if (oceanMixerChannel >= 0) {
         Mix_HaltChannel(oceanMixerChannel);
         oceanMixerChannel = -1;

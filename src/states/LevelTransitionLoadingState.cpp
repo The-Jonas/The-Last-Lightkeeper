@@ -1,6 +1,7 @@
 #include "states/LevelTransitionLoadingState.h"
 #include "core/Game.h"
 #include "core/InputManager.h"
+#include "audio/GameSfx.h"
 #include "engine/Camera.h"
 #include "states/stage/StageState.h"
 #include "ui/Text.h"
@@ -40,6 +41,7 @@ void LevelTransitionLoadingState::LoadAssets() {
 }
 
 void LevelTransitionLoadingState::Start() {
+    GameSfx::NotifyLoadingBegin();
     LoadAssets();
     StartArray();
     started = true;

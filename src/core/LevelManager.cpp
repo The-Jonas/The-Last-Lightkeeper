@@ -26,6 +26,9 @@ LevelManager::~LevelManager() {
     chaoEscada.clear();
     chaoNormal.clear();
     chaoBuraco.clear();
+    floorWoodZones.clear();
+    floorStoneZones.clear();
+    footstepWoodFallbackMinY = 2100;
     circleColliders.clear();
     objPolyColliders.clear();
     objRectColliders.clear();
@@ -56,6 +59,9 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
         chaoEscada.clear();
         chaoNormal.clear();
         chaoBuraco.clear();
+        floorWoodZones.clear();
+    floorStoneZones.clear();
+    footstepWoodFallbackMinY = 2100;
         circleColliders.clear();
         objPolyColliders.clear();
         objRectColliders.clear();
@@ -71,6 +77,8 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
                 const std::string pName = prop.value("name", "");
                 if (pName == "levelLabel" && prop.contains("value")) {
                     levelLabel = prop["value"].get<std::string>();
+                } else if (pName == "footstepWoodMinY" && prop.contains("value")) {
+                    footstepWoodFallbackMinY = prop["value"].get<int>();
                 }
             }
         }
@@ -139,6 +147,8 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
                                     chaoEscada.push_back(poly);
                                 } else if (type == "Buraco") {
                                     chaoBuraco.push_back(poly); 
+                                } else if (type == "Madeira") {
+                                    floorWoodZones.push_back(poly);
                                 } else {
                                     chaoNormal.push_back(poly);
                                 }
@@ -210,6 +220,46 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
                             r.h = (int)obj.value("height", 0.0f);
                             if (r.w > 0 && r.h > 0)
                                 objRectColliders.push_back(r);
+                        }
+                    }
+                }
+                else if (layerName == "FootstepZones") {
+                    for (auto& obj : layer["objects"]) {
+                        std::string type = obj.value("class", obj.value("type", ""));
+                        float finalX = obj.value("x", 0.0f) + layerOffsetX;
+                        float finalY = obj.value("y", 0.0f) + layerOffsetY;
+
+                        auto storeZone = [&](std::vector<Polygon>& target) {
+                            if (obj.contains("polygon")) {
+                                Polygon poly;
+                                for (auto& p : obj["polygon"]) {
+                                    poly.vertices.push_back({
+                                        static_cast<int>(finalX + p.value("x", 0.0f)),
+                                        static_cast<int>(finalY + p.value("y", 0.0f)),
+                                    });
+                                }
+                                if (poly.vertices.size() >= 3) {
+                                    target.push_back(poly);
+                                }
+                            } else {
+                                const float w = obj.value("width", 0.0f);
+                                const float h = obj.value("height", 0.0f);
+                                if (w <= 0.0f || h <= 0.0f) {
+                                    return;
+                                }
+                                Polygon poly;
+                                poly.vertices.push_back({static_cast<int>(finalX), static_cast<int>(finalY)});
+                                poly.vertices.push_back({static_cast<int>(finalX + w), static_cast<int>(finalY)});
+                                poly.vertices.push_back({static_cast<int>(finalX + w), static_cast<int>(finalY + h)});
+                                poly.vertices.push_back({static_cast<int>(finalX), static_cast<int>(finalY + h)});
+                                target.push_back(poly);
+                            }
+                        };
+
+                        if (type == "Madeira" || type == "Wood") {
+                            storeZone(floorWoodZones);
+                        } else if (type == "Pedra" || type == "Stone") {
+                            storeZone(floorStoneZones);
                         }
                     }
                 }
@@ -509,6 +559,44 @@ bool LevelManager::CheckPolygonVsCircle(const Polygon& poly, const Circle& circl
     return false;
 }
 
+bool LevelManager::PointInPolygon(const Polygon& poly, int x, int y) {
+    if (poly.vertices.size() < 3) {
+        return false;
+    }
+    const float cx = static_cast<float>(x);
+    const float cy = static_cast<float>(y);
+    bool inside = false;
+    for (size_t i = 0, j = poly.vertices.size() - 1; i < poly.vertices.size(); j = i++) {
+        const float p1x = static_cast<float>(poly.vertices[i].x);
+        const float p1y = static_cast<float>(poly.vertices[i].y);
+        const float p2x = static_cast<float>(poly.vertices[j].x);
+        const float p2y = static_cast<float>(poly.vertices[j].y);
+        if (((p1y > cy) != (p2y > cy)) && (cx < (p2x - p1x) * (cy - p1y) / (p2y - p1y) + p1x)) {
+            inside = !inside;
+        }
+    }
+    return inside;
+}
+
+FootstepSurface LevelManager::QueryFootstepSurface(int x, int y, bool isElevated) const {
+    if (isElevated) {
+        return FootstepSurface::Stairs;
+    }
+    for (const Polygon& poly : floorWoodZones) {
+        if (PointInPolygon(poly, x, y)) {
+            return FootstepSurface::Wood;
+        }
+    }
+    for (const Polygon& poly : floorStoneZones) {
+        if (PointInPolygon(poly, x, y)) {
+            return FootstepSurface::Stone;
+        }
+    }
+    if (floorWoodZones.empty() && floorStoneZones.empty() && y >= footstepWoodFallbackMinY) {
+        return FootstepSurface::Wood;
+    }
+    return FootstepSurface::Stone;
+}
 
 void LevelManager::RenderCollisionOverlay(SDL_Renderer* renderer) const {
     if (!renderer) {
@@ -571,6 +659,31 @@ void LevelManager::RenderCollisionOverlay(SDL_Renderer* renderer) const {
     }
 
     SDL_SetRenderDrawColor(renderer, 255, 140, 80, 230);
+    for (const auto& poly : floorWoodZones) {
+        for (size_t i = 0; i < poly.vertices.size(); i++) {
+            SDL_Point p1 = poly.vertices[i];
+            SDL_Point p2 = poly.vertices[(i + 1) % poly.vertices.size()];
+            const float x1 = (static_cast<float>(p1.x) - Camera::pos.x) * zm;
+            const float y1 = (static_cast<float>(p1.y) - Camera::pos.y) * zm;
+            const float x2 = (static_cast<float>(p2.x) - Camera::pos.x) * zm;
+            const float y2 = (static_cast<float>(p2.y) - Camera::pos.y) * zm;
+            SDL_RenderDrawLineF(renderer, x1, y1, x2, y2);
+        }
+    }
+
+    SDL_SetRenderDrawColor(renderer, 180, 180, 200, 210);
+    for (const auto& poly : floorStoneZones) {
+        for (size_t i = 0; i < poly.vertices.size(); i++) {
+            SDL_Point p1 = poly.vertices[i];
+            SDL_Point p2 = poly.vertices[(i + 1) % poly.vertices.size()];
+            const float x1 = (static_cast<float>(p1.x) - Camera::pos.x) * zm;
+            const float y1 = (static_cast<float>(p1.y) - Camera::pos.y) * zm;
+            const float x2 = (static_cast<float>(p2.x) - Camera::pos.x) * zm;
+            const float y2 = (static_cast<float>(p2.y) - Camera::pos.y) * zm;
+            SDL_RenderDrawLineF(renderer, x1, y1, x2, y2);
+        }
+    }
+
     for (const auto& c : circleColliders) {
         const float cx = (static_cast<float>(c.center.x) - Camera::pos.x) * zm;
         const float cy = (static_cast<float>(c.center.y) - Camera::pos.y) * zm;

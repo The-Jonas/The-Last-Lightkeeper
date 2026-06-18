@@ -154,7 +154,6 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
         const int lighterGroup = cfg.backpackConfig.GroupIndexForItem(cfg.startingFlashlight.name);
         if (lighterGroup >= 0) {
             inventory.AddItemToGroup(lighterGroup, cfg.startingFlashlight, cfg.startingFlashlightDurability);
-            inventory.SelectGroup(lighterGroup);
             bigComp->NotifyInventoryLightChanged();
         }
         inventory.isLightToggledOn = false;

@@ -6,6 +6,7 @@
 #include "gameplay/ItemPickup.h"
 #include "states/stage/StageState.h"
 #include "audio/Sound.h"
+#include "audio/GameSfx.h"
 
 #include <cstdlib>
 #include <iostream>
@@ -126,7 +127,17 @@ void HotbarComponent::TrySelectGroupOnKeyPress() {
             return;
         }
         const int g = cfg.GroupIndexForSelectKey(selectKey);
-        if (g >= 0 && inventory.SelectGroup(g) && bigCharacter) {
+        if (g < 0 || inventory.CountInGroup(g) <= 0) {
+            return;
+        }
+        const bool wasSelected = inventory.GetSelectedGroup() == g;
+        if (!inventory.ToggleGroup(g) || !bigCharacter) {
+            return;
+        }
+        const BackpackGroupDef* group = cfg.GetGroup(g);
+        if (!wasSelected && group && group->id == "lamp") {
+            bigCharacter->PlayPickLampAnimation();
+        } else {
             bigCharacter->NotifyInventoryLightChanged();
         }
     };
@@ -147,10 +158,18 @@ void HotbarComponent::TryUseActiveItemOnKeyPress() {
     }
 
     if (active->def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
-        if (inventory.isLightToggledOn) {
+        const bool wasOn = inventory.isLightToggledOn;
+        const BackpackGroupDef* group = inventory.GetBackpackConfig().GetGroup(inventory.GetSelectedGroup());
+        const bool isLighter = group && group->id == "lighter";
+        if (wasOn) {
             inventory.isLightToggledOn = false;
-        } else {
-            inventory.TryTurnLightOn();
+            if (isLighter) {
+                GameSfx::PlayLighterToggle(false);
+            }
+        } else if (inventory.TryTurnLightOn()) {
+            if (isLighter) {
+                GameSfx::PlayLighterToggle(true);
+            }
         }
     } else if (active->def.HasProperty(ItemProperty::FUEL)) {
         if (inventory.TryRefuelLampFromOil()) {

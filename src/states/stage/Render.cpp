@@ -25,6 +25,7 @@
 #include "gameplay/Repairable.h"
 #include "gameplay/StairTrigger.h"
 #include "core/Resources.h"
+#include "audio/GameSfx.h"
 #include <iostream>
 #include <fstream>
 #include <algorithm>
@@ -371,8 +372,13 @@ void StageState::Render(){
         smallLightContact = smallMaxContact;
 
         // Salva a iluminação real para o sistema de Sanidade ler!
+        const float thunderBoost = GameSfx::GetThunderFlashStrength() * 0.88f;
         this->bigIlluminationLevel   = torchIsActuallyLit ? std::max(bigMaxTouch,   0.92f) : bigMaxTouch;
         this->smallIlluminationLevel = torchIsActuallyLit ? std::max(smallMaxTouch, 0.92f) : smallMaxTouch;
+        if (thunderBoost > 0.01f) {
+            this->bigIlluminationLevel = std::max(this->bigIlluminationLevel, thunderBoost);
+            this->smallIlluminationLevel = std::max(this->smallIlluminationLevel, thunderBoost);
+        }
     }
 
     if (lightsEnabled) {
@@ -490,6 +496,17 @@ void StageState::Render(){
     } else {
         // Se a sanidade tiver normal, apenas cola a textura reta na tela
         SDL_RenderCopy(renderer, renderTarget, nullptr, nullptr);
+    }
+
+    const float thunderFlash = GameSfx::GetThunderFlashStrength();
+    if (thunderFlash > 0.01f) {
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
+        const Uint8 flashAlpha = static_cast<Uint8>(std::min(255.0f, 230.0f * thunderFlash));
+        SDL_SetRenderDrawColor(renderer, 205, 215, 255, flashAlpha);
+        const SDL_Rect flashRect{0, 0, winW, winH};
+        SDL_RenderFillRect(renderer, &flashRect);
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     }
 
     // ====================================

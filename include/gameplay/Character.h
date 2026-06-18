@@ -24,7 +24,7 @@ public:
         Vec2 pos;                                                       // A posição do alvo (para movimento ou tiro)
     };
 
-    /// @param useIrmaozaoIdleStrips Só para o irmãozão: usa `irmaozao_idle/` (6 frames por direção) para idle e movimento.
+    /// @param useIrmaozaoIdleStrips Só para o irmãozão: usa `irmaozao_idle/` parado e `irmaozao_walk/` em movimento (6 frames por direção).
     Character(GameObject& associated, std::string spritePath, bool useIrmaozaoIdleStrips = false);
     ~Character();                                                       // Destrutor 
 
@@ -68,6 +68,7 @@ public:
     enum class Direction { UP, DOWN, LEFT, RIGHT };
     Direction GetFacingDirection() const { return currentDirection; }
     void NotifyInventoryLightChanged();
+    void PlayPickLampAnimation();
 
     // Poder do irmãozinho — visão do monstro
     float visionPowerTimer    = 0.0f;   // Quanto tempo ainda ativa
@@ -92,8 +93,17 @@ private:
     bool irmaozaoIdleStrips = false;
     float stripAnimTimer = 0.0f;
     int stripFrameIndex = 0;
+    bool playingPickLampAnim = false;
+    float pickLampAnimTimer = 0.0f;
+    int pickLampFrameIndex = 0;
+    bool stripWasMoving = false;
+    std::string lastStripSpritePath;
 
-    std::string IrmaozaoIdleStripPath(Direction dir, int frameIndex, HeldPropVisual prop = HeldPropVisual::None) const;
+    std::string IrmaozaoIdleStripPath(Direction dir,
+                                      int frameIndex,
+                                      HeldPropVisual prop = HeldPropVisual::None,
+                                      bool moving = false) const;
+    std::string IrmaozaoPickLampStripPath(Direction dir, int frameIndex) const;
     void RefreshIrmaozaoStripSprite();
     void EnsureIrmaozaoBaselineBox();
     void RestoreIrmaozaoCollisionBox(float centerX, float footY);

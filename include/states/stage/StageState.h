@@ -255,11 +255,13 @@ private:
     Box* activePushBox = nullptr;
     Vec2 pushBoxOffset{0.0f, 0.0f};
     bool wasPushingLastFrame = false;
+    int boxPushSoundStreak = 0;
 
     std::shared_ptr<Mix_Chunk> oceanWavesChunk;
     StageOceanAmbientController oceanAmbient_;
     /// Canal das ondas (0 = ambiente dedicado, reservado para não colidir com Mix_PlayChannel(-1) dos SFX).
     int oceanMixerChannel = -1;
+    float ambientResumeDelay = 0.0f;
     /// Set true at end of LoadAssets(); LoadingState may call LoadAssets before Start() — Start skips a second load.
     bool levelContentLoaded = false;
     LoadMode loadMode = LoadMode::NewGame;

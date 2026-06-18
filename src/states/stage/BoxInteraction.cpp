@@ -8,6 +8,7 @@
 #include "gameplay/Candlestick.h"
 #include "ui/InteractionOutline.h"
 #include "world/Collider.h"
+#include "audio/GameSfx.h"
 
 #include <algorithm>
 #include <cmath>
@@ -289,6 +290,8 @@ void StageState::UpdateBoxInteraction() {
     reachablePickup = FindClosestReachableItem();
     reachableCandle = FindClosestReachableCandle();
 
+    GameSfx::UpdateCandleProximity(reachableCandle != nullptr);
+
     InputManager& input = InputManager::GetInstance();
     const bool eHeld = input.IsKeyDown(SDLK_e);
     ItemPickup* reachableItem = FindClosestReachableItem();
@@ -334,10 +337,18 @@ void StageState::ApplyCoupledPushMovement(const Vec2& prevPlayerPos) {
     const float dx = targetBoxX - boxObj.box.x;
     const float dy = targetBoxY - boxObj.box.y;
     if (dx == 0.0f && dy == 0.0f) {
+        boxPushSoundStreak = 0;
         return;
     }
 
-    if (!activePushBox->TryMoveBy(dx, dy)) {
+    if (activePushBox->TryMoveBy(dx, dy)) {
+        boxPushSoundStreak++;
+        GameSfx::PlayBoxPushSound(boxPushSoundStreak >= 4);
+        if (boxPushSoundStreak >= 4) {
+            boxPushSoundStreak = 0;
+        }
+    } else {
+        boxPushSoundStreak = 0;
         bigCharacterObject->box.x = prevPlayerPos.x;
         bigCharacterObject->box.y = prevPlayerPos.y;
         if (Collider* playerCol = bigCharacterObject->GetComponent<Collider>()) {

@@ -28,6 +28,17 @@ void Sound::Play(int times) {
     }
 }
 
+int Sound::PlayLooped() {
+    if (!chunk) {
+        return -1;
+    }
+    channel = Mix_PlayChannel(-1, chunk.get(), -1);
+    if (channel == -1) {
+        std::cerr << "Erro ao reproduzir som em loop: " << Mix_GetError() << std::endl;
+    }
+    return channel;
+}
+
 void Sound::Stop() {
     if (chunk && Mix_Playing(channel)) {                                // Verifica se o som existe e se está tocando em algum canal antes de pará-lo
         Mix_HaltChannel(channel);

@@ -17,6 +17,8 @@ public:
     // Obtém uma textura. Se ela já estiver em memória, retorna o ponteiro existente.
     // Se não, carrega, armazena e retorna o ponteiro.
     static std::shared_ptr<SDL_Texture> GetImage(const std::string file);
+    /// Descarta cache da imagem (e máscara branca) para forçar recarga do disco no próximo GetImage.
+    static void ReloadImage(const std::string& file);
     /// RGB=255, alpha from source — for interaction highlights on colored sprites.
     static std::shared_ptr<SDL_Texture> GetWhiteMaskImage(const std::string file);
     static void ClearImages();                                                          // Libera todas as texturas da memória
