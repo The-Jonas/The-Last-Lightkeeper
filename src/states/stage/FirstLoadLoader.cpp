@@ -63,7 +63,7 @@ StageFirstLoadData EmbeddedDefaults() {
                              true,
                              2,
                              {{ItemProperty::LIGHT_SOURCE, 1.0f}}};
-    ItemDef oil{"Oil Gallon", "Recursos/img/items/oil_gallon.png", 1, false, 3, {{ItemProperty::FUEL, 100.0f}}};
+    ItemDef oil{"Lighter Fuel", "Recursos/img/items/lighter_fuel.png", 1, false, 3, {{ItemProperty::FUEL, 100.0f}}};
     ItemDef lamp{"Lamp",
                  "Recursos/img/items/0106_ASSET_LAMPARINA_PERSPECTIVA_APAGADA_FLV.png.png",
                  250,

@@ -14,7 +14,7 @@ TileSet::TileSet(int tileWidth, int tileHeight, const std::string file) {
         frameCountW = std::max(1, tileSet.GetWidth() / tileWidth);
         frameCountH = std::max(1, tileSet.GetHeight() / tileHeight);
 
-        tileCount = static_cast<unsigned>(frameCountW * frameCountH);                              // calcula o número total de tiles
+        tileCount = static_cast<unsigned>(frameCountW * frameCountH);                               // calcula o número total de tiles
         tileSet.SetFrameCount(frameCountW, frameCountH);                                            // Seta o frameCount no sprite para que GetWidth/GetHeight retornem o valor correto
 
     } else {

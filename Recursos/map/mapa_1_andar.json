@@ -2642,14 +2642,14 @@
                         {
                          "name":"itemName",
                          "type":"string",
-                         "value":"Oil Gallon"
+                         "value":"Lighter Fuel"
                         }],
                  "rotation":0,
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":40,
-                 "x":1254.90909090909,
-                 "y":2077.63636363636
+                 "x":1251.09090909091,
+                 "y":1871.09090909091
                 }, 
                 {
                  "gid":6,
@@ -2661,8 +2661,8 @@
                  "type":"PlayerSpawn_Small",
                  "visible":true,
                  "width":126,
-                 "x":2071.90909090909,
-                 "y":2434.81818181818
+                 "x":1611.90909090909,
+                 "y":2150.81818181818
                 }, 
                 {
                  "gid":5,
@@ -2674,8 +2674,8 @@
                  "type":"PlayerSpawn_Big",
                  "visible":true,
                  "width":127,
-                 "x":1741,
-                 "y":2461
+                 "x":1861,
+                 "y":2153
                 }, 
                 {
                  "gid":7,
@@ -2703,8 +2703,8 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":53.3333333333333,
-                 "x":1558.72727272727,
-                 "y":1998.63636363636
+                 "x":2160.72727272727,
+                 "y":1058.63636363636
                 }, 
                 {
                  "gid":7,
@@ -2732,8 +2732,32 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":53.3333333333333,
-                 "x":2250,
-                 "y":1000.33333333333
+                 "x":2238,
+                 "y":1110.33333333333
+                }, 
+                {
+                 "gid":32,
+                 "height":987,
+                 "id":736,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":-1000
+                        }, 
+                        {
+                         "name":"nameObject",
+                         "type":"string",
+                         "value":"rede_parede"
+                        }],
+                 "rotation":0,
+                 "type":"Pesca_Asset",
+                 "visible":true,
+                 "width":850,
+                 "x":107,
+                 "y":686
                 }, 
                 {
                  "gid":17,
@@ -2756,8 +2780,8 @@
                  "type":"Armario",
                  "visible":true,
                  "width":775,
-                 "x":576.818181818182,
-                 "y":562.030303030306
+                 "x":555.606060606061,
+                 "y":549.909090909094
                 }, 
                 {
                  "gid":7,
@@ -2785,7 +2809,7 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":53.3333333333333,
-                 "x":2502,
+                 "x":2090,
                  "y":1170.33333333333
                 }, 
                 {
@@ -2814,32 +2838,8 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":53.3333333333333,
-                 "x":1821.75757575758,
-                 "y":2084.63636363636
-                }, 
-                {
-                 "gid":13,
-                 "height":99,
-                 "id":670,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"direction",
-                         "type":"string",
-                         "value":"esquerda"
-                        }, 
-                        {
-                         "name":"startsLit",
-                         "type":"bool",
-                         "value":false
-                        }],
-                 "rotation":0,
-                 "type":"Castical",
-                 "visible":true,
-                 "width":55,
-                 "x":200.272727272727,
-                 "y":692.424242424242
+                 "x":2091.75757575758,
+                 "y":1086.63636363636
                 }, 
                 {
                  "gid":15,
@@ -2862,8 +2862,8 @@
                  "type":"Castical",
                  "visible":true,
                  "width":55,
-                 "x":3654.81818181818,
-                 "y":895.454545454545
+                 "x":3650.81818181818,
+                 "y":791.454545454545
                 }, 
                 {
                  "gid":1,
@@ -2886,8 +2886,8 @@
                  "type":"Caixa",
                  "visible":true,
                  "width":188,
-                 "x":1012.66666666667,
-                 "y":1173
+                 "x":948.66666666667,
+                 "y":1779
                 }, 
                 {
                  "gid":1,
@@ -2910,8 +2910,8 @@
                  "type":"Caixa",
                  "visible":true,
                  "width":188,
-                 "x":2448.06060606061,
-                 "y":2144.57575757576
+                 "x":1045.87878787879,
+                 "y":918.757575757578
                 }, 
                 {
                  "gid":1,
@@ -2986,14 +2986,14 @@
                         {
                          "name":"itemName",
                          "type":"string",
-                         "value":"Oil Gallon"
+                         "value":"Lighter Fuel"
                         }],
                  "rotation":0,
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":40,
-                 "x":1293.33333333333,
-                 "y":1625.66666666667
+                 "x":1285.33333333333,
+                 "y":1619.16666666667
                 }, 
                 {
                  "gid":8,
@@ -3015,14 +3015,14 @@
                         {
                          "name":"itemName",
                          "type":"string",
-                         "value":"Oil Gallon"
+                         "value":"Lighter Fuel"
                         }],
                  "rotation":0,
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":40,
-                 "x":1131.33333333333,
-                 "y":1008.66666666667
+                 "x":1067.33333333333,
+                 "y":1614.66666666667
                 }, 
                 {
                  "gid":8,
@@ -3044,14 +3044,14 @@
                         {
                          "name":"itemName",
                          "type":"string",
-                         "value":"Oil Gallon"
+                         "value":"Lighter Fuel"
                         }],
                  "rotation":0,
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":40,
-                 "x":1047.33333333333,
-                 "y":1012.66666666667
+                 "x":983.33333333333,
+                 "y":1618.66666666667
                 }, 
                 {
                  "gid":8,
@@ -3073,7 +3073,7 @@
                         {
                          "name":"itemName",
                          "type":"string",
-                         "value":"Oil Gallon"
+                         "value":"Lighter Fuel"
                         }],
                  "rotation":0,
                  "type":"ItemSpawn",
@@ -3093,13 +3093,18 @@
                          "name":"depthOffset",
                          "type":"float",
                          "value":-200
+                        }, 
+                        {
+                         "name":"nameObj",
+                         "type":"string",
+                         "value":"Amontoado_caixas"
                         }],
                  "rotation":0,
-                 "type":"CaixasAmontoadas",
+                 "type":"Recipiente_Decoracao",
                  "visible":true,
                  "width":443,
-                 "x":2355,
-                 "y":1090
+                 "x":2505,
+                 "y":1124
                 }, 
                 {
                  "gid":9,
@@ -3127,8 +3132,8 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":48,
-                 "x":2375,
-                 "y":736.666666666663
+                 "x":2525,
+                 "y":770.666666666663
                 }, 
                 {
                  "gid":7,
@@ -3156,8 +3161,8 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":52,
-                 "x":2708.66666666666,
-                 "y":707.333333333334
+                 "x":2858.66666666666,
+                 "y":741.333333333334
                 }, 
                 {
                  "gid":7,
@@ -3185,8 +3190,8 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":52,
-                 "x":2600.66666666666,
-                 "y":856.666666666667
+                 "x":2750.66666666666,
+                 "y":890.666666666667
                 }, 
                 {
                  "gid":11,
@@ -3214,8 +3219,8 @@
                  "type":"Castical",
                  "visible":true,
                  "width":48,
-                 "x":1425.33333333333,
-                 "y":30
+                 "x":1358.66666666666,
+                 "y":-0.303030303030297
                 }, 
                 {
                  "gid":7,
@@ -3289,25 +3294,6 @@
                  "y":1572.72727272727
                 }, 
                 {
-                 "gid":20,
-                 "height":561,
-                 "id":720,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"waypoints",
-                         "type":"string",
-                         "value":"305,1913;1077,849;3061,1689"
-                        }],
-                 "rotation":0,
-                 "type":"Monstro",
-                 "visible":true,
-                 "width":574,
-                 "x":1194.45454545455,
-                 "y":834.151515151515
-                }, 
-                {
                  "gid":21,
                  "height":1553,
                  "id":721,
@@ -3321,6 +3307,82 @@
                  "y":883.060606060606
                 }, 
                 {
+                 "gid":24,
+                 "height":642,
+                 "id":728,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"type",
+                         "type":"int",
+                         "value":2
+                        }],
+                 "rotation":0,
+                 "type":"Barril",
+                 "visible":true,
+                 "width":472,
+                 "x":1422.78787878788,
+                 "y":412.636363636364
+                }, 
+                {
+                 "gid":28,
+                 "height":284,
+                 "id":739,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"nameObject",
+                         "type":"string",
+                         "value":"boia"
+                        }],
+                 "rotation":0,
+                 "type":"Pesca_Asset",
+                 "visible":true,
+                 "width":269,
+                 "x":312.666666666667,
+                 "y":712.666666666667
+                }, 
+                {
+                 "gid":33,
+                 "height":502,
+                 "id":740,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"nameObject",
+                         "type":"string",
+                         "value":"rede_pendurada"
+                        }],
+                 "rotation":0,
+                 "type":"Pesca_Asset",
+                 "visible":true,
+                 "width":193,
+                 "x":1944,
+                 "y":1035
+                }, 
+                {
+                 "gid":37,
+                 "height":555,
+                 "id":741,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"nameObj",
+                         "type":"string",
+                         "value":"Estante_Quebrada"
+                        }],
+                 "rotation":0,
+                 "type":"Recipiente_Decoracao",
+                 "visible":true,
+                 "width":686,
+                 "x":1517,
+                 "y":606
+                }, 
+                {
                  "gid":2,
                  "height":1347,
                  "id":173,
@@ -3332,6 +3394,35 @@
                  "width":2847,
                  "x":439,
                  "y":1406
+                }, 
+                {
+                 "gid":13,
+                 "height":99,
+                 "id":670,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":1000
+                        }, 
+                        {
+                         "name":"direction",
+                         "type":"string",
+                         "value":"esquerda"
+                        }, 
+                        {
+                         "name":"startsLit",
+                         "type":"bool",
+                         "value":false
+                        }],
+                 "rotation":0,
+                 "type":"Castical",
+                 "visible":true,
+                 "width":55,
+                 "x":594.272727272727,
+                 "y":1020.42424242424
                 }, 
                 {
                  "gid":12,
@@ -3373,6 +3464,11 @@
                          "name":"depthOffset",
                          "type":"float",
                          "value":-280
+                        }, 
+                        {
+                         "name":"variation",
+                         "type":"string",
+                         "value":"normal"
                         }],
                  "rotation":0,
                  "type":"Mesa",
@@ -3380,6 +3476,209 @@
                  "width":368,
                  "x":1936.60606060606,
                  "y":1798.57575757576
+                }, 
+                {
+                 "gid":25,
+                 "height":548,
+                 "id":725,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"type",
+                         "type":"int",
+                         "value":3
+                        }],
+                 "rotation":0,
+                 "type":"Barril",
+                 "visible":true,
+                 "width":536,
+                 "x":2140,
+                 "y":2698
+                }, 
+                {
+                 "gid":23,
+                 "height":630,
+                 "id":726,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"type",
+                         "type":"int",
+                         "value":1
+                        }],
+                 "rotation":0,
+                 "type":"Barril",
+                 "visible":true,
+                 "width":608,
+                 "x":2712,
+                 "y":1747
+                }, 
+                {
+                 "gid":26,
+                 "height":446,
+                 "id":727,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"variation",
+                         "type":"string",
+                         "value":"mapa"
+                        }],
+                 "rotation":0,
+                 "type":"Mesa",
+                 "visible":true,
+                 "width":252,
+                 "x":1018,
+                 "y":1411
+                }, 
+                {
+                 "gid":31,
+                 "height":428,
+                 "id":729,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"nameObject",
+                         "type":"string",
+                         "value":"cestas_corda"
+                        }],
+                 "rotation":0,
+                 "type":"Pesca_Asset",
+                 "visible":true,
+                 "width":438,
+                 "x":205,
+                 "y":1950
+                }, 
+                {
+                 "gid":30,
+                 "height":255,
+                 "id":730,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"nameObject",
+                         "type":"string",
+                         "value":"cesta_corda"
+                        }],
+                 "rotation":0,
+                 "type":"Pesca_Asset",
+                 "visible":true,
+                 "width":314,
+                 "x":239,
+                 "y":2076
+                }, 
+                {
+                 "gid":34,
+                 "height":338,
+                 "id":731,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"nameObject",
+                         "type":"string",
+                         "value":"redes"
+                        }],
+                 "rotation":0,
+                 "type":"Pesca_Asset",
+                 "visible":true,
+                 "width":302,
+                 "x":565,
+                 "y":2029
+                }, 
+                {
+                 "gid":36,
+                 "height":500,
+                 "id":732,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"nameObj",
+                         "type":"string",
+                         "value":"Bau"
+                        }],
+                 "rotation":0,
+                 "type":"Recipiente_Decoracao",
+                 "visible":true,
+                 "width":498,
+                 "x":511,
+                 "y":2466
+                }, 
+                {
+                 "gid":27,
+                 "height":419,
+                 "id":733,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"nameObject",
+                         "type":"string",
+                         "value":"baldes"
+                        }],
+                 "rotation":0,
+                 "type":"Pesca_Asset",
+                 "visible":true,
+                 "width":430,
+                 "x":997,
+                 "y":2334
+                }, 
+                {
+                 "gid":29,
+                 "height":284,
+                 "id":734,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"nameObject",
+                         "type":"string",
+                         "value":"boias"
+                        }],
+                 "rotation":0,
+                 "type":"Pesca_Asset",
+                 "visible":true,
+                 "width":431,
+                 "x":905,
+                 "y":2594
+                }, 
+                {
+                 "gid":35,
+                 "height":538,
+                 "id":735,
+                 "name":"",
+                 "opacity":1,
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":134,
+                 "x":1953,
+                 "y":1393
+                }, 
+                {
+                 "gid":22,
+                 "height":343,
+                 "id":738,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"type",
+                         "type":"int",
+                         "value":0
+                        }],
+                 "rotation":0,
+                 "type":"Barril",
+                 "visible":true,
+                 "width":235,
+                 "x":139,
+                 "y":1016
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -3418,8 +3717,8 @@
                  "type":"",
                  "visible":true,
                  "width":0,
-                 "x":676,
-                 "y":440
+                 "x":654.787878787879,
+                 "y":427.878787878788
                 }, 
                 {
                  "height":0,
@@ -3447,8 +3746,8 @@
                  "type":"",
                  "visible":true,
                  "width":0,
-                 "x":2794.66666666667,
-                 "y":840.903225806452
+                 "x":2944.66666666667,
+                 "y":874.903225806452
                 }, 
                 {
                  "height":0,
@@ -3476,8 +3775,8 @@
                  "type":"",
                  "visible":true,
                  "width":0,
-                 "x":2760,
-                 "y":873.333333333333
+                 "x":2910,
+                 "y":907.333333333333
                 }, 
                 {
                  "height":0,
@@ -3505,8 +3804,8 @@
                  "type":"",
                  "visible":true,
                  "width":0,
-                 "x":2469.39944903581,
-                 "y":938.666666666667
+                 "x":2619.39944903581,
+                 "y":972.66666666667
                 }, 
                 {
                  "height":0,
@@ -3534,8 +3833,8 @@
                  "type":"",
                  "visible":true,
                  "width":0,
-                 "x":2346.66666666667,
-                 "y":862.666666666667
+                 "x":2496.66666666667,
+                 "y":896.666666666667
                 }, 
                 {
                  "height":0,
@@ -3614,7 +3913,7 @@
          "y":0
         }],
  "nextlayerid":29,
- "nextobjectid":725,
+ "nextobjectid":742,
  "orientation":"orthogonal",
  "properties":[
         {

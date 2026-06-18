@@ -279,17 +279,20 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
  
         stage.AddObject(closetObj);
     }
-    else if (spawn.type == "CaixasAmontoadas") {
+    else if (spawn.type == "Recipiente_Decoracao") {
+        // Para as caixas amontoadas e baú 
         float depthOff = 0.0f;
+        std::string name = "Amontoado_caixas";
         if (spawn.properties.count("depthOffset")) depthOff = spawn.properties.at("depthOffset").get<float>();
+        if (spawn.properties.count("nameObj")) name = spawn.properties.at("nameObj").get<std::string>();
  
         GameObject* caixasObj = new GameObject();
         caixasObj->tiledId = spawn.tiledId;
         caixasObj->z = spawn.z;
         caixasObj->depthOffset = depthOff;
- 
-        caixasObj->AddComponent(new SpriteRenderer(*caixasObj, "Recursos/img/objetos/Amontoado_caixas.png"));
- 
+
+        std::string caminho = "Recursos/img/objetos/" + name + ".png";
+        caixasObj->AddComponent(new SpriteRenderer(*caixasObj, caminho));
         caixasObj->box.x = spawn.x;
         caixasObj->box.y = spawn.y - caixasObj->box.h;
  
@@ -300,14 +303,17 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
     }
     else if (spawn.type == "Mesa") {
         float depthOff = 0.0f;
+        std::string variation = "normal";
         if (spawn.properties.count("depthOffset")) depthOff = spawn.properties.at("depthOffset").get<float>();
-
+        if (spawn.properties.count("variation")) variation = spawn.properties.at("variation").get<std::string>();
+ 
         GameObject* tableObj = new GameObject();
         tableObj->tiledId = spawn.tiledId;
         tableObj->z = spawn.z;
         tableObj->depthOffset = depthOff;
 
-        tableObj->AddComponent(new SpriteRenderer(*tableObj, "Recursos/img/objetos/Mesa.png"));
+        std::string caminho = "Recursos/img/objetos/mesa/Mesa_" + variation + ".png";
+        tableObj->AddComponent(new SpriteRenderer(*tableObj, caminho));
         tableObj->box.x = spawn.x;
         tableObj->box.y = spawn.y - tableObj->box.h;
 
@@ -332,4 +338,48 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
 
         stage.AddObject(fallenChairObj);
     }
+    else if (spawn.type == "Barril") {
+        float depthOff = 0.0f;
+        
+        int typeB = 0;                                      // Seleciona o tipo do Barril que vai spawnar
+
+        if (spawn.properties.count("depthOffset")) depthOff = spawn.properties.at("depthOffset").get<float>();
+        if (spawn.properties.count("type")) typeB = spawn.properties.at("type").get<int>();
+        
+        GameObject* barrelObj = new GameObject();
+        barrelObj->tiledId = spawn.tiledId;
+        barrelObj->z = spawn.z;
+        barrelObj->depthOffset = depthOff;
+
+        std::string caminho = "Recursos/img/objetos/barril/barril_" + std::to_string(typeB) + ".png";
+        barrelObj->AddComponent(new SpriteRenderer(*barrelObj, caminho));
+        barrelObj->box.x = spawn.x;
+        barrelObj->box.y = spawn.y - barrelObj->box.h;
+
+        // Colisão feita no Tiled
+
+        stage.AddObject(barrelObj);
+    }
+    else if (spawn.type == "Pesca_Asset") {
+        float depthOff = 0.0f;
+        std::string object = "boia";
+
+        if (spawn.properties.count("depthOffset")) depthOff = spawn.properties.at("depthOffset").get<float>();
+        if (spawn.properties.count("nameObject")) object = spawn.properties.at("nameObject").get<std::string>();
+
+        GameObject* fishingObj = new GameObject();
+        fishingObj->tiledId = spawn.tiledId;
+        fishingObj->z = spawn.z;
+        fishingObj->depthOffset = depthOff;
+
+        std::string caminho = "Recursos/img/objetos/pesca/" + object + ".png";
+        fishingObj->AddComponent(new SpriteRenderer(*fishingObj, caminho));
+        fishingObj->box.x = spawn.x;
+        fishingObj->box.y = spawn.y - fishingObj->box.h;
+
+        // Colisão feita no Tiled
+
+        stage.AddObject(fishingObj);
+    }
+    
 }

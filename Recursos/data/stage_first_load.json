@@ -43,8 +43,8 @@
       "properties": [{ "prop": "LIGHT_SOURCE", "value": 1.0 }]
     },
     {
-      "name": "Oil Gallon",
-      "spritePath": "Recursos/img/items/oil_gallon.png",
+      "name": "Lighter Fuel",
+      "spritePath": "Recursos/img/items/lighter_fuel.png",
       "maxDurability": 1,
       "durabilityDecreases": false,
       "sortOrder": 3,
@@ -70,7 +70,7 @@
       "id": "oil",
       "maxItems": 2,
       "selectKey": 2,
-      "itemNames": ["Oil Gallon"]
+      "itemNames": ["Light Fuel"]
     },
     {
       "id": "lamp",
