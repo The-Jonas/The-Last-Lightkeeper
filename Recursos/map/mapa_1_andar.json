@@ -1648,7 +1648,7 @@
                  "y":1152
                 }, 
                 {
-                 "height":129,
+                 "height":128.212121212121,
                  "id":184,
                  "name":"",
                  "opacity":1,
@@ -1660,7 +1660,7 @@
                  "y":1222
                 }, 
                 {
-                 "height":122,
+                 "height":128.060606060606,
                  "id":186,
                  "name":"",
                  "opacity":1,
@@ -3314,6 +3314,11 @@
                  "opacity":1,
                  "properties":[
                         {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":-200
+                        }, 
+                        {
                          "name":"type",
                          "type":"int",
                          "value":2
@@ -3345,25 +3350,6 @@
                  "y":712.666666666667
                 }, 
                 {
-                 "gid":33,
-                 "height":502,
-                 "id":740,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"nameObject",
-                         "type":"string",
-                         "value":"rede_pendurada"
-                        }],
-                 "rotation":0,
-                 "type":"Pesca_Asset",
-                 "visible":true,
-                 "width":193,
-                 "x":1944,
-                 "y":1035
-                }, 
-                {
                  "gid":37,
                  "height":555,
                  "id":741,
@@ -3383,6 +3369,30 @@
                  "y":606
                 }, 
                 {
+                 "gid":33,
+                 "height":502,
+                 "id":740,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":60
+                        }, 
+                        {
+                         "name":"nameObject",
+                         "type":"string",
+                         "value":"rede_pendurada"
+                        }],
+                 "rotation":0,
+                 "type":"Pesca_Asset",
+                 "visible":true,
+                 "width":193,
+                 "x":1944,
+                 "y":1035
+                }, 
+                {
                  "gid":2,
                  "height":1347,
                  "id":173,
@@ -3390,7 +3400,7 @@
                  "opacity":1,
                  "rotation":0,
                  "type":"Pilar",
-                 "visible":true,
+                 "visible":false,
                  "width":2847,
                  "x":439,
                  "y":1406
@@ -3485,6 +3495,11 @@
                  "opacity":1,
                  "properties":[
                         {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":-210
+                        }, 
+                        {
                          "name":"type",
                          "type":"int",
                          "value":3
@@ -3503,6 +3518,11 @@
                  "name":"",
                  "opacity":1,
                  "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":-140
+                        }, 
                         {
                          "name":"type",
                          "type":"int",
@@ -3523,6 +3543,11 @@
                  "opacity":1,
                  "properties":[
                         {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":-280
+                        }, 
+                        {
                          "name":"variation",
                          "type":"string",
                          "value":"mapa"
@@ -3541,6 +3566,11 @@
                  "name":"",
                  "opacity":1,
                  "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":-50
+                        }, 
                         {
                          "name":"nameObject",
                          "type":"string",
@@ -3561,6 +3591,11 @@
                  "opacity":1,
                  "properties":[
                         {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":-140
+                        }, 
+                        {
                          "name":"nameObject",
                          "type":"string",
                          "value":"cesta_corda"
@@ -3579,6 +3614,11 @@
                  "name":"",
                  "opacity":1,
                  "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":-70
+                        }, 
                         {
                          "name":"nameObject",
                          "type":"string",
@@ -3599,6 +3639,11 @@
                  "opacity":1,
                  "properties":[
                         {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":-140
+                        }, 
+                        {
                          "name":"nameObj",
                          "type":"string",
                          "value":"Bau"
@@ -3617,6 +3662,11 @@
                  "name":"",
                  "opacity":1,
                  "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":-140
+                        }, 
                         {
                          "name":"nameObject",
                          "type":"string",
@@ -3637,6 +3687,11 @@
                  "opacity":1,
                  "properties":[
                         {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":-140
+                        }, 
+                        {
                          "name":"nameObject",
                          "type":"string",
                          "value":"boias"
@@ -3645,8 +3700,8 @@
                  "type":"Pesca_Asset",
                  "visible":true,
                  "width":431,
-                 "x":905,
-                 "y":2594
+                 "x":897,
+                 "y":2592
                 }, 
                 {
                  "gid":35,
@@ -3905,6 +3960,494 @@
                  "width":0,
                  "x":2300,
                  "y":1280
+                }, 
+                {
+                 "height":0,
+                 "id":743,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":0,
+                         "y":0
+                        }, 
+                        {
+                         "x":-40,
+                         "y":294.094240837696
+                        }, 
+                        {
+                         "x":194,
+                         "y":302
+                        }, 
+                        {
+                         "x":208,
+                         "y":0
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":1054,
+                 "y":1046
+                }, 
+                {
+                 "height":0,
+                 "id":744,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":-14,
+                         "y":-8
+                        }, 
+                        {
+                         "x":118,
+                         "y":46
+                        }, 
+                        {
+                         "x":194,
+                         "y":-76
+                        }, 
+                        {
+                         "x":42,
+                         "y":-128
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":182,
+                 "y":984
+                }, 
+                {
+                 "height":0,
+                 "id":747,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":0,
+                         "y":0
+                        }, 
+                        {
+                         "x":-106,
+                         "y":342
+                        }, 
+                        {
+                         "x":-92,
+                         "y":344
+                        }, 
+                        {
+                         "x":16,
+                         "y":4
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":1890,
+                 "y":104
+                }, 
+                {
+                 "height":0,
+                 "id":746,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":4,
+                         "y":6
+                        }, 
+                        {
+                         "x":-109.042016806723,
+                         "y":-100
+                        }, 
+                        {
+                         "x":-111.563025210084,
+                         "y":-320
+                        }, 
+                        {
+                         "x":122.957983193277,
+                         "y":-310
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":1545.04201680672,
+                 "y":442
+                }, 
+                {
+                 "height":0,
+                 "id":745,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":0,
+                         "y":0
+                        }, 
+                        {
+                         "x":-8,
+                         "y":120
+                        }, 
+                        {
+                         "x":634,
+                         "y":122
+                        }, 
+                        {
+                         "x":630,
+                         "y":-4
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":1552,
+                 "y":456
+                }, 
+                {
+                 "height":0,
+                 "id":748,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":0,
+                         "y":0
+                        }, 
+                        {
+                         "x":108,
+                         "y":48
+                        }, 
+                        {
+                         "x":206,
+                         "y":-90
+                        }, 
+                        {
+                         "x":136,
+                         "y":-128
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":362,
+                 "y":670
+                }, 
+                {
+                 "height":0,
+                 "id":749,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":0,
+                         "y":0
+                        }, 
+                        {
+                         "x":-80,
+                         "y":154
+                        }, 
+                        {
+                         "x":-394,
+                         "y":46
+                        }, 
+                        {
+                         "x":-392.817005545287,
+                         "y":-62.4842883548981
+                        }, 
+                        {
+                         "x":-328,
+                         "y":-118
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":1414,
+                 "y":2182
+                }, 
+                {
+                 "height":0,
+                 "id":750,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":12,
+                         "y":-4
+                        }, 
+                        {
+                         "x":-236,
+                         "y":-230
+                        }, 
+                        {
+                         "x":-402,
+                         "y":-92
+                        }, 
+                        {
+                         "x":-128,
+                         "y":134
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":946,
+                 "y":2324
+                }, 
+                {
+                 "height":0,
+                 "id":753,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":-14,
+                         "y":-30
+                        }, 
+                        {
+                         "x":170,
+                         "y":128
+                        }, 
+                        {
+                         "x":320,
+                         "y":36
+                        }, 
+                        {
+                         "x":122,
+                         "y":-118
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":2734,
+                 "y":1620
+                }, 
+                {
+                 "height":0,
+                 "id":754,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":22,
+                         "y":6
+                        }, 
+                        {
+                         "x":228,
+                         "y":-160
+                        }, 
+                        {
+                         "x":22,
+                         "y":-336
+                        }, 
+                        {
+                         "x":-208,
+                         "y":-204
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":3074,
+                 "y":1742
+                }, 
+                {
+                 "height":0,
+                 "id":755,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":56,
+                         "y":-46
+                        }, 
+                        {
+                         "x":-288,
+                         "y":-148
+                        }, 
+                        {
+                         "x":-424,
+                         "y":78
+                        }, 
+                        {
+                         "x":-48,
+                         "y":212
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":1290,
+                 "y":2408
+                }, 
+                {
+                 "height":71,
+                 "id":757,
+                 "name":"",
+                 "opacity":1,
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":162,
+                 "x":1953,
+                 "y":1005
+                }, 
+                {
+                 "height":0,
+                 "id":758,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":-24.6666666666665,
+                         "y":-34.333333333333
+                        }, 
+                        {
+                         "x":225.333333333333,
+                         "y":238.666666666667
+                        }, 
+                        {
+                         "x":372,
+                         "y":183.333333333333
+                        }, 
+                        {
+                         "x":167.666666666667,
+                         "y":-106.333333333333
+                        }, 
+                        {
+                         "x":-28.2516245681245,
+                         "y":-112.591223453453
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":2196,
+                 "y":2446.66666666667
+                }, 
+                {
+                 "height":0,
+                 "id":759,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":14,
+                         "y":-28
+                        }, 
+                        {
+                         "x":101.333333333333,
+                         "y":-125.333333333333
+                        }, 
+                        {
+                         "x":108.829214937834,
+                         "y":-209.341503158552
+                        }, 
+                        {
+                         "x":-31.3333333333335,
+                         "y":-228.666666666667
+                        }, 
+                        {
+                         "x":-112.666666666667,
+                         "y":-177.333333333333
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":2554.66666666667,
+                 "y":2645.33333333333
+                }, 
+                {
+                 "height":0,
+                 "id":760,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":0,
+                         "y":0
+                        }, 
+                        {
+                         "x":170,
+                         "y":112
+                        }, 
+                        {
+                         "x":244,
+                         "y":32
+                        }, 
+                        {
+                         "x":132,
+                         "y":-56
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":598,
+                 "y":1908
+                }, 
+                {
+                 "height":0,
+                 "id":761,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":4,
+                         "y":-5.33333333333348
+                        }, 
+                        {
+                         "x":57.3333333333334,
+                         "y":100
+                        }, 
+                        {
+                         "x":214,
+                         "y":132.666666666667
+                        }, 
+                        {
+                         "x":166,
+                         "y":-47.3333333333335
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":218,
+                 "y":1656
+                }, 
+                {
+                 "height":0,
+                 "id":762,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":16,
+                         "y":-24
+                        }, 
+                        {
+                         "x":-156,
+                         "y":144
+                        }, 
+                        {
+                         "x":-32,
+                         "y":278
+                        }, 
+                        {
+                         "x":178,
+                         "y":56
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":416,
+                 "y":1818
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -3913,7 +4456,7 @@
          "y":0
         }],
  "nextlayerid":29,
- "nextobjectid":742,
+ "nextobjectid":763,
  "orientation":"orthogonal",
  "properties":[
         {
