@@ -36,15 +36,14 @@ void GameObject::Render() {                                                     
 }
 
 void GameObject::Start() {
-    if (started) {                                                                  // Se já startou, não faz nada
+    if (started) {
         return;
     }
 
-    for (Component* cpt : components) {                                             // Percorre os componentes chamando o Start deles.
-        cpt -> Start();
+    started = true;
+    for (size_t i = 0; i < components.size(); ++i) {
+        components[i]->Start();
     }
-
-    started = true;                                                                 // Define a flag como true, já que foi chamado o start
 }
 
 void GameObject::AddComponent(Component* cpt) {                                     // Adiciona o componente ao vetor 'components'

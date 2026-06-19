@@ -1,6 +1,7 @@
 #include "states/stage/StageState.h"
 #include "states/stage/InternalHelpers.h"
 #include "core/Game.h"
+#include "audio/GameSfx.h"
 #include "engine/GameObject.h"
 #include "engine/SpriteRenderer.h"
 #include "math/Rect.h"
@@ -69,12 +70,20 @@ void StageState::Start() {
 
     ShowLevelTitleBanner();
     started = true;
+    ambientResumeDelay = 0.85f;
+    GameSfx::NotifyLoadingEnd();
 }
 
 void StageState::Pause() {
+    GameSfx::NotifyLoadingBegin();
+    if (oceanMixerChannel >= 0) {
+        Mix_HaltChannel(oceanMixerChannel);
+    }
     SetMouseConfinedToWindow(false);
 }
 
 void StageState::Resume() {
+    ambientResumeDelay = 0.85f;
+    GameSfx::NotifyLoadingEnd();
     SetMouseConfinedToWindow(true);
 }

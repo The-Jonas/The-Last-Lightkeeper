@@ -26,6 +26,7 @@
 #include "gameplay/Repairable.h"
 #include "gameplay/StairTrigger.h"
 #include "core/Resources.h"
+#include "audio/GameSfx.h"
 #include <iostream>
 #include <fstream>
 #include <algorithm>
@@ -60,8 +61,12 @@ void StageState::Update(float dt){
     InputManager& input = InputManager::GetInstance();
 
     if (oceanWavesChunk) {
-        oceanAmbient_.EnsurePlaying();
-        oceanAmbient_.RefreshVolume();
+        if (ambientResumeDelay > 0.0f) {
+            ambientResumeDelay -= dt;
+        } else {
+            oceanAmbient_.EnsurePlaying();
+            oceanAmbient_.RefreshVolume();
+        }
     }
 
     Vec2 prevBigPos(0.0f, 0.0f);
@@ -328,6 +333,12 @@ void StageState::Update(float dt){
         } else {
             i++;                                                // Se não, avança para o próximo
         }
+    }
+
+    GameSfx::UpdateThunder(dt);
+
+    if (input.KeyPress(THUNDER_TEST_KEY)) {
+        GameSfx::TriggerThunderStrike();
     }
 
     // VERIFICAÇÃO DE FIM DE JOGO

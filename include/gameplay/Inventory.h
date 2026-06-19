@@ -18,7 +18,10 @@ public:
     bool AddItem(const ItemDef& def, int durability);
     void ClearAll();
     bool SelectGroup(int groupIndex);
+    bool DeselectGroup();
+    bool ToggleGroup(int groupIndex);
     int GetSelectedGroup() const { return selectedGroup; }
+    bool HasSelection() const { return selectedGroup >= 0; }
 
     int CountInGroup(int groupIndex) const;
     bool IsGroupFull(int groupIndex) const;

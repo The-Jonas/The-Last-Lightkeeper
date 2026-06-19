@@ -2,6 +2,7 @@
 #include "core/Game.h"
 #include "core/SaveManager.h"
 #include "core/SaveData.h"
+#include "audio/GameSfx.h"
 #include "engine/GameObject.h"
 #include "core/InputManager.h"
 #include "engine/Camera.h"
@@ -41,6 +42,7 @@ void LoadingState::LoadAssets() {
 }
 
 void LoadingState::Start() {
+    GameSfx::NotifyLoadingBegin();
     Mix_HaltMusic();
     LoadAssets();
     StartArray();

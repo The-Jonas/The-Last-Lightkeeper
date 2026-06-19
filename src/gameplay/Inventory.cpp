@@ -12,7 +12,7 @@ void Inventory::ClearAll() {
     for (auto& group : groups) {
         group.clear();
     }
-    selectedGroup = 0;
+    selectedGroup = -1;
     activeItemIndex = -1;
     usingSlot.reset();
     usingDrainAccum = 0.0f;
@@ -64,6 +64,9 @@ bool Inventory::SelectGroup(int groupIndex) {
     if (groupIndex < 0 || groupIndex >= static_cast<int>(groups.size())) {
         return false;
     }
+    if (groups[groupIndex].empty()) {
+        return false;
+    }
     if (groupIndex == selectedGroup) {
         return false;
     }
@@ -72,6 +75,30 @@ bool Inventory::SelectGroup(int groupIndex) {
     isLightToggledOn = false;
     SyncUsingSlotMirror();
     return true;
+}
+
+bool Inventory::DeselectGroup() {
+    if (selectedGroup < 0) {
+        return false;
+    }
+    selectedGroup = -1;
+    activeItemIndex = -1;
+    isLightToggledOn = false;
+    usingSlot.reset();
+    return true;
+}
+
+bool Inventory::ToggleGroup(int groupIndex) {
+    if (groupIndex < 0 || groupIndex >= static_cast<int>(groups.size())) {
+        return false;
+    }
+    if (groups[groupIndex].empty()) {
+        return false;
+    }
+    if (groupIndex == selectedGroup) {
+        return DeselectGroup();
+    }
+    return SelectGroup(groupIndex);
 }
 
 bool Inventory::AddItemToGroup(int groupIndex, const ItemDef& def, int durability) {
@@ -214,15 +241,6 @@ bool Inventory::TryTurnLightOn() {
         isLightToggledOn = true;
         return true;
     }
-
-    const BackpackGroupDef* group = backpackConfig.GetGroup(selectedGroup);
-    if (group && group->id == "lamp" && TryRefuelLampFromAnyOil()) {
-        active = GetActiveItem();
-        if (CanEmitLight(active)) {
-            isLightToggledOn = true;
-            return true;
-        }
-    }
     return false;
 }
 
@@ -241,6 +259,9 @@ bool Inventory::TryRefuelLampFromOil() {
 }
 
 HeldPropVisual Inventory::GetHeldPropVisual() const {
+    if (selectedGroup < 0) {
+        return HeldPropVisual::None;
+    }
     const ItemInstance* active = GetActiveItem();
     if (!active || !active->def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
         return HeldPropVisual::None;
@@ -358,7 +379,7 @@ void Inventory::ReadFromSave(const SaveGameState& state, const std::vector<ItemD
     }
 
     if (selectedGroup < 0 || selectedGroup >= static_cast<int>(groups.size())) {
-        selectedGroup = 0;
+        selectedGroup = -1;
     }
     activeItemIndex = FindBestItemIndexInGroup(selectedGroup);
     SyncUsingSlotMirror();

@@ -6,13 +6,16 @@
 #include "world/Collider.h"
 #include "engine/Camera.h"
 #include "core/Game.h"
+#include "core/Resources.h"
 #include "states/stage/StageState.h"
 #include "gameplay/StairTrigger.h"
 #include "core/InputManager.h"
 #include "gameplay/Monster.h"
+#include "audio/GameSfx.h"
 #include <cmath>
 #include <string>
 #include <iostream>
+#include <cstdio>
 
 namespace {
 constexpr int kFootCollisionSkinPx = 1;
@@ -57,8 +60,10 @@ void TryNudgeOutOfStaticGeometry(StageState* stage, GameObject& go, Collider* co
     }
 }
 constexpr const char* kIrmaozaoIdleRoot = "Recursos/img/personagens/irmaozao_idle/";
+constexpr const char* kIrmaozaoWalkRoot = "Recursos/img/personagens/irmaozao_walk/";
 constexpr const char* kIrmaozaoIdleLighterRoot = "Recursos/img/personagens/irmaozao_idle_lighter/";
 constexpr const char* kIrmaozaoIdleLampRoot = "Recursos/img/personagens/irmaozao_idle_lamp/";
+constexpr float kIrmaozaoMovingSpeedThreshold = 5.0f;
 
 constexpr int kIrmaozaoStripFrameCount = 6;
 constexpr float kIrmaozaoStripFrameSeconds = 0.11f;
@@ -115,7 +120,7 @@ Character::Character(GameObject& associated, std::string spritePath, bool useIrm
     }
 }
 
-std::string Character::IrmaozaoIdleStripPath(Direction dir, int frameIndex, HeldPropVisual prop) const {
+std::string Character::IrmaozaoIdleStripPath(Direction dir, int frameIndex, HeldPropVisual prop, bool moving) const {
     int fi = frameIndex % kIrmaozaoStripFrameCount;
     if (fi < 0) {
         fi += kIrmaozaoStripFrameCount;
@@ -128,7 +133,8 @@ std::string Character::IrmaozaoIdleStripPath(Direction dir, int frameIndex, Held
         root = kIrmaozaoIdleLighterRoot;
     } else if (prop == HeldPropVisual::Lamp) {
         root = kIrmaozaoIdleLampRoot;
-        ext = ".bmp";
+    } else if (moving) {
+        root = kIrmaozaoWalkRoot;
     }
 
     switch (dir) {
@@ -142,6 +148,42 @@ std::string Character::IrmaozaoIdleStripPath(Direction dir, int frameIndex, Held
         return std::string(root) + "direita/FRAME_" + std::to_string(n) + ext;
     }
     return std::string(root) + "frente/FRAME_1" + ext;
+}
+
+std::string Character::IrmaozaoPickLampStripPath(Direction dir, int frameIndex) const {
+    int fi = frameIndex % kIrmaozaoStripFrameCount;
+    if (fi < 0) {
+        fi += kIrmaozaoStripFrameCount;
+    }
+    const int n = fi + 1;
+    const std::string root = "Recursos/img/personagens/irmaozao_pick_lamp/";
+
+    if (dir == Direction::LEFT) {
+        char buf[160];
+        std::snprintf(buf,
+                      sizeof(buf),
+                      "%sesquerda/pegando lamparina direita_000%d.bmp",
+                      root.c_str(),
+                      n);
+        return std::string(buf);
+    }
+
+    const char* subdir = "frente";
+    switch (dir) {
+    case Direction::UP:
+        subdir = "trás";
+        break;
+    case Direction::DOWN:
+        subdir = "frente";
+        break;
+    case Direction::LEFT:
+        break;
+    case Direction::RIGHT:
+        subdir = "direita";
+        break;
+    }
+
+    return root + subdir + "/FRAME_" + std::to_string(n) + ".bmp";
 }
 
 void Character::EnsureIrmaozaoBaselineBox() {
@@ -164,9 +206,25 @@ void Character::RestoreIrmaozaoCollisionBox(float centerX, float footY) {
 }
 
 void Character::NotifyInventoryLightChanged() {
-    if (irmaozaoIdleStrips) {
-        RefreshIrmaozaoStripSprite();
+    if (!irmaozaoIdleStrips) {
+        return;
     }
+    playingPickLampAnim = false;
+    pickLampAnimTimer = 0.0f;
+    pickLampFrameIndex = 0;
+    RefreshIrmaozaoStripSprite();
+}
+
+void Character::PlayPickLampAnimation() {
+    if (!irmaozaoIdleStrips) {
+        return;
+    }
+    playingPickLampAnim = true;
+    pickLampAnimTimer = 0.0f;
+    pickLampFrameIndex = 0;
+    stripFrameIndex = 0;
+    stripAnimTimer = 0.0f;
+    RefreshIrmaozaoStripSprite();
 }
 
 void Character::RefreshIrmaozaoStripSprite() {
@@ -178,12 +236,23 @@ void Character::RefreshIrmaozaoStripSprite() {
     const float centerX = associated.box.x + associated.box.w * 0.5f;
     const float footY = associated.box.y + associated.box.h;
 
-    HeldPropVisual prop = HeldPropVisual::None;
-    if (StageState* stage = Game::TryGetStageState()) {
-        prop = stage->GetInventory().GetHeldPropVisual();
+    const bool moving = speed.Magnitude() > kIrmaozaoMovingSpeedThreshold;
+
+    std::string path;
+    if (playingPickLampAnim) {
+        path = IrmaozaoPickLampStripPath(currentDirection, pickLampFrameIndex);
+    } else {
+        HeldPropVisual prop = HeldPropVisual::None;
+        if (StageState* stage = Game::TryGetStageState()) {
+            prop = stage->GetInventory().GetHeldPropVisual();
+        }
+        path = IrmaozaoIdleStripPath(currentDirection, stripFrameIndex, prop, moving);
     }
 
-    const std::string path = IrmaozaoIdleStripPath(currentDirection, stripFrameIndex, prop);
+    if (path != lastStripSpritePath) {
+        Resources::ReloadImage(path);
+        lastStripSpritePath = path;
+    }
 
     sprite->Open(path);
     sprite->SetFrameCount(1, 1);
@@ -342,17 +411,41 @@ void Character::Update(float dt) {
         }
 
         if (irmaozaoIdleStrips) {
-            if (newDirection != currentDirection && speed.Magnitude() > 5.0f) {
-                currentDirection = newDirection;
+            const bool moving = speed.Magnitude() > kIrmaozaoMovingSpeedThreshold;
+            if (moving != stripWasMoving && !playingPickLampAnim) {
+                stripWasMoving = moving;
                 stripFrameIndex = 0;
                 stripAnimTimer = 0.0f;
                 RefreshIrmaozaoStripSprite();
             }
-            stripAnimTimer += dt;
-            while (stripAnimTimer >= kIrmaozaoStripFrameSeconds) {
-                stripAnimTimer -= kIrmaozaoStripFrameSeconds;
-                stripFrameIndex = (stripFrameIndex + 1) % kIrmaozaoStripFrameCount;
+            if (newDirection != currentDirection && moving) {
+                currentDirection = newDirection;
+                if (!playingPickLampAnim) {
+                    stripFrameIndex = 0;
+                    stripAnimTimer = 0.0f;
+                }
                 RefreshIrmaozaoStripSprite();
+            }
+            if (playingPickLampAnim) {
+                pickLampAnimTimer += dt;
+                while (pickLampAnimTimer >= kIrmaozaoStripFrameSeconds) {
+                    pickLampAnimTimer -= kIrmaozaoStripFrameSeconds;
+                    pickLampFrameIndex++;
+                    if (pickLampFrameIndex >= kIrmaozaoStripFrameCount) {
+                        playingPickLampAnim = false;
+                        pickLampFrameIndex = 0;
+                        stripFrameIndex = 0;
+                        stripAnimTimer = 0.0f;
+                    }
+                    RefreshIrmaozaoStripSprite();
+                }
+            } else {
+                stripAnimTimer += dt;
+                while (stripAnimTimer >= kIrmaozaoStripFrameSeconds) {
+                    stripAnimTimer -= kIrmaozaoStripFrameSeconds;
+                    stripFrameIndex = (stripFrameIndex + 1) % kIrmaozaoStripFrameCount;
+                    RefreshIrmaozaoStripSprite();
+                }
             }
         } else if (newDirection != currentDirection && speed.Magnitude() > 5.0f) {
             currentDirection = newDirection;
@@ -374,11 +467,18 @@ void Character::Update(float dt) {
         }
     }
 
+    StageState* stage = Game::TryGetStageState();
+    if (irmaozaoIdleStrips && stage && currentState != ActionState::INTERACTING) {
+        const Vec2 foot = GetFootCircleCenter();
+        const FootstepSurface surface = stage->level.QueryFootstepSurface(
+            static_cast<int>(foot.x), static_cast<int>(foot.y), isElevated);
+        GameSfx::UpdateBigBrotherFootsteps(dt, speed.Magnitude(), true, surface);
+    }
+
     // ============================================================
     // SISTEMA DE SANIDADE (BASEADO NO CONTATO REAL COM A LUZ)
     // ============================================================
 
-    StageState* stage = Game::TryGetStageState();
     float myLightContact = 1.0f;
 
     if (stage) {

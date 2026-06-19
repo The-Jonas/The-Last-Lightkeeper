@@ -6,6 +6,7 @@
 #include <string>
 #include "SDL_include.h" 
 #include "nlohmann/json.hpp"
+#include "audio/GameSfx.h"
 
 using json = nlohmann::json;
 
@@ -72,6 +73,8 @@ public:
     bool escadaConsertada = false;
     std::string levelLabel;
 
+    FootstepSurface QueryFootstepSurface(int x, int y, bool isElevated) const;
+
 private:
     // Vetor pra guardar todas as imagens na ordem certa
     std::vector<ImageLayer> imageLayers;              
@@ -82,12 +85,16 @@ private:
 
     // Ferramenta matemática para testar um polígono contra um círculo
     bool CheckPolygonVsCircle(const Polygon& poly, const Circle& circle);
+    static bool PointInPolygon(const Polygon& poly, int x, int y);
 
     // Listas de colisores baseadas no que o Tiled exporta
     std::vector<SDL_Rect> rectColliders;
     std::vector<Polygon> chaoNormal;
     std::vector<Polygon> chaoEscada;
     std::vector<Polygon> chaoBuraco;
+    std::vector<Polygon> floorWoodZones;
+    std::vector<Polygon> floorStoneZones;
+    int footstepWoodFallbackMinY = 2100;
     std::vector<Circle> circleColliders;
 
     // Colisão estática de objetos do cenário (armários, caixas diagonais, etc.)

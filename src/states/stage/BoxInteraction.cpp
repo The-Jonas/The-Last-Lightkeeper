@@ -8,6 +8,7 @@
 #include "gameplay/Candlestick.h"
 #include "ui/InteractionOutline.h"
 #include "world/Collider.h"
+#include "audio/GameSfx.h"
 
 #include <algorithm>
 #include <cmath>
@@ -289,6 +290,8 @@ void StageState::UpdateBoxInteraction() {
     reachablePickup = FindClosestReachableItem();
     reachableCandle = FindClosestReachableCandle();
 
+    GameSfx::UpdateCandleProximity(reachableCandle != nullptr);
+
     InputManager& input = InputManager::GetInstance();
     const bool eHeld = input.IsKeyDown(SDLK_e);
     ItemPickup* reachableItem = FindClosestReachableItem();
@@ -306,6 +309,7 @@ void StageState::UpdateBoxInteraction() {
             }
         }
     } else if (activePushBox) {
+        GameSfx::NotifyBoxPushEnd();
         activePushBox = nullptr;
         if (bigCharacter && bigCharacter->currentState == Character::ActionState::PUSHING_BOX) {
             bigCharacter->currentState = Character::ActionState::NORMAL;
@@ -318,6 +322,9 @@ void StageState::UpdateBoxInteraction() {
         SaveCurrentProgress();
     }
     wasPushingLastFrame = activePushBox != nullptr;
+    if (activePushBox) {
+        GameSfx::MaintainBoxPushLoop();
+    }
 }
 
 void StageState::ApplyCoupledPushMovement(const Vec2& prevPlayerPos) {
@@ -337,7 +344,9 @@ void StageState::ApplyCoupledPushMovement(const Vec2& prevPlayerPos) {
         return;
     }
 
-    if (!activePushBox->TryMoveBy(dx, dy)) {
+    if (activePushBox->TryMoveBy(dx, dy)) {
+        GameSfx::NotifyBoxSlide();
+    } else {
         bigCharacterObject->box.x = prevPlayerPos.x;
         bigCharacterObject->box.y = prevPlayerPos.y;
         if (Collider* playerCol = bigCharacterObject->GetComponent<Collider>()) {

@@ -6,6 +6,7 @@
 #include "core/SaveManager.h"
 #include "engine/GameObject.h"
 #include "gameplay/Box.h"
+#include "audio/GameSfx.h"
 #include "gameplay/Character.h"
 #include "gameplay/BackpackVisuals.h"
 #include "gameplay/HotbarComponent.h"
@@ -63,6 +64,7 @@ void StageState::ClearGameplayWorld() {
     journalCloseTimer = 0.0f;
     journalViewImagePath.clear();
     reachablePushBox = nullptr;
+    GameSfx::NotifyBoxPushEnd();
     activePushBox = nullptr;
     wasPushingLastFrame = false;
     Box::SetActivePushTarget(nullptr);
@@ -154,7 +156,6 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
         const int lighterGroup = cfg.backpackConfig.GroupIndexForItem(cfg.startingFlashlight.name);
         if (lighterGroup >= 0) {
             inventory.AddItemToGroup(lighterGroup, cfg.startingFlashlight, cfg.startingFlashlightDurability);
-            inventory.SelectGroup(lighterGroup);
             bigComp->NotifyInventoryLightChanged();
         }
         inventory.isLightToggledOn = false;

@@ -7,30 +7,84 @@
 
 namespace {
 
-struct SatchelOffset {
+struct BodyAttachOffset {
     float x;
     float y;
+    float sizeMul;
 };
 
-SatchelOffset OffsetForFacing(Character::Direction dir, int groupIndex, int stackIndex) {
-    SatchelOffset base{};
-    switch (dir) {
-    case Character::Direction::DOWN:
-        base = {-18.0f, 8.0f};
-        break;
-    case Character::Direction::UP:
-        base = {16.0f, 10.0f};
-        break;
-    case Character::Direction::LEFT:
-        base = {14.0f, 4.0f};
-        break;
-    case Character::Direction::RIGHT:
-        base = {-20.0f, 4.0f};
-        break;
+BodyAttachOffset OffsetForItemGroup(const std::string& groupId,
+                                    Character::Direction dir,
+                                    int stackIndex,
+                                    float boxW,
+                                    float boxH) {
+    BodyAttachOffset off{0.0f, 0.0f, 1.0f};
+
+    if (groupId == "lighter") {
+        switch (dir) {
+        case Character::Direction::DOWN:
+            off = {boxW * 0.22f, boxH * 0.72f, 0.55f};
+            break;
+        case Character::Direction::UP:
+            off = {-boxW * 0.18f, boxH * 0.68f, 0.55f};
+            break;
+        case Character::Direction::LEFT:
+            off = {-boxW * 0.24f, boxH * 0.74f, 0.55f};
+            break;
+        case Character::Direction::RIGHT:
+            off = {boxW * 0.24f, boxH * 0.74f, 0.55f};
+            break;
+        }
+    } else if (groupId == "lamp") {
+        switch (dir) {
+        case Character::Direction::DOWN:
+            off = {-boxW * 0.30f, boxH * 0.48f, 0.85f};
+            break;
+        case Character::Direction::UP:
+            off = {boxW * 0.26f, boxH * 0.42f, 0.85f};
+            break;
+        case Character::Direction::LEFT:
+            off = {-boxW * 0.08f, boxH * 0.46f, 0.85f};
+            break;
+        case Character::Direction::RIGHT:
+            off = {boxW * 0.08f, boxH * 0.46f, 0.85f};
+            break;
+        }
+    } else if (groupId == "oil") {
+        switch (dir) {
+        case Character::Direction::DOWN:
+            off = {boxW * 0.06f, boxH * 0.34f, 0.95f};
+            break;
+        case Character::Direction::UP:
+            off = {0.0f, boxH * 0.38f, 1.0f};
+            break;
+        case Character::Direction::LEFT:
+            off = {boxW * 0.22f, boxH * 0.36f, 0.95f};
+            break;
+        case Character::Direction::RIGHT:
+            off = {-boxW * 0.22f, boxH * 0.36f, 0.95f};
+            break;
+        }
+    } else {
+        switch (dir) {
+        case Character::Direction::DOWN:
+            off = {-boxW * 0.18f, boxH * 0.50f, 0.7f};
+            break;
+        case Character::Direction::UP:
+            off = {boxW * 0.16f, boxH * 0.44f, 0.7f};
+            break;
+        case Character::Direction::LEFT:
+            off = {boxW * 0.10f, boxH * 0.48f, 0.7f};
+            break;
+        case Character::Direction::RIGHT:
+            off = {-boxW * 0.10f, boxH * 0.48f, 0.7f};
+            break;
+        }
     }
-    base.x += static_cast<float>(groupIndex) * 4.0f;
-    base.y += static_cast<float>(stackIndex) * 3.0f;
-    return base;
+
+    off.x += static_cast<float>(stackIndex) * 3.0f;
+    off.y -= static_cast<float>(stackIndex) * 2.0f;
+    return off;
 }
 
 } // namespace
@@ -57,7 +111,7 @@ void BackpackVisuals::Render() {
     const GameObject& ch = bigCharacter->GetAssociated();
     const Character::Direction facing = bigCharacter->GetFacingDirection();
     const float zoom = Camera::GetZoom();
-    const float drawSize = 22.0f * zoom;
+    const float baseDrawSize = 22.0f * zoom;
     const int selectedGroup = inventory.GetSelectedGroup();
     const BackpackConfig& cfg = inventory.GetBackpackConfig();
 
@@ -67,15 +121,24 @@ void BackpackVisuals::Render() {
             continue;
         }
 
+        const BackpackGroupDef* group = cfg.GetGroup(gi);
+        const std::string groupId = group ? group->id : "";
+
         for (int si = 0; si < count; ++si) {
+            if (gi == selectedGroup) {
+                continue;
+            }
+
             const ItemInstance* item = inventory.GetItemInGroup(gi, si);
             if (!item) {
                 continue;
             }
 
-            const SatchelOffset off = OffsetForFacing(facing, gi, si);
-            const float cx = ch.box.x + ch.box.w * 0.5f + off.x;
-            const float cy = ch.box.y + ch.box.h * 0.55f + off.y;
+            const BodyAttachOffset attach =
+                OffsetForItemGroup(groupId, facing, si, ch.box.w, ch.box.h);
+            const float cx = ch.box.x + ch.box.w * 0.5f + attach.x;
+            const float cy = ch.box.y + attach.y;
+            const float drawSize = baseDrawSize * attach.sizeMul;
             const float screenX = (cx - Camera::pos.x) * zoom - drawSize * 0.5f;
             const float screenY = (cy - Camera::pos.y) * zoom - drawSize * 0.5f;
 
@@ -84,12 +147,8 @@ void BackpackVisuals::Render() {
                 continue;
             }
 
-            const bool selected = (gi == selectedGroup);
-            const float size = selected ? drawSize * 1.12f : drawSize;
-            const float adjX = screenX - (size - drawSize) * 0.5f;
-            const float adjY = screenY - (size - drawSize) * 0.5f;
-            SDL_FRect dst{adjX, adjY, size, size};
-            SDL_SetTextureAlphaMod(tex.get(), selected ? 255 : 210);
+            SDL_FRect dst{screenX, screenY, drawSize, drawSize};
+            SDL_SetTextureAlphaMod(tex.get(), 235);
             SDL_SetTextureColorMod(tex.get(), 255, 255, 255);
             SDL_RenderCopyExF(renderer, tex.get(), nullptr, &dst, 0.0, nullptr,
                               (facing == Character::Direction::LEFT) ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);

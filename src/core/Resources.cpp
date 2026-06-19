@@ -51,6 +51,11 @@ std::shared_ptr<SDL_Texture> Resources::GetImage(const std::string file) {
     return shared;
 }
 
+void Resources::ReloadImage(const std::string& file) {
+    imageTable.erase(file);
+    whiteMaskTable.erase(file);
+}
+
 std::shared_ptr<SDL_Texture> Resources::GetWhiteMaskImage(const std::string file) {
     if (whiteMaskTable.find(file) != whiteMaskTable.end()) {
         return whiteMaskTable[file];
