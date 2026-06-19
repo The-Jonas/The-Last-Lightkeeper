@@ -11,11 +11,9 @@
 
 namespace {
 
-constexpr const char* kBoxShortPaths[] = {
-    "Recursos/audio/SFX/CAIXAS/CAIXA_Madeira.mp3",
-    "Recursos/audio/SFX/CAIXAS/CAIXA_Madeira2.mp3",
-};
-constexpr const char* kBoxLongPath = "Recursos/audio/SFX/CAIXAS/CAIXA_MADEIRALONGO.mp3";
+constexpr const char* kBoxStartPath = "Recursos/audio/SFX/CAIXAS/CAIXA_Madeira.mp3";
+constexpr const char* kBoxStopPath = "Recursos/audio/SFX/CAIXAS/CAIXA_Madeira2.mp3";
+constexpr const char* kBoxMovingLoopPath = "Recursos/audio/SFX/CAIXAS/CAIXA_MADEIRALONGO.mp3";
 
 constexpr const char* kLighterOnPath = "Recursos/audio/SFX/ISQUEIRO/ISQUEIRO_ ABRINDO.mp3";
 constexpr const char* kLighterOffPath = "Recursos/audio/SFX/ISQUEIRO/ISQUEIRO_FECHANDO.mp3";
@@ -33,10 +31,7 @@ constexpr const char* kThunderPaths[] = {
 
 constexpr const char* kCandleLoopPath = "Recursos/audio/SFX/VELA/FOGO_VELA.mp3";
 
-constexpr int kBoxShortCount = 2;
 constexpr int kThunderCount = 4;
-
-constexpr float kBoxPushCooldown = 0.22f;
 constexpr float kMinFootstepSpeed = 35.0f;
 constexpr float kThunderMinDelay = 18.0f;
 constexpr float kThunderMaxDelay = 42.0f;
@@ -44,8 +39,9 @@ constexpr float kThunderFlashDuration = 0.42f;
 constexpr float kPostLoadingThunderDelay = 12.0f;
 constexpr int kFootstepVolumePercent = 100;
 
-Sound gBoxShortSounds[kBoxShortCount];
-Sound gBoxLongSound;
+Sound gBoxStartSound;
+Sound gBoxStopSound;
+Sound gBoxMovingLoopSound;
 Sound gLighterOnSound;
 Sound gLighterOffSound;
 Sound gFootstepStoneSound;
@@ -56,10 +52,11 @@ Sound gCandleLoopSound;
 
 bool gLoaded = false;
 bool gGameplayMuted = false;
-float gBoxPushCooldownTimer = 0.0f;
 float gThunderTimer = 12.0f;
 float gThunderFlashTimer = 0.0f;
 bool gCandleLoopActive = false;
+bool gBoxMovingLoopActive = false;
+bool gBoxIsMoving = false;
 bool gFootstepLoopActive = false;
 FootstepSurface gFootstepLoopSurface = FootstepSurface::Stone;
 
@@ -67,10 +64,9 @@ void EnsureLoaded() {
     if (gLoaded) {
         return;
     }
-    for (int i = 0; i < kBoxShortCount; ++i) {
-        gBoxShortSounds[i].Open(kBoxShortPaths[i]);
-    }
-    gBoxLongSound.Open(kBoxLongPath);
+    gBoxStartSound.Open(kBoxStartPath);
+    gBoxStopSound.Open(kBoxStopPath);
+    gBoxMovingLoopSound.Open(kBoxMovingLoopPath);
     gLighterOnSound.Open(kLighterOnPath);
     gLighterOffSound.Open(kLighterOffPath);
     gFootstepStoneSound.Open(kFootstepStonePath);
@@ -102,6 +98,31 @@ Sound& FootstepSound(FootstepSurface surface) {
     case FootstepSurface::Stone:
     default:
         return gFootstepStoneSound;
+    }
+}
+
+void StopBoxMovingLoop() {
+    if (gBoxMovingLoopActive) {
+        gBoxMovingLoopSound.Stop();
+        gBoxMovingLoopActive = false;
+    }
+}
+
+void StartBoxMovingLoop() {
+    if (gGameplayMuted) {
+        StopBoxMovingLoop();
+        return;
+    }
+    EnsureLoaded();
+    if (!gBoxMovingLoopSound.IsOpen()) {
+        return;
+    }
+    const int channel = gBoxMovingLoopSound.GetChannel();
+    if (gBoxMovingLoopActive && channel >= 0 && Mix_Playing(channel)) {
+        return;
+    }
+    if (gBoxMovingLoopSound.PlayLooped() >= 0) {
+        gBoxMovingLoopActive = true;
     }
 }
 
@@ -143,7 +164,8 @@ void StopFootstepLoop() {
 void StopAllGameplayAudio() {
     StopFootstepLoop();
     StopCandleLoop();
-    gBoxPushCooldownTimer = 0.0f;
+    StopBoxMovingLoop();
+    gBoxIsMoving = false;
 }
 
 void ApplyFootstepLoopVolume(Sound& sound) {
@@ -214,23 +236,40 @@ void NotifyLoadingEnd() {
     gThunderFlashTimer = 0.0f;
 }
 
-void PlayBoxPushSound(bool sustainedPush) {
+void NotifyBoxSlide() {
     if (gGameplayMuted) {
         return;
     }
-    EnsureLoaded();
-    if (gBoxPushCooldownTimer > 0.0f) {
+
+    if (!gBoxIsMoving) {
+        PlaySound(gBoxStartSound);
+        gBoxIsMoving = true;
+    }
+    StartBoxMovingLoop();
+}
+
+void MaintainBoxPushLoop() {
+    if (gGameplayMuted || !gBoxIsMoving) {
         return;
     }
-    gBoxPushCooldownTimer = kBoxPushCooldown;
-    if (sustainedPush && gBoxLongSound.IsOpen()) {
-        gBoxLongSound.Play();
-    } else {
-        const int idx = rand() % kBoxShortCount;
-        if (gBoxShortSounds[idx].IsOpen()) {
-            gBoxShortSounds[idx].Play();
-        }
+    StartBoxMovingLoop();
+}
+
+void NotifyBoxPushEnd() {
+    if (gGameplayMuted) {
+        StopBoxMovingLoop();
+        gBoxIsMoving = false;
+        return;
     }
+
+    if (gBoxIsMoving) {
+        StopBoxMovingLoop();
+        PlaySound(gBoxStopSound);
+        gBoxIsMoving = false;
+        return;
+    }
+
+    StopBoxMovingLoop();
 }
 
 void PlayLighterToggle(bool turningOn) {
@@ -242,8 +281,6 @@ void UpdateBigBrotherFootsteps(float dt, float moveSpeed, bool isBigBrother, Foo
         StopFootstepLoop();
         return;
     }
-
-    gBoxPushCooldownTimer = std::max(0.0f, gBoxPushCooldownTimer - dt);
 
     if (gGameplayMuted || moveSpeed < kMinFootstepSpeed) {
         StopFootstepLoop();

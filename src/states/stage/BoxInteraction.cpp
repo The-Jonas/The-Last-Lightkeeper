@@ -309,6 +309,7 @@ void StageState::UpdateBoxInteraction() {
             }
         }
     } else if (activePushBox) {
+        GameSfx::NotifyBoxPushEnd();
         activePushBox = nullptr;
         if (bigCharacter && bigCharacter->currentState == Character::ActionState::PUSHING_BOX) {
             bigCharacter->currentState = Character::ActionState::NORMAL;
@@ -321,6 +322,9 @@ void StageState::UpdateBoxInteraction() {
         SaveCurrentProgress();
     }
     wasPushingLastFrame = activePushBox != nullptr;
+    if (activePushBox) {
+        GameSfx::MaintainBoxPushLoop();
+    }
 }
 
 void StageState::ApplyCoupledPushMovement(const Vec2& prevPlayerPos) {
@@ -337,18 +341,12 @@ void StageState::ApplyCoupledPushMovement(const Vec2& prevPlayerPos) {
     const float dx = targetBoxX - boxObj.box.x;
     const float dy = targetBoxY - boxObj.box.y;
     if (dx == 0.0f && dy == 0.0f) {
-        boxPushSoundStreak = 0;
         return;
     }
 
     if (activePushBox->TryMoveBy(dx, dy)) {
-        boxPushSoundStreak++;
-        GameSfx::PlayBoxPushSound(boxPushSoundStreak >= 4);
-        if (boxPushSoundStreak >= 4) {
-            boxPushSoundStreak = 0;
-        }
+        GameSfx::NotifyBoxSlide();
     } else {
-        boxPushSoundStreak = 0;
         bigCharacterObject->box.x = prevPlayerPos.x;
         bigCharacterObject->box.y = prevPlayerPos.y;
         if (Collider* playerCol = bigCharacterObject->GetComponent<Collider>()) {

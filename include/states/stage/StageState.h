@@ -255,7 +255,6 @@ private:
     Box* activePushBox = nullptr;
     Vec2 pushBoxOffset{0.0f, 0.0f};
     bool wasPushingLastFrame = false;
-    int boxPushSoundStreak = 0;
 
     std::shared_ptr<Mix_Chunk> oceanWavesChunk;
     StageOceanAmbientController oceanAmbient_;

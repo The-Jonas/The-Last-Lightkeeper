@@ -8,7 +8,9 @@ namespace GameSfx {
 void NotifyLoadingBegin();
 void NotifyLoadingEnd();
 
-void PlayBoxPushSound(bool sustainedPush);
+void NotifyBoxSlide();
+void MaintainBoxPushLoop();
+void NotifyBoxPushEnd();
 void PlayLighterToggle(bool turningOn);
 void UpdateBigBrotherFootsteps(float dt, float moveSpeed, bool isBigBrother, FootstepSurface surface);
 void UpdateThunder(float dt);
