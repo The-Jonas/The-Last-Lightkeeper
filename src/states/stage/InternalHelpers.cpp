@@ -3,6 +3,7 @@
 #include "engine/GameObject.h"
 #include "engine/SpriteRenderer.h"
 #include "engine/Camera.h"
+#include "gameplay/Character.h"
 #include "lighting/LightMaskTypes.h"
 #define INCLUDE_SDL
 #include "SDL_include.h"
@@ -171,6 +172,29 @@ bool IsFootLit(GameObject* go, const Vec2& lightScreenPos, const LightMaskParams
     return rate > 0.0f;
 }
 
+void RenderShadowSpriteOnly(GameObject* go, SpriteRenderer* sprite, Uint8 shadowAlpha) {
+    Character* character = go->GetComponent<Character>();
+    std::string restoreSpritePath;
+    bool swappedSprite = false;
+    if (character) {
+        restoreSpritePath = character->GetCurrentStripSpritePath();
+        const std::string shadowPath = character->GetShadowSpritePath();
+        if (!shadowPath.empty() && shadowPath != restoreSpritePath) {
+            sprite->Open(shadowPath);
+            swappedSprite = true;
+        }
+    }
+
+    const Uint8 spriteShadowAlpha = static_cast<Uint8>(std::max(18, std::min(205, static_cast<int>(shadowAlpha))));
+    sprite->SetTint(0, 0, 0, spriteShadowAlpha);
+    sprite->Render();
+
+    sprite->SetTint(255, 255, 255, 255);
+    if (swappedSprite) {
+        sprite->Open(restoreSpritePath);
+    }
+}
+
 void RenderProjectedSpriteShadow(GameObject* go, const Vec2& lightScreenPos, float lightTouch, float shadowLengthPx, Uint8 shadowAlpha,
                                  const LightMaskParams& params) {
     (void)params;
@@ -213,9 +237,7 @@ void RenderProjectedSpriteShadow(GameObject* go, const Vec2& lightScreenPos, flo
 
     go->box = shadowBox;
     go->angleDeg = angDeg;
-    const Uint8 spriteShadowAlpha = static_cast<Uint8>(std::max(18, std::min(205, static_cast<int>(shadowAlpha))));
-    sprite->SetTint(0, 0, 0, spriteShadowAlpha);
-    go->Render();
+    RenderShadowSpriteOnly(go, sprite, shadowAlpha);
 
     go->box = originalBox;
     go->angleDeg = originalAngle;
@@ -293,13 +315,10 @@ const Vec2 foot(originalBox.x + 0.5f * originalBox.w, originalBox.y + originalBo
  
     go->box = shadowBox;
     go->angleDeg = angDeg;
-    const Uint8 spriteShadowAlpha = static_cast<Uint8>(std::max(18, std::min(205, static_cast<int>(shadowAlpha))));
-    sprite->SetTint(0, 0, 0, spriteShadowAlpha);
-    go->Render();
- 
+    RenderShadowSpriteOnly(go, sprite, shadowAlpha);
+
     go->box = originalBox;
     go->angleDeg = originalAngle;
-    sprite->SetTint(255, 255, 255, 255);
 }
 
 void DrawContactFootShadow(SDL_Renderer* renderer, const Rect& box, float contactRate) {

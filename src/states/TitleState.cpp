@@ -10,6 +10,7 @@
 #include "ui/Text.h"
 #include "core/Resources.h"
 #include <algorithm>
+#include <cstdio>
 
 namespace {
 
@@ -46,10 +47,125 @@ void LayoutMenuOption(GameObject* option, float centerY) {
 #include "states/CutsceneState.h"
 
 TitleState::TitleState() : State() {
-    sliderVolume = Game::masterVolumePercent;
+    InitSliders();
 }
 
 TitleState::~TitleState() {
+}
+
+void TitleState::InitSliders() {
+    sliders[static_cast<int>(VolumeSliderKind::Master)] = {
+        VolumeSliderKind::Master, "Master", Game::masterVolumePercent};
+    sliders[static_cast<int>(VolumeSliderKind::Ambient)] = {
+        VolumeSliderKind::Ambient, "Ambiente", Game::ambientVolumePercent};
+    sliders[static_cast<int>(VolumeSliderKind::Thunder)] = {
+        VolumeSliderKind::Thunder, "Trovao", Game::thunderVolumePercent};
+}
+
+void TitleState::ApplySliderValue(VolumeSliderKind kind, int percent) {
+    switch (kind) {
+    case VolumeSliderKind::Master:
+        Game::SetMasterVolume(percent);
+        break;
+    case VolumeSliderKind::Ambient:
+        Game::SetAmbientVolume(percent);
+        break;
+    case VolumeSliderKind::Thunder:
+        Game::SetThunderVolume(percent);
+        break;
+    case VolumeSliderKind::Count:
+        break;
+    }
+}
+
+TitleState::VolumeSliderUi* TitleState::FindSliderAtPoint(int mx, int my) {
+    SDL_Point pt{mx, my};
+    for (VolumeSliderUi& slider : sliders) {
+        if (SDL_PointInRect(&pt, &slider.bar) || SDL_PointInRect(&pt, &slider.handle)) {
+            return &slider;
+        }
+    }
+    return nullptr;
+}
+
+void TitleState::RecalcSliders() {
+    const int winH = Game::GetInstance().GetWindowsHeight();
+    const int baseY = winH - 36;
+
+    for (int i = 0; i < static_cast<int>(VolumeSliderKind::Count); ++i) {
+        VolumeSliderUi& slider = sliders[i];
+        slider.bar.x = 40;
+        slider.bar.y = baseY - i * kSliderRowH;
+        slider.bar.w = kSliderW;
+        slider.bar.h = kSliderH;
+
+        const int frac = (slider.value * kSliderW) / 100;
+        slider.handle.x = slider.bar.x + frac - kHandleW / 2;
+        slider.handle.y = slider.bar.y - 4;
+        slider.handle.w = kHandleW;
+        slider.handle.h = kSliderH + 8;
+    }
+}
+
+void TitleState::HandleSliderInput(int mx, int my, InputManager& input) {
+    if (input.MousePress(SDL_BUTTON_LEFT)) {
+        if (VolumeSliderUi* hit = FindSliderAtPoint(mx, my)) {
+            hit->dragging = true;
+        }
+    }
+
+    for (VolumeSliderUi& slider : sliders) {
+        if (!slider.dragging) {
+            continue;
+        }
+        if (input.IsMouseDown(SDL_BUTTON_LEFT)) {
+            float frac = static_cast<float>(mx - slider.bar.x) / static_cast<float>(kSliderW);
+            frac = std::max(0.0f, std::min(1.0f, frac));
+            slider.value = static_cast<int>(frac * 100.0f);
+            ApplySliderValue(slider.kind, slider.value);
+        } else {
+            slider.dragging = false;
+        }
+    }
+}
+
+void TitleState::RenderSliders(SDL_Renderer* renderer) {
+    if (!renderer) {
+        return;
+    }
+
+    auto font = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 14);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+    for (const VolumeSliderUi& slider : sliders) {
+        SDL_SetRenderDrawColor(renderer, 60, 60, 60, 200);
+        SDL_RenderFillRect(renderer, &slider.bar);
+
+        SDL_SetRenderDrawColor(renderer, 120, 120, 120, 255);
+        SDL_RenderDrawRect(renderer, &slider.bar);
+
+        SDL_SetRenderDrawColor(renderer, 200, 180, 100, 220);
+        SDL_RenderFillRect(renderer, &slider.handle);
+
+        if (!font) {
+            continue;
+        }
+
+        char labelBuf[64];
+        std::snprintf(labelBuf, sizeof(labelBuf), "%s: %d", slider.label, slider.value);
+        SDL_Color labelColor{180, 180, 180, 220};
+        SDL_Surface* labelSurface = TTF_RenderText_Blended(font.get(), labelBuf, labelColor);
+        if (!labelSurface) {
+            continue;
+        }
+        SDL_Texture* labelTexture = SDL_CreateTextureFromSurface(renderer, labelSurface);
+        SDL_Rect labelDst{slider.bar.x, slider.bar.y - 22, labelSurface->w, labelSurface->h};
+        SDL_FreeSurface(labelSurface);
+        if (labelTexture) {
+            SDL_RenderCopy(renderer, labelTexture, nullptr, &labelDst);
+            SDL_DestroyTexture(labelTexture);
+        }
+    }
 }
 
 void TitleState::LoadAssets() {
@@ -61,14 +177,6 @@ void TitleState::LoadAssets() {
     titleGo->box.y = Camera::pos.y;
     AddObject(titleGo);
     titleBackground = titleGo;
-
-    //GameObject* nameGO = new GameObject();
-    //nameGO->z = 10;
-    //SDL_Color titleColor = {255, 255, 255, 0};
-    //Text* nameText = new Text(*nameGO, "Recursos/font/alcotton.ttf", 48, Text::BLENDED, "The Last LightKeeper", titleColor);
-    //nameGO->AddComponent(nameText);
-    //AddObject(nameGO);
-    //titleText = nameGO;
 
     GameObject* continueGO = new GameObject();
     continueGO->z = 10;
@@ -161,27 +269,10 @@ void TitleState::Update(float dt) {
     fadeAlpha = t * 255.0f;
     Uint8 a = static_cast<Uint8>(fadeAlpha);
 
-    int mx = input.GetMouseX();
-    int my = input.GetMouseY();
-    RecalcSlider();
-
-    if (input.MousePress(SDL_BUTTON_LEFT)) {
-        SDL_Point pt{mx, my};
-        if (SDL_PointInRect(&pt, &sliderBar) || SDL_PointInRect(&pt, &sliderHandle)) {
-            draggingSlider = true;
-        }
-    }
-    if (draggingSlider) {
-        if (input.IsMouseDown(SDL_BUTTON_LEFT)) {
-            float frac = static_cast<float>(mx - sliderBar.x) / static_cast<float>(kSliderW);
-            if (frac < 0.0f) frac = 0.0f;
-            if (frac > 1.0f) frac = 1.0f;
-            sliderVolume = static_cast<int>(frac * 100.0f);
-            Game::SetMasterVolume(sliderVolume);
-        } else {
-            draggingSlider = false;
-        }
-    }
+    const int mx = input.GetMouseX();
+    const int my = input.GetMouseY();
+    RecalcSliders();
+    HandleSliderInput(mx, my, input);
 
     if (titleText) {
         Text* text = titleText->GetComponent<Text>();
@@ -230,13 +321,13 @@ void TitleState::Update(float dt) {
 
 void TitleState::Render() {
     RenderArray();
-    RenderSlider(Game::GetInstance().GetRenderer());
+    RenderSliders(Game::GetInstance().GetRenderer());
 }
 
 void TitleState::Start() {
     LoadAssets();
     StartArray();
-    music.Open("Recursos/audio/soundtracks/Virtutes Instrumenti.mp3");
+    music.Open("Recursos/audio/soundtracks/Ambientacao.mp3");
     music.Play();
     started = true;
 }
@@ -250,48 +341,5 @@ void TitleState::Resume() {
     if (!hasContinueSave) {
         menuSelection = 1;
     }
-}
-
-void TitleState::RecalcSlider() {
-    int winH = Game::GetInstance().GetWindowsHeight();
-    sliderBar.x = 40;
-    sliderBar.y = winH - 70;
-    sliderBar.w = kSliderW;
-    sliderBar.h = kSliderH;
-    int frac = (sliderVolume * kSliderW) / 100;
-    sliderHandle.x = sliderBar.x + frac - kHandleW / 2;
-    sliderHandle.y = sliderBar.y - 4;
-    sliderHandle.w = kHandleW;
-    sliderHandle.h = kSliderH + 8;
-}
-
-void TitleState::RenderSlider(SDL_Renderer* renderer) {
-    if (!renderer) return;
-
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-
-    SDL_SetRenderDrawColor(renderer, 60, 60, 60, 200);
-    SDL_RenderFillRect(renderer, &sliderBar);
-
-    SDL_SetRenderDrawColor(renderer, 120, 120, 120, 255);
-    SDL_RenderDrawRect(renderer, &sliderBar);
-
-    SDL_SetRenderDrawColor(renderer, 200, 180, 100, 220);
-    SDL_RenderFillRect(renderer, &sliderHandle);
-
-    const char* label = "Volume";
-    auto font = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 14);
-    if (font) {
-        SDL_Color c{180, 180, 180, 200};
-        SDL_Surface* s = TTF_RenderText_Blended(font.get(), label, c);
-        if (s) {
-            SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, s);
-            SDL_Rect d = {sliderBar.x, sliderBar.y - 22, s->w, s->h};
-            SDL_FreeSurface(s);
-            if (t) {
-                SDL_RenderCopy(renderer, t, nullptr, &d);
-                SDL_DestroyTexture(t);
-            }
-        }
-    }
+    InitSliders();
 }

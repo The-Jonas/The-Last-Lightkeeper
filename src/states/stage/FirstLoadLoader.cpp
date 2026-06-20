@@ -54,7 +54,7 @@ StageFirstLoadData EmbeddedDefaults() {
     d.navWorldH = 3276.0f;
     d.navTilePx = 64;
     d.itemPickupCount = 35;
-    d.startingFlashlightDurability = 50;
+    d.startingFlashlightDurability = 100;
 
     ItemDef apple{"Apple", "Recursos/img/items/apple.png", -1, false, 1, {}};
     ItemDef brokenFlashlight{"Broken Flashlight",
@@ -63,14 +63,14 @@ StageFirstLoadData EmbeddedDefaults() {
                              true,
                              2,
                              {{ItemProperty::LIGHT_SOURCE, 1.0f}}};
-    ItemDef oil{"Lighter Fuel", "Recursos/img/items/lighter_fuel.png", 1, false, 3, {{ItemProperty::FUEL, 100.0f}}};
+    ItemDef fuel{"Fuel", "Recursos/img/items/lighter_fuel.png", 250, false, 3, {{ItemProperty::FUEL, 250.0f}}};
     ItemDef lamp{"Lamp",
                  "Recursos/img/items/0106_ASSET_LAMPARINA_PERSPECTIVA_APAGADA_FLV.png.png",
                  250,
                  true,
                  4,
                  {{ItemProperty::LIGHT_SOURCE, 1.0f}}};
-    d.pickupCycle = {apple, brokenFlashlight, oil, lamp};
+    d.pickupCycle = {apple, brokenFlashlight, fuel, lamp};
 
     d.startingFlashlight =
         ItemDef{"Flashlight",
@@ -80,7 +80,7 @@ StageFirstLoadData EmbeddedDefaults() {
                 0,
                 {{ItemProperty::LIGHT_SOURCE, 1.0f}}};
 
-    d.oceanChunkCandidates = {};
+    d.oceanChunkCandidates = {"Recursos/audio/waves.mp3"};
     d.levels = {
         {"level_1", "Recursos/map/mapa_1_andar.json", 1},
         {"level_2", "Recursos/map/mapa_2_andar.json", 2},
@@ -212,6 +212,9 @@ StageFirstLoadData SanitizeLists(StageFirstLoadData d) {
     }
     if (d.backpackConfig.groups.empty()) {
         d.backpackConfig = DefaultBackpackConfig();
+    }
+    if (d.oceanChunkCandidates.empty()) {
+        d.oceanChunkCandidates = EmbeddedDefaults().oceanChunkCandidates;
     }
     return d;
 }

@@ -59,6 +59,7 @@ public:
     int CreateStaticLight(Vec2 pos, bool startsLit, LightMaskShape shape, const LightMaskParams& params); // Overload de CreateStaticLight com shape e params customizados
 
     void SetLightEnabled(int lightId, bool enabled);
+    void UpdateInventoryLight();
 
     // Verifica se a luz está no range dos pés dos personagens
     float bigLightContact = 0.0f;
@@ -94,6 +95,7 @@ public:
     bool IsJornalCloserThanItemAndBox(Jornal* jornal, ItemPickup* item, Box* box) const;
     bool IsCandleClosestForInteraction(Candlestick* candle) const;
     ItemPickup* GetReachablePickup() const { return reachablePickup; }
+    void NotifyItemPickupCollected(ItemPickup* pickup);
     bool ShouldSkipPickupSpawn(int tiledId) const;
     bool IsPickupBlocked(ItemPickup* pickup) const;
 
@@ -175,8 +177,10 @@ private:
     void UpdateJournalViewer(float dt);
     Box* FindClosestReachablePushBox() const;
     ItemPickup* FindClosestReachableItem() const;
+    bool IsPickupStillTracked(ItemPickup* pickup) const;
     Jornal* FindClosestReachableJornal() const;
     Candlestick* FindClosestReachableCandle() const;
+    bool IsPlayerNearLitCandle() const;
     float GetInteractableDistance(const GameObject& obj) const;
 
     Music music;                                                        // Música de Fundo
@@ -216,6 +220,7 @@ private:
     bool renderStaticTileShadows = false;
     Vec2 smoothedDynamicLightScreenPos{0.0f, 0.0f};
     bool hasSmoothedDynamicLight = false;
+    int inventoryLightId = -1;
     Vec2 smoothedTorchLightScreenPos{0.0f, 0.0f};
     bool hasSmoothedTorchLight = false;
     bool previewLightLockedToPlayer = false;

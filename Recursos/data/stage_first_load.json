@@ -16,7 +16,7 @@
   "navWorld": { "w": 4358, "h": 3276 },
   "navTilePx": 64,
   "itemPickupCount": 35,
-  "startingFlashlightDurability": 50,
+  "startingFlashlightDurability": 100,
   "startingFlashlight": {
     "name": "Flashlight",
     "spritePath": "Recursos/img/items/Isqueiro.png",
@@ -43,12 +43,12 @@
       "properties": [{ "prop": "LIGHT_SOURCE", "value": 1.0 }]
     },
     {
-      "name": "Lighter Fuel",
+      "name": "Fuel",
       "spritePath": "Recursos/img/items/lighter_fuel.png",
-      "maxDurability": 1,
+      "maxDurability": 250,
       "durabilityDecreases": false,
       "sortOrder": 3,
-      "properties": [{ "prop": "FUEL", "value": 100.0}]
+      "properties": [{ "prop": "FUEL", "value": 250.0}]
     },
     {
       "name": "Lamp",
@@ -67,17 +67,16 @@
       "itemNames": ["Flashlight", "Broken Flashlight"]
     },
     {
-      "id": "oil",
+      "id": "fuel",
       "maxItems": 2,
-      "selectKey": 2,
-      "itemNames": ["Light Fuel"]
+      "itemNames": ["Fuel"]
     },
     {
       "id": "lamp",
       "maxItems": 1,
-      "selectKey": 3,
+      "selectKey": 2,
       "itemNames": ["Lamp"]
     }
   ],
-  "oceanChunkCandidates": []
+  "oceanChunkCandidates": ["Recursos/audio/waves.mp3"]
 }

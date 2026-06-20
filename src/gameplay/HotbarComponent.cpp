@@ -37,7 +37,8 @@ void PlayRandomPickupSound() {
     gPickupSounds[idx].Play();
 }
 
-void PerformPickup(Inventory& inventory, ItemPickup* closest, std::vector<ItemPickup*>& itemPickups) {
+void PerformPickup(Inventory& inventory, ItemPickup* closest, std::vector<ItemPickup*>& itemPickups,
+                   Character* bigChar) {
     const ItemDef& def = *closest->GetDef();
     if (!inventory.CanAcceptItem(def)) {
         return;
@@ -54,6 +55,7 @@ void PerformPickup(Inventory& inventory, ItemPickup* closest, std::vector<ItemPi
     closest->Destroy();
     PlayRandomPickupSound();
     if (StageState* stage = Game::TryGetStageState()) {
+        stage->NotifyItemPickupCollected(closest);
         stage->SaveCurrentProgress();
     }
 }
@@ -122,11 +124,11 @@ ItemPickup* HotbarComponent::FindClosestReachablePickup() const {
 void HotbarComponent::TrySelectGroupOnKeyPress() {
     InputManager& input = InputManager::GetInstance();
     const BackpackConfig& cfg = inventory.GetBackpackConfig();
-    auto selectIfPressed = [&](int key, int selectKey) {
+    auto selectGroupById = [&](int key, const char* groupId) {
         if (!input.KeyPress(key)) {
             return;
         }
-        const int g = cfg.GroupIndexForSelectKey(selectKey);
+        const int g = cfg.GroupIndexForId(groupId);
         if (g < 0 || inventory.CountInGroup(g) <= 0) {
             return;
         }
@@ -134,16 +136,14 @@ void HotbarComponent::TrySelectGroupOnKeyPress() {
         if (!inventory.ToggleGroup(g) || !bigCharacter) {
             return;
         }
-        const BackpackGroupDef* group = cfg.GetGroup(g);
-        if (!wasSelected && group && group->id == "lamp") {
+        if (!wasSelected && std::string(groupId) == "lamp") {
             bigCharacter->PlayPickLampAnimation();
         } else {
             bigCharacter->NotifyInventoryLightChanged();
         }
     };
-    selectIfPressed(SDLK_1, 1);
-    selectIfPressed(SDLK_2, 2);
-    selectIfPressed(SDLK_3, 3);
+    selectGroupById(SDLK_1, "lighter");
+    selectGroupById(SDLK_2, "lamp");
 }
 
 void HotbarComponent::TryUseActiveItemOnKeyPress() {
@@ -157,27 +157,41 @@ void HotbarComponent::TryUseActiveItemOnKeyPress() {
         return;
     }
 
-    if (active->def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
-        const bool wasOn = inventory.isLightToggledOn;
-        const BackpackGroupDef* group = inventory.GetBackpackConfig().GetGroup(inventory.GetSelectedGroup());
-        const bool isLighter = group && group->id == "lighter";
-        if (wasOn) {
-            inventory.isLightToggledOn = false;
-            if (isLighter) {
-                GameSfx::PlayLighterToggle(false);
-            }
-        } else if (inventory.TryTurnLightOn()) {
-            if (isLighter) {
-                GameSfx::PlayLighterToggle(true);
-            }
+    if (!active->def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
+        return;
+    }
+
+    const bool wasOn = inventory.isLightToggledOn;
+    const BackpackGroupDef* group = inventory.GetBackpackConfig().GetGroup(inventory.GetSelectedGroup());
+    const bool isLighter = group && group->id == "lighter";
+    if (wasOn) {
+        inventory.isLightToggledOn = false;
+        if (isLighter) {
+            GameSfx::PlayLighterToggle(false);
         }
-    } else if (active->def.HasProperty(ItemProperty::FUEL)) {
-        if (inventory.TryRefuelLampFromOil()) {
-            PlayRandomPickupSound();
-            if (StageState* stage = Game::TryGetStageState()) {
-                stage->SaveCurrentProgress();
-            }
+    } else if (inventory.TryTurnLightOn()) {
+        if (isLighter) {
+            GameSfx::PlayLighterToggle(true);
         }
+    }
+}
+
+void HotbarComponent::TryRefuelOnKeyPress() {
+    InputManager& input = InputManager::GetInstance();
+    if (!input.KeyPress(SDLK_r)) {
+        return;
+    }
+
+    if (!inventory.TryRefuelWithFuel()) {
+        return;
+    }
+
+    PlayRandomPickupSound();
+    if (bigCharacter) {
+        bigCharacter->NotifyInventoryLightChanged();
+    }
+    if (StageState* stage = Game::TryGetStageState()) {
+        stage->SaveCurrentProgress();
     }
 }
 
@@ -209,7 +223,7 @@ void HotbarComponent::TryPickupOnKeyPress() {
         if (!inventory.CanAcceptItem(*closest->GetDef())) {
             return;
         }
-        PerformPickup(inventory, closest, itemPickups);
+        PerformPickup(inventory, closest, itemPickups, bigCharacter);
         if (Character::player) {
             Character::player->currentState = Character::ActionState::INTERACTING;
             Character::player->interactTimer = 0.2f;
@@ -232,7 +246,7 @@ void HotbarComponent::TryPickupOnKeyPress() {
         Character::littleBrother->currentState = Character::ActionState::INTERACTING;
         Character::littleBrother->interactTimer = 1.5f;
         Character::littleBrother->PositionForCoop(Character::player);
-        PerformPickup(inventory, closest, itemPickups);
+        PerformPickup(inventory, closest, itemPickups, bigCharacter);
     }
 }
 
@@ -247,6 +261,7 @@ void HotbarComponent::Update(float dt) {
 
     TrySelectGroupOnKeyPress();
     TryUseActiveItemOnKeyPress();
+    TryRefuelOnKeyPress();
     TryPickupOnKeyPress();
 }
 

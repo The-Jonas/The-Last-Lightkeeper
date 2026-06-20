@@ -114,8 +114,11 @@ void StageState::Render(){
     }
 
     const bool playerWantsLightHidden = Character::player && Character::player->hidePersonalLight;
-    const bool torchFromInventory     = inventory.IsUsableLightActive() && !playerWantsLightHidden; // controla o VISUAL
-    const bool torchIsActuallyLit     = inventory.IsUsableLightActive();                            // controla o CONDICIONAL
+    const bool lighterFromInventory =
+        inventory.IsActiveLightLighter() && !playerWantsLightHidden;
+    const bool torchIsActuallyLit = inventory.IsUsableLightActive();
+    const LightMaskParams lighterLightParams =
+        lighterFromInventory ? inventory.BuildLighterLightParams(lightMaskParams) : lightMaskParams;
 
     const bool bigCircleOnlyLight =
         cursorPreviewLightEnabled && previewLightLockedToPlayer && previewLightAnchorPlayer == bigCharacterObject;
@@ -193,19 +196,24 @@ void StageState::Render(){
             renderShadowsForLight(smoothedDynamicLightScreenPos, lightMaskParams);
         }
 
-        if (torchFromInventory && hasSmoothedTorchLight) {
-            renderShadowsForLight(smoothedTorchLightScreenPos, lightMaskParams);
+        if (lighterFromInventory && hasSmoothedTorchLight) {
+            renderShadowsForLight(smoothedTorchLightScreenPos, lighterLightParams);
         }
 
         if (showDebugTools && cursorPreviewLightEnabled) {
             const float previewShadowRadius = std::max(24.0f, std::max(8.0f, lightMaskParams.falloffRadiusPx) * std::max(0.4f, lightMaskParams.fatorDicaDeRaio));
             DrawDebugCircle(g.GetRenderer(), smoothedDynamicLightScreenPos.x, smoothedDynamicLightScreenPos.y, previewShadowRadius, 255, 210, 90, 130);
-            if (torchFromInventory && hasSmoothedTorchLight) {
+            if (lighterFromInventory && hasSmoothedTorchLight) {
+                const float previewShadowRadius = std::max(
+                    24.0f, std::max(8.0f, lighterLightParams.falloffRadiusPx) *
+                               std::max(0.4f, lighterLightParams.fatorDicaDeRaio));
                 DrawDebugCircle(g.GetRenderer(), smoothedTorchLightScreenPos.x, smoothedTorchLightScreenPos.y,
                                 previewShadowRadius * 0.85f, 255, 150, 70, 150);
             }
-        } else if (showDebugTools && torchFromInventory && hasSmoothedTorchLight) {
-            const float previewShadowRadius = std::max(24.0f, std::max(8.0f, lightMaskParams.falloffRadiusPx) * std::max(0.4f, lightMaskParams.fatorDicaDeRaio));
+        } else if (showDebugTools && lighterFromInventory && hasSmoothedTorchLight) {
+            const float previewShadowRadius = std::max(
+                24.0f, std::max(8.0f, lighterLightParams.falloffRadiusPx) *
+                           std::max(0.4f, lighterLightParams.fatorDicaDeRaio));
             DrawDebugCircle(g.GetRenderer(), smoothedTorchLightScreenPos.x, smoothedTorchLightScreenPos.y,
                             previewShadowRadius * 0.85f, 255, 150, 70, 150);
         }
@@ -268,10 +276,10 @@ void StageState::Render(){
             }
         }
 
-        if (torchIsActuallyLit && hasSmoothedTorchLight && bigCharacterObject) {
+        if (torchIsActuallyLit && bigCharacterObject) {
             bigMaxContact = std::max(bigMaxContact, 0.92f);
         }
-        if (torchIsActuallyLit && hasSmoothedTorchLight && smallCharacterObject) {
+        if (torchIsActuallyLit && smallCharacterObject) {
             smallMaxContact = std::max(smallMaxContact, 0.92f);
         }
         
@@ -314,9 +322,9 @@ void StageState::Render(){
             screenLights.push_back({smoothedDynamicLightScreenPos.x, smoothedDynamicLightScreenPos.y, lightMaskShape,
                                     lightMaskParams, kCursorLightBlend});
         }
-        if (torchFromInventory && hasSmoothedTorchLight) {
+        if (lighterFromInventory && hasSmoothedTorchLight) {
             screenLights.push_back({smoothedTorchLightScreenPos.x, smoothedTorchLightScreenPos.y, lightMaskShape,
-                                    lightMaskParams, kTorchLightBlend});
+                                    lighterLightParams, kTorchLightBlend});
         }
         
         int renderedLights = 0;
@@ -415,7 +423,7 @@ void StageState::Render(){
 
         // Salva a iluminação real para o sistema de Sanidade ler!
         const float thunderBoost = GameSfx::GetThunderFlashStrength() * 0.88f;
-        this->bigIlluminationLevel   = torchIsActuallyLit ? std::max(bigMaxTouch,   0.92f) : bigMaxTouch;
+        this->bigIlluminationLevel   = torchIsActuallyLit ? std::max(bigMaxTouch, 0.92f) : bigMaxTouch;
         this->smallIlluminationLevel = torchIsActuallyLit ? std::max(smallMaxTouch, 0.92f) : smallMaxTouch;
         if (thunderBoost > 0.01f) {
             this->bigIlluminationLevel = std::max(this->bigIlluminationLevel, thunderBoost);

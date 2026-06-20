@@ -21,6 +21,8 @@
 
 Game* Game::instance = nullptr;
 int Game::masterVolumePercent = Game::MASTER_VOLUME_PERCENT;
+int Game::ambientVolumePercent = Game::AMBIENT_VOLUME_PERCENT;
+int Game::thunderVolumePercent = Game::THUNDER_VOLUME_PERCENT;
 
 namespace {
 
@@ -91,6 +93,22 @@ void Game::LoadEnvVolume() {
             } catch (const std::exception&) {
                 // valores malformados são ignorados
             }
+        } else if (key == "AMBIENT_VOLUME") {
+            try {
+                const int vol = std::stoi(value);
+                if (vol >= 0 && vol <= 100) {
+                    ambientVolumePercent = vol;
+                }
+            } catch (const std::exception&) {
+            }
+        } else if (key == "THUNDER_VOLUME") {
+            try {
+                const int vol = std::stoi(value);
+                if (vol >= 0 && vol <= 100) {
+                    thunderVolumePercent = vol;
+                }
+            } catch (const std::exception&) {
+            }
         }
     }
 }
@@ -102,6 +120,18 @@ void Game::SetMasterVolume(int percent) {
     const int vol = (MIX_MAX_VOLUME * masterVolumePercent) / 100;
     Mix_Volume(-1, vol);
     Mix_VolumeMusic(vol);
+}
+
+void Game::SetAmbientVolume(int percent) {
+    if (percent < 0) percent = 0;
+    if (percent > 100) percent = 100;
+    ambientVolumePercent = percent;
+}
+
+void Game::SetThunderVolume(int percent) {
+    if (percent < 0) percent = 0;
+    if (percent > 100) percent = 100;
+    thunderVolumePercent = percent;
 }
 
 Game::Game(std::string title) {

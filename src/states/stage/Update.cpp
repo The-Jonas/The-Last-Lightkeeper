@@ -147,8 +147,11 @@ void StageState::Update(float dt){
     UpdateBoxInteraction();
     TryOpenJournalOnKeyPress();
     TryInteractCandleOnKeyPress();
+    UpdateInventoryLight();
 
     UpdateArray(dt);                                                                    // Percorre o vetor de GameObjects chamando o Update de cada um
+
+    reachablePickup = FindClosestReachableItem();
 
     if (inventory.IsUsableLightActive()) {                                              // slot "usando" degrada sempre, mesmo controlando o irmãozinho
         inventory.TickUsingDurability(dt); 
@@ -288,7 +291,10 @@ void StageState::Update(float dt){
         smoothedDynamicLightScreenPos = smoothedDynamicLightScreenPos + (targetLightScreen - smoothedDynamicLightScreenPos) * lerpA;
     }
 
-    if (inventory.IsUsableLightActive() && bigCharacterObject) {
+    const bool playerWantsLightHidden = Character::player && Character::player->hidePersonalLight;
+    const bool lighterLightActive =
+        inventory.IsActiveLightLighter() && !playerWantsLightHidden && bigCharacterObject;
+    if (lighterLightActive) {
         const Vec2 targetTorchScreen = WorldToScreen(bigCharacterObject->box.Center());
         if (!hasSmoothedTorchLight) {
             smoothedTorchLightScreenPos = targetTorchScreen;

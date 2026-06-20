@@ -72,6 +72,10 @@ public:
     void NotifyInventoryLightChanged();
     void PlayPickLampAnimation();
 
+    /// Sprite atual (sem props) para desenhar sombra — não inclui itens na mão.
+    std::string GetShadowSpritePath() const;
+    const std::string& GetCurrentStripSpritePath() const { return lastStripSpritePath; }
+
     // Poder do irmãozinho — visão do monstro
     float visionPowerTimer    = 0.0f;   // Quanto tempo ainda ativa
     float visionCooldown      = 0.0f;   // Tempo até poder usar de novo

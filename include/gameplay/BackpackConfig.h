@@ -15,6 +15,7 @@ struct BackpackConfig {
     std::vector<BackpackGroupDef> groups;
 
     int GroupIndexForItem(const std::string& itemName) const;
+    int GroupIndexForId(const std::string& groupId) const;
     int MaxItemsInGroup(int groupIndex) const;
     int TotalCapacity() const;
     int GroupIndexForSelectKey(int selectKey) const;

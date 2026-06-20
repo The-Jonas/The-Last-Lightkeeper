@@ -20,6 +20,10 @@ constexpr float kCandleReachPadX = 110.0f;
 constexpr float kCandleReachPadUp = 280.0f;
 constexpr float kCandleReachPadDown = 320.0f;
 
+bool IsHoldingLamp(const Inventory& inventory) {
+    return inventory.GetHeldPropVisual() == HeldPropVisual::Lamp;
+}
+
 bool IsCandleWithinRelaxedReach(Character& character, const Candlestick& candle) {
     const GameObject& candleObj = candle.GetAssociated();
     const Vec2 footCenter = character.GetFootCircleCenter();
@@ -90,6 +94,18 @@ ItemPickup* StageState::FindClosestReachableItem() const {
     }
 
     return closest;
+}
+
+bool StageState::IsPickupStillTracked(ItemPickup* pickup) const {
+    if (!pickup) {
+        return false;
+    }
+    for (ItemPickup* tracked : itemPickups) {
+        if (tracked == pickup && !tracked->GetAssociated().IsDead()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 Box* StageState::FindClosestReachablePushBox() const {
@@ -178,6 +194,30 @@ Candlestick* StageState::FindClosestReachableCandle() const {
     }
 
     return closest;
+}
+
+bool StageState::IsPlayerNearLitCandle() const {
+    if (!controlledCharacter) {
+        return false;
+    }
+
+    for (const auto& goPtr : objectArray) {
+        GameObject* go = goPtr.get();
+        if (!go || go->IsDead()) {
+            continue;
+        }
+
+        Candlestick* candle = go->GetComponent<Candlestick>();
+        if (!candle || !candle->IsLit()) {
+            continue;
+        }
+
+        if (IsCandleWithinRelaxedReach(*controlledCharacter, *candle)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool StageState::IsCandleClosestForInteraction(Candlestick* candle) const {
@@ -284,20 +324,36 @@ void StageState::MarkMissedUniquePickupsOnLevelLeave() {
     }
 }
 
+void StageState::NotifyItemPickupCollected(ItemPickup* pickup) {
+    if (reachablePickup == pickup) {
+        reachablePickup = nullptr;
+    }
+}
+
 void StageState::UpdateBoxInteraction() {
     reachableJornal = FindClosestReachableJornal();
     reachablePushBox = FindClosestReachablePushBox();
     reachablePickup = FindClosestReachableItem();
     reachableCandle = FindClosestReachableCandle();
 
-    GameSfx::UpdateCandleProximity(reachableCandle != nullptr);
+    GameSfx::UpdateCandleProximity(IsPlayerNearLitCandle());
 
     InputManager& input = InputManager::GetInstance();
     const bool eHeld = input.IsKeyDown(SDLK_e);
+    const bool boxPushBlocked = IsHoldingLamp(inventory);
     ItemPickup* reachableItem = FindClosestReachableItem();
 
+    if (boxPushBlocked && activePushBox) {
+        GameSfx::NotifyBoxPushEnd();
+        activePushBox = nullptr;
+        if (bigCharacter && bigCharacter->currentState == Character::ActionState::PUSHING_BOX) {
+            bigCharacter->currentState = Character::ActionState::NORMAL;
+        }
+    }
+
     if (eHeld) {
-        if (!activePushBox && reachablePushBox && IsPushBoxCloserThanItem(reachableItem, reachablePushBox)) {
+        if (!boxPushBlocked && !activePushBox && reachablePushBox &&
+            IsPushBoxCloserThanItem(reachableItem, reachablePushBox)) {
             activePushBox = reachablePushBox;
             if (bigCharacterObject) {
                 const GameObject& boxObj = reachablePushBox->GetAssociated();
@@ -329,6 +385,9 @@ void StageState::UpdateBoxInteraction() {
 
 void StageState::ApplyCoupledPushMovement(const Vec2& prevPlayerPos) {
     if (!activePushBox || !bigCharacterObject || !bigCharacter) {
+        return;
+    }
+    if (IsHoldingLamp(inventory)) {
         return;
     }
     if (bigCharacter->currentState != Character::ActionState::PUSHING_BOX) {
@@ -366,7 +425,11 @@ void StageState::RenderInteractionGlowIfNeeded(GameObject& go) {
         if (box == activePushBox) {
             DrawSpriteInteractionGlow(go, 255, 220, 0);
         } else if (box == reachablePushBox) {
-            DrawSpriteInteractionGlow(go, 255, 255, 255);
+            if (IsHoldingLamp(inventory)) {
+                DrawSpriteInteractionGlow(go, 255, 64, 64, 1.14f);
+            } else {
+                DrawSpriteInteractionGlow(go, 255, 255, 255);
+            }
         }
         return;
     }
@@ -383,7 +446,10 @@ void StageState::RenderInteractionGlowIfNeeded(GameObject& go) {
         return;
     }
 
-    if (!reachablePickup || reachablePickup->GetAssociated().IsDead()) {
+    if (!reachablePickup || !IsPickupStillTracked(reachablePickup)) {
+        return;
+    }
+    if (reachablePickup->GetAssociated().IsDead()) {
         return;
     }
     if (&reachablePickup->GetAssociated() == &go) {
