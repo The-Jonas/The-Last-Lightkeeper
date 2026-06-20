@@ -905,6 +905,11 @@
                  "opacity":1,
                  "properties":[
                         {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":180
+                        }, 
+                        {
                          "name":"nameObject",
                          "type":"string",
                          "value":"vara_pesca"
@@ -934,6 +939,25 @@
                  "width":235,
                  "x":139,
                  "y":1016
+                }, 
+                {
+                 "gid":20,
+                 "height":561,
+                 "id":765,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"waypoints",
+                         "type":"string",
+                         "value":"2234,1323;1258,953;431,1547"
+                        }],
+                 "rotation":0,
+                 "type":"Monstro",
+                 "visible":true,
+                 "width":574,
+                 "x":431.181818181819,
+                 "y":1547.66666666667
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -1978,35 +2002,6 @@
                  "width":0,
                  "x":3757.33,
                  "y":1569.33
-                }, 
-                {
-                 "height":0,
-                 "id":122,
-                 "name":"",
-                 "opacity":1,
-                 "polygon":[
-                        {
-                         "x":0,
-                         "y":0
-                        }, 
-                        {
-                         "x":-100,
-                         "y":229.333
-                        }, 
-                        {
-                         "x":-88,
-                         "y":233.333
-                        }, 
-                        {
-                         "x":12,
-                         "y":4
-                        }],
-                 "rotation":0,
-                 "type":"",
-                 "visible":true,
-                 "width":0,
-                 "x":3717.33,
-                 "y":1764
                 }, 
                 {
                  "height":0,
@@ -3348,8 +3343,7 @@
                  "width":0,
                  "x":3364.5,
                  "y":522
-                },
-            
+                }, 
                 {
                  "height":0,
                  "id":625,
@@ -3378,7 +3372,8 @@
                  "width":0,
                  "x":3268.5,
                  "y":397
-                }, 
+                },
+            
                 {
                  "height":0,
                  "id":628,
@@ -4123,7 +4118,7 @@
          "y":0
         }],
  "nextlayerid":29,
- "nextobjectid":765,
+ "nextobjectid":766,
  "orientation":"orthogonal",
  "properties":[
         {

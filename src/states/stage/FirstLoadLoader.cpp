@@ -48,7 +48,7 @@ ItemDef ParseItemDef(const json& j) {
 
 StageFirstLoadData EmbeddedDefaults() {
     StageFirstLoadData d;
-    d.ostPath = "Recursos/audio/soundtracks/Ambientacao.mp3";
+    d.ostPath = "Recursos/audio/soundtracks/Ambientacao.wav";
     d.levelPath = "Recursos/map/mapa_1_andar.json";
     d.navWorldW = 4358.0f;
     d.navWorldH = 3276.0f;

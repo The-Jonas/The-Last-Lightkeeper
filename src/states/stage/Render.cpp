@@ -81,9 +81,18 @@ void StageState::Render(){
         Character* charA = a->GetComponent<Character>();
         Character* charB = b->GetComponent<Character>();
         
-        // Força a profundidade do personagem para a exata base do Asset que ele vai subir
-        if (charA && charA->isElevated) sortingY_a = charA->stairAnchorY; 
-        if (charB && charB->isElevated) sortingY_b = charB->stairAnchorY;
+        bool a_isElevated = (charA && charA->isElevated);
+        bool b_isElevated = (charB && charB->isElevated);
+
+        // Se AMBOS estão na escada, nós ignoramos a âncora falsa. 
+        // Deixamos eles usarem o Y real (base_a e base_b) para que 
+        // quem estiver no degrau de baixo seja desenhado na frente!
+        if (!(a_isElevated && b_isElevated)) {
+            // Caso contrário (seja um personagem contra o cenário, ou um personagem na escada 
+            // e outro no chão), nós forçamos a âncora da escada.
+            if (a_isElevated) sortingY_a = charA->stairAnchorY; 
+            if (b_isElevated) sortingY_b = charB->stairAnchorY;
+        }
 
         float epsilon = 0.01f; 
         if (std::abs(sortingY_a - sortingY_b) > epsilon) {
