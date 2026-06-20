@@ -51,6 +51,8 @@ public:
     bool hidePersonalLight = false;                                     // Esconder a luz mesmo ela estando ativada
     float stairAnchorY = 0.0f;                                          // GUARDA A PROFUNDIDADE DA ESCADA DO ANDAR ATUAL
 
+    void PreloadAnimationFrames();                                      // Carrega todos os frames no Start() para evitar stutter
+
 
     // Sistema de Sanidade (medo da escuridão)
     float sanity = 100.0f;          

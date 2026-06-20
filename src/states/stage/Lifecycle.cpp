@@ -54,7 +54,7 @@ void StageState::Start() {
     RegisterAllCandleLights();
     companionStartDelay = 2;
 
-    SetMouseConfinedToWindow(true);
+    //SetMouseConfinedToWindow(true);
     // OST só após o nível estar carregado e empilhado (não durante o loading screen).
     if (music.IsOpen()) {
         const int ostVol = (MIX_MAX_VOLUME * Game::masterVolumePercent) / 100;

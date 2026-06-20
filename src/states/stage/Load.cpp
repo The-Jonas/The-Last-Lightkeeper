@@ -79,6 +79,19 @@ StageState::StageState(LoadMode mode) : loadMode(mode) {
     
     // Cria uma textura vazia para ser a nossa "Tela de Cinema"
     renderTarget = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, winW, winH);
+
+    // ── WARMUP: força o driver a compilar o pipeline de render-to-texture agora,
+    // durante a criação do stage, em vez de no primeiro movimento do jogador
+    // isso possivelmente vai melhorar a travada inicial que o jogo tava tendo ──
+    if (renderTarget) {
+    SDL_Texture* prevTarget = SDL_GetRenderTarget(renderer);
+
+    SDL_SetRenderTarget(renderer, renderTarget);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+    SDL_RenderClear(renderer);
+
+    SDL_SetRenderTarget(renderer, prevTarget);
+}
 }
 
 StageState::~StageState(){                                

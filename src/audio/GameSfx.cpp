@@ -231,6 +231,7 @@ void NotifyLoadingBegin() {
 
 void NotifyLoadingEnd() {
     gGameplayMuted = false;
+    EnsureLoaded();                                     // Força a carregar todos os sons "agora", antes da gameplay
     StopAllGameplayAudio();
     ResetThunderSchedule(kPostLoadingThunderDelay);
     gThunderFlashTimer = 0.0f;

@@ -20,22 +20,24 @@
 namespace {
 constexpr int kFootCollisionSkinPx = 1;
 
-Circle FootCircleForCollision(const Rect& box, int skinPx) {
-    Circle c{};
-    c.radius = std::max(1, static_cast<int>(box.w * 0.25f) - skinPx);
-    c.center.x = static_cast<int>(box.x + box.w * 0.5f);
-    c.center.y = static_cast<int>(box.y + box.h - c.radius);
-    return c;
-}
-
 /// Se ainda estiver dentro de geometria estática (polígonos/retângulos sobrepostos no mapa), empurra o jogador para fora.
-void TryNudgeOutOfStaticGeometry(StageState* stage, GameObject& go, Collider* collider, bool isElevated) {
-    if (!stage || !collider) {
+void TryNudgeOutOfStaticGeometry(StageState* stage, Character* character, Collider* collider, bool isElevated) {
+    if (!stage || !collider || !character) {
         return;
     }
-    if (!stage->level.CheckCollision(FootCircleForCollision(go.box, 0), isElevated)) {
+
+    // Pega o círculo travado no tamanho original!
+    Circle c;
+    c.radius = character->GetFootCircleRadius();
+    Vec2 footPos = character->GetFootCircleCenter();
+    c.center.x = footPos.x;
+    c.center.y = footPos.y;
+
+    if (!stage->level.CheckCollision(c, isElevated)) {
         return;
     }
+
+    GameObject& go = character->GetAssociated();
     const float dists[] = {2.0f, 4.0f, 6.0f, 10.0f, 14.0f};
     const int dirs[8][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
     for (float d : dists) {
@@ -50,7 +52,13 @@ void TryNudgeOutOfStaticGeometry(StageState* stage, GameObject& go, Collider* co
             go.box.x += mx * d;
             go.box.y += my * d;
             collider->Update(0);
-            if (!stage->level.CheckCollision(FootCircleForCollision(go.box, 0), isElevated)) {
+            
+            // Atualiza o centro do círculo depois de mover
+            Vec2 newFootPos = character->GetFootCircleCenter();
+            c.center.x = newFootPos.x;
+            c.center.y = newFootPos.y;
+            
+            if (!stage->level.CheckCollision(c, isElevated)) {
                 return;
             }
             go.box.x -= mx * d;
@@ -295,6 +303,9 @@ Character::~Character() {
 }
 
 void Character::Start() {
+    PreloadAnimationFrames();   // carrega tudo de uma vez antes do gameplay
+
+
     EnsureBaselineBox();
 
     // Define o tamanho proporcional da HitBox (Na sola do pé)
@@ -375,7 +386,13 @@ void Character::Update(float dt) {
         // Atualiza a posição do collider manualmente para teste futuro
         collider->Update(0);
 
-        Circle playerCircleX = FootCircleForCollision(associated.box, kFootCollisionSkinPx);
+        Circle playerCircleX;
+        playerCircleX.radius = GetFootCircleRadius() - kFootCollisionSkinPx;
+        
+        // Passando x e y separadamente
+        Vec2 footCenterX = GetFootCircleCenter();
+        playerCircleX.center.x = footCenterX.x;
+        playerCircleX.center.y = footCenterX.y;
 
         if (stage->level.CheckCollision(playerCircleX, isElevated)) {
             associated.box.x = oldX;
@@ -390,7 +407,13 @@ void Character::Update(float dt) {
 
         collider->Update(0);
 
-        Circle playerCircleY = FootCircleForCollision(associated.box, kFootCollisionSkinPx);
+        Circle playerCircleY;
+        playerCircleY.radius = GetFootCircleRadius() - kFootCollisionSkinPx;
+        
+        // Passando x e y separadamente
+        Vec2 footCenterY = GetFootCircleCenter();
+        playerCircleY.center.x = footCenterY.x;
+        playerCircleY.center.y = footCenterY.y;
 
         // NO EIXO Y TAMBÉM:
         if (stage->level.CheckCollision(playerCircleY, isElevated)) {
@@ -400,7 +423,7 @@ void Character::Update(float dt) {
 
         collider->Update(0);
 
-        TryNudgeOutOfStaticGeometry(stage, associated, collider, isElevated);
+        TryNudgeOutOfStaticGeometry(stage, this, collider, isElevated);
         collider->Update(0);
         }
 
@@ -550,6 +573,7 @@ void Character::Update(float dt) {
             }
         }
     }
+    
 }
 
 
@@ -638,6 +662,47 @@ void Character::PositionForCoop(Character* leader) {
     }
 }
 
+void Character::PreloadAnimationFrames() {
+    const Direction allDirs[] = {
+        Direction::UP, Direction::DOWN, Direction::LEFT, Direction::RIGHT
+    };
+ 
+    // Carrega idle e walk (moving = false / true)
+    for (bool moving : {false, true}) {
+        for (Direction d : allDirs) {
+ 
+            if (irmaozaoIdleStrips) {
+                // Irmãozão — precisa cobrir os 3 estados de prop também
+                // (None, Lighter, Lamp) porque cada um é uma pasta diferente
+                for (HeldPropVisual prop : {HeldPropVisual::None,
+                                            HeldPropVisual::Lighter,
+                                            HeldPropVisual::Lamp}) {
+                    for (int f = 0; f < kIrmaozaoStripFrameCount; f++) {
+                        std::string path = GetAnimStripPath(d, f, prop, moving);
+                        Resources::GetImage(path);
+                    }
+                }
+            } else {
+                // Irmãozinho — sem variação de prop
+                for (int f = 0; f < kIrmaozaoStripFrameCount; f++) {
+                    std::string path = GetAnimStripPath(d, f, HeldPropVisual::None, moving);
+                    Resources::GetImage(path);
+                }
+            }
+        }
+    }
+ 
+    // Pré-carrega também a animação de pegar a lamparina (só irmãozão)
+    if (irmaozaoIdleStrips) {
+        for (Direction d : allDirs) {
+            for (int f = 0; f < kIrmaozaoStripFrameCount; f++) {
+                std::string path = IrmaozaoPickLampStripPath(d, f);
+                Resources::GetImage(path);
+            }
+        }
+    }
+}
+
 
 void Character::Render() { 
 #ifdef DEBUG
@@ -648,7 +713,7 @@ void Character::Render() {
     int cx = (int)(associated.box.x + (associated.box.w / 2) - Camera::pos.x);
     
     // O raio e o Y também baseados na imagem real (idêntico ao Update)
-    int r = (int)(associated.box.w * 0.25f); 
+    int r = (int)GetFootCircleRadius(); 
     int cy = (int)(associated.box.y + associated.box.h - r - Camera::pos.y);
 
     SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255); // Cor Verde
