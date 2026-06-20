@@ -63,8 +63,12 @@ constexpr const char* kIrmaozaoIdleRoot = "Recursos/img/personagens/irmaozao_idl
 constexpr const char* kIrmaozaoWalkRoot = "Recursos/img/personagens/irmaozao_walk/";
 constexpr const char* kIrmaozaoIdleLighterRoot = "Recursos/img/personagens/irmaozao_idle_lighter/";
 constexpr const char* kIrmaozaoIdleLampRoot = "Recursos/img/personagens/irmaozao_idle_lamp/";
-constexpr float kIrmaozaoMovingSpeedThreshold = 5.0f;
 
+// Para as animações do irmãozinho
+constexpr const char* kIrmaozinhoIdleRoot = "Recursos/img/personagens/irmaozinho_idle/";
+constexpr const char* kIrmaozinhoWalkRoot = "Recursos/img/personagens/irmaozinho_walk/";
+
+constexpr float kIrmaozaoMovingSpeedThreshold = 5.0f;
 constexpr int kIrmaozaoStripFrameCount = 6;
 constexpr float kIrmaozaoStripFrameSeconds = 0.11f;
 } // namespace
@@ -91,17 +95,14 @@ Character::Character(GameObject& associated, std::string spritePath, bool useIrm
     currentDirection = Direction::DOWN;
     baseSpritePath = spritePath;
 
-    if (irmaozaoIdleStrips) {
-        stripAnimTimer = 0.0f;
-        stripFrameIndex = 0;
-        const std::string first = IrmaozaoIdleStripPath(currentDirection, stripFrameIndex);
-        SpriteRenderer* sprite = new SpriteRenderer(associated, first, PLAYER_FRAMES_PER_ROW, PLAYER_ROWS);
-        associated.AddComponent(sprite);
-    } else {
-        SpriteRenderer* sprite =
-            new SpriteRenderer(associated, baseSpritePath + " frente.png", PLAYER_FRAMES_PER_ROW, PLAYER_ROWS);
-        associated.AddComponent(sprite);
-    }
+
+    stripAnimTimer = 0.0f;
+    stripFrameIndex = 0;
+    
+    // ambos os personagens pegam o primeiro frame da animação no construtor
+    const std::string first = GetAnimStripPath(currentDirection, stripFrameIndex);
+    SpriteRenderer* sprite = new SpriteRenderer(associated, first, PLAYER_FRAMES_PER_ROW, PLAYER_ROWS);
+    associated.AddComponent(sprite);
 
     if (player == nullptr) {
         player = this;
@@ -120,22 +121,28 @@ Character::Character(GameObject& associated, std::string spritePath, bool useIrm
     }
 }
 
-std::string Character::IrmaozaoIdleStripPath(Direction dir, int frameIndex, HeldPropVisual prop, bool moving) const {
+std::string Character::GetAnimStripPath(Direction dir, int frameIndex, HeldPropVisual prop, bool moving) const {
     int fi = frameIndex % kIrmaozaoStripFrameCount;
     if (fi < 0) {
         fi += kIrmaozaoStripFrameCount;
     }
     const int n = fi + 1;
 
-    const char* root = kIrmaozaoIdleRoot;
-    const char* ext = ".png";
-    if (prop == HeldPropVisual::Lighter) {
-        root = kIrmaozaoIdleLighterRoot;
-    } else if (prop == HeldPropVisual::Lamp) {
-        root = kIrmaozaoIdleLampRoot;
-    } else if (moving) {
-        root = kIrmaozaoWalkRoot;
+    const char* root;
+
+    if (irmaozaoIdleStrips) {
+        root = moving? kIrmaozaoWalkRoot : kIrmaozaoIdleRoot;
+        if (prop == HeldPropVisual::Lighter) root = kIrmaozaoIdleLighterRoot;
+        else if (prop == HeldPropVisual::Lamp) root = kIrmaozaoIdleLampRoot;
+    } else {
+        root = moving? kIrmaozinhoWalkRoot : kIrmaozinhoIdleRoot;
+
+        if (dir == Direction::RIGHT) {
+            dir = Direction::LEFT;
+        }
     }
+
+    const char* ext = ".png";
 
     switch (dir) {
     case Direction::UP:
@@ -186,23 +193,36 @@ std::string Character::IrmaozaoPickLampStripPath(Direction dir, int frameIndex) 
     return root + subdir + "/FRAME_" + std::to_string(n) + ".bmp";
 }
 
-void Character::EnsureIrmaozaoBaselineBox() {
-    if (!irmaozaoIdleStrips || baselineBoxW > 0.0f) {
+void Character::EnsureBaselineBox() {
+    if (baselineBoxW > 0.0f) {
         return;
     }
     baselineBoxW = associated.box.w;
     baselineBoxH = associated.box.h;
 }
 
-void Character::RestoreIrmaozaoCollisionBox(float centerX, float footY) {
-    EnsureIrmaozaoBaselineBox();
+void Character::RestoreCollisionBox(float centerX, float footY) {
+    EnsureBaselineBox();
     if (baselineBoxW <= 0.0f || baselineBoxH <= 0.0f) {
         return;
     }
-    associated.box.w = baselineBoxW;
-    associated.box.h = baselineBoxH;
-    associated.box.x = centerX - baselineBoxW * 0.5f;
-    associated.box.y = footY - baselineBoxH;
+
+    // Não esmaga a imagem, só centraliza o pé
+    associated.box.x = centerX - (associated.box.w * 0.5f);
+    associated.box.y = footY - associated.box.h;
+
+    // Ajusta a escala do colisor com os Setters
+    Collider* col = (Collider*)associated.GetComponent<Collider>();
+    if (col) {
+        float absoluteHitboxW = baselineBoxW * 0.45f;
+        float absoluteHitboxH = baselineBoxH * 0.12f;
+
+        Vec2 newScale(absoluteHitboxW / associated.box.w, absoluteHitboxH / associated.box.h);
+        float offsetY = (associated.box.h / 2.0f) * (1.0f - newScale.y);
+
+        col->SetScale(newScale);
+        col->SetOffset(Vec2(0, offsetY));
+    }
 }
 
 void Character::NotifyInventoryLightChanged() {
@@ -212,7 +232,7 @@ void Character::NotifyInventoryLightChanged() {
     playingPickLampAnim = false;
     pickLampAnimTimer = 0.0f;
     pickLampFrameIndex = 0;
-    RefreshIrmaozaoStripSprite();
+    RefreshAnimSprite();
 }
 
 void Character::PlayPickLampAnimation() {
@@ -224,18 +244,15 @@ void Character::PlayPickLampAnimation() {
     pickLampFrameIndex = 0;
     stripFrameIndex = 0;
     stripAnimTimer = 0.0f;
-    RefreshIrmaozaoStripSprite();
+    RefreshAnimSprite();
 }
 
-void Character::RefreshIrmaozaoStripSprite() {
+void Character::RefreshAnimSprite() {
     SpriteRenderer* sprite = associated.GetComponent<SpriteRenderer>();
-    if (!sprite) {
-        return;
-    }
+    if (!sprite) return;
 
     const float centerX = associated.box.x + associated.box.w * 0.5f;
     const float footY = associated.box.y + associated.box.h;
-
     const bool moving = speed.Magnitude() > kIrmaozaoMovingSpeedThreshold;
 
     std::string path;
@@ -246,7 +263,7 @@ void Character::RefreshIrmaozaoStripSprite() {
         if (StageState* stage = Game::TryGetStageState()) {
             prop = stage->GetInventory().GetHeldPropVisual();
         }
-        path = IrmaozaoIdleStripPath(currentDirection, stripFrameIndex, prop, moving);
+        path = GetAnimStripPath(currentDirection, stripFrameIndex, prop, moving);
     }
 
     if (path != lastStripSpritePath) {
@@ -257,7 +274,14 @@ void Character::RefreshIrmaozaoStripSprite() {
     sprite->Open(path);
     sprite->SetFrameCount(1, 1);
     sprite->SetFrame(0);
-    RestoreIrmaozaoCollisionBox(centerX, footY);
+
+    if (!irmaozaoIdleStrips && currentDirection == Direction::RIGHT) {
+        sprite->SetFlip(SDL_FLIP_HORIZONTAL);
+    } else {
+        sprite->SetFlip(SDL_FLIP_NONE);
+    }
+
+    RestoreCollisionBox(centerX, footY);
 }
 
 // Destrutor de Character
@@ -271,7 +295,7 @@ Character::~Character() {
 }
 
 void Character::Start() {
-    EnsureIrmaozaoBaselineBox();
+    EnsureBaselineBox();
 
     // Define o tamanho proporcional da HitBox (Na sola do pé)
     Vec2 scale(0.45f, 0.12f);
@@ -392,77 +416,50 @@ void Character::Update(float dt) {
     if (currentState != ActionState::PUSHING_BOX) {
         Direction newDirection = currentDirection;
 
-        // PRIORIDADE HORIZONTAL: Se houver movimento lateral significativo, sempre olha para o lado.
-        // Isso garante que nas diagonais ele sempre exiba o sprite lateral!
         if (std::abs(speed.x) > 0.1f) {
-            if (speed.x > 0.1f) {
-                newDirection = Direction::RIGHT;
-            } else {
-                newDirection = Direction::LEFT;
-            }
+            newDirection = (speed.x > 0.1f) ? Direction::RIGHT : Direction::LEFT;
         }
-        // Só olha para cima/baixo se estivermos andando estritamente na vertical
         else if (std::abs(speed.y) > 0.1f) {
-            if (speed.y > 0.1f) {
-                newDirection = Direction::DOWN; // Y cresce para baixo na tela
-            } else {
-                newDirection = Direction::UP;
-            }
+            newDirection = (speed.y > 0.1f) ? Direction::DOWN : Direction::UP;
         }
 
-        if (irmaozaoIdleStrips) {
-            const bool moving = speed.Magnitude() > kIrmaozaoMovingSpeedThreshold;
-            if (moving != stripWasMoving && !playingPickLampAnim) {
-                stripWasMoving = moving;
+        // REMOVIDO O IF Agora ambos rodam o loop de animação:
+        const bool moving = speed.Magnitude() > kIrmaozaoMovingSpeedThreshold;
+        
+        if (moving != stripWasMoving && !playingPickLampAnim) {
+            stripWasMoving = moving;
+            stripFrameIndex = 0;
+            stripAnimTimer = 0.0f;
+            RefreshAnimSprite();
+        }
+        if (newDirection != currentDirection && moving) {
+            currentDirection = newDirection;
+            if (!playingPickLampAnim) {
                 stripFrameIndex = 0;
                 stripAnimTimer = 0.0f;
-                RefreshIrmaozaoStripSprite();
             }
-            if (newDirection != currentDirection && moving) {
-                currentDirection = newDirection;
-                if (!playingPickLampAnim) {
+            RefreshAnimSprite();
+        }
+        
+        if (playingPickLampAnim) {
+            pickLampAnimTimer += dt;
+            while (pickLampAnimTimer >= kIrmaozaoStripFrameSeconds) {
+                pickLampAnimTimer -= kIrmaozaoStripFrameSeconds;
+                pickLampFrameIndex++;
+                if (pickLampFrameIndex >= kIrmaozaoStripFrameCount) {
+                    playingPickLampAnim = false;
+                    pickLampFrameIndex = 0;
                     stripFrameIndex = 0;
                     stripAnimTimer = 0.0f;
                 }
-                RefreshIrmaozaoStripSprite();
+                RefreshAnimSprite();
             }
-            if (playingPickLampAnim) {
-                pickLampAnimTimer += dt;
-                while (pickLampAnimTimer >= kIrmaozaoStripFrameSeconds) {
-                    pickLampAnimTimer -= kIrmaozaoStripFrameSeconds;
-                    pickLampFrameIndex++;
-                    if (pickLampFrameIndex >= kIrmaozaoStripFrameCount) {
-                        playingPickLampAnim = false;
-                        pickLampFrameIndex = 0;
-                        stripFrameIndex = 0;
-                        stripAnimTimer = 0.0f;
-                    }
-                    RefreshIrmaozaoStripSprite();
-                }
-            } else {
-                stripAnimTimer += dt;
-                while (stripAnimTimer >= kIrmaozaoStripFrameSeconds) {
-                    stripAnimTimer -= kIrmaozaoStripFrameSeconds;
-                    stripFrameIndex = (stripFrameIndex + 1) % kIrmaozaoStripFrameCount;
-                    RefreshIrmaozaoStripSprite();
-                }
-            }
-        } else if (newDirection != currentDirection && speed.Magnitude() > 5.0f) {
-            currentDirection = newDirection;
-            SpriteRenderer* sprite = associated.GetComponent<SpriteRenderer>();
-
-            if (sprite) {
-                if (currentDirection == Direction::UP) {
-                    sprite->Open(baseSpritePath + " trás.png");
-                } else if (currentDirection == Direction::DOWN) {
-                    sprite->Open(baseSpritePath + " frente.png");
-                } else if (currentDirection == Direction::LEFT) {
-                    sprite->Open(baseSpritePath + " esquerda.png");
-                } else if (currentDirection == Direction::RIGHT) {
-                    sprite->Open(baseSpritePath + " direita.png");
-                }
-
-                sprite->SetFrameCount(1, 1);
+        } else {
+            stripAnimTimer += dt;
+            while (stripAnimTimer >= kIrmaozaoStripFrameSeconds) {
+                stripAnimTimer -= kIrmaozaoStripFrameSeconds;
+                stripFrameIndex = (stripFrameIndex + 1) % kIrmaozaoStripFrameCount;
+                RefreshAnimSprite();
             }
         }
     }
@@ -611,14 +608,7 @@ void Character::PositionForCoop(Character* leader) {
     // Lê a mente do líder: Copia a direção pra olharem pro mesmo lado
     this->currentDirection = leader-> currentDirection;
 
-    // Atualiza a arte a força
-    SpriteRenderer* sprite = associated.GetComponent<SpriteRenderer>();
-    if (sprite && !irmaozaoIdleStrips) {
-        if (currentDirection == Direction::UP) sprite->Open(baseSpritePath + " trás.png");
-        else if (currentDirection == Direction::DOWN) sprite->Open(baseSpritePath + " frente.png");
-        else if (currentDirection == Direction::LEFT) sprite->Open(baseSpritePath + " esquerda.png");
-        else if (currentDirection == Direction::RIGHT) sprite->Open(baseSpritePath + " direita.png");
-    }
+    RefreshAnimSprite();
 
     // POSIÇÃO:
     float distance = 45.0f; // O quão longe o Irmãozinho fica na frente (ajuste no olho)
@@ -689,7 +679,9 @@ Vec2 Character::GetCenter() {
 }
 
 float Character::GetFootCircleRadius() const {
-    return associated.box.w * 0.25f;
+    // Em vez de usar a largura da arte atual, usamos a largura base imutável
+    float baseW = (baselineBoxW > 0.0f) ? baselineBoxW : associated.box.w;
+    return baseW * 0.25f;
 }
 
 Vec2 Character::GetFootCircleCenter() const {

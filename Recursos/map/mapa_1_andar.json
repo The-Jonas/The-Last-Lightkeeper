@@ -2678,64 +2678,6 @@
                  "y":2153
                 }, 
                 {
-                 "gid":7,
-                 "height":52.6666666666665,
-                 "id":660,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":0
-                        }, 
-                        {
-                         "name":"heightLevel",
-                         "type":"int",
-                         "value":0
-                        }, 
-                        {
-                         "name":"itemName",
-                         "type":"string",
-                         "value":"Broken Flashlight"
-                        }],
-                 "rotation":0,
-                 "type":"ItemSpawn",
-                 "visible":true,
-                 "width":53.3333333333333,
-                 "x":2160.72727272727,
-                 "y":1058.63636363636
-                }, 
-                {
-                 "gid":7,
-                 "height":52.6666666666665,
-                 "id":662,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":0
-                        }, 
-                        {
-                         "name":"heightLevel",
-                         "type":"int",
-                         "value":0
-                        }, 
-                        {
-                         "name":"itemName",
-                         "type":"string",
-                         "value":"Broken Flashlight"
-                        }],
-                 "rotation":0,
-                 "type":"ItemSpawn",
-                 "visible":true,
-                 "width":53.3333333333333,
-                 "x":2238,
-                 "y":1110.33333333333
-                }, 
-                {
                  "gid":32,
                  "height":987,
                  "id":736,
@@ -2782,64 +2724,6 @@
                  "width":775,
                  "x":555.606060606061,
                  "y":549.909090909094
-                }, 
-                {
-                 "gid":7,
-                 "height":52.6666666666665,
-                 "id":663,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":0
-                        }, 
-                        {
-                         "name":"heightLevel",
-                         "type":"int",
-                         "value":0
-                        }, 
-                        {
-                         "name":"itemName",
-                         "type":"string",
-                         "value":"Broken Flashlight"
-                        }],
-                 "rotation":0,
-                 "type":"ItemSpawn",
-                 "visible":true,
-                 "width":53.3333333333333,
-                 "x":2090,
-                 "y":1170.33333333333
-                }, 
-                {
-                 "gid":7,
-                 "height":52.6666666666665,
-                 "id":665,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":0
-                        }, 
-                        {
-                         "name":"heightLevel",
-                         "type":"int",
-                         "value":0
-                        }, 
-                        {
-                         "name":"itemName",
-                         "type":"string",
-                         "value":"Broken Flashlight"
-                        }],
-                 "rotation":0,
-                 "type":"ItemSpawn",
-                 "visible":true,
-                 "width":53.3333333333333,
-                 "x":2091.75757575758,
-                 "y":1086.63636363636
                 }, 
                 {
                  "gid":15,
@@ -2936,35 +2820,6 @@
                  "width":188,
                  "x":1159.33333333333,
                  "y":1779.66666666667
-                }, 
-                {
-                 "gid":7,
-                 "height":48.6666666666667,
-                 "id":661,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":220
-                        }, 
-                        {
-                         "name":"heightLevel",
-                         "type":"int",
-                         "value":1
-                        }, 
-                        {
-                         "name":"itemName",
-                         "type":"string",
-                         "value":"Broken Flashlight"
-                        }],
-                 "rotation":0,
-                 "type":"ItemSpawn",
-                 "visible":true,
-                 "width":52,
-                 "x":1221.66666666667,
-                 "y":1568
                 }, 
                 {
                  "gid":8,
@@ -3107,93 +2962,6 @@
                  "y":1124
                 }, 
                 {
-                 "gid":9,
-                 "height":62.6666666666665,
-                 "id":659,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":400
-                        }, 
-                        {
-                         "name":"heightLevel",
-                         "type":"int",
-                         "value":2
-                        }, 
-                        {
-                         "name":"itemName",
-                         "type":"string",
-                         "value":"Apple"
-                        }],
-                 "rotation":0,
-                 "type":"ItemSpawn",
-                 "visible":true,
-                 "width":48,
-                 "x":2525,
-                 "y":770.666666666663
-                }, 
-                {
-                 "gid":7,
-                 "height":48.6666666666667,
-                 "id":672,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":270
-                        }, 
-                        {
-                         "name":"heightLevel",
-                         "type":"int",
-                         "value":2
-                        }, 
-                        {
-                         "name":"itemName",
-                         "type":"string",
-                         "value":"Broken Flashlight"
-                        }],
-                 "rotation":0,
-                 "type":"ItemSpawn",
-                 "visible":true,
-                 "width":52,
-                 "x":2858.66666666666,
-                 "y":741.333333333334
-                }, 
-                {
-                 "gid":7,
-                 "height":48.6666666666667,
-                 "id":666,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":250
-                        }, 
-                        {
-                         "name":"heightLevel",
-                         "type":"int",
-                         "value":2
-                        }, 
-                        {
-                         "name":"itemName",
-                         "type":"string",
-                         "value":"Broken Flashlight"
-                        }],
-                 "rotation":0,
-                 "type":"ItemSpawn",
-                 "visible":true,
-                 "width":52,
-                 "x":2750.66666666666,
-                 "y":890.666666666667
-                }, 
-                {
                  "gid":11,
                  "height":95,
                  "id":683,
@@ -3221,64 +2989,6 @@
                  "width":48,
                  "x":1358.66666666666,
                  "y":-0.303030303030297
-                }, 
-                {
-                 "gid":7,
-                 "height":52.6666666666665,
-                 "id":900,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":170
-                        }, 
-                        {
-                         "name":"heightLevel",
-                         "type":"int",
-                         "value":1
-                        }, 
-                        {
-                         "name":"imagePath",
-                         "type":"string",
-                         "value":"Recursos\/img\/items\/old_letter.jpg"
-                        }],
-                 "rotation":0,
-                 "type":"JornalSpawn",
-                 "visible":true,
-                 "width":48,
-                 "x":2094.60606060606,
-                 "y":1637.57575757576
-                }, 
-                {
-                 "gid":7,
-                 "height":52.6666666666665,
-                 "id":664,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":160
-                        }, 
-                        {
-                         "name":"heightLevel",
-                         "type":"int",
-                         "value":1
-                        }, 
-                        {
-                         "name":"itemName",
-                         "type":"string",
-                         "value":"Broken Flashlight"
-                        }],
-                 "rotation":0,
-                 "type":"ItemSpawn",
-                 "visible":true,
-                 "width":53.3333333333333,
-                 "x":2174,
-                 "y":1618.33333333333
                 }, 
                 {
                  "gid":19,
@@ -3393,6 +3103,25 @@
                  "y":1035
                 }, 
                 {
+                 "gid":38,
+                 "height":555,
+                 "id":763,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"nameObj",
+                         "type":"string",
+                         "value":"Estante_Quebrada"
+                        }],
+                 "rotation":0,
+                 "type":"Recipiente_Decoracao",
+                 "visible":true,
+                 "width":686,
+                 "x":1517.60606060606,
+                 "y":605.272727272727
+                }, 
+                {
                  "gid":2,
                  "height":1347,
                  "id":173,
@@ -3400,7 +3129,7 @@
                  "opacity":1,
                  "rotation":0,
                  "type":"Pilar",
-                 "visible":false,
+                 "visible":true,
                  "width":2847,
                  "x":439,
                  "y":1406
@@ -3486,6 +3215,35 @@
                  "width":368,
                  "x":1936.60606060606,
                  "y":1798.57575757576
+                }, 
+                {
+                 "gid":7,
+                 "height":52.6666666666665,
+                 "id":900,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":170
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":1
+                        }, 
+                        {
+                         "name":"imagePath",
+                         "type":"string",
+                         "value":"Recursos\/img\/items\/old_letter.jpg"
+                        }],
+                 "rotation":0,
+                 "type":"JornalSpawn",
+                 "visible":true,
+                 "width":48,
+                 "x":2094.60606060606,
+                 "y":1637.57575757576
                 }, 
                 {
                  "gid":25,
@@ -4451,12 +4209,12 @@
                 }],
          "opacity":1,
          "type":"objectgroup",
-         "visible":true,
+         "visible":false,
          "x":0,
          "y":0
         }],
  "nextlayerid":29,
- "nextobjectid":763,
+ "nextobjectid":764,
  "orientation":"orthogonal",
  "properties":[
         {

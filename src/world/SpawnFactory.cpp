@@ -178,18 +178,18 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
             } else if (foundDef->HasProperty(ItemProperty::LIGHT_SOURCE)) {
                 spawnDurability = 1 + (rand() % 100);
             }
-            const float itemSize = 48.0f;
 
-            // Posição base (como se estivesse no chão)
-            Vec2 tl(spawn.x, spawn.y - itemSize);;
-            tl = stage.ClampPickupTopLeft(tl, itemSize, itemSize);
+
 
             // Cria o Pickup
-            ItemPickup* pickup = ItemPickup::Spawn(tl.x, tl.y, *foundDef, spawnDurability, stage.itemPickups);
+            ItemPickup* pickup = ItemPickup::Spawn(spawn.x, spawn.y, *foundDef, spawnDurability, stage.itemPickups);
             
             if (pickup) {
             GameObject& itemObj = pickup->GetAssociated();
             itemObj.tiledId = spawn.tiledId;
+
+            itemObj.box.x = spawn.x;
+            itemObj.box.y = spawn.y - itemObj.box.h;
 
             // A MECÂNICA (Passamos o 0, 1 ou 2 para ditar qual o comportamento da altura do item) 
             pickup->SetHeightLevel(itemHeightLevel);
@@ -198,7 +198,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
             itemObj.z = spawn.z; // Fica no mesmo andar
             itemObj.depthOffset = itemDepthOffset; 
 
-            stage.AddObject(&pickup->GetAssociated());
+            stage.AddObject(&itemObj);
             } 
         }
         else {
@@ -381,5 +381,4 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
 
         stage.AddObject(fishingObj);
     }
-    
 }

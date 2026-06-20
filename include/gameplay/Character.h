@@ -99,14 +99,14 @@ private:
     bool stripWasMoving = false;
     std::string lastStripSpritePath;
 
-    std::string IrmaozaoIdleStripPath(Direction dir,
+    std::string GetAnimStripPath(Direction dir,
                                       int frameIndex,
                                       HeldPropVisual prop = HeldPropVisual::None,
                                       bool moving = false) const;
     std::string IrmaozaoPickLampStripPath(Direction dir, int frameIndex) const;
-    void RefreshIrmaozaoStripSprite();
-    void EnsureIrmaozaoBaselineBox();
-    void RestoreIrmaozaoCollisionBox(float centerX, float footY);
+    void RefreshAnimSprite();
+    void EnsureBaselineBox();   
+    void RestoreCollisionBox(float centerX, float footY);
 
     float baselineBoxW = 0.0f;
     float baselineBoxH = 0.0f;

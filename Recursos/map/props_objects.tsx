@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<tileset version="1.10" tiledversion="1.12.1" name="props_objects" tilewidth="2847" tileheight="1920" tilecount="36" columns="0">
+<tileset version="1.10" tiledversion="1.12.1" name="props_objects" tilewidth="2847" tileheight="1920" tilecount="37" columns="0">
  <grid orientation="orthogonal" width="1" height="1"/>
  <tile id="0" type="Caixa">
   <properties>
@@ -202,5 +202,11 @@
    <property name="nameObj" value="Bau"/>
   </properties>
   <image source="../img/objetos/Bau.png" width="498" height="500"/>
+ </tile>
+ <tile id="37" type="Recipiente_Decoracao">
+  <properties>
+   <property name="nameObj" value="Estante_Quebrada"/>
+  </properties>
+  <image source="../img/objetos/Estante_quebrada.png" width="686" height="555"/>
  </tile>
 </tileset>
