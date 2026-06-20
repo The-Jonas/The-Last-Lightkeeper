@@ -64,7 +64,7 @@ SaveGameState StageState::CaptureSaveState() const {
 
     std::unordered_set<int> alivePickupIds;
     for (const auto& go : objectArray) {
-        if (!go) {
+        if (!go || go->IsDead()) {
             continue;
         }
         if (ItemPickup* pickup = go->GetComponent<ItemPickup>()) {

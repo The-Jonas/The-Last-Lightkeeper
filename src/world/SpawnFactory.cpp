@@ -151,6 +151,10 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
 
         std:: string itemName = "";
         if (spawn.properties.count("itemName")) itemName = spawn.properties.at("itemName").get<std::string>();
+        if (itemName == "Lamp Fuel" || itemName == "Lighter Fuel" || itemName == "Light Fuel" ||
+            itemName == "Oil Gallon") {
+            itemName = "Fuel";
+        }
 
         int itemHeightLevel = 0;
         if (spawn.properties.count("heightLevel")) itemHeightLevel = spawn.properties.at("heightLevel").get<int>();

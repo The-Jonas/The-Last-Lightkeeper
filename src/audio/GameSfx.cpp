@@ -89,6 +89,16 @@ void PlaySound(Sound& sound) {
     }
 }
 
+void ApplyThunderVolume(Sound& sound) {
+    const int channel = sound.GetChannel();
+    if (channel < 0) {
+        return;
+    }
+    int vol = (MIX_MAX_VOLUME * Game::masterVolumePercent) / 100;
+    vol = (vol * Game::thunderVolumePercent) / 100;
+    Mix_Volume(channel, vol);
+}
+
 Sound& FootstepSound(FootstepSurface surface) {
     switch (surface) {
     case FootstepSurface::Wood:
@@ -216,6 +226,7 @@ void TriggerThunderStrikeInternal() {
     const int idx = rand() % kThunderCount;
     if (gThunderSounds[idx].IsOpen()) {
         gThunderSounds[idx].Play();
+        ApplyThunderVolume(gThunderSounds[idx]);
     }
     gThunderFlashTimer = kThunderFlashDuration;
 }

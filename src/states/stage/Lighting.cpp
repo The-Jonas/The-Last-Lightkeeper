@@ -143,3 +143,29 @@ void StageState::SetLightEnabled(int lightId, bool enabled) {
         lights[static_cast<size_t>(lightId)].enabled = enabled;
     }
 }
+
+void StageState::UpdateInventoryLight() {
+    const bool playerWantsLightHidden = Character::player && Character::player->hidePersonalLight;
+    const bool wantLampLight =
+        inventory.IsActiveLightLamp() && !playerWantsLightHidden && bigCharacterObject;
+
+    if (!wantLampLight) {
+        if (inventoryLightId >= 0) {
+            SetLightEnabled(inventoryLightId, false);
+        }
+        return;
+    }
+
+    const Vec2 pos = bigCharacterObject->box.Center();
+    const LightMaskParams params = inventory.BuildLampLightParams(lightMaskParams);
+
+    if (inventoryLightId < 0 || static_cast<size_t>(inventoryLightId) >= lights.size()) {
+        inventoryLightId = CreateStaticLight(pos, true);
+    }
+
+    LightInstance& light = lights[static_cast<size_t>(inventoryLightId)];
+    light.worldPos = pos;
+    light.shape = lightMaskShape;
+    light.params = params;
+    light.enabled = true;
+}

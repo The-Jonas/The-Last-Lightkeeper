@@ -7,6 +7,7 @@
 #include "core/Game.h"
 
 class GameObject;
+class InputManager;
 
 class TitleState : public State {
 public:
@@ -22,6 +23,17 @@ public:
     void Resume() override;
     
 private:
+    enum class VolumeSliderKind { Master, Ambient, Thunder, Count };
+
+    struct VolumeSliderUi {
+        VolumeSliderKind kind;
+        const char* label;
+        int value = 0;
+        bool dragging = false;
+        SDL_Rect bar{0, 0, 0, 0};
+        SDL_Rect handle{0, 0, 0, 0};
+    };
+
     Music music;
     Timer fadeTimer;
     float fadeAlpha = 0.0f;
@@ -41,16 +53,19 @@ private:
     void StartContinue();
     void ActivateMenuSelection();
 
-    bool draggingSlider = false;
-    int sliderVolume = Game::MASTER_VOLUME_PERCENT;
-    SDL_Rect sliderBar{0, 0, 0, 0};
-    SDL_Rect sliderHandle{0, 0, 0, 0};
+    VolumeSliderUi sliders[static_cast<int>(VolumeSliderKind::Count)];
+
     static constexpr int kSliderW = 260;
     static constexpr int kSliderH = 12;
     static constexpr int kHandleW = 20;
+    static constexpr int kSliderRowH = 44;
 
-    void RecalcSlider();
-    void RenderSlider(SDL_Renderer* renderer);
+    void InitSliders();
+    void RecalcSliders();
+    void HandleSliderInput(int mx, int my, InputManager& input);
+    void ApplySliderValue(VolumeSliderKind kind, int percent);
+    void RenderSliders(SDL_Renderer* renderer);
+    VolumeSliderUi* FindSliderAtPoint(int mx, int my);
 };
 
 #endif

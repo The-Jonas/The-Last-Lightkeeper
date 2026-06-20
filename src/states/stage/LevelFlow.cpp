@@ -69,6 +69,8 @@ void StageState::ClearGameplayWorld() {
     wasPushingLastFrame = false;
     Box::SetActivePushTarget(nullptr);
     lights.clear();
+    inventoryLightId = -1;
+    hasSmoothedTorchLight = false;
     staticShadowEdges.clear();
     staticShadowEdgesBuilt = false;
     companionFollowPathWorld.clear();
@@ -162,17 +164,26 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
     }
     inventoryInitialized = true;
 
-    bigObject->AddComponent(new BackpackVisuals(*bigObject, inventory, bigComp));
-
     SDL_Color hudColor = {230, 230, 230, 220};
 
-    hudLine1 = nullptr;
-    hudLine2 = nullptr;
+    hudLine1 = new GameObject();
+    hudLine1->z = 100;
+    hudLine1->AddComponent(new Text(*hudLine1, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
+                                    "WASD mover | Ctrl trocar irmao | Q junto/separado | Esc sair",
+                                    hudColor));
+    AddObject(hudLine1);
+
+    hudLine2 = new GameObject();
+    hudLine2->z = 100;
+    hudLine2->AddComponent(new Text(*hudLine2, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
+                                    "E interagir/pegar/empurrar | 1 isqueiro | 2 lamparina | F luz | R abastecer",
+                                    hudColor));
+    AddObject(hudLine2);
 
     hudLine3 = new GameObject();
     hudLine3->z = 100;
     hudLine3->AddComponent(new Text(*hudLine3, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
-                                    "K forma | X luz cursor | C criar luz fixa | P painel | L luz | O sombras | B mapa",
+                                    "Irmaozinho: E visao de monstro",
                                     hudColor));
     AddObject(hudLine3);
 
@@ -188,6 +199,7 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
                                                 [this](Vec2 tl, float w, float h) {
                                                     return ClampPickupTopLeft(tl, w, h);
                                                 }));
+    hotbarObj->AddComponent(new BackpackVisuals(*hotbarObj, inventory, bigComp));
     hotbarObj->z = 200;
     AddObject(hotbarObj);
     hotbarObject = hotbarObj;

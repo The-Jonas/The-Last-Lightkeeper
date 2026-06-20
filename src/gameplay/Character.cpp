@@ -239,6 +239,11 @@ void Character::RestoreCollisionBox(float centerX, float footY) {
     }
 }
 
+std::string Character::GetShadowSpritePath() const {
+    const bool moving = speed.Magnitude() > kIrmaozaoMovingSpeedThreshold;
+    return GetAnimStripPath(currentDirection, stripFrameIndex, HeldPropVisual::None, moving);
+}
+
 void Character::NotifyInventoryLightChanged() {
     if (!irmaozaoIdleStrips) {
         return;

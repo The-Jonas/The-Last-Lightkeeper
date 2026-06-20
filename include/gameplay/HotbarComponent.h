@@ -38,6 +38,7 @@ private:
     void TryPickupOnKeyPress();
     void TrySelectGroupOnKeyPress();
     void TryUseActiveItemOnKeyPress();
+    void TryRefuelOnKeyPress();
 };
 
 #endif

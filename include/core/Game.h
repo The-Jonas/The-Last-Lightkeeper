@@ -15,9 +15,15 @@ class StageState;
 class Game {
 public:
     static constexpr int MASTER_VOLUME_PERCENT = 20;
+    static constexpr int AMBIENT_VOLUME_PERCENT = 50;
+    static constexpr int THUNDER_VOLUME_PERCENT = 100;
     static int masterVolumePercent;
+    static int ambientVolumePercent;
+    static int thunderVolumePercent;
     static void LoadEnvVolume();
     static void SetMasterVolume(int percent);
+    static void SetAmbientVolume(int percent);
+    static void SetThunderVolume(int percent);
     static constexpr int WINDOW_WIDTH = 1920;
     static constexpr int WINDOW_HEIGHT = 1080;
 

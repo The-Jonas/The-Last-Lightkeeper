@@ -3,6 +3,7 @@
 
 #include "gameplay/BackpackConfig.h"
 #include "gameplay/Item.h"
+#include "lighting/LightMaskTypes.h"
 
 #include <optional>
 #include <vector>
@@ -36,10 +37,15 @@ public:
     ItemInstance* GetUsingMutable() { return GetActiveItemMutable(); }
     bool IsUsingEmpty() const { return GetActiveItem() == nullptr; }
 
-    bool TryRefuelLampFromOil();
+    bool TryRefuelWithFuel();
     bool TryTurnLightOn();
     HeldPropVisual GetHeldPropVisual() const;
     bool IsUsableLightActive() const;
+    bool IsActiveLightLamp() const;
+    bool IsActiveLightLighter() const;
+    float GetActiveLightFuelRatio() const;
+    LightMaskParams BuildLighterLightParams(const LightMaskParams& base) const;
+    LightMaskParams BuildLampLightParams(const LightMaskParams& base) const;
     void TickUsingDurability(float dt);
 
     void WriteToSave(struct SaveGameState& state) const;
@@ -51,9 +57,12 @@ public:
 private:
     void SyncUsingSlotMirror();
     int FindBestItemIndexInGroup(int groupIndex) const;
+    int FindLighterGroupIndex() const;
     int FindLampGroupIndex() const;
-    int FindOilGroupIndex() const;
-    bool TryRefuelLampFromAnyOil();
+    int FindFuelGroupIndex() const;
+    int FindRefuelTargetIndex(int groupIndex) const;
+    int FindUsableFuelIndexInGroup(int fuelGroup) const;
+    bool TryRefuelGroupItem(int targetGroup, int fuelGroup, int targetItemIndex = -1);
     bool CanEmitLight(const ItemInstance* active) const;
 
     BackpackConfig backpackConfig = DefaultBackpackConfig();

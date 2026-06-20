@@ -91,7 +91,7 @@
                         {
                          "name":"itemName",
                          "type":"string",
-                         "value":"Lighter Fuel"
+                         "value":"Fuel"
                         }],
                  "rotation":0,
                  "type":"ItemSpawn",
@@ -290,7 +290,7 @@
                         {
                          "name":"itemName",
                          "type":"string",
-                         "value":"Lighter Fuel"
+                         "value":"Fuel"
                         }],
                  "rotation":0,
                  "type":"ItemSpawn",
@@ -319,7 +319,7 @@
                         {
                          "name":"itemName",
                          "type":"string",
-                         "value":"Lighter Fuel"
+                         "value":"Fuel"
                         }],
                  "rotation":0,
                  "type":"ItemSpawn",
@@ -348,7 +348,7 @@
                         {
                          "name":"itemName",
                          "type":"string",
-                         "value":"Lighter Fuel"
+                         "value":"Fuel"
                         }],
                  "rotation":0,
                  "type":"ItemSpawn",
@@ -377,7 +377,7 @@
                         {
                          "name":"itemName",
                          "type":"string",
-                         "value":"Lighter Fuel"
+                         "value":"Fuel"
                         }],
                  "rotation":0,
                  "type":"ItemSpawn",

@@ -18,6 +18,7 @@ void StageOceanAmbientController::RefreshVolume() {
     }
     const int nominalCap = (MIX_MAX_VOLUME * StageOceanAudio::kNominalPercent) / 100;
     int v = (nominalCap * Game::masterVolumePercent) / 100;
+    v = (v * Game::ambientVolumePercent) / 100;
     if (*musicMuted_) {
         v = 0;
     }

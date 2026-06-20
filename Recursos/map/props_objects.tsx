@@ -35,7 +35,7 @@
   <properties>
    <property name="depthOffset" type="float" value="0"/>
    <property name="heightLevel" type="int" value="0"/>
-   <property name="itemName" value="Oil Gallon"/>
+   <property name="itemName" value="Fuel"/>
   </properties>
   <image source="../img/items/lighter_fuel.png" width="38" height="82"/>
  </tile>
