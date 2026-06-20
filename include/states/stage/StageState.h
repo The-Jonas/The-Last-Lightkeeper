@@ -101,9 +101,14 @@ public:
     std::vector<Vec2> FindPathWorld(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent = nullptr, int nodeBudget = 4096) const;
     const std::vector<std::shared_ptr<GameObject>>& GetObjectArray() const { return objectArray; }
 
-
     // Getter para saber quem está atualmente sendo controlado
     Character* GetControlledCharacter() const { return controlledCharacter; }
+
+    // TESTE: objetos estáticos que vão receber sombra de sprite real
+    // Para reverter o teste, basta deixar esse vetor vazio (não chame Register)
+    std::vector<GameObject*> testShadowObjects;
+    void RegisterTestShadowObject(GameObject* go) { testShadowObjects.push_back(go); }
+    float lastFrameDt = 0.016f;
 
 private:
 

@@ -26,6 +26,9 @@ float ComputeShadowDistanceRate(const Vec2& pointScreen, const Vec2& lightScreen
 bool IsFootLit(GameObject* go, const Vec2& lightScreenPos, const LightMaskParams& params, float* outIntensity = nullptr);
 void RenderProjectedSpriteShadow(GameObject* go, const Vec2& lightScreenPos, float lightTouch, float shadowLengthPx, Uint8 shadowAlpha,
                                  const LightMaskParams& params);
+// InternalHelpers.h — adicione junto das outras declarações do namespace:
+void RenderSingleLightSpriteShadow(GameObject* go, const Vec2& lightScreenPos,
+                                    float lightTouch, float shadowLengthPx, Uint8 shadowAlpha, float dt);
 void DrawContactFootShadow(SDL_Renderer* renderer, const Rect& box, float contactRate);
 
 } // namespace stage_internal

@@ -28,18 +28,20 @@ void TryNudgeOutOfStaticGeometry(StageState* stage, Character* character, Collid
 
     // Pega o círculo travado no tamanho original!
     Circle c;
-    c.radius = character->GetFootCircleRadius();
+    
+    // Isso cria uma margem de segurança contra os erros de ponto flutuante
+    c.radius = character->GetFootCircleRadius() - (kFootCollisionSkinPx + 2); 
     Vec2 footPos = character->GetFootCircleCenter();
     c.center.x = footPos.x;
     c.center.y = footPos.y;
 
     if (!stage->level.CheckCollision(c, isElevated)) {
-        return;
+        return;                                                 // Não está preso de verdade. Foge da função imediatamente sem gastar a CPU!
     }
 
     GameObject& go = character->GetAssociated();
-    const float dists[] = {2.0f, 4.0f, 6.0f, 10.0f, 14.0f};
-    const int dirs[8][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
+    const float dists[] = {4.0f, 16.0f, 32.0f};
+    const int dirs[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
     for (float d : dists) {
         for (const auto& dir : dirs) {
             float mx = static_cast<float>(dir[0]);
@@ -49,6 +51,8 @@ void TryNudgeOutOfStaticGeometry(StageState* stage, Character* character, Collid
                 mx /= len;
                 my /= len;
             }
+
+            // Empurra para testar a rota de fuga
             go.box.x += mx * d;
             go.box.y += my * d;
             collider->Update(0);
@@ -59,8 +63,10 @@ void TryNudgeOutOfStaticGeometry(StageState* stage, Character* character, Collid
             c.center.y = newFootPos.y;
             
             if (!stage->level.CheckCollision(c, isElevated)) {
-                return;
+                return;                                         // Empurrou pra fora com sucesso! Interrompe o processo.
             }
+
+            // Falhou, estava pior que antes. Desfaz o movimento e tenta outra direção.
             go.box.x -= mx * d;
             go.box.y -= my * d;
             collider->Update(0);
@@ -317,6 +323,14 @@ void Character::Start() {
 }
 
 void Character::Update(float dt) {
+
+    // Trava de segurança contra a "Espiral da Morte" do Delta Time!
+    // Se o frame demorar mais que 0.033s (30 FPS), a física ignora a diferença
+    // para o personagem não atravessar as paredes ou bugar os cálculos.
+    if (dt > 0.033f) {
+        dt = 0.033f;
+    }
+    
     // ==========================================
     // SE ESTIVER INTERAGINDO, CONGELA TUDO
     // ==========================================

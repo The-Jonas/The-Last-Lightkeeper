@@ -359,6 +359,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         // Colisão feita no Tiled
 
         stage.AddObject(barrelObj);
+        stage.RegisterTestShadowObject(barrelObj);
     }
     else if (spawn.type == "Pesca_Asset") {
         float depthOff = 0.0f;

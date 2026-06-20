@@ -341,6 +341,39 @@ void StageState::Render(){
         }
         radialGeometry->RenderMany(g.GetRenderer(), g.GetWindowsWidth(), g.GetWindowsHeight(), screenLights, occCtx);
 
+        // ══════════════ TESTE: sombra de sprite real em objetos estáticos ══════
+        // Para reverter: comente todo este bloco ou deixe testShadowObjects vazio.
+        for (GameObject* obj : testShadowObjects) {
+            if (!obj) continue;
+ 
+            // Acha a luz mais relevante para ESSE objeto (maior "touch")
+            // Reaproveitamos o mesmo prepared/screenLights já calculado no frame
+            Vec2 bestLightScreen;
+            float bestTouch = 0.0f;
+            float bestLengthPx = 0.0f;
+            Uint8 bestAlpha = 0;
+ 
+            for (const auto& sl : screenLights) {   // screenLights já existe no seu pipeline
+                Vec2 lightScreen(sl.x, sl.y);
+ 
+                float touch = 0.0f;
+                IsFootLit(obj, lightScreen, sl.params, &touch);   // reaproveita IsFootLit já existente
+                if (touch > bestTouch) {
+                    bestTouch = touch;
+                    bestLightScreen = lightScreen;
+                    const float distance01 = Clamp01(1.0f - touch);
+                    bestLengthPx = sl.params.shadowMaxLengthPx * distance01;
+                    bestAlpha = static_cast<Uint8>(std::max(0.0f, std::min(255.0f, sl.params.darknessMax * touch)));
+                }
+            }
+ 
+            // Só 1 luz por objeto (a mais relevante) — esse é o ponto do teste
+            if (bestTouch > 0.0f) {
+                RenderSingleLightSpriteShadow(obj, bestLightScreen, bestTouch, bestLengthPx, bestAlpha, lastFrameDt);
+            }
+        }
+        // ══════════════ FIM DO BLOCO DE TESTE ═══════════════════════════════════
+
         if (shadowsEnabled && staticShadowEdgesBuilt && !staticShadowEdges.empty()) {
             const std::vector<TopDownShadowEdge> noDynamic;
             const int maxShadowVolumes = shadowsEnabled ? 8 : 0;

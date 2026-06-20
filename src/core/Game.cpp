@@ -179,11 +179,11 @@ Game::Game(std::string title) {
     }
 
     //Cria Renderizador
-    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED); // SDL_RENDERER_ACCELERATED, para requisitar o uso de OpenGL ou Direct3D.
+    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC); // SDL_RENDERER_ACCELERATED, para requisitar o uso de OpenGL ou Direct3D.
     if (!renderer) {
         std::cerr << "SDL_CreateRenderer falhou: " << SDL_GetError() << std::endl;
         exit(1);
-    }
+    }   
     
     storedState = nullptr;                         // Inicializa o ponteiro de troca de estado
 

@@ -47,6 +47,9 @@
 
 using namespace stage_internal;
 void StageState::Update(float dt){
+
+    lastFrameDt = dt;
+
     // Chamadas a Mix_PlayMusic em todo frame fazem SDL_mixer reorganizar música e pode matar/samples atrasarem ondas.
     if (!musicMuted && music.IsOpen() && Mix_PlayingMusic() == 0) {
         gStageOstSilenceRecover += dt;

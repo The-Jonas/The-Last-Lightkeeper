@@ -393,6 +393,30 @@ bool LevelManager::CheckPolygonVsPolygon(const Polygon& p1, const Polygon& p2) {
     // Trava de segurança: Um poligono precisa de no mínimo 3 pontos para ter volume
     if (p1.vertices.size() < 3 || p2.vertices.size() < 3) return false;
 
+    // ─── OTIMIZAÇÃO: BROAD PHASE (AABB) ──────────────────────────────────
+    // Cria uma caixa simples ao redor do Polígono 1
+    int minX1 = p1.vertices[0].x, maxX1 = p1.vertices[0].x;
+    int minY1 = p1.vertices[0].y, maxY1 = p1.vertices[0].y;
+    for (const auto& v : p1.vertices) {
+        if (v.x < minX1) minX1 = v.x; else if (v.x > maxX1) maxX1 = v.x;
+        if (v.y < minY1) minY1 = v.y; else if (v.y > maxY1) maxY1 = v.y;
+    }
+
+    // Cria uma caixa simples ao redor do Polígono 2
+    int minX2 = p2.vertices[0].x, maxX2 = p2.vertices[0].x;
+    int minY2 = p2.vertices[0].y, maxY2 = p2.vertices[0].y;
+    for (const auto& v : p2.vertices) {
+        if (v.x < minX2) minX2 = v.x; else if (v.x > maxX2) maxX2 = v.x;
+        if (v.y < minY2) minY2 = v.y; else if (v.y > maxY2) maxY2 = v.y;
+    }
+
+    // Se uma caixa está totalmente isolada da outra, descarta a colisão NA HORA!
+    if (maxX1 < minX2 || minX1 > maxX2 || maxY1 < minY2 || minY1 > maxY2) {
+        return false;
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
+    // Fase Estreita (Narrow Phase):
     // Primeiro testar os eixos (normais) de ambos os polígonos
     const Polygon* polys[2] = {&p1, &p2};
 
@@ -511,6 +535,28 @@ bool LevelManager::CheckCollision(const Circle& entityCircle, bool isElevated) {
 bool LevelManager::CheckPolygonVsCircle(const Polygon& poly, const Circle& circle) {
     if (poly.vertices.empty()) return false;
 
+    // ─── OTIMIZAÇÃO: BROAD PHASE (AABB) ──────────────────────────────────
+    // Cria a caixa ao redor do polígono do Tiled
+    int minX = poly.vertices[0].x, maxX = poly.vertices[0].x;
+    int minY = poly.vertices[0].y, maxY = poly.vertices[0].y;
+    for (const auto& v : poly.vertices) {
+        if (v.x < minX) minX = v.x; else if (v.x > maxX) maxX = v.x;
+        if (v.y < minY) minY = v.y; else if (v.y > maxY) maxY = v.y;
+    }
+
+    // Cria a caixa virtual ao redor do círculo do Jogador/Monstro
+    int cMinX = circle.center.x - circle.radius;
+    int cMaxX = circle.center.x + circle.radius;
+    int cMinY = circle.center.y - circle.radius;
+    int cMaxY = circle.center.y + circle.radius;
+
+    // Descarta se estiverem longe!
+    if (maxX < cMinX || minX > cMaxX || maxY < cMinY || minY > cMaxY) {
+        return false; 
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
+    // Fase Estreita (Narrow Phase)
     float cx = (float)circle.center.x;
     float cy = (float)circle.center.y;
     float radiusSq = (float)(circle.radius * circle.radius);
