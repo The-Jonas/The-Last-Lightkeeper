@@ -26,6 +26,7 @@
 #include "gameplay/StairTrigger.h"
 #include "core/Resources.h"
 #include "audio/GameSfx.h"
+#include "gameplay/Window.h"
 #include <iostream>
 #include <fstream>
 #include <algorithm>

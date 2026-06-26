@@ -147,6 +147,7 @@ void StageState::Update(float dt){
     UpdateBoxInteraction();
     TryOpenJournalOnKeyPress();
     TryInteractCandleOnKeyPress();
+    TryInteractWindowOnKeyPress();
     UpdateInventoryLight();
 
     UpdateArray(dt);                                                                    // Percorre o vetor de GameObjects chamando o Update de cada um

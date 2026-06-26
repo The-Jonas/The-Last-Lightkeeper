@@ -14,6 +14,7 @@
 #include "gameplay/ItemPickup.h"
 #include "gameplay/Jornal.h"
 #include "gameplay/Closet.h"
+#include "gameplay/Window.h"
 #include "gameplay/Monster.h"
 #include "ui/MonsterSilhouette.h"
 #include <iostream>
@@ -103,6 +104,20 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
             Vec2(1780, 1050)
         ));
 
+        ladderObj->box.x = spawn.x;
+        ladderObj->box.y = spawn.y - ladderObj->box.h;
+
+        stage.AddObject(ladderObj);
+    }
+    else if (spawn.type == "Escada") {
+        GameObject* ladderObj = new GameObject();
+        ladderObj->tiledId = spawn.tiledId;
+        ladderObj->z = spawn.z;
+        ladderObj->isStairs = true;
+
+        ladderObj->AddComponent(new SpriteRenderer(*ladderObj, "Recursos/img/cenario/escada_inteira.png"));
+        ladderObj->AddComponent(new FadeEffect(*ladderObj, true));
+        
         ladderObj->box.x = spawn.x;
         ladderObj->box.y = spawn.y - ladderObj->box.h;
 
@@ -368,10 +383,8 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         std::string caminho = "Recursos/img/objetos/barril/barril_" + std::to_string(typeB) + ".png";
 
         if (interactive) {
-            std::cout << "[DEBUG] Spawnou um Barril INTERATIVO do tipo " << typeB << "!" << std::endl;
             barrelObj->AddComponent(new Box(*barrelObj, false, caminho, weight));
         } else {
-            std::cout << "[DEBUG] Spawnou um Barril de ENFEITE do tipo " << typeB << "!" << std::endl;
             barrelObj->AddComponent(new SpriteRenderer(*barrelObj, caminho));
         }
 
@@ -382,6 +395,38 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
 
         stage.AddObject(barrelObj);
         stage.RegisterTestShadowObject(barrelObj);
+    }
+    else if (spawn.type == "Janela") {
+        float depthOff = -500.0f;
+        bool startsOpen = false;
+        float windRadius = 300.0f;
+        std::string windowType = "1"; 
+        
+        bool interactive = false; 
+        if (spawn.properties.count("depthOffset")) depthOff = spawn.properties.at("depthOffset").get<float>();
+        if (spawn.properties.count("startsOpen")) startsOpen = spawn.properties.at("startsOpen").get<bool>();
+        if (spawn.properties.count("windRadius")) windRadius = spawn.properties.at("windRadius").get<float>();
+        if (spawn.properties.count("type")) windowType = spawn.properties.at("type").get<std::string>();
+        if (spawn.properties.count("interactive")) interactive = spawn.properties.at("interactive").get<bool>();
+
+        GameObject* winObj = new GameObject();
+        winObj->tiledId = spawn.tiledId;
+        winObj->z = spawn.z;
+        winObj->depthOffset = depthOff;
+
+        if (interactive) {
+            // Janela completa do puzzle! Ganha lógica, estados e vento.
+            winObj->AddComponent(new Window(*winObj, windowType, startsOpen, windRadius));
+        } else {
+            // Janela de enfeite! Só carrega o PNG dela fechada direto da pasta.
+            std::string caminho = "Recursos/img/cenario/janelas/janela_" + windowType + "_fechada.png";
+            winObj->AddComponent(new SpriteRenderer(*winObj, caminho));
+        }
+
+        winObj->box.x = spawn.x;
+        winObj->box.y = spawn.y - winObj->box.h; 
+
+        stage.AddObject(winObj);
     }
     else if (spawn.type == "Pesca_Asset") {
         float depthOff = 0.0f;

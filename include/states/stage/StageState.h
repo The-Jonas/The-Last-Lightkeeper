@@ -30,6 +30,7 @@ class Box;
 class ItemPickup;
 class Jornal;
 class Candlestick;
+class Window;
 
 class StageState : public State {
 friend class SpawnFactory;
@@ -98,6 +99,11 @@ public:
     void NotifyItemPickupCollected(ItemPickup* pickup);
     bool ShouldSkipPickupSpawn(int tiledId) const;
     bool IsPickupBlocked(ItemPickup* pickup) const;
+
+    Window* GetReachableWindow() const { return reachableWindow; }
+    Window* FindClosestReachableWindow() const;
+    bool IsWindowClosestForInteraction(Window* window) const;
+    void TryInteractWindowOnKeyPress();
 
     // Público pra ser reutilizado pelo monstro
     std::vector<Vec2> FindPathWorld(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent = nullptr, int nodeBudget = 4096) const;
@@ -248,6 +254,7 @@ private:
 
     Jornal* reachableJornal = nullptr;
     Candlestick* reachableCandle = nullptr;
+    Window* reachableWindow = nullptr;
     bool journalViewerOpen = false;
     bool journalViewerClosing = false;
     float journalAnimTimer = 0.0f;

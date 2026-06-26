@@ -6,6 +6,7 @@
 #include "gameplay/ItemPickup.h"
 #include "gameplay/Jornal.h"
 #include "gameplay/Candlestick.h"
+#include "gameplay/Window.h"
 #include "ui/InteractionOutline.h"
 #include "world/Collider.h"
 #include "audio/GameSfx.h"
@@ -196,6 +197,8 @@ Candlestick* StageState::FindClosestReachableCandle() const {
     return closest;
 }
 
+
+
 bool StageState::IsPlayerNearLitCandle() const {
     if (!controlledCharacter) {
         return false;
@@ -274,6 +277,66 @@ void StageState::TryInteractCandleOnKeyPress() {
     }
 }
 
+Window* StageState::FindClosestReachableWindow() const {
+    if (!bigCharacter || controlledCharacter != bigCharacter) {
+        return nullptr;
+    }
+
+    Window* closest = nullptr;
+    float closestDist = 1e30f;
+    const Vec2 playerCenter = bigCharacter->GetCenter();
+
+    for (const auto& goPtr : objectArray) {
+        GameObject* go = goPtr.get();
+        if (!go || go->IsDead()) continue;
+
+        Window* window = go->GetComponent<Window>();
+        if (!window) continue;
+
+        const float d = playerCenter.Distance(go->box.Center());
+        
+        // Raio de distância para conseguir interagir com a janela (ajuste se precisar)
+        if (d < 200.0f && d < closestDist) {
+            closestDist = d;
+            closest = window;
+        }
+    }
+    return closest;
+}
+
+bool StageState::IsWindowClosestForInteraction(Window* window) const {
+    if (!window) return false;
+
+    const float windowDist = GetInteractableDistance(window->GetAssociated());
+
+    if (reachableJornal && GetInteractableDistance(reachableJornal->GetAssociated()) < windowDist) return false;
+    if (reachableCandle && GetInteractableDistance(reachableCandle->GetAssociated()) < windowDist) return false;
+    if (reachablePushBox && reachablePushBox->IsPushable() && GetInteractableDistance(reachablePushBox->GetAssociated()) < windowDist) return false;
+    
+    ItemPickup* item = FindClosestReachableItem();
+    if (item && !item->GetAssociated().IsDead() && GetInteractableDistance(item->GetAssociated()) < windowDist) return false;
+
+    return true;
+}
+
+void StageState::TryInteractWindowOnKeyPress() {
+    InputManager& input = InputManager::GetInstance();
+    if (!input.KeyPress(SDLK_e) || !reachableWindow) {
+        return;
+    }
+
+    // Só interage se a janela for o objeto mais próximo (evita conflitos)
+    if (!IsWindowClosestForInteraction(reachableWindow)) {
+        return;
+    }
+
+    // Chama a função da janela para abrir/fechar
+    reachableWindow->Toggle();
+    
+    // Salva o jogo toda vez que interage com a janela (igual a vela)
+    SaveCurrentProgress(); 
+}
+
 bool StageState::IsPickupBlocked(ItemPickup* pickup) const {
     if (!pickup || !pickup->GetDef()) {
         return true;
@@ -335,6 +398,7 @@ void StageState::UpdateBoxInteraction() {
     reachablePushBox = FindClosestReachablePushBox();
     reachablePickup = FindClosestReachableItem();
     reachableCandle = FindClosestReachableCandle();
+    reachableWindow = FindClosestReachableWindow();
 
     GameSfx::UpdateCandleProximity(IsPlayerNearLitCandle());
 

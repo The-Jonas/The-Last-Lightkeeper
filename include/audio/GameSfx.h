@@ -22,6 +22,13 @@ void TriggerThunderStrike();
 /// 0..1 — força do clarão de trovão (decai ao longo do tempo).
 float GetThunderFlashStrength();
 
+// ==========================================
+// FUNÇÕES DA JANELA E DO VENTO
+// ==========================================
+void PlayWindowToggle(bool opening);
+void StartWindLoop();
+void StopWindLoop();
+
 } // namespace GameSfx
 
 #endif

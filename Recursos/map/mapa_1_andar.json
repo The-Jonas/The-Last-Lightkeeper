@@ -47,7 +47,7 @@
                  "name":"",
                  "opacity":1,
                  "rotation":0,
-                 "type":"Escada_Quebrada",
+                 "type":"Escada",
                  "visible":true,
                  "width":2497,
                  "x":1188.77,
@@ -1661,7 +1661,7 @@
                 }],
          "opacity":1,
          "type":"objectgroup",
-         "visible":true,
+         "visible":false,
          "x":0,
          "y":0
         }, 
@@ -4099,7 +4099,7 @@
                 }],
          "opacity":1,
          "type":"objectgroup",
-         "visible":true,
+         "visible":false,
          "x":0,
          "y":0
         }],

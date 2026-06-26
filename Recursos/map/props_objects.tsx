@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<tileset version="1.10" tiledversion="1.12.1" name="props_objects" tilewidth="2847" tileheight="1920" tilecount="37" columns="0">
+<tileset version="1.10" tiledversion="1.12.1" name="props_objects" tilewidth="2847" tileheight="1553" tilecount="40" columns="0">
  <grid orientation="orthogonal" width="1" height="1"/>
  <tile id="0" type="Caixa">
   <properties>
@@ -38,9 +38,6 @@
    <property name="itemName" value="Fuel"/>
   </properties>
   <image source="../img/items/lighter_fuel.png" width="38" height="82"/>
- </tile>
- <tile id="8">
-  <image source="../img/items/apple.png" width="1920" height="1920"/>
  </tile>
  <tile id="9" type="Recipiente_Decoracao">
   <properties>
@@ -220,5 +217,41 @@
    <property name="nameObj" value="Estante_Quebrada"/>
   </properties>
   <image source="../img/objetos/Estante_quebrada.png" width="686" height="555"/>
+ </tile>
+ <tile id="38" type="ItemSpawn">
+  <properties>
+   <property name="depthOffset" type="float" value="0"/>
+   <property name="heightLevel" type="int" value="0"/>
+   <property name="itemName" value="Lamp"/>
+   <property name="unique" type="bool" value="true"/>
+  </properties>
+  <image source="../img/objetos/Lamparina_Desligada.png" width="80" height="147"/>
+ </tile>
+ <tile id="39" type="Janela">
+  <properties>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="startsOpen" type="bool" value="false"/>
+   <property name="type" value="1"/>
+   <property name="windRadius" type="float" value="300"/>
+  </properties>
+  <image source="../img/cenario/janelas/janela_1_fechada.png" width="369" height="597"/>
+ </tile>
+ <tile id="40" type="Janela">
+  <properties>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="startsOpen" type="bool" value="false"/>
+   <property name="type" value="2"/>
+   <property name="windRadius" type="float" value="300"/>
+  </properties>
+  <image source="../img/cenario/janelas/janela_2_fechada.png" width="233" height="502"/>
+ </tile>
+ <tile id="41" type="Janela">
+  <properties>
+   <property name="interactive" type="bool" value="false"/>
+   <property name="startsOpen" type="bool" value="false"/>
+   <property name="type" value="3"/>
+   <property name="windRadius" type="float" value="0"/>
+  </properties>
+  <image source="../img/cenario/janelas/janela_3_fechada.png" width="206" height="597"/>
  </tile>
 </tileset>
