@@ -40,6 +40,14 @@ public:
         Continue
     };
 
+    struct LightInstance {
+        Vec2 worldPos;
+        LightMaskShape shape = LightMaskShape::Circle;
+        LightMaskParams params;
+        bool enabled = true;
+        float animationSeed = 0.0f;
+    };
+
     StageState(LoadMode mode = LoadMode::NewGame);                      // Construtor
     ~StageState();                                                      // Destrutor
 
@@ -100,6 +108,20 @@ public:
     bool ShouldSkipPickupSpawn(int tiledId) const;
     bool IsPickupBlocked(ItemPickup* pickup) const;
 
+    const std::vector<LightInstance>& GetLights() const { return lights; }
+ 
+    // Posição em MUNDO da tocha/isqueiro do personagem, se estiver ativa.  
+    // (smoothedTorchLightScreenPos é em coordenadas de TELA — não serve direto)
+    bool GetActiveTorchWorldPos(Vec2& outPos, float& outFalloffRadiusPx) const {
+        const bool playerWantsLightHidden = Character::player && Character::player->hidePersonalLight;
+        const bool torchActive = inventory.IsActiveLightLighter() && !playerWantsLightHidden && bigCharacterObject;
+        if (!torchActive) return false;
+ 
+        outPos = bigCharacterObject->box.Center();
+        outFalloffRadiusPx = lightMaskParams.falloffRadiusPx; // ou lighterLightParams se preferir o raio específico
+        return true;
+    }
+
     Window* GetReachableWindow() const { return reachableWindow; }
     Window* FindClosestReachableWindow() const;
     bool IsWindowClosestForInteraction(Window* window) const;
@@ -128,14 +150,6 @@ public:
     static constexpr float kChromaticAberrationMaxOffsetPx = 14.0f;
 
 private:
-
-    struct LightInstance {
-        Vec2 worldPos;
-        LightMaskShape shape = LightMaskShape::Circle;
-        LightMaskParams params;
-        bool enabled = true;
-        float animationSeed = 0.0f;
-    };
 
     enum class PartyMode {
         TOGETHER,      // Personagens andam juntos (seguidor ativo)

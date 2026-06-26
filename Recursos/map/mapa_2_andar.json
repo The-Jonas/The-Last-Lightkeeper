@@ -56,6 +56,40 @@
                  "y":886.182
                 }, 
                 {
+                 "gid":41,
+                 "height":502,
+                 "id":690,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"interactive",
+                         "type":"bool",
+                         "value":true
+                        }, 
+                        {
+                         "name":"startsOpen",
+                         "type":"bool",
+                         "value":false
+                        }, 
+                        {
+                         "name":"type",
+                         "type":"string",
+                         "value":"2"
+                        }, 
+                        {
+                         "name":"windRadius",
+                         "type":"float",
+                         "value":300
+                        }],
+                 "rotation":0,
+                 "type":"Janela",
+                 "visible":true,
+                 "width":233,
+                 "x":887.030303030303,
+                 "y":193.424242424242
+                }, 
+                {
                  "gid":2,
                  "height":1347,
                  "id":173,
@@ -63,7 +97,7 @@
                  "opacity":1,
                  "rotation":0,
                  "type":"Pilar",
-                 "visible":false,
+                 "visible":true,
                  "width":2847,
                  "x":439,
                  "y":1406
@@ -210,8 +244,8 @@
                  "type":"Caixa",
                  "visible":true,
                  "width":188,
-                 "x":1012.66666666667,
-                 "y":1173
+                 "x":1008.66666666667,
+                 "y":1321
                 }, 
                 {
                  "gid":1,
@@ -258,21 +292,8 @@
                  "type":"Caixa",
                  "visible":true,
                  "width":188,
-                 "x":1159.33333333333,
-                 "y":1779.66666666667
-                }, 
-                {
-                 "gid":10,
-                 "height":596,
-                 "id":680,
-                 "name":"",
-                 "opacity":1,
-                 "rotation":0,
-                 "type":"CaixasAmontoadas",
-                 "visible":true,
-                 "width":443,
-                 "x":1103,
-                 "y":962
+                 "x":1307.33333333333,
+                 "y":1823.66666666667
                 }, 
                 {
                  "gid":22,
@@ -356,40 +377,6 @@
                  "y":686.878787878788
                 }, 
                 {
-                 "gid":41,
-                 "height":502,
-                 "id":690,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"interactive",
-                         "type":"bool",
-                         "value":true
-                        }, 
-                        {
-                         "name":"startsOpen",
-                         "type":"bool",
-                         "value":false
-                        }, 
-                        {
-                         "name":"type",
-                         "type":"string",
-                         "value":"2"
-                        }, 
-                        {
-                         "name":"windRadius",
-                         "type":"float",
-                         "value":300
-                        }],
-                 "rotation":0,
-                 "type":"Janela",
-                 "visible":true,
-                 "width":233,
-                 "x":887.030303030303,
-                 "y":193.424242424242
-                }, 
-                {
                  "gid":42,
                  "height":597,
                  "id":691,
@@ -422,6 +409,165 @@
                  "width":206,
                  "x":3333.36363636364,
                  "y":729.30303030303
+                }, 
+                {
+                 "gid":20,
+                 "height":561,
+                 "id":692,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"waypoints",
+                         "type":"string",
+                         "value":"549,921;1589,2081;2757,1949;2181,957"
+                        }],
+                 "rotation":0,
+                 "type":"Monstro",
+                 "visible":true,
+                 "width":574,
+                 "x":2181,
+                 "y":957
+                }, 
+                {
+                 "gid":10,
+                 "height":596,
+                 "id":693,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":-200
+                        }, 
+                        {
+                         "name":"nameObj",
+                         "type":"string",
+                         "value":"Amontoado_caixas"
+                        }],
+                 "rotation":0,
+                 "type":"Recipiente_Decoracao",
+                 "visible":true,
+                 "width":443,
+                 "x":1126.5,
+                 "y":1018
+                }, 
+                {
+                 "height":0,
+                 "id":694,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":0,
+                         "y":0
+                        }, 
+                        {
+                         "x":-181.617,
+                         "y":-92.9032
+                        }, 
+                        {
+                         "x":-282.667,
+                         "y":-10.1613
+                        }, 
+                        {
+                         "x":-105.147,
+                         "y":87.0968
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":1566.17,
+                 "y":768.903
+                }, 
+                {
+                 "height":0,
+                 "id":695,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":0,
+                         "y":0
+                        }, 
+                        {
+                         "x":-4,
+                         "y":89.7842
+                        }, 
+                        {
+                         "x":-125.333,
+                         "y":192
+                        }, 
+                        {
+                         "x":-126.667,
+                         "y":98.0719
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":1531.5,
+                 "y":801.333
+                }, 
+                {
+                 "height":0,
+                 "id":696,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":0,
+                         "y":0
+                        }, 
+                        {
+                         "x":-2.73278,
+                         "y":30.5169
+                        }, 
+                        {
+                         "x":161.234,
+                         "y":129.333
+                        }, 
+                        {
+                         "x":162.601,
+                         "y":72.6592
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":1240.9,
+                 "y":866.667
+                }, 
+                {
+                 "height":0,
+                 "id":697,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":0,
+                         "y":0
+                        }, 
+                        {
+                         "x":18.715,
+                         "y":78.6667
+                        }, 
+                        {
+                         "x":198.667,
+                         "y":64
+                        }, 
+                        {
+                         "x":159.797,
+                         "y":-24
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":1118.17,
+                 "y":790.667
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -2897,7 +3043,7 @@
          "y":0
         }],
  "nextlayerid":28,
- "nextobjectid":692,
+ "nextobjectid":698,
  "orientation":"orthogonal",
  "properties":[
         {
