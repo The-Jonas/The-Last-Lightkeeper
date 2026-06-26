@@ -363,13 +363,19 @@ void StageState::UpdateBoxInteraction() {
             if (bigCharacter) {
                 bigCharacter->currentState = Character::ActionState::PUSHING_BOX;
             }
+            // O personagem pega a lerdeza da caixa pra ele (em outras palavras ele fica mais lento)
+            bigCharacter->SetSpeedMultiplier(activePushBox->GetWeightMultiplier());
         }
     } else if (activePushBox) {
         GameSfx::NotifyBoxPushEnd();
         activePushBox = nullptr;
         if (bigCharacter && bigCharacter->currentState == Character::ActionState::PUSHING_BOX) {
             bigCharacter->currentState = Character::ActionState::NORMAL;
+
+            // --- DEVOLVE A VELOCIDADE NORMAL AO SOLTAR ---
+            bigCharacter->SetSpeedMultiplier(1.0f);
         }
+        
     }
 
     Box::SetActivePushTarget(activePushBox);

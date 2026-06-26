@@ -44,6 +44,7 @@
  </tile>
  <tile id="9" type="Recipiente_Decoracao">
   <properties>
+   <property name="depthOffset" type="float" value="-200"/>
    <property name="nameObj" value="Amontoado_caixas"/>
   </properties>
   <image source="../img/objetos/Amontoado_caixas.png" width="443" height="596"/>
@@ -115,12 +116,16 @@
  </tile>
  <tile id="21" type="Barril">
   <properties>
+   <property name="depthOffset" type="float" value="-50"/>
+   <property name="interactive" type="bool" value="false"/>
    <property name="type" type="int" value="0"/>
+   <property name="weight" type="float" value="0.5"/>
   </properties>
   <image source="../img/objetos/barril/barril_0.png" width="235" height="343"/>
  </tile>
  <tile id="22" type="Barril">
   <properties>
+   <property name="depthOffset" type="float" value="-140"/>
    <property name="type" type="int" value="1"/>
   </properties>
   <image source="../img/objetos/barril/barril_1.png" width="608" height="630"/>
@@ -133,18 +138,21 @@
  </tile>
  <tile id="24" type="Barril">
   <properties>
+   <property name="depthOffset" type="float" value="-210"/>
    <property name="type" type="int" value="3"/>
   </properties>
   <image source="../img/objetos/barril/barril_3.png" width="536" height="548"/>
  </tile>
  <tile id="25" type="Mesa">
   <properties>
+   <property name="depthOffset" type="float" value="-280"/>
    <property name="variation" value="mapa"/>
   </properties>
   <image source="../img/objetos/mesa/Mesa_mapa.png" width="252" height="446"/>
  </tile>
  <tile id="26" type="Pesca_Asset">
   <properties>
+   <property name="depthOffset" type="float" value="-140"/>
    <property name="nameObject" value="baldes"/>
   </properties>
   <image source="../img/objetos/pesca/baldes.png" width="430" height="419"/>
@@ -181,24 +189,28 @@
  </tile>
  <tile id="32" type="Pesca_Asset">
   <properties>
+   <property name="depthOffset" type="float" value="60"/>
    <property name="nameObject" value="rede_pendurada"/>
   </properties>
   <image source="../img/objetos/pesca/rede_pendurada.png" width="193" height="502"/>
  </tile>
  <tile id="33" type="Pesca_Asset">
   <properties>
+   <property name="depthOffset" type="float" value="-70"/>
    <property name="nameObject" value="redes"/>
   </properties>
   <image source="../img/objetos/pesca/redes.png" width="302" height="338"/>
  </tile>
  <tile id="34" type="Pesca_Asset">
   <properties>
+   <property name="depthOffset" type="float" value="180"/>
    <property name="nameObject" value="vara_pesca"/>
   </properties>
   <image source="../img/objetos/pesca/vara_pesca.png" width="134" height="538"/>
  </tile>
  <tile id="35" type="Recipiente_Decoracao">
   <properties>
+   <property name="depthOffset" type="float" value="-140"/>
    <property name="nameObj" value="Bau"/>
   </properties>
   <image source="../img/objetos/Bau.png" width="498" height="500"/>

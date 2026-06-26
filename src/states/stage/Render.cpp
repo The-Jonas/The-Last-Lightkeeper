@@ -299,25 +299,15 @@ void StageState::Render(){
     }
 
     // ===================================================================
-    // 5. AGORA DESENHAMOS A LISTA ORDENADA INTEIRA SEM REGRAS
+    // 4.5 PRÉ-CALCULA AS LUZES DA TELA E CARIMBA SOMBRAS DOS OBJETOS
     // ===================================================================
-    constexpr int kHudZ = 100;
-    for (const auto& go : objectArray) {
-        if (go->z < kHudZ) {
-            RenderInteractionGlowIfNeeded(*go);
-            go->Render();
-        }
-    }
-
-    // ===================================================================
-    // 6. DEBUG E SISTEMA DE LUZ RADIAL
-    // ===================================================================
+    std::vector<RadialLightOverlay::ScreenLight> screenLights;
 
     if (lightsEnabled && radialGeometry != nullptr) {
-        std::vector<RadialLightOverlay::ScreenLight> screenLights;
         screenLights.reserve(static_cast<size_t>(maxActiveLights + 2));
         constexpr float kCursorLightBlend = 0.28f;
         constexpr float kTorchLightBlend = 0.28f;
+
         if (cursorPreviewLightEnabled) {
             screenLights.push_back({smoothedDynamicLightScreenPos.x, smoothedDynamicLightScreenPos.y, lightMaskShape,
                                     lightMaskParams, kCursorLightBlend});
@@ -342,7 +332,50 @@ void StageState::Render(){
             screenLights.push_back({lightScreen.x, lightScreen.y, light.shape, light.params, light.animationSeed});
             renderedLights++;
         }
-        
+        for (GameObject* obj : testShadowObjects) {
+            if (!obj) continue;
+            if (obj == bigCharacterObject || obj == smallCharacterObject) continue;
+            Vec2 bestLightScreen;
+            float bestTouch = 0.0f;
+            float bestLengthPx = 0.0f;
+            Uint8 bestAlpha = 0;
+
+            for (const auto& sl : screenLights) {
+                Vec2 lightScreen(sl.x, sl.y);
+                float touch = 0.0f;
+                IsFootLit(obj, lightScreen, sl.params, &touch);
+                if (touch > bestTouch) {
+                    bestTouch = touch;
+                    bestLightScreen = lightScreen;
+                    const float distance01 = Clamp01(1.0f - touch);
+                    bestLengthPx = sl.params.shadowMaxLengthPx * distance01;
+                    bestAlpha = static_cast<Uint8>(std::max(0.0f, std::min(255.0f, sl.params.darknessMax * touch)));
+                }
+            }
+
+            if (bestTouch > 0.0f) {
+                RenderSingleLightSpriteShadow(obj, bestLightScreen, bestTouch, bestLengthPx, bestAlpha, lastFrameDt);
+            }
+        }
+    }
+
+    // ===================================================================
+    // 5. AGORA DESENHAMOS A LISTA ORDENADA INTEIRA SEM REGRAS
+    // ===================================================================
+    constexpr int kHudZ = 100;
+    for (const auto& go : objectArray) {
+        if (go->z < kHudZ) {
+            RenderInteractionGlowIfNeeded(*go);
+            go->Render();
+        }
+    }
+
+    // ===================================================================
+    // 6. MÁSCARA DE ESCURIDÃO GERAL E SOMBRAS DE PAREDE
+    // ===================================================================
+
+    if (lightsEnabled && radialGeometry != nullptr) {
+    
         LightOcclusionContext occCtx;
         if (tileMapComp && tileSet) {
             occCtx.solidGrid = &tileMapComp->GetLightOcclusionSolid();
@@ -356,40 +389,9 @@ void StageState::Render(){
             occCtx.cameraY = Camera::pos.y;
             occCtx.zoom = Camera::GetZoom();
         }
+        // Joga a escuridão por cima de tudo (chão + sombras + sprites) respeitando os raios de luz:
         radialGeometry->RenderMany(g.GetRenderer(), g.GetWindowsWidth(), g.GetWindowsHeight(), screenLights, occCtx);
 
-        // ══════════════ TESTE: sombra de sprite real em objetos estáticos ══════
-        // Para reverter: comente todo este bloco ou deixe testShadowObjects vazio.
-        for (GameObject* obj : testShadowObjects) {
-            if (!obj) continue;
- 
-            // Acha a luz mais relevante para ESSE objeto (maior "touch")
-            // Reaproveitamos o mesmo prepared/screenLights já calculado no frame
-            Vec2 bestLightScreen;
-            float bestTouch = 0.0f;
-            float bestLengthPx = 0.0f;
-            Uint8 bestAlpha = 0;
- 
-            for (const auto& sl : screenLights) {   // screenLights já existe no seu pipeline
-                Vec2 lightScreen(sl.x, sl.y);
- 
-                float touch = 0.0f;
-                IsFootLit(obj, lightScreen, sl.params, &touch);   // reaproveita IsFootLit já existente
-                if (touch > bestTouch) {
-                    bestTouch = touch;
-                    bestLightScreen = lightScreen;
-                    const float distance01 = Clamp01(1.0f - touch);
-                    bestLengthPx = sl.params.shadowMaxLengthPx * distance01;
-                    bestAlpha = static_cast<Uint8>(std::max(0.0f, std::min(255.0f, sl.params.darknessMax * touch)));
-                }
-            }
- 
-            // Só 1 luz por objeto (a mais relevante) — esse é o ponto do teste
-            if (bestTouch > 0.0f) {
-                RenderSingleLightSpriteShadow(obj, bestLightScreen, bestTouch, bestLengthPx, bestAlpha, lastFrameDt);
-            }
-        }
-        // ══════════════ FIM DO BLOCO DE TESTE ═══════════════════════════════════
 
         if (shadowsEnabled && staticShadowEdgesBuilt && !staticShadowEdges.empty()) {
             const std::vector<TopDownShadowEdge> noDynamic;

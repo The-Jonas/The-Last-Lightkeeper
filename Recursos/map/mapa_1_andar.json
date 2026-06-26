@@ -91,7 +91,7 @@
                         {
                          "name":"itemName",
                          "type":"string",
-                         "value":"Fuel"
+                         "value":"Lighter Fuel"
                         }],
                  "rotation":0,
                  "type":"ItemSpawn",
@@ -290,7 +290,7 @@
                         {
                          "name":"itemName",
                          "type":"string",
-                         "value":"Fuel"
+                         "value":"Lighter Fuel"
                         }],
                  "rotation":0,
                  "type":"ItemSpawn",
@@ -319,7 +319,7 @@
                         {
                          "name":"itemName",
                          "type":"string",
-                         "value":"Fuel"
+                         "value":"Lighter Fuel"
                         }],
                  "rotation":0,
                  "type":"ItemSpawn",
@@ -348,7 +348,7 @@
                         {
                          "name":"itemName",
                          "type":"string",
-                         "value":"Fuel"
+                         "value":"Lighter Fuel"
                         }],
                  "rotation":0,
                  "type":"ItemSpawn",
@@ -377,7 +377,7 @@
                         {
                          "name":"itemName",
                          "type":"string",
-                         "value":"Fuel"
+                         "value":"Lighter Fuel"
                         }],
                  "rotation":0,
                  "type":"ItemSpawn",
@@ -929,6 +929,11 @@
                  "opacity":1,
                  "properties":[
                         {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":-50
+                        }, 
+                        {
                          "name":"type",
                          "type":"int",
                          "value":0
@@ -939,25 +944,6 @@
                  "width":235,
                  "x":139,
                  "y":1016
-                }, 
-                {
-                 "gid":20,
-                 "height":561,
-                 "id":765,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"waypoints",
-                         "type":"string",
-                         "value":"2234,1323;1258,953;431,1547"
-                        }],
-                 "rotation":0,
-                 "type":"Monstro",
-                 "visible":true,
-                 "width":574,
-                 "x":431.181818181819,
-                 "y":1547.66666666667
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -1675,7 +1661,7 @@
                 }],
          "opacity":1,
          "type":"objectgroup",
-         "visible":false,
+         "visible":true,
          "x":0,
          "y":0
         }, 

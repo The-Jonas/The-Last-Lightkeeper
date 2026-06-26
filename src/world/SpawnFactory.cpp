@@ -71,6 +71,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         boxObj->box.x = spawn.x;
         boxObj->box.y = spawn.y - (boxObj->box.h);
         stage.AddObject(boxObj);
+        stage.RegisterTestShadowObject(boxObj);
     }
     else if (spawn.type == "Pilar") {
         GameObject* pilarObj = new GameObject();
@@ -282,6 +283,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         // Colisão daqui vem da camada "Collision_Obj" desenhada no Tiled. 
  
         stage.AddObject(closetObj);
+        stage.RegisterTestShadowObject(closetObj);
     }
     else if (spawn.type == "Recipiente_Decoracao") {
         // Para as caixas amontoadas e baú 
@@ -304,6 +306,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         // Não há mais injeção manual de SDL_Rect aqui.
  
         stage.AddObject(caixasObj);
+        stage.RegisterTestShadowObject(caixasObj);
     }
     else if (spawn.type == "Mesa") {
         float depthOff = 0.0f;
@@ -324,6 +327,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         // Colisão feita no tiled (objeto na diagonal)
 
         stage.AddObject(tableObj);
+        stage.RegisterTestShadowObject(tableObj);
     }
     else if (spawn.type == "Cadeira_Caida") {
         float depthOff = 0.0f;
@@ -341,14 +345,20 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         // Colisão feita no tiled (objeto na diagonal)
 
         stage.AddObject(fallenChairObj);
+        stage.RegisterTestShadowObject(fallenChairObj);
     }
     else if (spawn.type == "Barril") {
         float depthOff = 0.0f;
         
         int typeB = 0;                                      // Seleciona o tipo do Barril que vai spawnar
+        bool interactive = false;                           // Consigo interagir com o barril ou não?
+        float weight = 1.0f;                                // O peso do barril caso ele seja interativo
 
         if (spawn.properties.count("depthOffset")) depthOff = spawn.properties.at("depthOffset").get<float>();
         if (spawn.properties.count("type")) typeB = spawn.properties.at("type").get<int>();
+        if (spawn.properties.count("weight")) weight = spawn.properties.at("weight").get<float>();
+        
+        if (spawn.properties.count("interactive")) interactive = spawn.properties.at("interactive").get<bool>();
         
         GameObject* barrelObj = new GameObject();
         barrelObj->tiledId = spawn.tiledId;
@@ -356,7 +366,15 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         barrelObj->depthOffset = depthOff;
 
         std::string caminho = "Recursos/img/objetos/barril/barril_" + std::to_string(typeB) + ".png";
-        barrelObj->AddComponent(new SpriteRenderer(*barrelObj, caminho));
+
+        if (interactive) {
+            std::cout << "[DEBUG] Spawnou um Barril INTERATIVO do tipo " << typeB << "!" << std::endl;
+            barrelObj->AddComponent(new Box(*barrelObj, false, caminho, weight));
+        } else {
+            std::cout << "[DEBUG] Spawnou um Barril de ENFEITE do tipo " << typeB << "!" << std::endl;
+            barrelObj->AddComponent(new SpriteRenderer(*barrelObj, caminho));
+        }
+
         barrelObj->box.x = spawn.x;
         barrelObj->box.y = spawn.y - barrelObj->box.h;
 
@@ -385,5 +403,6 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         // Colisão feita no Tiled
 
         stage.AddObject(fishingObj);
+        stage.RegisterTestShadowObject(fishingObj);
     }
 }
