@@ -21,10 +21,11 @@ bool Box::IsActivePushTarget(const Box* box) {
     return gActivePushBox == box;
 }
 
-Box::Box(GameObject& associated, bool isStatic) : Component(associated), isStatic(isStatic) {
-    // Carrega a arte da caixa
-    SpriteRenderer* sprite = new SpriteRenderer(associated, "Recursos/img/objetos/Caixa.png", 1, 1);
-
+Box::Box(GameObject& associated, bool isStatic, std::string spritePath, float weightMulti) 
+    : Component(associated), isStatic(isStatic), weightMultiplier(weightMulti) {
+    
+    // Agora ele carrega a arte dinamicamente baseada no que foi passado
+    SpriteRenderer* sprite = new SpriteRenderer(associated, spritePath, 1, 1);
     associated.AddComponent(sprite);
 
     // Entra na lista ao nascer

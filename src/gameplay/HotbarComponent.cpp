@@ -222,7 +222,8 @@ void HotbarComponent::TryPickupOnKeyPress() {
         stage->IsJornalCloserThanItemAndBox(stage->GetReachableJornal(), closest, pushBox);
     const bool candleWins =
         stage->GetReachableCandle() && stage->IsCandleClosestForInteraction(stage->GetReachableCandle());
-    if (boxWins || jornalWins || candleWins) {
+    const bool windowWins = stage->GetReachableWindow() && stage->IsWindowClosestForInteraction(stage->GetReachableWindow());
+    if (boxWins || jornalWins || candleWins || windowWins) {
         return;
     }
 

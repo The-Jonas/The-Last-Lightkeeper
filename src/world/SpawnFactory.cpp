@@ -14,6 +14,7 @@
 #include "gameplay/ItemPickup.h"
 #include "gameplay/Jornal.h"
 #include "gameplay/Closet.h"
+#include "gameplay/Window.h"
 #include "gameplay/Monster.h"
 #include "ui/MonsterSilhouette.h"
 #include <iostream>
@@ -71,6 +72,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         boxObj->box.x = spawn.x;
         boxObj->box.y = spawn.y - (boxObj->box.h);
         stage.AddObject(boxObj);
+        stage.RegisterTestShadowObject(boxObj);
     }
     else if (spawn.type == "Pilar") {
         GameObject* pilarObj = new GameObject();
@@ -102,6 +104,20 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
             Vec2(1780, 1050)
         ));
 
+        ladderObj->box.x = spawn.x;
+        ladderObj->box.y = spawn.y - ladderObj->box.h;
+
+        stage.AddObject(ladderObj);
+    }
+    else if (spawn.type == "Escada") {
+        GameObject* ladderObj = new GameObject();
+        ladderObj->tiledId = spawn.tiledId;
+        ladderObj->z = spawn.z;
+        ladderObj->isStairs = true;
+
+        ladderObj->AddComponent(new SpriteRenderer(*ladderObj, "Recursos/img/cenario/escada_inteira.png"));
+        ladderObj->AddComponent(new FadeEffect(*ladderObj, true));
+        
         ladderObj->box.x = spawn.x;
         ladderObj->box.y = spawn.y - ladderObj->box.h;
 
@@ -282,6 +298,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         // Colisão daqui vem da camada "Collision_Obj" desenhada no Tiled. 
  
         stage.AddObject(closetObj);
+        stage.RegisterTestShadowObject(closetObj);
     }
     else if (spawn.type == "Recipiente_Decoracao") {
         // Para as caixas amontoadas e baú 
@@ -304,6 +321,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         // Não há mais injeção manual de SDL_Rect aqui.
  
         stage.AddObject(caixasObj);
+        stage.RegisterTestShadowObject(caixasObj);
     }
     else if (spawn.type == "Mesa") {
         float depthOff = 0.0f;
@@ -324,6 +342,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         // Colisão feita no tiled (objeto na diagonal)
 
         stage.AddObject(tableObj);
+        stage.RegisterTestShadowObject(tableObj);
     }
     else if (spawn.type == "Cadeira_Caida") {
         float depthOff = 0.0f;
@@ -341,14 +360,20 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         // Colisão feita no tiled (objeto na diagonal)
 
         stage.AddObject(fallenChairObj);
+        stage.RegisterTestShadowObject(fallenChairObj);
     }
     else if (spawn.type == "Barril") {
         float depthOff = 0.0f;
         
         int typeB = 0;                                      // Seleciona o tipo do Barril que vai spawnar
+        bool interactive = false;                           // Consigo interagir com o barril ou não?
+        float weight = 1.0f;                                // O peso do barril caso ele seja interativo
 
         if (spawn.properties.count("depthOffset")) depthOff = spawn.properties.at("depthOffset").get<float>();
         if (spawn.properties.count("type")) typeB = spawn.properties.at("type").get<int>();
+        if (spawn.properties.count("weight")) weight = spawn.properties.at("weight").get<float>();
+        
+        if (spawn.properties.count("interactive")) interactive = spawn.properties.at("interactive").get<bool>();
         
         GameObject* barrelObj = new GameObject();
         barrelObj->tiledId = spawn.tiledId;
@@ -356,7 +381,13 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         barrelObj->depthOffset = depthOff;
 
         std::string caminho = "Recursos/img/objetos/barril/barril_" + std::to_string(typeB) + ".png";
-        barrelObj->AddComponent(new SpriteRenderer(*barrelObj, caminho));
+
+        if (interactive) {
+            barrelObj->AddComponent(new Box(*barrelObj, false, caminho, weight));
+        } else {
+            barrelObj->AddComponent(new SpriteRenderer(*barrelObj, caminho));
+        }
+
         barrelObj->box.x = spawn.x;
         barrelObj->box.y = spawn.y - barrelObj->box.h;
 
@@ -364,6 +395,38 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
 
         stage.AddObject(barrelObj);
         stage.RegisterTestShadowObject(barrelObj);
+    }
+    else if (spawn.type == "Janela") {
+        float depthOff = -500.0f;
+        bool startsOpen = false;
+        float windRadius = 300.0f;
+        std::string windowType = "1"; 
+        
+        bool interactive = false; 
+        if (spawn.properties.count("depthOffset")) depthOff = spawn.properties.at("depthOffset").get<float>();
+        if (spawn.properties.count("startsOpen")) startsOpen = spawn.properties.at("startsOpen").get<bool>();
+        if (spawn.properties.count("windRadius")) windRadius = spawn.properties.at("windRadius").get<float>();
+        if (spawn.properties.count("type")) windowType = spawn.properties.at("type").get<std::string>();
+        if (spawn.properties.count("interactive")) interactive = spawn.properties.at("interactive").get<bool>();
+
+        GameObject* winObj = new GameObject();
+        winObj->tiledId = spawn.tiledId;
+        winObj->z = spawn.z;
+        winObj->depthOffset = depthOff;
+
+        if (interactive) {
+            // Janela completa do puzzle! Ganha lógica, estados e vento.
+            winObj->AddComponent(new Window(*winObj, windowType, startsOpen, windRadius));
+        } else {
+            // Janela de enfeite! Só carrega o PNG dela fechada direto da pasta.
+            std::string caminho = "Recursos/img/cenario/janelas/janela_" + windowType + "_fechada.png";
+            winObj->AddComponent(new SpriteRenderer(*winObj, caminho));
+        }
+
+        winObj->box.x = spawn.x;
+        winObj->box.y = spawn.y - winObj->box.h; 
+
+        stage.AddObject(winObj);
     }
     else if (spawn.type == "Pesca_Asset") {
         float depthOff = 0.0f;
@@ -385,5 +448,6 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         // Colisão feita no Tiled
 
         stage.AddObject(fishingObj);
+        stage.RegisterTestShadowObject(fishingObj);
     }
 }

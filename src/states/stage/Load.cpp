@@ -80,18 +80,51 @@ StageState::StageState(LoadMode mode) : loadMode(mode) {
     // Cria uma textura vazia para ser a nossa "Tela de Cinema"
     renderTarget = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, winW, winH);
 
+    // ══════════════════════════════════════════════════════════════════════════════
+    //  Construtor — Overlay de baixa sanidade, centralizado corretamente
+    // ══════════════════════════════════════════════════════════════════════════════
+ 
+    // Cria o overlay de baixa sanidade (fica oculto até a sanidade cair)
+    sanityOverlayObj = new GameObject();
+    sanityOverlayObj->z = 250; // Acima de tudo, inclusive do HUD (kHudZ = 100)
+    SpriteRenderer* overlaySprite = new SpriteRenderer(*sanityOverlayObj, "Recursos/img/ui/sanityUI.png", 8, 7);
+    sanityOverlayObj->AddComponent(overlaySprite);
+    overlaySprite->SetCameraFollower(true);
+ 
+    // ── DIMENSIONAMENTO CORRETO ─────────────────────────────────────────────
+    // Cada frame do spritesheet é QUADRADO (1920x1920), mas a tela é 16:9
+    // (1920x1080). Para cobrir a tela inteira sem distorcer o desenho,
+    // escalamos pela MAIOR dimensão da tela e centralizamos o resto.
+    {
+        const float winW = static_cast<float>(Game::GetInstance().GetWindowsWidth());
+        const float winH = static_cast<float>(Game::GetInstance().GetWindowsHeight());
+        const float frameSizePx = 1920.0f; // tamanho de UM frame do spritesheet
+ 
+        // A maior dimensão da tela "ganha" — garante cobertura total sem barras vazias
+        const float scale = std::max(winW, winH) / frameSizePx;
+ 
+        sanityOverlayObj->box.w = frameSizePx * scale;
+        sanityOverlayObj->box.h = frameSizePx * scale;
+ 
+        // Centraliza nos dois eixos
+        sanityOverlayObj->box.x = (winW - sanityOverlayObj->box.w) * 0.5f;
+        sanityOverlayObj->box.y = (winH - sanityOverlayObj->box.h) * 0.5f;
+    }
+ 
+    overlaySprite->SetTint(255, 255, 255, 0); // Começa invisível (alpha 0)
+
     // ── WARMUP: força o driver a compilar o pipeline de render-to-texture agora,
     // durante a criação do stage, em vez de no primeiro movimento do jogador
     // isso possivelmente vai melhorar a travada inicial que o jogo tava tendo ──
     if (renderTarget) {
-    SDL_Texture* prevTarget = SDL_GetRenderTarget(renderer);
+        SDL_Texture* prevTarget = SDL_GetRenderTarget(renderer);
 
-    SDL_SetRenderTarget(renderer, renderTarget);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-    SDL_RenderClear(renderer);
+        SDL_SetRenderTarget(renderer, renderTarget);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+        SDL_RenderClear(renderer);
 
-    SDL_SetRenderTarget(renderer, prevTarget);
-}
+        SDL_SetRenderTarget(renderer, prevTarget);
+    }
 }
 
 StageState::~StageState(){                                
@@ -100,6 +133,8 @@ StageState::~StageState(){
         Mix_HaltChannel(oceanMixerChannel);
         oceanMixerChannel = -1;
     }
+    delete sanityOverlayObj;        // ← ADICIONE ESSA LINHA
+    sanityOverlayObj = nullptr;     // ← E ESSA, por segurança
     // O destrutor de State cuida de limpar o objectArray
     // A música é limpa pelo destrutor de Music
     SetMouseConfinedToWindow(false);

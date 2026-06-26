@@ -6,6 +6,7 @@
 #include "core/Timer.h"
 #include "math/Vec2.h"
 #include "core/LevelManager.h"
+#include "gameplay/Window.h"
 #include <vector>
 #include <string>
 #include <sstream>
@@ -19,13 +20,14 @@ public:
         HUNT,                                           // Tocou em um irmão no escuro - perseguição agressiva ás cegas
         CHASE,                                          // Viu os irmãos e está correndo atrás (ou tocou neles no escuro)
         CAMP_CLOSET,                                    // Viu os irmãos entrarem no armário e está esperando na frente
-        FLEE_LIGHT                                      // Entrou em área muito iluminada — recua
+        FLEE_LIGHT,                                     // Entrou em área muito iluminada — recua
+        SABOTAGE_WINDOW                                 // Vai dar prioridade a abrir a janela pra apagar as velas
     };
 
     Monster(GameObject& associated);
     ~Monster();
 
-    void Start() override;
+    void Start() override;  
     void Update(float dt) override;
     void Render() override;
     void NotifyCollision(GameObject& other) override;
@@ -65,7 +67,7 @@ private:
     bool CanSeeLitBrother(Vec2& outPos) const;
  
     // Retorna true se a posição mundana está em área iluminada demais para o monstro
-    bool IsPosInLight(Vec2 worldPos) const;
+    bool IsWorldPosInAnyLight(Vec2 worldPos, float extraRadius = 0.0f) const;
  
     // Retorna true se o monstro está sobre tile iluminado demais (usa sua própria pos)
     bool IsSelfInLight() const;
@@ -122,6 +124,11 @@ private:
     static constexpr float kFleeThreshold         = 0.70f;  // Iluminação que faz ele recuar
     static constexpr float kMemoryDecayTime       = 6.0f;   // Segundos até esquecer posição
     static constexpr float kPathRefreshInterval   = 0.35f;  // Segundos entre recálculos de path
+
+    // ── Variáveis de Sabotagem ────────────────────────────────────────────────
+    Window* targetWindow = nullptr;
+    Window* FindNearbyClosedWindow();
+    void UpdateSabotageWindow(float dt);
 };
 
 #endif

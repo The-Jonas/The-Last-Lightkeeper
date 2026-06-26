@@ -1,0 +1,401 @@
+{
+  "sprites": [
+    {
+      "fileName": "linhas_00000.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 0,
+      "y": 0
+    },
+    {
+      "fileName": "linhas_00001.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 1920,
+      "y": 0
+    },
+    {
+      "fileName": "linhas_00002.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 3840,
+      "y": 0
+    },
+    {
+      "fileName": "linhas_00003.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 5760,
+      "y": 0
+    },
+    {
+      "fileName": "linhas_00004.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 7680,
+      "y": 0
+    },
+    {
+      "fileName": "linhas_00005.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 9600,
+      "y": 0
+    },
+    {
+      "fileName": "linhas_00006.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 11520,
+      "y": 0
+    },
+    {
+      "fileName": "linhas_00007.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 13440,
+      "y": 0
+    },
+    {
+      "fileName": "linhas_00008.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 0,
+      "y": 1920
+    },
+    {
+      "fileName": "linhas_00009.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 1920,
+      "y": 1920
+    },
+    {
+      "fileName": "linhas_00010.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 3840,
+      "y": 1920
+    },
+    {
+      "fileName": "linhas_00011.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 5760,
+      "y": 1920
+    },
+    {
+      "fileName": "linhas_00012.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 7680,
+      "y": 1920
+    },
+    {
+      "fileName": "linhas_00013.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 9600,
+      "y": 1920
+    },
+    {
+      "fileName": "linhas_00014.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 11520,
+      "y": 1920
+    },
+    {
+      "fileName": "linhas_00015.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 13440,
+      "y": 1920
+    },
+    {
+      "fileName": "linhas_00016.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 0,
+      "y": 3840
+    },
+    {
+      "fileName": "linhas_00017.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 1920,
+      "y": 3840
+    },
+    {
+      "fileName": "linhas_00018.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 3840,
+      "y": 3840
+    },
+    {
+      "fileName": "linhas_00019.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 5760,
+      "y": 3840
+    },
+    {
+      "fileName": "linhas_00020.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 7680,
+      "y": 3840
+    },
+    {
+      "fileName": "linhas_00021.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 9600,
+      "y": 3840
+    },
+    {
+      "fileName": "linhas_00022.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 11520,
+      "y": 3840
+    },
+    {
+      "fileName": "linhas_00023.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 13440,
+      "y": 3840
+    },
+    {
+      "fileName": "linhas_00024.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 0,
+      "y": 5760
+    },
+    {
+      "fileName": "linhas_00025.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 1920,
+      "y": 5760
+    },
+    {
+      "fileName": "linhas_00026.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 3840,
+      "y": 5760
+    },
+    {
+      "fileName": "linhas_00027.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 5760,
+      "y": 5760
+    },
+    {
+      "fileName": "linhas_00028.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 7680,
+      "y": 5760
+    },
+    {
+      "fileName": "linhas_00029.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 9600,
+      "y": 5760
+    },
+    {
+      "fileName": "linhas_00030.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 11520,
+      "y": 5760
+    },
+    {
+      "fileName": "linhas_00031.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 13440,
+      "y": 5760
+    },
+    {
+      "fileName": "linhas_00032.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 0,
+      "y": 7680
+    },
+    {
+      "fileName": "linhas_00033.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 1920,
+      "y": 7680
+    },
+    {
+      "fileName": "linhas_00034.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 3840,
+      "y": 7680
+    },
+    {
+      "fileName": "linhas_00035.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 5760,
+      "y": 7680
+    },
+    {
+      "fileName": "linhas_00036.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 7680,
+      "y": 7680
+    },
+    {
+      "fileName": "linhas_00037.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 9600,
+      "y": 7680
+    },
+    {
+      "fileName": "linhas_00038.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 11520,
+      "y": 7680
+    },
+    {
+      "fileName": "linhas_00039.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 13440,
+      "y": 7680
+    },
+    {
+      "fileName": "linhas_00040.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 0,
+      "y": 9600
+    },
+    {
+      "fileName": "linhas_00041.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 1920,
+      "y": 9600
+    },
+    {
+      "fileName": "linhas_00042.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 3840,
+      "y": 9600
+    },
+    {
+      "fileName": "linhas_00043.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 5760,
+      "y": 9600
+    },
+    {
+      "fileName": "linhas_00044.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 7680,
+      "y": 9600
+    },
+    {
+      "fileName": "linhas_00045.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 9600,
+      "y": 9600
+    },
+    {
+      "fileName": "linhas_00046.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 11520,
+      "y": 9600
+    },
+    {
+      "fileName": "linhas_00047.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 13440,
+      "y": 9600
+    },
+    {
+      "fileName": "linhas_00048.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 0,
+      "y": 11520
+    },
+    {
+      "fileName": "linhas_00049.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 1920,
+      "y": 11520
+    },
+    {
+      "fileName": "linhas_00050.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 3840,
+      "y": 11520
+    },
+    {
+      "fileName": "linhas_00051.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 5760,
+      "y": 11520
+    },
+    {
+      "fileName": "linhas_00052.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 7680,
+      "y": 11520
+    },
+    {
+      "fileName": "linhas_00053.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 9600,
+      "y": 11520
+    },
+    {
+      "fileName": "linhas_00054.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 11520,
+      "y": 11520
+    },
+    {
+      "fileName": "linhas_00055.png",
+      "width": 1920,
+      "height": 1920,
+      "x": 13440,
+      "y": 11520
+    }
+  ],
+  "packMode": "grid",
+  "padding": 0,
+  "backgroundColor": "rgba(0, 0, 0, 0)",
+  "spriteSheetWidth": 15360,
+  "spriteSheetHeight": 13440
+}

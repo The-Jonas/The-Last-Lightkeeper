@@ -31,6 +31,10 @@ constexpr const char* kThunderPaths[] = {
 
 constexpr const char* kCandleLoopPath = "Recursos/audio/SFX/VELA/FOGO_VELA.mp3";
 
+constexpr const char* kWindowOpenPath = "Recursos/audio/SFX/JANELA/JANELA_ABRINDO.mp3";
+constexpr const char* kWindowClosePath = "Recursos/audio/SFX/JANELA/JANELA_FECHANDO.mp3";
+constexpr const char* kWindLoopPath = "Recursos/audio/SFX/JANELA/VENTO_LOOP.mp3";
+
 constexpr int kThunderCount = 4;
 constexpr float kMinFootstepSpeed = 35.0f;
 constexpr float kThunderMinDelay = 18.0f;
@@ -49,7 +53,11 @@ Sound gFootstepWoodSound;
 Sound gFootstepStairsSound;
 Sound gThunderSounds[kThunderCount];
 Sound gCandleLoopSound;
+Sound gWindowOpenSound;
+Sound gWindowCloseSound;
+Sound gWindLoopSound;
 
+bool gWindLoopActive = false;
 bool gLoaded = false;
 bool gGameplayMuted = false;
 float gThunderTimer = 12.0f;
@@ -72,6 +80,9 @@ void EnsureLoaded() {
     gFootstepStoneSound.Open(kFootstepStonePath);
     gFootstepWoodSound.Open(kFootstepWoodPath);
     gFootstepStairsSound.Open(kFootstepStairsPath);
+    gWindowOpenSound.Open(kWindowOpenPath);
+    gWindowCloseSound.Open(kWindowClosePath);
+    gWindLoopSound.Open(kWindLoopPath);
     for (int i = 0; i < kThunderCount; ++i) {
         gThunderSounds[i].Open(kThunderPaths[i]);
     }
@@ -344,6 +355,26 @@ float GetThunderFlashStrength() {
         return 0.0f;
     }
     return gThunderFlashTimer / kThunderFlashDuration;
+}
+
+void PlayWindowToggle(bool opening) {
+    if (gGameplayMuted) return;
+    PlaySound(opening ? gWindowOpenSound : gWindowCloseSound);
+}
+
+void StartWindLoop() {
+    if (gGameplayMuted || gWindLoopActive) return;
+    EnsureLoaded();
+    if (gWindLoopSound.PlayLooped() >= 0) {
+        gWindLoopActive = true;
+    }
+}
+
+void StopWindLoop() {
+    if (gWindLoopActive) {
+        gWindLoopSound.Stop();
+        gWindLoopActive = false;
+    }
 }
 
 } // namespace GameSfx

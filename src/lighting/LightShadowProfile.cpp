@@ -85,9 +85,6 @@ void EndLightsFrame() {
         return;
     }
     g_lastLogMs = now;
-
-    SDL_Log("[lights profile] sprite_shadows=%.2f ms (ema) | radial_overlay=%.2f ms | volume_shadows=%.2f ms",
-            g_emaSpriteMs, g_emaRadialMs, g_emaVolumeMs);
 }
 
 } // namespace LightShadowProfile

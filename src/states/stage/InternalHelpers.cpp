@@ -20,6 +20,8 @@ namespace stage_internal {
 
 // Mapa de ângulos suavizados por objeto — persiste entre frames
 static std::unordered_map<GameObject*, double> gSmoothedShadowAngles;
+static std::unordered_map<GameObject*, Vec2> gLastChosenLight;
+static std::unordered_map<GameObject*, float> gLastChosenTouch;
 
 float gStageOstSilenceRecover = 0.0f; // Debounce Mix_PlayMusic — Mix_PlayMusic a cada frame atrasa chunks.
 
@@ -245,8 +247,7 @@ void RenderProjectedSpriteShadow(GameObject* go, const Vec2& lightScreenPos, flo
 
 void RenderSingleLightSpriteShadow(GameObject* go, const Vec2& lightScreenPos,
     float lightTouch, float shadowLengthPx, Uint8 shadowAlpha, float dt) {
-    // Implementação IDÊNTICA ao RenderProjectedSpriteShadow já existente.
-    // Copiada aqui só para isolar o teste sem tocar na função original.
+    // Uma variação da função acima
     if (!go || lightTouch <= 0.01f || shadowLengthPx <= 1.0f) {
         return;
     }
@@ -258,15 +259,35 @@ void RenderSingleLightSpriteShadow(GameObject* go, const Vec2& lightScreenPos,
     const Rect originalBox = go->box;
     const double originalAngle = go->angleDeg;
  
-const Vec2 foot(originalBox.x + 0.5f * originalBox.w, originalBox.y + originalBox.h);
+    // "foot" — ponto de ANCORAGEM VISUAL. É de onde a sombra nasce na tela,
+    // continua sendo a base do objeto.
+    const Vec2 foot(originalBox.x + 0.5f * originalBox.w, originalBox.y + originalBox.h);
+ 
+    // "objCenter" — ponto usado SÓ para calcular a DIREÇÃO da luz.
+    // Objetos grandes/largos: usar o centro evita que a direção pareça
+    // errada quando o jogador está do LADO do objeto, não embaixo dele.
+    // O centro é equidistante de todas as bordas, então não favorece
+    // nenhum lado em particular — diferente do "pé", que favorece a base.
+    const Vec2 objCenter(originalBox.x + 0.5f * originalBox.w, originalBox.y + 0.5f * originalBox.h);
  
     const Vec2 lightWorld(lightScreenPos.x / Camera::GetZoom() + Camera::pos.x,
                           lightScreenPos.y / Camera::GetZoom() + Camera::pos.y);
-    Vec2 dir = foot - lightWorld;
-    if (dir.Magnitude() < 1e-3f) {
-        return;
+ 
+    Vec2 dir = objCenter - lightWorld;
+    float distToCenter = dir.Magnitude();
+
+    // Cria um raio de proteção baseado no tamanho do objeto.
+    // Se a luz estiver muito perto do centro (ex: dentro da caixa), 
+    // a direção fica caótica. Nós abortamos a sombra.
+    float deadzoneRadius = std::min(originalBox.w, originalBox.h) * 0.1f; 
+
+    if (distToCenter < deadzoneRadius) {
+        return; // Luz entrou no objeto, não desenha a sombra
     }
-    dir = dir.Normalized();
+    
+    // Como já temos a magnitude, podemos normalizar dividindo por ela para poupar a CPU
+    dir.x /= distToCenter;
+    dir.y /= distToCenter;
  
     const float distance01 = Clamp01(1.0f - lightTouch);
     const float fastStretch = std::pow(distance01, 0.60f);
@@ -278,31 +299,20 @@ const Vec2 foot(originalBox.x + 0.5f * originalBox.w, originalBox.y + originalBo
     shadowBox.h = std::max(2.0f, originalBox.h * stretch);
  
     // ── SUAVIZAÇÃO DO ÂNGULO ──────────────────────────────────────────────────
-    // Em vez de aplicar o ângulo bruto (que muda bruscamente perto de objetos
-    // pequenos), interpola suavemente frame a frame.
     const double rawAngDeg = std::atan2(dir.y, dir.x) * (180.0 / M_PI) + 90.0;
  
     double& smoothedAngDeg = gSmoothedShadowAngles[go];
-    // Trata wrap-around de ângulo (ex.: ir de 359° pra 1° não deve girar 358°)
     double angDiff = rawAngDeg - smoothedAngDeg;
     while (angDiff > 180.0)  angDiff -= 360.0;
     while (angDiff < -180.0) angDiff += 360.0;
  
-    const double smoothingSpeed = 6.0; // Maior = acompanha mais rápido a luz real
+    const double smoothingSpeed = 6.0;
     smoothedAngDeg += angDiff * std::min(1.0, static_cast<double>(smoothingSpeed * dt));
  
     const double angDeg = smoothedAngDeg;
     const double angRad = angDeg * (M_PI / 180.0);
  
-    // ── ANCORAGEM CORRIGIDA ───────────────────────────────────────────────────
-    // O pivô de rotação é o PÉ REAL do objeto (foot), não um ponto recalculado
-    // a partir do shadowBox já esticado. Isso garante que, independente de
-    // quanto a sombra estique, ela SEMPRE nasce exatamente no pé do objeto,
-    // e só "cresce para longe" dali — nunca se desloca do lugar errado.
-    //
-    // localOffset: do pé até o CENTRO da sombra, ainda não rotacionado.
-    // Como a sombra cresce "para fora" a partir do pé (não simetricamente
-    // ao redor dele), o centro fica a meio caminho do comprimento total.
+    // ── ANCORAGEM — pivô continua sendo "foot", a base real do objeto ─────────
     const Vec2 localOffset(0.0f, -shadowBox.h * 0.5f);
     const Vec2 rotatedOffset(
         localOffset.x * std::cos(angRad) - localOffset.y * std::sin(angRad),
@@ -316,7 +326,7 @@ const Vec2 foot(originalBox.x + 0.5f * originalBox.w, originalBox.y + originalBo
     go->box = shadowBox;
     go->angleDeg = angDeg;
     RenderShadowSpriteOnly(go, sprite, shadowAlpha);
-
+ 
     go->box = originalBox;
     go->angleDeg = originalAngle;
 }

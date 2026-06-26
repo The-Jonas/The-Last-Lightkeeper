@@ -155,6 +155,7 @@ void StageState::Update(float dt){
     UpdateBoxInteraction();
     TryOpenJournalOnKeyPress();
     TryInteractCandleOnKeyPress();
+    TryInteractWindowOnKeyPress();
     UpdateInventoryLight();
 
     UpdateArray(dt);                                                                    // Percorre o vetor de GameObjects chamando o Update de cada um
@@ -356,6 +357,64 @@ void StageState::Update(float dt){
 
     if (input.KeyPress(THUNDER_TEST_KEY)) {
         GameSfx::TriggerThunderStrike();
+    }
+
+    // ── Overlay de baixa sanidade — frame reage à intensidade do desespero ──
+    {
+        float lowestSanityUpdate = std::min(
+            Character::player ? Character::player->sanity : 100.0f,
+            Character::littleBrother ? Character::littleBrother->sanity : 100.0f
+        );
+ 
+        SpriteRenderer* overlaySprite = sanityOverlayObj
+            ? sanityOverlayObj->GetComponent<SpriteRenderer>() : nullptr;
+ 
+        if (overlaySprite) {
+            constexpr float kSanityOverlayThreshold = 60.0f; // mesmo limiar de antes
+ 
+            if (lowestSanityUpdate < kSanityOverlayThreshold) {
+                // intensity: 0.0 (sanidade = threshold) até 1.0 (sanidade = 0)
+                const float intensity = 1.0f - (lowestSanityUpdate / kSanityOverlayThreshold);
+ 
+                // ── SUAVIZAÇÃO: evita "pular" de frame bruscamente quando a
+                // sanidade muda rápido (ex.: tocada pelo monstro). Interpola
+                // a intensidade visual suavemente em direção à real.
+                sanityOverlaySmoothedIntensity += (intensity - sanityOverlaySmoothedIntensity) * std::min(1.0f, 4.0f * dt);
+ 
+                // Mapeia a intensidade suavizada (0.0 a 1.0) direto para o
+                // frame correspondente do spritesheet (0 a 55).
+                int targetFrame = static_cast<int>(
+                    sanityOverlaySmoothedIntensity * (kSanityOverlayFrameCount - 1) + 0.5f
+                );
+                targetFrame = std::max(0, std::min(kSanityOverlayFrameCount - 1, targetFrame));
+ 
+                if (targetFrame != sanityOverlayFrameIndex) {
+                    sanityOverlayFrameIndex = targetFrame;
+                    overlaySprite->SetFrame(sanityOverlayFrameIndex);
+                }
+ 
+                // Alpha também acompanha a intensidade suavizada
+                Uint8 alpha = static_cast<Uint8>(std::min(255.0f, 255.0f * sanityOverlaySmoothedIntensity));
+                overlaySprite->SetTint(255, 255, 255, alpha);
+ 
+            } else {
+                // Sanidade saudável — suaviza de volta para 0 e esconde
+                sanityOverlaySmoothedIntensity += (0.0f - sanityOverlaySmoothedIntensity) * std::min(1.0f, 4.0f * dt);
+ 
+                int targetFrame = static_cast<int>(
+                    sanityOverlaySmoothedIntensity * (kSanityOverlayFrameCount - 1) + 0.5f
+                );
+                targetFrame = std::max(0, std::min(kSanityOverlayFrameCount - 1, targetFrame));
+ 
+                if (targetFrame != sanityOverlayFrameIndex) {
+                    sanityOverlayFrameIndex = targetFrame;
+                    overlaySprite->SetFrame(sanityOverlayFrameIndex);
+                }
+ 
+                Uint8 alpha = static_cast<Uint8>(std::min(255.0f, 255.0f * sanityOverlaySmoothedIntensity));
+                overlaySprite->SetTint(255, 255, 255, alpha);
+            }
+        }
     }
 
     // VERIFICAÇÃO DE FIM DE JOGO

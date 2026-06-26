@@ -31,6 +31,7 @@ class ItemPickup;
 class Jornal;
 class Candlestick;
 class InventoryGrid;
+class Window;
 
 class StageState : public State {
 friend class SpawnFactory;
@@ -38,6 +39,14 @@ public:
     enum class LoadMode {
         NewGame,
         Continue
+    };
+
+    struct LightInstance {
+        Vec2 worldPos;
+        LightMaskShape shape = LightMaskShape::Circle;
+        LightMaskParams params;
+        bool enabled = true;
+        float animationSeed = 0.0f;
     };
 
     StageState(LoadMode mode = LoadMode::NewGame);                      // Construtor
@@ -100,6 +109,25 @@ public:
     bool ShouldSkipPickupSpawn(int tiledId) const;
     bool IsPickupBlocked(ItemPickup* pickup) const;
 
+    const std::vector<LightInstance>& GetLights() const { return lights; }
+ 
+    // Posição em MUNDO da tocha/isqueiro do personagem, se estiver ativa.  
+    // (smoothedTorchLightScreenPos é em coordenadas de TELA — não serve direto)
+    bool GetActiveTorchWorldPos(Vec2& outPos, float& outFalloffRadiusPx) const {
+        const bool playerWantsLightHidden = Character::player && Character::player->hidePersonalLight;
+        const bool torchActive = inventory.IsActiveLightLighter() && !playerWantsLightHidden && bigCharacterObject;
+        if (!torchActive) return false;
+ 
+        outPos = bigCharacterObject->box.Center();
+        outFalloffRadiusPx = lightMaskParams.falloffRadiusPx; // ou lighterLightParams se preferir o raio específico
+        return true;
+    }
+
+    Window* GetReachableWindow() const { return reachableWindow; }
+    Window* FindClosestReachableWindow() const;
+    bool IsWindowClosestForInteraction(Window* window) const;
+    void TryInteractWindowOnKeyPress();
+
     // Público pra ser reutilizado pelo monstro
     std::vector<Vec2> FindPathWorld(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent = nullptr, int nodeBudget = 4096) const;
     bool IsWorldPosNavigableFor(const Vec2& worldPos, const GameObject* agent) const;
@@ -108,21 +136,22 @@ public:
     // Getter para saber quem está atualmente sendo controlado
     Character* GetControlledCharacter() const { return controlledCharacter; }
 
-    // TESTE: objetos estáticos que vão receber sombra de sprite real
+    // objetos estáticos que vão receber sombra de sprite real
     // Para reverter o teste, basta deixar esse vetor vazio (não chame Register)
     std::vector<GameObject*> testShadowObjects;
     void RegisterTestShadowObject(GameObject* go) { testShadowObjects.push_back(go); }
     float lastFrameDt = 0.016f;
 
-private:
+    // Overlay de baixa sanidade (spritesheet de "linhas"/rabiscos na tela)
+    GameObject* sanityOverlayObj = nullptr;   // GameObject dedicado para o overlay
+    float sanityOverlayFrameTimer = 0.0f;
+    int   sanityOverlayFrameIndex = 0;
+    float sanityOverlaySmoothedIntensity = 0.0f;
+    static constexpr int   kSanityOverlayFrameCount = 56;
+    static constexpr float kSanityOverlayFrameSeconds = 0.05f; // ajuste a velocidade aqui
+    static constexpr float kChromaticAberrationMaxOffsetPx = 14.0f;
 
-    struct LightInstance {
-        Vec2 worldPos;
-        LightMaskShape shape = LightMaskShape::Circle;
-        LightMaskParams params;
-        bool enabled = true;
-        float animationSeed = 0.0f;
-    };
+private:
 
     enum class PartyMode {
         TOGETHER,      // Personagens andam juntos (seguidor ativo)
@@ -251,6 +280,7 @@ private:
 
     Jornal* reachableJornal = nullptr;
     Candlestick* reachableCandle = nullptr;
+    Window* reachableWindow = nullptr;
     bool journalViewerOpen = false;
     bool journalViewerClosing = false;
     float journalAnimTimer = 0.0f;
