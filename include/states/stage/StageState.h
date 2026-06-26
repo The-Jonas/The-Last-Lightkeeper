@@ -112,11 +112,20 @@ public:
     // Getter para saber quem está atualmente sendo controlado
     Character* GetControlledCharacter() const { return controlledCharacter; }
 
-    // TESTE: objetos estáticos que vão receber sombra de sprite real
+    // objetos estáticos que vão receber sombra de sprite real
     // Para reverter o teste, basta deixar esse vetor vazio (não chame Register)
     std::vector<GameObject*> testShadowObjects;
     void RegisterTestShadowObject(GameObject* go) { testShadowObjects.push_back(go); }
     float lastFrameDt = 0.016f;
+
+    // Overlay de baixa sanidade (spritesheet de "linhas"/rabiscos na tela)
+    GameObject* sanityOverlayObj = nullptr;   // GameObject dedicado para o overlay
+    float sanityOverlayFrameTimer = 0.0f;
+    int   sanityOverlayFrameIndex = 0;
+    float sanityOverlaySmoothedIntensity = 0.0f;
+    static constexpr int   kSanityOverlayFrameCount = 56;
+    static constexpr float kSanityOverlayFrameSeconds = 0.05f; // ajuste a velocidade aqui
+    static constexpr float kChromaticAberrationMaxOffsetPx = 14.0f;
 
 private:
 

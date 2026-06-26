@@ -477,79 +477,7 @@ void StageState::Render(){
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
 
-    float lowestSanity = std::min(Character::player->sanity, Character::littleBrother ? Character::littleBrother->sanity : 100.0f);
-
-    if (lowestSanity < 60.0f) {
-        float intensity = 1.0f - (lowestSanity / 60.0f);
-        float time = SDL_GetTicks() * 0.002f;
-
-        // Define o quanto a malha vai "passar" da tela para esconder as bordas (10%)
-        // Usamos a intensidade para que ele só dê esse zoom extra quando a sanidade cair
-        float overscan = 1.0f + (0.10f * intensity);
-
-        // Cria uma malha (Mesh) de 10x10 quadrados (11x11 vértices)
-        const int GRID_SIZE = 10;
-        std::vector<SDL_Vertex> vertices;
-        std::vector<int> indices;
-        
-        float cellW = winW / (float)GRID_SIZE;
-        float cellH = winH / (float)GRID_SIZE;
-        float maxDist = std::sqrt((winW/2.0f)*(winW/2.0f) + (winH/2.0f)*(winH/2.0f));
-
-        // Tintura Doentia (Aplica direto nos vértices da malha!)
-        float wave = std::abs(std::sin(time));
-        // 'dimming' define o quão escura a tela fica. 70 já é um escurecimento notável e sombrio.
-        Uint8 dimming = static_cast<Uint8>(70 * intensity * wave);
-
-        Uint8 r = 255 - dimming;
-        Uint8 g = 255 - dimming;
-        Uint8 b = 255 - dimming;
-
-        // Constrói os Vértices entortados
-        for (int y = 0; y <= GRID_SIZE; ++y) {
-            for (int x = 0; x <= GRID_SIZE; ++x) {
-                float px = x * cellW;
-                float py = y * cellH;
-
-                // Calcula a distância do pixel para o centro da tela
-                float dx = px - (winW / 2.0f);
-                float dy = py - (winH / 2.0f);
-                float dist = std::sqrt(dx*dx + dy*dy);
-                float distNorm = dist / maxDist; // 0 no centro, 1 nas pontas
-
-                // MATEMÁTICA DO FISHEYE/NÁUSEA (A onda viaja do centro pras bordas)
-                float warpEffect = std::sin(time - distNorm * 5.0f) * 0.08f * intensity;
-
-                // Isso força os vértices a nascerem "para fora" do monitor!
-                float warpedX = (winW / 2.0f) + (dx + dx * warpEffect) * overscan;
-                float warpedY = (winH / 2.0f) + (dy + dy * warpEffect) * overscan;
-
-                vertices.push_back({
-                    {warpedX, warpedY},                         // Posição Distorcida
-                    {r, g, b, 255},                             // Cor base do Shader (tintura)
-                    {x / (float)GRID_SIZE, y / (float)GRID_SIZE} // Coordenada UV da textura
-                });
-            }
-        }
-
-        // Conecta os pontos para formar triângulos para o motor gráfico renderizar
-        for (int y = 0; y < GRID_SIZE; ++y) {
-            for (int x = 0; x < GRID_SIZE; ++x) {
-                int tl = y * (GRID_SIZE + 1) + x;
-                int tr = tl + 1;
-                int bl = (y + 1) * (GRID_SIZE + 1) + x;
-                int br = bl + 1;
-
-                indices.insert(indices.end(), {tl, tr, bl, tr, br, bl});
-            }
-        }
-
-        // Desenha a Malha 3D falsa na tela 2D!
-        SDL_RenderGeometry(renderer, renderTarget, vertices.data(), vertices.size(), indices.data(), indices.size());
-    } else {
-        // Se a sanidade tiver normal, apenas cola a textura reta na tela
-        SDL_RenderCopy(renderer, renderTarget, nullptr, nullptr);
-    }
+    SDL_RenderCopy(renderer, renderTarget, nullptr, nullptr);
 
     const float thunderFlash = GameSfx::GetThunderFlashStrength();
     if (thunderFlash > 0.01f) {
@@ -560,6 +488,34 @@ void StageState::Render(){
         SDL_RenderFillRect(renderer, &flashRect);
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    }
+
+    if (sanityOverlayObj) {
+        SpriteRenderer* overlaySprite = sanityOverlayObj->GetComponent<SpriteRenderer>();
+
+        if (overlaySprite && sanityOverlaySmoothedIntensity > 0.001f) {
+            const float offsetPx = kChromaticAberrationMaxOffsetPx * sanityOverlaySmoothedIntensity;
+            const Rect baseBox = sanityOverlayObj->box;
+            const Uint8 baseAlpha = static_cast<Uint8>(std::min(255.0f, 255.0f * sanityOverlaySmoothedIntensity));
+
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
+
+            // Canal VERMELHO — desloca para a esquerda
+            sanityOverlayObj->box.x = baseBox.x - offsetPx;
+            sanityOverlayObj->box.y = baseBox.y;
+            overlaySprite->SetTint(255, 30, 30, baseAlpha);
+            overlaySprite->Render();
+
+            // Canal AZUL — desloca para a direita
+            sanityOverlayObj->box.x = baseBox.x + offsetPx;
+            sanityOverlayObj->box.y = baseBox.y;
+            overlaySprite->SetTint(30, 30, 255, baseAlpha);
+            overlaySprite->Render();
+
+            sanityOverlayObj->box = baseBox;
+            overlaySprite->SetTint(255, 255, 255, 255);
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+        }
     }
 
     // ====================================
