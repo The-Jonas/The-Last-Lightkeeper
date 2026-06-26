@@ -44,6 +44,7 @@ const char* kRowLabels[LightTweakPanel::kLogicalRows] = {
     "Sombra sprite: escala min",
     "Sombra sprite: escala max",
     "Criar luz em C / clique",
+    "Durabilidade (itens)",
 };
 
 void destroyTex(SDL_Texture*& t) {
@@ -57,19 +58,19 @@ void appendRowsForShape(LightMaskShape s, std::vector<int>& out) {
     out.clear();
     switch (s) {
     case LightMaskShape::Circle:
-        out = {0, 1, 2, 3, 4, 5, 6, 16, 17, 28, 29, 18, 19, 20, 21, 30};
+        out = {0, 1, 2, 3, 4, 5, 6, 16, 17, 28, 29, 18, 19, 20, 21, 30, 31};
         break;
     case LightMaskShape::Ellipse:
-        out = {0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 28, 29, 18, 19, 20, 21, 30};
+        out = {0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 28, 29, 18, 19, 20, 21, 30, 31};
         break;
     case LightMaskShape::Cone:
-        out = {0, 2, 3, 4, 5, 6, 8, 9, 10, 11, 16, 17, 28, 29, 18, 19, 20, 21, 30};
+        out = {0, 2, 3, 4, 5, 6, 8, 9, 10, 11, 16, 17, 28, 29, 18, 19, 20, 21, 30, 31};
         break;
     case LightMaskShape::SoftRect:
-        out = {0, 2, 3, 4, 5, 6, 12, 13, 14, 16, 17, 28, 29, 18, 19, 20, 21, 30};
+        out = {0, 2, 3, 4, 5, 6, 12, 13, 14, 16, 17, 28, 29, 18, 19, 20, 21, 30, 31};
         break;
     case LightMaskShape::Torch:
-        out = {0, 1, 2, 3, 4, 5, 6, 16, 17, 28, 29, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 30};
+        out = {0, 1, 2, 3, 4, 5, 6, 16, 17, 28, 29, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 30, 31};
         break;
     default:
         out = {0, 1, 2, 3, 4, 5, 6};
@@ -199,6 +200,8 @@ float LightTweakPanel::getRowNormalized(int logicalRow) const {
         return (params.spriteShadowMaxScale - 1.00f) / (4.20f - 1.00f);
     case 30:
         return 0.0f;
+    case 31:
+        return durabilityEnabled ? 1.0f : 0.0f;
     default:
         return 0.0f;
     }
@@ -305,6 +308,9 @@ void LightTweakPanel::setRowFromNormalized(int logicalRow, float n01) {
         break;
     case 30:
         break;
+    case 31:
+        durabilityEnabled = !durabilityEnabled;
+        break;
     default:
         break;
     }
@@ -315,7 +321,7 @@ bool LightTweakPanel::barHit(int mx, int my, int /*winW*/, int panelLeft, int pa
         return false;
     }
     const int y = kFirstRowY + slotIndex * kRowH;
-    if (logicalRowAtSlot(slotIndex) == 30) {
+    if (logicalRowAtSlot(slotIndex) == 30 || logicalRowAtSlot(slotIndex) == 31) {
         return false;
     }
     const int by = y + kBarOffsetY;
@@ -334,7 +340,7 @@ bool LightTweakPanel::rowButtonHit(int mx, int my, int panelLeft, int panelW, in
     if (slotIndex < 0 || slotIndex >= slotCount()) {
         return false;
     }
-    if (logicalRowAtSlot(slotIndex) != 30) {
+    if (logicalRowAtSlot(slotIndex) != 30 && logicalRowAtSlot(slotIndex) != 31) {
         return false;
     }
     const int y = kFirstRowY + slotIndex * kRowH;
@@ -444,6 +450,10 @@ void LightTweakPanel::rebuildRowLabel(SDL_Renderer* renderer, int logicalRow) {
         break;
     case 30:
         std::snprintf(buf, sizeof(buf), "%s", kRowLabels[logicalRow]);
+        break;
+    case 31:
+        std::snprintf(buf, sizeof(buf), "%s: %s", kRowLabels[logicalRow],
+                      durabilityEnabled ? "ligado" : "desligado");
         break;
     default:
         buf[0] = 0;
@@ -564,7 +574,12 @@ void LightTweakPanel::Update(InputManager& input, float /*dt*/, int windowW, int
         float n = 0.0f;
         for (int s = 0; s < nSlots; s++) {
             if (rowButtonHit(mx, my, panelLeft, panelW, s)) {
-                createLightRequested = true;
+                const int lr = logicalRowAtSlot(s);
+                if (lr == 30) {
+                    createLightRequested = true;
+                } else if (lr == 31) {
+                    durabilityEnabled = !durabilityEnabled;
+                }
                 focusedSlot = s;
                 dragSlot = -1;
                 break;
@@ -688,6 +703,20 @@ void LightTweakPanel::Render(SDL_Renderer* renderer, int windowW, int /*windowH*
             SDL_RenderFillRectF(renderer, &button);
             SDL_SetRenderDrawColor(renderer, 100, 170, 120, 255);
             SDL_RenderDrawRectF(renderer, &button);
+        } else if (lr == 31) {
+            const float cbSize = 18.0f;
+            const float cbX = (float)bx;
+            const float cbY = (float)(y + kRowH / 2.0f - cbSize / 2.0f);
+            SDL_SetRenderDrawColor(renderer, 40, 40, 52, 255);
+            const SDL_FRect cbBg{cbX, cbY, cbSize, cbSize};
+            SDL_RenderFillRectF(renderer, &cbBg);
+            SDL_SetRenderDrawColor(renderer, 130, 130, 160, 255);
+            SDL_RenderDrawRectF(renderer, &cbBg);
+            if (durabilityEnabled) {
+                SDL_SetRenderDrawColor(renderer, 90, 210, 120, 255);
+                const SDL_FRect cbCheck{cbX + 4.0f, cbY + 4.0f, cbSize - 8.0f, cbSize - 8.0f};
+                SDL_RenderFillRectF(renderer, &cbCheck);
+            }
         } else {
             const float n = std::max(0.0f, std::min(1.0f, getRowNormalized(lr)));
             SDL_SetRenderDrawColor(renderer, 40, 40, 52, 255);

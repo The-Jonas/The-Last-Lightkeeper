@@ -1,7 +1,6 @@
 #ifndef INVENTORY_H
 #define INVENTORY_H
 
-#include "gameplay/BackpackConfig.h"
 #include "gameplay/Item.h"
 #include "lighting/LightMaskTypes.h"
 
@@ -12,38 +11,44 @@ enum class HeldPropVisual { None, Lighter, Lamp };
 
 class Inventory {
 public:
-    void ApplyBackpackConfig(const BackpackConfig& config);
-    const BackpackConfig& GetBackpackConfig() const { return backpackConfig; }
+    static constexpr int kGridWidth = 5;
+    static constexpr int kGridHeight = 5;
+    static constexpr int kTotalSlots = kGridWidth * kGridHeight;
 
-    bool AddItemToGroup(int groupIndex, const ItemDef& def, int durability);
     bool AddItem(const ItemDef& def, int durability);
     void ClearAll();
-    bool SelectGroup(int groupIndex);
-    bool DeselectGroup();
-    bool ToggleGroup(int groupIndex);
-    int GetSelectedGroup() const { return selectedGroup; }
-    bool HasSelection() const { return selectedGroup >= 0; }
+    bool SelectSlot(int slotIndex);
+    void DeselectSlot();
+    int GetSelectedSlot() const { return selectedSlot; }
+    bool HasSelection() const { return selectedSlot >= 0; }
 
-    int CountInGroup(int groupIndex) const;
-    bool IsGroupFull(int groupIndex) const;
-    bool IsInventoryFull() const;
     int TotalItemCount() const;
+    bool IsInventoryFull() const;
     bool CanAcceptItem(const ItemDef& def) const;
 
-    const ItemInstance* GetActiveItem() const;
-    ItemInstance* GetActiveItemMutable();
-    const ItemInstance* GetItemInGroup(int groupIndex, int itemIndex) const;
-    const ItemInstance* GetUsing() const { return GetActiveItem(); }
-    ItemInstance* GetUsingMutable() { return GetActiveItemMutable(); }
-    bool IsUsingEmpty() const { return GetActiveItem() == nullptr; }
+    void MoveItem(int fromSlot, int toSlot);
+    bool TryCombineOil(int oilSlot, int lightSlot);
+    void RemoveFromSlot(int slotIndex);
 
-    bool TryRefuelWithFuel();
+    const ItemInstance* GetSelectedItem() const;
+    ItemInstance* GetSelectedItemMutable();
+    const ItemInstance* GetItem(int slotIndex) const;
+    const std::optional<ItemInstance>& GetSlot(int slotIndex) const;
+
+    int FindBestFlashlight() const;
+    int FindBestLamp() const;
+    int FindFirstFlashlight() const;
+    int FindFirstLamp() const;
+    int FindSlotWithFuel() const;
+    int FindSlotWithName(const std::string& name) const;
+    bool HasItem(const std::string& name) const;
+
     bool TryTurnLightOn();
     HeldPropVisual GetHeldPropVisual() const;
     bool IsUsableLightActive() const;
     bool IsActiveLightLamp() const;
     bool IsActiveLightLighter() const;
-    float GetActiveLightFuelRatio() const;
+    float GetSelectedLightFuelRatio() const;
     LightMaskParams BuildLighterLightParams(const LightMaskParams& base) const;
     LightMaskParams BuildLampLightParams(const LightMaskParams& base) const;
     void TickUsingDurability(float dt);
@@ -56,19 +61,10 @@ public:
 
 private:
     void SyncUsingSlotMirror();
-    int FindBestItemIndexInGroup(int groupIndex) const;
-    int FindLighterGroupIndex() const;
-    int FindLampGroupIndex() const;
-    int FindFuelGroupIndex() const;
-    int FindRefuelTargetIndex(int groupIndex) const;
-    int FindUsableFuelIndexInGroup(int fuelGroup) const;
-    bool TryRefuelGroupItem(int targetGroup, int fuelGroup, int targetItemIndex = -1);
-    bool CanEmitLight(const ItemInstance* active) const;
+    bool IsLightSlot(int slotIndex) const;
 
-    BackpackConfig backpackConfig = DefaultBackpackConfig();
-    std::vector<std::vector<ItemInstance>> groups;
-    int selectedGroup = 0;
-    int activeItemIndex = -1;
+    std::vector<std::optional<ItemInstance>> slots;
+    int selectedSlot = -1;
     std::optional<ItemInstance> usingSlot;
     float usingDrainAccum = 0.0f;
 };

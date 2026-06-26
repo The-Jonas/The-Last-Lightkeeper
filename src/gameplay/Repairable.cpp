@@ -63,8 +63,11 @@ void Repairable::Update(float dt) {
             // Aperta a tecla E
             if (InputManager::GetInstance().KeyPress(SDLK_e)) {
 
-                // Checa o item pelo nome que foi passado (ex: "Madeira" ou "Engrenagem")
-                // if (requiredItem != "" && !Inventory::HasItem(requiredItem)) return;
+                if (!requiredItem.empty()) {
+                    int slot = stage->GetInventory().FindSlotWithName(requiredItem);
+                    if (slot < 0) return;
+                    stage->GetInventory().RemoveFromSlot(slot);
+                }
 
                 if (soundPath != "") {
                     //Sound* repairSound = new Sound(associated, soundPath);

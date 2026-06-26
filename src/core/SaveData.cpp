@@ -84,11 +84,18 @@ void to_json(json& j, const SaveGameState& s) {
         slots.push_back(SerializeOptionalSlot(slot));
     }
 
+    json invSlots = json::array();
+    for (const auto& slot : s.inventorySlots) {
+        invSlots.push_back(SerializeOptionalSlot(slot));
+    }
+
     j = json{{"big", s.big},
              {"small", s.small},
              {"controlled", s.controlled},
              {"partyMode", s.partyMode},
              {"lightOn", s.lightOn},
+             {"selectedSlot", s.selectedSlot},
+             {"inventorySlots", invSlots},
              {"selectedBackpackGroup", s.selectedBackpackGroup},
              {"backpackGroups", s.backpackGroups},
              {"using", SerializeOptionalSlot(s.usingItem)},
@@ -112,6 +119,13 @@ void from_json(const json& j, SaveGameState& s) {
     s.controlled = j.value("controlled", "big");
     s.partyMode = j.value("partyMode", "TOGETHER");
     s.lightOn = j.value("lightOn", false);
+    s.selectedSlot = j.value("selectedSlot", -1);
+    s.inventorySlots.clear();
+    if (j.contains("inventorySlots") && j["inventorySlots"].is_array()) {
+        for (const auto& slotJson : j["inventorySlots"]) {
+            s.inventorySlots.push_back(DeserializeOptionalSlot(slotJson));
+        }
+    }
     s.selectedBackpackGroup = j.value("selectedBackpackGroup", 0);
     s.backpackGroups = j.value("backpackGroups", std::vector<SavedBackpackGroup>{});
     s.usingItem = DeserializeOptionalSlot(j.value("using", json()));

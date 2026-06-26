@@ -377,8 +377,15 @@ bool Monster::IsSelfInLight() const {
 void Monster::RequestPath(Vec2 destination) {
     StageState* stage = Game::TryGetStageState();
     if (!stage) return;
- 
+
     targetPos   = destination;
+
+    if (!stage->IsWorldPosNavigableFor(destination, &associated)) {
+        currentPath.clear();
+        pathStep = 0;
+        return;
+    }
+
     currentPath = stage->FindPathWorld(associated.box.Center(), destination, &associated);
     pathStep    = 0;
 }

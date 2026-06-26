@@ -5,6 +5,7 @@
 #include "gameplay/Character.h"
 #include "gameplay/ItemPickup.h"
 #include "states/stage/StageState.h"
+#include "ui/InventoryGrid.h"
 #include "audio/Sound.h"
 #include "audio/GameSfx.h"
 
@@ -121,29 +122,48 @@ ItemPickup* HotbarComponent::FindClosestReachablePickup() const {
     return closest;
 }
 
-void HotbarComponent::TrySelectGroupOnKeyPress() {
+void HotbarComponent::TryInventoryToggle() {
     InputManager& input = InputManager::GetInstance();
-    const BackpackConfig& cfg = inventory.GetBackpackConfig();
-    auto selectGroupById = [&](int key, const char* groupId) {
-        if (!input.KeyPress(key)) {
-            return;
+    if (!input.KeyPress(SDLK_i)) return;
+    if (!inventoryGrid) return;
+    inventoryGrid->Toggle();
+}
+
+void HotbarComponent::TryCloseGridOnEKey() {
+    InputManager& input = InputManager::GetInstance();
+    if (!input.KeyPress(SDLK_e)) return;
+    if (!inventoryGrid || !inventoryGrid->IsOpen()) return;
+    inventoryGrid->Close();
+}
+
+void HotbarComponent::TrySelectSlotOnKeyPress() {
+    InputManager& input = InputManager::GetInstance();
+
+    if (input.KeyPress(SDLK_1)) {
+        const int slot = inventory.FindBestFlashlight();
+        if (slot >= 0) {
+            const bool wasSelected = inventory.GetSelectedSlot() == slot;
+            if (!inventory.SelectSlot(slot)) return;
+            if (!bigCharacter) return;
+            if (!wasSelected) {
+                bigCharacter->NotifyInventoryLightChanged();
+            }
         }
-        const int g = cfg.GroupIndexForId(groupId);
-        if (g < 0 || inventory.CountInGroup(g) <= 0) {
-            return;
+    }
+
+    if (input.KeyPress(SDLK_2)) {
+        const int slot = inventory.FindBestLamp();
+        if (slot >= 0) {
+            const bool wasSelected = inventory.GetSelectedSlot() == slot;
+            if (!inventory.SelectSlot(slot)) return;
+            if (!bigCharacter) return;
+            if (wasSelected) {
+                bigCharacter->PlayPickLampAnimation();
+            } else {
+                bigCharacter->NotifyInventoryLightChanged();
+            }
         }
-        const bool wasSelected = inventory.GetSelectedGroup() == g;
-        if (!inventory.ToggleGroup(g) || !bigCharacter) {
-            return;
-        }
-        if (!wasSelected && std::string(groupId) == "lamp") {
-            bigCharacter->PlayPickLampAnimation();
-        } else {
-            bigCharacter->NotifyInventoryLightChanged();
-        }
-    };
-    selectGroupById(SDLK_1, "lighter");
-    selectGroupById(SDLK_2, "lamp");
+    }
 }
 
 void HotbarComponent::TryUseActiveItemOnKeyPress() {
@@ -152,7 +172,7 @@ void HotbarComponent::TryUseActiveItemOnKeyPress() {
         return;
     }
 
-    const ItemInstance* active = inventory.GetActiveItem();
+    const ItemInstance* active = inventory.GetSelectedItem();
     if (!active) {
         return;
     }
@@ -162,8 +182,7 @@ void HotbarComponent::TryUseActiveItemOnKeyPress() {
     }
 
     const bool wasOn = inventory.isLightToggledOn;
-    const BackpackGroupDef* group = inventory.GetBackpackConfig().GetGroup(inventory.GetSelectedGroup());
-    const bool isLighter = group && group->id == "lighter";
+    const bool isLighter = inventory.IsActiveLightLighter();
     if (wasOn) {
         inventory.isLightToggledOn = false;
         if (isLighter) {
@@ -176,25 +195,6 @@ void HotbarComponent::TryUseActiveItemOnKeyPress() {
     }
 }
 
-void HotbarComponent::TryRefuelOnKeyPress() {
-    InputManager& input = InputManager::GetInstance();
-    if (!input.KeyPress(SDLK_r)) {
-        return;
-    }
-
-    if (!inventory.TryRefuelWithFuel()) {
-        return;
-    }
-
-    PlayRandomPickupSound();
-    if (bigCharacter) {
-        bigCharacter->NotifyInventoryLightChanged();
-    }
-    if (StageState* stage = Game::TryGetStageState()) {
-        stage->SaveCurrentProgress();
-    }
-}
-
 void HotbarComponent::TryPickupOnKeyPress() {
     InputManager& input = InputManager::GetInstance();
     StageState* stage = Game::TryGetStageState();
@@ -202,8 +202,16 @@ void HotbarComponent::TryPickupOnKeyPress() {
         return;
     }
 
+    if (!input.KeyPress(SDLK_e)) {
+        return;
+    }
+
+    if (inventoryGrid && inventoryGrid->IsOpen()) {
+        return;
+    }
+
     ItemPickup* closest = stage->GetReachablePickup();
-    if (!input.KeyPress(SDLK_e) || !closest) {
+    if (!closest) {
         return;
     }
 
@@ -259,9 +267,10 @@ void HotbarComponent::Update(float dt) {
         return;
     }
 
-    TrySelectGroupOnKeyPress();
+    TryInventoryToggle();
+    TryCloseGridOnEKey();
+    TrySelectSlotOnKeyPress();
     TryUseActiveItemOnKeyPress();
-    TryRefuelOnKeyPress();
     TryPickupOnKeyPress();
 }
 

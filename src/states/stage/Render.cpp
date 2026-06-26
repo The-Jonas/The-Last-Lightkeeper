@@ -117,8 +117,9 @@ void StageState::Render(){
     const bool lighterFromInventory =
         inventory.IsActiveLightLighter() && !playerWantsLightHidden;
     const bool torchIsActuallyLit = inventory.IsUsableLightActive();
+    const bool durabilityOn = lightTweakPanel ? lightTweakPanel->durabilityEnabled : true;
     const LightMaskParams lighterLightParams =
-        lighterFromInventory ? inventory.BuildLighterLightParams(lightMaskParams) : lightMaskParams;
+        lighterFromInventory && durabilityOn ? inventory.BuildLighterLightParams(lightMaskParams) : lightMaskParams;
 
     const bool bigCircleOnlyLight =
         cursorPreviewLightEnabled && previewLightLockedToPlayer && previewLightAnchorPlayer == bigCharacterObject;

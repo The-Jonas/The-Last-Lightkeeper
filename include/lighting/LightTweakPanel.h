@@ -23,8 +23,9 @@ public:
     bool ConsumeCreateLightRequest();
 
     bool visible = false;
+    bool durabilityEnabled = true;
 
-    static constexpr int kLogicalRows = 31;
+    static constexpr int kLogicalRows = 32;
 
 private:
     static constexpr int kPanelWMax = 248;

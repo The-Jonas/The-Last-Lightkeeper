@@ -14,6 +14,7 @@
 #include "states/EndState.h"
 #include "states/LevelTransitionLoadingState.h"
 #include "ui/Text.h"
+#include "ui/InventoryGrid.h"
 #include "world/SpawnFactory.h"
 
 #define INCLUDE_SDL_TTF
@@ -51,6 +52,7 @@ void StageState::ClearGameplayWorld() {
     hudLine3 = nullptr;
     hudFps = nullptr;
     hotbarObject = nullptr;
+    inventoryGridObject = nullptr;
     itemPickups.clear();
     jornals.clear();
     reachableJornal = nullptr;
@@ -152,12 +154,11 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
     companionCharacter = smallCharacter;
     partyMode = PartyMode::TOGETHER;
 
-    inventory.ApplyBackpackConfig(cfg.backpackConfig);
+    inventory.ClearAll();
     if (resetInventory) {
         inventory.ClearAll();
-        const int lighterGroup = cfg.backpackConfig.GroupIndexForItem(cfg.startingFlashlight.name);
-        if (lighterGroup >= 0) {
-            inventory.AddItemToGroup(lighterGroup, cfg.startingFlashlight, cfg.startingFlashlightDurability);
+        inventory.AddItem(cfg.startingFlashlight, cfg.startingFlashlightDurability);
+        if (bigComp) {
             bigComp->NotifyInventoryLightChanged();
         }
         inventory.isLightToggledOn = false;
@@ -176,7 +177,7 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
     hudLine2 = new GameObject();
     hudLine2->z = 100;
     hudLine2->AddComponent(new Text(*hudLine2, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
-                                    "E interagir/pegar/empurrar | 1 isqueiro | 2 lamparina | F luz | R abastecer",
+                                     "E interagir/pegar | 1 isqueiro | 2 lamparina | F luz | I inventario",
                                     hudColor));
     AddObject(hudLine2);
 
@@ -194,15 +195,25 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
     AddObject(hudFps);
 
     GameObject* hotbarObj = new GameObject();
-    hotbarObj->AddComponent(new HotbarComponent(*hotbarObj, inventory, bigCharacter, &controlledCharacter,
+    HotbarComponent* hotbarComp = new HotbarComponent(*hotbarObj, inventory, bigCharacter, &controlledCharacter,
                                                 itemPickups, [this](GameObject* obj) { AddObject(obj); },
                                                 [this](Vec2 tl, float w, float h) {
                                                     return ClampPickupTopLeft(tl, w, h);
-                                                }));
+                                                });
+    hotbarObj->AddComponent(hotbarComp);
     hotbarObj->AddComponent(new BackpackVisuals(*hotbarObj, inventory, bigComp));
     hotbarObj->z = 200;
     AddObject(hotbarObj);
     hotbarObject = hotbarObj;
+
+    GameObject* gridObj = new GameObject();
+    InventoryGrid* gridComp = new InventoryGrid(*gridObj, inventory, bigCharacter, &itemPickups,
+                                                [this](GameObject* obj) { AddObject(obj); });
+    gridObj->AddComponent(gridComp);
+    gridObj->z = 300;
+    AddObject(gridObj);
+    inventoryGridObject = gridObj;
+    hotbarComp->SetInventoryGrid(gridComp);
 
     RefreshCameraTargets();
     UpdateControlledCharacterVisuals();
@@ -245,7 +256,6 @@ void StageState::TransitionToLevel(int targetLevelIndex) {
 
     std::vector<ItemDef> catalog = cfg.pickupCycle;
     catalog.push_back(cfg.startingFlashlight);
-    inventory.ApplyBackpackConfig(cfg.backpackConfig);
     inventory.ReadFromSave(preserved, catalog);
     skippedPickupSpawnIds = std::move(skippedForNextLevel);
     if (bigCharacter) {

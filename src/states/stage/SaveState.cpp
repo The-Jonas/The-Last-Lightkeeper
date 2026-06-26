@@ -148,7 +148,6 @@ void StageState::ApplySaveState(const SaveGameState& state) {
 
     ApplyCharacter(state.big, bigCharacterObject, bigCharacter);
     ApplyCharacter(state.small, smallCharacterObject, smallCharacter);
-    inventory.ApplyBackpackConfig(cfg.backpackConfig);
     inventory.ReadFromSave(state, catalog);
     missedUniquePickupIdsAccum = state.missedUniquePickupIds;
     MergeSkippedPickupIds(state.removedPickupIds, state.missedUniquePickupIds);

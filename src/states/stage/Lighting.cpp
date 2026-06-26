@@ -157,7 +157,9 @@ void StageState::UpdateInventoryLight() {
     }
 
     const Vec2 pos = bigCharacterObject->box.Center();
-    const LightMaskParams params = inventory.BuildLampLightParams(lightMaskParams);
+    const bool durabilityOn = lightTweakPanel ? lightTweakPanel->durabilityEnabled : true;
+    const LightMaskParams params =
+        durabilityOn ? inventory.BuildLampLightParams(lightMaskParams) : lightMaskParams;
 
     if (inventoryLightId < 0 || static_cast<size_t>(inventoryLightId) >= lights.size()) {
         inventoryLightId = CreateStaticLight(pos, true);

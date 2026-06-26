@@ -10,6 +10,7 @@
 
 class Character;
 class ItemPickup;
+class InventoryGrid;
 
 class HotbarComponent : public Component {
 public:
@@ -23,6 +24,8 @@ public:
     void Update(float dt) override;
     void Render() override;
 
+    void SetInventoryGrid(InventoryGrid* grid) { inventoryGrid = grid; }
+
 private:
     Inventory& inventory;
     Character* bigCharacter;
@@ -30,15 +33,17 @@ private:
     std::vector<ItemPickup*>& itemPickups;
     std::function<void(GameObject*)> addObjectToState;
     std::function<Vec2(Vec2, float, float)> clampPickupTopLeft;
+    InventoryGrid* inventoryGrid = nullptr;
 
     static constexpr float kPickupPromptFootRadiusExtra = 18.0f;
 
     float GetPickupReachRadius() const;
     ItemPickup* FindClosestReachablePickup() const;
     void TryPickupOnKeyPress();
-    void TrySelectGroupOnKeyPress();
+    void TryCloseGridOnEKey();
+    void TrySelectSlotOnKeyPress();
     void TryUseActiveItemOnKeyPress();
-    void TryRefuelOnKeyPress();
+    void TryInventoryToggle();
 };
 
 #endif

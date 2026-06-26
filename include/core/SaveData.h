@@ -45,6 +45,8 @@ struct SaveGameState {
     std::string controlled = "big";
     std::string partyMode = "TOGETHER";
     bool lightOn = false;
+    int selectedSlot = -1;
+    std::vector<std::optional<SavedItemSlot>> inventorySlots;
     int selectedBackpackGroup = 0;
     std::vector<SavedBackpackGroup> backpackGroups;
     std::optional<SavedItemSlot> usingItem;

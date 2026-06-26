@@ -1,7 +1,6 @@
 #ifndef STAGE_FIRST_LOAD_DATA_H
 #define STAGE_FIRST_LOAD_DATA_H
 
-#include "gameplay/BackpackConfig.h"
 #include "gameplay/Item.h"
 
 #include <string>
@@ -26,7 +25,6 @@ struct StageFirstLoadData {
     std::vector<ItemDef> pickupCycle;
     std::vector<std::string> oceanChunkCandidates;
     std::vector<LevelDef> levels;
-    BackpackConfig backpackConfig = DefaultBackpackConfig();
 };
 
 int GetLevelCount(const StageFirstLoadData& cfg);

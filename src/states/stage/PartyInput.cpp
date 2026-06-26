@@ -137,7 +137,11 @@ void StageState::IssueFollowCommand(Character* follower, GameObject* followerObj
         follower->SetSpeedMultiplier(1.55f);
     }
     Vec2 followTarget = targetPos;
-    if (HasNavigationGrid() && !HasWalkableLine(followerCenter, targetPos, followerObject)) {
+
+    const Character* leaderChar = leaderObject->GetComponent<Character>();
+    const bool elevationMismatch = leaderChar && follower->isElevated != leaderChar->isElevated;
+
+    if (HasNavigationGrid() && !elevationMismatch && !HasWalkableLine(followerCenter, targetPos, followerObject)) {
         const std::vector<Vec2> path = FindPathWorld(followerCenter, targetPos, followerObject);
         companionFollowPathWorld = path;
         if (!companionFollowPathWorld.empty()) {

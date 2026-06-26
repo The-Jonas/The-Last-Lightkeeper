@@ -298,6 +298,12 @@ bool StageState::HasWalkableLine(const Vec2& fromWorld, const Vec2& toWorld, con
     return true;
 }
 
+bool StageState::IsWorldPosNavigableFor(const Vec2& worldPos, const GameObject* agent) const {
+    int tx = 0, ty = 0;
+    if (!WorldToTile(worldPos, tx, ty)) return false;
+    return IsTileNavigableFor(agent, tx, ty);
+}
+
 std::vector<Vec2> StageState::FindPathWorld(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent, int nodeBudget) const {
     std::vector<Vec2> empty;
     if (!HasNavigationGrid()) {

@@ -16,6 +16,7 @@
 #include "core/SaveManager.h"
 #include "states/EndState.h"
 #include "ui/Text.h"
+#include "ui/InventoryGrid.h"
 #include "lighting/TopDownLightShadows.h"
 #include "lighting/LightShadowProfile.h"
 #include "gameplay/Item.h"
@@ -103,8 +104,15 @@ void StageState::Update(float dt){
         }
     }
 
-    // ESC -> Abre confirmação de saída
+    // ESC -> fecha inventario em grid, ou abre confirmação de saída
     if (input.KeyPress(ESCAPE_KEY)) {
+        if (inventoryGridObject) {
+            auto* grid = inventoryGridObject->GetComponent<InventoryGrid>();
+            if (grid && grid->IsOpen()) {
+                grid->Close();
+                return;
+            }
+        }
         quitConfirmOpen = true;
         quitConfirmSelection = 0;
         return;
@@ -153,8 +161,8 @@ void StageState::Update(float dt){
 
     reachablePickup = FindClosestReachableItem();
 
-    if (inventory.IsUsableLightActive()) {                                              // slot "usando" degrada sempre, mesmo controlando o irmãozinho
-        inventory.TickUsingDurability(dt); 
+    if (inventory.IsUsableLightActive() && (!lightTweakPanel || lightTweakPanel->durabilityEnabled)) {
+        inventory.TickUsingDurability(dt);
     }
     
     ApplyMapBoundsAndWalkability(bigCharacterObject, prevBigPos);

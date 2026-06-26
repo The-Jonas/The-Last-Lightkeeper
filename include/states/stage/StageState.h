@@ -30,6 +30,7 @@ class Box;
 class ItemPickup;
 class Jornal;
 class Candlestick;
+class InventoryGrid;
 
 class StageState : public State {
 friend class SpawnFactory;
@@ -101,6 +102,7 @@ public:
 
     // Público pra ser reutilizado pelo monstro
     std::vector<Vec2> FindPathWorld(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent = nullptr, int nodeBudget = 4096) const;
+    bool IsWorldPosNavigableFor(const Vec2& worldPos, const GameObject* agent) const;
     const std::vector<std::shared_ptr<GameObject>>& GetObjectArray() const { return objectArray; }
 
     // Getter para saber quem está atualmente sendo controlado
@@ -243,6 +245,7 @@ private:
 
     Inventory inventory;
     GameObject* hotbarObject = nullptr;
+    GameObject* inventoryGridObject = nullptr;
     std::vector<class ItemPickup*> itemPickups;
     std::vector<Jornal*> jornals;
 

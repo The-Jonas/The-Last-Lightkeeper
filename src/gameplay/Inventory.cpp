@@ -3,355 +3,279 @@
 
 #include <algorithm>
 
-void Inventory::ApplyBackpackConfig(const BackpackConfig& config) {
-    backpackConfig = config;
-    groups.resize(backpackConfig.groups.size());
-}
-
 void Inventory::ClearAll() {
-    for (auto& group : groups) {
-        group.clear();
-    }
-    selectedGroup = -1;
-    activeItemIndex = -1;
+    slots.clear();
+    slots.resize(kTotalSlots);
+    selectedSlot = -1;
     usingSlot.reset();
     usingDrainAccum = 0.0f;
     isLightToggledOn = false;
 }
 
-int Inventory::FindLighterGroupIndex() const {
-    const int byId = backpackConfig.GroupIndexForId("lighter");
-    if (byId >= 0) {
-        return byId;
-    }
-    return backpackConfig.GroupIndexForItem("Flashlight");
-}
-
-int Inventory::FindLampGroupIndex() const {
-    for (size_t i = 0; i < backpackConfig.groups.size(); ++i) {
-        if (backpackConfig.groups[i].id == "lamp") {
-            return static_cast<int>(i);
-        }
-    }
-    return backpackConfig.GroupIndexForItem("Lamp");
-}
-
-int Inventory::FindFuelGroupIndex() const {
-    for (size_t i = 0; i < backpackConfig.groups.size(); ++i) {
-        const std::string& id = backpackConfig.groups[i].id;
-        if (id == "fuel" || id == "oil") {
-            return static_cast<int>(i);
-        }
-    }
-    return backpackConfig.GroupIndexForItem("Fuel");
-}
-
-int Inventory::FindBestItemIndexInGroup(int groupIndex) const {
-    if (groupIndex < 0 || groupIndex >= static_cast<int>(groups.size()) || groups[groupIndex].empty()) {
-        return -1;
-    }
-    int best = 0;
-    int bestDur = groups[groupIndex][0].durability;
-    for (size_t i = 1; i < groups[groupIndex].size(); ++i) {
-        if (groups[groupIndex][i].durability > bestDur) {
-            bestDur = groups[groupIndex][i].durability;
-            best = static_cast<int>(i);
-        }
-    }
-    return best;
-}
-
-void Inventory::SyncUsingSlotMirror() {
-    usingSlot.reset();
-    const ItemInstance* active = GetActiveItem();
-    if (active) {
-        usingSlot = *active;
-    }
-}
-
-bool Inventory::SelectGroup(int groupIndex) {
-    if (groupIndex < 0 || groupIndex >= static_cast<int>(groups.size())) {
-        return false;
-    }
-    if (groups[groupIndex].empty()) {
-        return false;
-    }
-    if (groupIndex == selectedGroup) {
-        return false;
-    }
-    selectedGroup = groupIndex;
-    activeItemIndex = FindBestItemIndexInGroup(groupIndex);
-    isLightToggledOn = false;
-    SyncUsingSlotMirror();
-    return true;
-}
-
-bool Inventory::DeselectGroup() {
-    if (selectedGroup < 0) {
-        return false;
-    }
-    selectedGroup = -1;
-    activeItemIndex = -1;
-    isLightToggledOn = false;
-    usingSlot.reset();
-    return true;
-}
-
-bool Inventory::ToggleGroup(int groupIndex) {
-    if (groupIndex < 0 || groupIndex >= static_cast<int>(groups.size())) {
-        return false;
-    }
-    if (groups[groupIndex].empty()) {
-        return false;
-    }
-    if (groupIndex == selectedGroup) {
-        return DeselectGroup();
-    }
-    return SelectGroup(groupIndex);
-}
-
-bool Inventory::AddItemToGroup(int groupIndex, const ItemDef& def, int durability) {
-    if (groupIndex < 0 || groupIndex >= static_cast<int>(groups.size())) {
-        return false;
-    }
-    if (IsGroupFull(groupIndex)) {
-        return false;
-    }
-    groups[groupIndex].push_back(ItemInstance{def, durability});
-    return true;
-}
-
 bool Inventory::AddItem(const ItemDef& def, int durability) {
-    const int groupIndex = backpackConfig.GroupIndexForItem(def.name);
-    if (groupIndex < 0) {
-        return false;
+    for (int i = 0; i < kTotalSlots; ++i) {
+        if (!slots[static_cast<size_t>(i)].has_value()) {
+            slots[static_cast<size_t>(i)] = ItemInstance{def, durability};
+            return true;
+        }
     }
-    return AddItemToGroup(groupIndex, def, durability);
-}
-
-int Inventory::CountInGroup(int groupIndex) const {
-    if (groupIndex < 0 || groupIndex >= static_cast<int>(groups.size())) {
-        return 0;
-    }
-    return static_cast<int>(groups[groupIndex].size());
-}
-
-bool Inventory::IsGroupFull(int groupIndex) const {
-    return CountInGroup(groupIndex) >= backpackConfig.MaxItemsInGroup(groupIndex);
+    return false;
 }
 
 int Inventory::TotalItemCount() const {
     int total = 0;
-    for (const auto& group : groups) {
-        total += static_cast<int>(group.size());
+    for (const auto& slot : slots) {
+        if (slot.has_value()) {
+            total++;
+        }
     }
     return total;
 }
 
 bool Inventory::IsInventoryFull() const {
-    return TotalItemCount() >= backpackConfig.TotalCapacity();
+    return TotalItemCount() >= kTotalSlots;
 }
 
 bool Inventory::CanAcceptItem(const ItemDef& def) const {
-    const int groupIndex = backpackConfig.GroupIndexForItem(def.name);
-    if (groupIndex < 0) {
-        return false;
-    }
-    return !IsGroupFull(groupIndex);
+    (void)def;
+    return !IsInventoryFull();
 }
 
-const ItemInstance* Inventory::GetActiveItem() const {
-    if (selectedGroup < 0 || selectedGroup >= static_cast<int>(groups.size())) {
-        return nullptr;
+bool Inventory::SelectSlot(int slotIndex) {
+    if (slotIndex < 0 || slotIndex >= kTotalSlots) {
+        return false;
     }
-    if (activeItemIndex < 0 || activeItemIndex >= static_cast<int>(groups[selectedGroup].size())) {
-        return nullptr;
+    if (!slots[static_cast<size_t>(slotIndex)].has_value()) {
+        return false;
     }
-    return &groups[selectedGroup][static_cast<size_t>(activeItemIndex)];
+    if (slotIndex == selectedSlot) {
+        return false;
+    }
+    selectedSlot = slotIndex;
+    isLightToggledOn = false;
+    SyncUsingSlotMirror();
+    return true;
 }
 
-const ItemInstance* Inventory::GetItemInGroup(int groupIndex, int itemIndex) const {
-    if (groupIndex < 0 || groupIndex >= static_cast<int>(groups.size())) {
-        return nullptr;
-    }
-    if (itemIndex < 0 || itemIndex >= static_cast<int>(groups[groupIndex].size())) {
-        return nullptr;
-    }
-    return &groups[groupIndex][static_cast<size_t>(itemIndex)];
+void Inventory::DeselectSlot() {
+    selectedSlot = -1;
+    isLightToggledOn = false;
+    usingSlot.reset();
 }
 
-ItemInstance* Inventory::GetActiveItemMutable() {
-    if (selectedGroup < 0 || selectedGroup >= static_cast<int>(groups.size())) {
-        return nullptr;
+void Inventory::MoveItem(int fromSlot, int toSlot) {
+    if (fromSlot < 0 || fromSlot >= kTotalSlots || toSlot < 0 || toSlot >= kTotalSlots) {
+        return;
     }
-    if (activeItemIndex < 0 || activeItemIndex >= static_cast<int>(groups[selectedGroup].size())) {
-        return nullptr;
+    std::swap(slots[static_cast<size_t>(fromSlot)], slots[static_cast<size_t>(toSlot)]);
+    if (selectedSlot == fromSlot) {
+        selectedSlot = toSlot;
+    } else if (selectedSlot == toSlot) {
+        selectedSlot = fromSlot;
     }
-    return &groups[selectedGroup][static_cast<size_t>(activeItemIndex)];
+    SyncUsingSlotMirror();
 }
 
-int Inventory::FindRefuelTargetIndex(int groupIndex) const {
-    if (groupIndex < 0 || groupIndex >= static_cast<int>(groups.size())) {
-        return -1;
-    }
-    int best = -1;
-    int bestDur = 2147483647;
-    for (size_t i = 0; i < groups[groupIndex].size(); ++i) {
-        const ItemInstance& item = groups[groupIndex][i];
-        if (!item.def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
-            continue;
-        }
-        if (item.def.maxDurability > 0 && item.durability >= item.def.maxDurability) {
-            continue;
-        }
-        if (item.durability < bestDur) {
-            bestDur = item.durability;
-            best = static_cast<int>(i);
-        }
-    }
-    return best;
-}
-
-int Inventory::FindUsableFuelIndexInGroup(int fuelGroup) const {
-    if (fuelGroup < 0 || fuelGroup >= static_cast<int>(groups.size())) {
-        return -1;
-    }
-    int best = -1;
-    int bestRemaining = 2147483647;
-    for (size_t i = 0; i < groups[fuelGroup].size(); ++i) {
-        const int remaining = groups[fuelGroup][i].durability;
-        if (remaining <= 0) {
-            continue;
-        }
-        if (remaining < bestRemaining) {
-            bestRemaining = remaining;
-            best = static_cast<int>(i);
-        }
-    }
-    return best;
-}
-
-bool Inventory::TryRefuelGroupItem(int targetGroup, int fuelGroup, int targetItemIndex) {
-    if (targetGroup < 0 || fuelGroup < 0) {
+bool Inventory::TryCombineOil(int oilSlot, int lightSlot) {
+    if (oilSlot < 0 || oilSlot >= kTotalSlots || lightSlot < 0 || lightSlot >= kTotalSlots) {
         return false;
     }
-    if (targetGroup >= static_cast<int>(groups.size()) || fuelGroup >= static_cast<int>(groups.size())) {
+    auto& oilOpt = slots[static_cast<size_t>(oilSlot)];
+    auto& lightOpt = slots[static_cast<size_t>(lightSlot)];
+    if (!oilOpt.has_value() || !lightOpt.has_value()) {
         return false;
     }
-    if (groups[targetGroup].empty() || groups[fuelGroup].empty()) {
+    ItemInstance& oil = *oilOpt;
+    ItemInstance& light = *lightOpt;
+    if (!oil.def.HasProperty(ItemProperty::FUEL)) {
+        return false;
+    }
+    if (!light.def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
+        return false;
+    }
+    if (oil.durability <= 0) {
+        return false;
+    }
+    if (light.def.maxDurability > 0 && light.durability >= light.def.maxDurability) {
         return false;
     }
 
-    int itemIdx = targetItemIndex;
-    if (itemIdx < 0) {
-        itemIdx = FindRefuelTargetIndex(targetGroup);
-    }
-    if (itemIdx < 0 || itemIdx >= static_cast<int>(groups[targetGroup].size())) {
-        return false;
-    }
-
-    ItemInstance& target = groups[targetGroup][static_cast<size_t>(itemIdx)];
-    if (!target.def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
-        return false;
-    }
-    if (target.def.maxDurability > 0 && target.durability >= target.def.maxDurability) {
-        return false;
-    }
-
-    int fuelIndex = -1;
-    if (selectedGroup == fuelGroup && activeItemIndex >= 0 &&
-        activeItemIndex < static_cast<int>(groups[fuelGroup].size()) &&
-        groups[fuelGroup][static_cast<size_t>(activeItemIndex)].durability > 0) {
-        fuelIndex = activeItemIndex;
-    } else {
-        fuelIndex = FindUsableFuelIndexInGroup(fuelGroup);
-    }
-    if (fuelIndex < 0) {
-        return false;
-    }
-
-    ItemInstance& fuelItem = groups[fuelGroup][static_cast<size_t>(fuelIndex)];
-    if (fuelItem.durability <= 0) {
-        return false;
-    }
-
-    int needed = fuelItem.durability;
-    if (target.def.maxDurability > 0) {
-        needed = target.def.maxDurability - target.durability;
+    int needed = oil.durability;
+    if (light.def.maxDurability > 0) {
+        needed = light.def.maxDurability - light.durability;
     }
     if (needed <= 0) {
         return false;
     }
 
-    const int transfer = std::min(needed, fuelItem.durability);
+    const int transfer = std::min(needed, oil.durability);
     if (transfer <= 0) {
         return false;
     }
 
-    target.durability += transfer;
-    if (target.def.maxDurability > 0 && target.durability > target.def.maxDurability) {
-        target.durability = target.def.maxDurability;
+    light.durability += transfer;
+    if (light.def.maxDurability > 0 && light.durability > light.def.maxDurability) {
+        light.durability = light.def.maxDurability;
     }
 
-    fuelItem.durability -= transfer;
-    if (fuelItem.durability <= 0) {
-        groups[fuelGroup].erase(groups[fuelGroup].begin() + fuelIndex);
-        if (selectedGroup == fuelGroup) {
-            if (activeItemIndex == fuelIndex) {
-                activeItemIndex = FindUsableFuelIndexInGroup(fuelGroup);
-            } else if (activeItemIndex > fuelIndex) {
-                activeItemIndex -= 1;
-            }
-            if (activeItemIndex < 0) {
-                activeItemIndex = -1;
-            }
-        }
-    } else if (selectedGroup == targetGroup) {
-        activeItemIndex = FindBestItemIndexInGroup(targetGroup);
+    oil.durability -= transfer;
+    if (oil.durability <= 0) {
+        oilOpt.reset();
     }
+
     SyncUsingSlotMirror();
     return true;
 }
 
-bool Inventory::TryRefuelWithFuel() {
-    const int fuelGroup = FindFuelGroupIndex();
-    if (fuelGroup < 0 || groups[fuelGroup].empty()) {
-        return false;
+void Inventory::RemoveFromSlot(int slotIndex) {
+    if (slotIndex < 0 || slotIndex >= kTotalSlots) {
+        return;
     }
-
-    const ItemInstance* active = GetActiveItem();
-    if (!active) {
-        return false;
+    slots[static_cast<size_t>(slotIndex)].reset();
+    if (selectedSlot == slotIndex) {
+        selectedSlot = -1;
+        isLightToggledOn = false;
     }
-
-    if (active->def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
-        return TryRefuelGroupItem(selectedGroup, fuelGroup, activeItemIndex);
-    }
-
-    if (active->def.HasProperty(ItemProperty::FUEL) && selectedGroup == fuelGroup) {
-        const int lighterGroup = FindLighterGroupIndex();
-        const int lampGroup = FindLampGroupIndex();
-        if (TryRefuelGroupItem(lighterGroup, fuelGroup)) {
-            return true;
-        }
-        if (TryRefuelGroupItem(lampGroup, fuelGroup)) {
-            return true;
-        }
-    }
-
-    return false;
+    SyncUsingSlotMirror();
 }
 
-bool Inventory::CanEmitLight(const ItemInstance* active) const {
-    return active && active->durability > 0 && active->def.HasProperty(ItemProperty::LIGHT_SOURCE);
+const ItemInstance* Inventory::GetSelectedItem() const {
+    if (selectedSlot < 0 || selectedSlot >= kTotalSlots) {
+        return nullptr;
+    }
+    const auto& slot = slots[static_cast<size_t>(selectedSlot)];
+    return slot.has_value() ? &*slot : nullptr;
+}
+
+ItemInstance* Inventory::GetSelectedItemMutable() {
+    if (selectedSlot < 0 || selectedSlot >= kTotalSlots) {
+        return nullptr;
+    }
+    auto& slot = slots[static_cast<size_t>(selectedSlot)];
+    return slot.has_value() ? &*slot : nullptr;
+}
+
+const ItemInstance* Inventory::GetItem(int slotIndex) const {
+    if (slotIndex < 0 || slotIndex >= kTotalSlots) {
+        return nullptr;
+    }
+    const auto& slot = slots[static_cast<size_t>(slotIndex)];
+    return slot.has_value() ? &*slot : nullptr;
+}
+
+const std::optional<ItemInstance>& Inventory::GetSlot(int slotIndex) const {
+    static const std::optional<ItemInstance> empty;
+    if (slotIndex < 0 || slotIndex >= kTotalSlots) {
+        return empty;
+    }
+    return slots[static_cast<size_t>(slotIndex)];
+}
+
+bool Inventory::IsLightSlot(int slotIndex) const {
+    const ItemInstance* item = GetItem(slotIndex);
+    return item && item->def.HasProperty(ItemProperty::LIGHT_SOURCE);
+}
+
+int Inventory::FindBestFlashlight() const {
+    int best = -1;
+    int bestDur = -1;
+    for (int i = 0; i < kTotalSlots; ++i) {
+        const ItemInstance* item = GetItem(i);
+        if (!item || !item->def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
+            continue;
+        }
+        const std::string& name = item->def.name;
+        if (name != "Flashlight" && name != "Broken Flashlight") {
+            continue;
+        }
+        if (item->durability > bestDur) {
+            bestDur = item->durability;
+            best = i;
+        }
+    }
+    return best;
+}
+
+int Inventory::FindBestLamp() const {
+    int best = -1;
+    int bestDur = -1;
+    for (int i = 0; i < kTotalSlots; ++i) {
+        const ItemInstance* item = GetItem(i);
+        if (!item || !item->def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
+            continue;
+        }
+        if (item->def.name != "Lamp") {
+            continue;
+        }
+        if (item->durability > bestDur) {
+            bestDur = item->durability;
+            best = i;
+        }
+    }
+    return best;
+}
+
+int Inventory::FindFirstFlashlight() const {
+    for (int i = 0; i < kTotalSlots; ++i) {
+        const ItemInstance* item = GetItem(i);
+        if (item && item->def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
+            const std::string& name = item->def.name;
+            if (name == "Flashlight" || name == "Broken Flashlight") {
+                return i;
+            }
+        }
+    }
+    return -1;
+}
+
+int Inventory::FindFirstLamp() const {
+    for (int i = 0; i < kTotalSlots; ++i) {
+        const ItemInstance* item = GetItem(i);
+        if (item && item->def.HasProperty(ItemProperty::LIGHT_SOURCE) && item->def.name == "Lamp") {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int Inventory::FindSlotWithFuel() const {
+    for (int i = 0; i < kTotalSlots; ++i) {
+        const ItemInstance* item = GetItem(i);
+        if (item && item->def.HasProperty(ItemProperty::FUEL) && item->durability > 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int Inventory::FindSlotWithName(const std::string& name) const {
+    for (int i = 0; i < kTotalSlots; ++i) {
+        const ItemInstance* item = GetItem(i);
+        if (item && item->def.name == name) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+bool Inventory::HasItem(const std::string& name) const {
+    return FindSlotWithName(name) >= 0;
+}
+
+void Inventory::SyncUsingSlotMirror() {
+    usingSlot.reset();
+    const ItemInstance* selected = GetSelectedItem();
+    if (selected) {
+        usingSlot = *selected;
+    }
 }
 
 bool Inventory::TryTurnLightOn() {
-    const ItemInstance* active = GetActiveItem();
-    if (!active || !active->def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
+    const ItemInstance* selected = GetSelectedItem();
+    if (!selected || !selected->def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
         return false;
     }
-    if (CanEmitLight(active)) {
+    if (selected->durability > 0) {
         isLightToggledOn = true;
         return true;
     }
@@ -359,66 +283,60 @@ bool Inventory::TryTurnLightOn() {
 }
 
 HeldPropVisual Inventory::GetHeldPropVisual() const {
-    if (selectedGroup < 0) {
+    const ItemInstance* selected = GetSelectedItem();
+    if (!selected || !selected->def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
         return HeldPropVisual::None;
     }
-    const ItemInstance* active = GetActiveItem();
-    if (!active || !active->def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
-        return HeldPropVisual::None;
-    }
-    const BackpackGroupDef* group = backpackConfig.GetGroup(selectedGroup);
-    if (!group) {
-        return HeldPropVisual::None;
-    }
-    if (group->id == "lighter") {
+    const std::string& name = selected->def.name;
+    if (name == "Flashlight" || name == "Broken Flashlight") {
         return HeldPropVisual::Lighter;
     }
-    if (group->id == "lamp") {
+    if (name == "Lamp") {
         return HeldPropVisual::Lamp;
     }
     return HeldPropVisual::None;
 }
 
 bool Inventory::IsUsableLightActive() const {
-    const ItemInstance* active = GetActiveItem();
-    if (!active || !isLightToggledOn) {
+    const ItemInstance* selected = GetSelectedItem();
+    if (!selected || !isLightToggledOn) {
         return false;
     }
-    return active->durability > 0 && active->def.HasProperty(ItemProperty::LIGHT_SOURCE);
+    return selected->durability > 0 && selected->def.HasProperty(ItemProperty::LIGHT_SOURCE);
 }
 
 bool Inventory::IsActiveLightLamp() const {
     if (!IsUsableLightActive()) {
         return false;
     }
-    const BackpackGroupDef* group = backpackConfig.GetGroup(selectedGroup);
-    return group && group->id == "lamp";
+    const ItemInstance* selected = GetSelectedItem();
+    return selected && selected->def.name == "Lamp";
 }
 
 bool Inventory::IsActiveLightLighter() const {
     if (!IsUsableLightActive()) {
         return false;
     }
-    const BackpackGroupDef* group = backpackConfig.GetGroup(selectedGroup);
-    return group && group->id == "lighter";
+    const ItemInstance* selected = GetSelectedItem();
+    return selected && (selected->def.name == "Flashlight" || selected->def.name == "Broken Flashlight");
 }
 
-float Inventory::GetActiveLightFuelRatio() const {
-    const ItemInstance* active = GetActiveItem();
-    if (!active || !active->def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
+float Inventory::GetSelectedLightFuelRatio() const {
+    const ItemInstance* selected = GetSelectedItem();
+    if (!selected || !selected->def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
         return 0.0f;
     }
-    if (active->def.maxDurability <= 0) {
+    if (selected->def.maxDurability <= 0) {
         return 1.0f;
     }
     const float ratio =
-        static_cast<float>(active->durability) / static_cast<float>(active->def.maxDurability);
+        static_cast<float>(selected->durability) / static_cast<float>(selected->def.maxDurability);
     return std::max(0.0f, std::min(1.0f, ratio));
 }
 
 LightMaskParams Inventory::BuildLighterLightParams(const LightMaskParams& base) const {
     LightMaskParams params = base;
-    const float fuelRatio = GetActiveLightFuelRatio();
+    const float fuelRatio = GetSelectedLightFuelRatio();
     params.falloffRadiusPx *= fuelRatio;
     params.shadowMaxLengthPx *= fuelRatio;
     params.coneLengthPx *= fuelRatio;
@@ -428,7 +346,7 @@ LightMaskParams Inventory::BuildLighterLightParams(const LightMaskParams& base) 
 LightMaskParams Inventory::BuildLampLightParams(const LightMaskParams& base) const {
     LightMaskParams params = base;
     constexpr float kLampVsLighterScale = 1.40f;
-    const float sizeScale = GetActiveLightFuelRatio() * kLampVsLighterScale;
+    const float sizeScale = GetSelectedLightFuelRatio() * kLampVsLighterScale;
     params.falloffRadiusPx *= sizeScale;
     params.shadowMaxLengthPx *= sizeScale;
     params.coneLengthPx *= sizeScale;
@@ -439,17 +357,18 @@ void Inventory::TickUsingDurability(float dt) {
     if (!IsUsableLightActive()) {
         return;
     }
-    ItemInstance* active = GetActiveItemMutable();
-    if (!active) {
+    ItemInstance* selected = GetSelectedItemMutable();
+    if (!selected) {
         return;
     }
-    if (active->def.maxDurability <= 0 || active->durability <= 0) {
+    if (selected->def.maxDurability <= 0 || selected->durability <= 0) {
         return;
     }
+    const float drainInterval = (selected->def.name == "Lamp") ? 2.0f : 1.0f;
     usingDrainAccum += dt;
-    while (usingDrainAccum >= 1.0f && active->durability > 0) {
-        active->durability -= 1;
-        usingDrainAccum -= 1.0f;
+    while (usingDrainAccum >= drainInterval && selected->durability > 0) {
+        selected->durability -= 1;
+        usingDrainAccum -= drainInterval;
     }
     SyncUsingSlotMirror();
 }
@@ -472,70 +391,151 @@ const ItemDef* FindItemDefByName(const std::string& name, const std::vector<Item
     return nullptr;
 }
 
+bool IsFlashlightName(const std::string& name) {
+    return name == "Flashlight" || name == "Broken Flashlight";
+}
+
+bool IsLampName(const std::string& name) {
+    return name == "Lamp";
+}
+
+bool IsFuelName(const std::string& name) {
+    return name == "Fuel" || name == "Lamp Fuel" || name == "Lighter Fuel" ||
+           name == "Light Fuel" || name == "Oil Gallon";
+}
+
+const ItemDef* FindFlashlightDef(const std::vector<ItemDef>& catalog) {
+    for (const ItemDef& def : catalog) {
+        if (IsFlashlightName(def.name)) {
+            return &def;
+        }
+    }
+    return nullptr;
+}
+
+const ItemDef* FindLampDef(const std::vector<ItemDef>& catalog) {
+    for (const ItemDef& def : catalog) {
+        if (IsLampName(def.name)) {
+            return &def;
+        }
+    }
+    return nullptr;
+}
+
 } // namespace
 
 void Inventory::WriteToSave(SaveGameState& state) const {
     state.lightOn = isLightToggledOn;
-    state.selectedBackpackGroup = selectedGroup;
-    state.backpackGroups.clear();
-    state.backpackGroups.resize(backpackConfig.groups.size());
+    state.selectedSlot = selectedSlot;
 
-    for (size_t gi = 0; gi < groups.size(); ++gi) {
-        SavedBackpackGroup saved;
-        if (gi < backpackConfig.groups.size()) {
-            saved.groupId = backpackConfig.groups[gi].id;
+    state.inventorySlots.clear();
+    state.inventorySlots.resize(kTotalSlots);
+    for (size_t i = 0; i < slots.size(); ++i) {
+        if (slots[i].has_value()) {
+            state.inventorySlots[i] = SavedItemSlot{slots[i]->def.name, slots[i]->durability};
+        } else {
+            state.inventorySlots[i] = std::nullopt;
         }
-        for (const ItemInstance& item : groups[gi]) {
-            saved.items.push_back(SavedItemSlot{item.def.name, item.durability});
-        }
-        state.backpackGroups[gi] = std::move(saved);
     }
 
+    state.selectedBackpackGroup = -1;
+    state.backpackGroups.clear();
+
     state.usingItem.reset();
-    if (const ItemInstance* active = GetActiveItem()) {
-        state.usingItem = SavedItemSlot{active->def.name, active->durability};
+    if (const ItemInstance* selected = GetSelectedItem()) {
+        state.usingItem = SavedItemSlot{selected->def.name, selected->durability};
     }
 }
 
 void Inventory::ReadFromSave(const SaveGameState& state, const std::vector<ItemDef>& itemCatalog) {
     ClearAll();
-    isLightToggledOn = state.lightOn;
-    selectedGroup = state.selectedBackpackGroup;
 
-    if (!state.backpackGroups.empty()) {
-        for (size_t gi = 0; gi < state.backpackGroups.size() && gi < groups.size(); ++gi) {
-            for (const SavedItemSlot& saved : state.backpackGroups[gi].items) {
+    isLightToggledOn = state.lightOn;
+
+    if (!state.inventorySlots.empty()) {
+        for (size_t i = 0; i < state.inventorySlots.size() && i < static_cast<size_t>(kTotalSlots); ++i) {
+            if (!state.inventorySlots[i].has_value()) {
+                continue;
+            }
+            const ItemDef* def = FindItemDefByName(state.inventorySlots[i]->name, itemCatalog);
+            if (def) {
+                slots[i] = ItemInstance{*def, state.inventorySlots[i]->durability};
+            }
+        }
+        selectedSlot = state.selectedSlot;
+        if (selectedSlot < 0 || selectedSlot >= kTotalSlots || !slots[static_cast<size_t>(selectedSlot)].has_value()) {
+            selectedSlot = -1;
+        }
+    } else if (!state.backpackGroups.empty()) {
+        int slotIdx = 0;
+        for (const SavedBackpackGroup& group : state.backpackGroups) {
+            for (const SavedItemSlot& saved : group.items) {
+                if (slotIdx >= kTotalSlots) {
+                    break;
+                }
                 const ItemDef* def = FindItemDefByName(saved.name, itemCatalog);
-                if (def && !IsGroupFull(static_cast<int>(gi))) {
-                    groups[gi].push_back(ItemInstance{*def, saved.durability});
+                if (def) {
+                    slots[static_cast<size_t>(slotIdx)] = ItemInstance{*def, saved.durability};
+                    slotIdx++;
+                }
+            }
+            if (slotIdx >= kTotalSlots) {
+                break;
+            }
+        }
+        selectedSlot = state.selectedBackpackGroup;
+        if (state.selectedBackpackGroup >= 0 && state.selectedBackpackGroup < static_cast<int>(state.backpackGroups.size())) {
+            const int oldGroupIndex = state.selectedBackpackGroup;
+            const auto& oldGroup = state.backpackGroups[static_cast<size_t>(oldGroupIndex)];
+            if (!oldGroup.items.empty()) {
+                const ItemDef* selDef = FindItemDefByName(oldGroup.items.front().name, itemCatalog);
+                if (selDef) {
+                    if (IsFlashlightName(oldGroup.items.front().name)) {
+                        selectedSlot = FindFirstFlashlight();
+                    } else if (IsLampName(oldGroup.items.front().name)) {
+                        selectedSlot = FindFirstLamp();
+                    } else {
+                        selectedSlot = FindSlotWithFuel();
+                    }
                 }
             }
         }
+        if (selectedSlot < 0 || selectedSlot >= kTotalSlots) {
+            selectedSlot = FindFirstFlashlight();
+        }
     } else {
-        for (size_t i = 0; i < state.slots.size(); ++i) {
+        for (size_t i = 0; i < state.slots.size() && i < static_cast<size_t>(kTotalSlots); ++i) {
             if (!state.slots[i].has_value()) {
                 continue;
             }
             const ItemDef* def = FindItemDefByName(state.slots[i]->name, itemCatalog);
-            if (!def) {
-                continue;
+            if (def) {
+                slots[i] = ItemInstance{*def, state.slots[i]->durability};
             }
-            AddItem(*def, state.slots[i]->durability);
         }
         if (state.usingItem.has_value()) {
             const ItemDef* def = FindItemDefByName(state.usingItem->name, itemCatalog);
             if (def) {
-                const int gi = backpackConfig.GroupIndexForItem(def->name);
-                if (gi >= 0) {
-                    SelectGroup(gi);
+                for (int i = 0; i < kTotalSlots; ++i) {
+                    if (slots[i].has_value() && slots[i]->def.name == def->name &&
+                        slots[i]->durability == state.usingItem->durability) {
+                        selectedSlot = i;
+                        break;
+                    }
+                }
+                if (selectedSlot < 0) {
+                    if (IsFlashlightName(state.usingItem->name)) {
+                        selectedSlot = FindFirstFlashlight();
+                    } else if (IsLampName(state.usingItem->name)) {
+                        selectedSlot = FindFirstLamp();
+                    }
                 }
             }
         }
     }
 
-    if (selectedGroup < 0 || selectedGroup >= static_cast<int>(groups.size())) {
-        selectedGroup = -1;
+    if (selectedSlot < 0) {
+        selectedSlot = FindFirstFlashlight();
     }
-    activeItemIndex = FindBestItemIndexInGroup(selectedGroup);
     SyncUsingSlotMirror();
 }

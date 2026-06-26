@@ -57,25 +57,14 @@
       "durabilityDecreases": true,
       "sortOrder": 4,
       "properties": [{ "prop": "LIGHT_SOURCE", "value": 1.0 }]
-    }
-  ],
-  "backpackGroups": [
-    {
-      "id": "lighter",
-      "maxItems": 3,
-      "selectKey": 1,
-      "itemNames": ["Flashlight", "Broken Flashlight"]
     },
     {
-      "id": "fuel",
-      "maxItems": 2,
-      "itemNames": ["Fuel"]
-    },
-    {
-      "id": "lamp",
-      "maxItems": 1,
-      "selectKey": 2,
-      "itemNames": ["Lamp"]
+      "name": "Tabua de Madeira",
+      "spritePath": "Recursos/img/cenario/tabua-item.png",
+      "maxDurability": 0,
+      "durabilityDecreases": false,
+      "sortOrder": 5,
+      "properties": []
     }
   ],
   "oceanChunkCandidates": ["Recursos/audio/waves.mp3"]

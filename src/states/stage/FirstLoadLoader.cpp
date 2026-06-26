@@ -1,5 +1,4 @@
 #include "states/stage/FirstLoadData.h"
-#include "gameplay/BackpackConfig.h"
 #include "gameplay/Item.h"
 
 #include "nlohmann/json.hpp"
@@ -70,7 +69,8 @@ StageFirstLoadData EmbeddedDefaults() {
                  true,
                  4,
                  {{ItemProperty::LIGHT_SOURCE, 1.0f}}};
-    d.pickupCycle = {apple, brokenFlashlight, fuel, lamp};
+    d.pickupCycle = {apple, brokenFlashlight, fuel, lamp,
+                     ItemDef{"Tabua de Madeira", "Recursos/img/cenario/tabua-item.png", 0, false, 5, {}}};
 
     d.startingFlashlight =
         ItemDef{"Flashlight",
@@ -85,34 +85,7 @@ StageFirstLoadData EmbeddedDefaults() {
         {"level_1", "Recursos/map/mapa_1_andar.json", 1},
         {"level_2", "Recursos/map/mapa_2_andar.json", 2},
     };
-    d.backpackConfig = DefaultBackpackConfig();
     return d;
-}
-
-BackpackConfig ParseBackpackConfig(const json& j) {
-    BackpackConfig cfg = DefaultBackpackConfig();
-    if (!j.is_array()) {
-        return cfg;
-    }
-    std::vector<BackpackGroupDef> groups;
-    for (const auto& g : j) {
-        BackpackGroupDef def;
-        def.id = g.value("id", "");
-        def.maxItems = g.value("maxItems", 1);
-        def.selectKey = g.value("selectKey", 0);
-        if (g.contains("itemNames") && g["itemNames"].is_array()) {
-            for (const auto& name : g["itemNames"]) {
-                def.itemNames.push_back(name.get<std::string>());
-            }
-        }
-        if (!def.id.empty()) {
-            groups.push_back(std::move(def));
-        }
-    }
-    if (!groups.empty()) {
-        cfg.groups = std::move(groups);
-    }
-    return cfg;
 }
 
 bool TryReadJsonFile(const char* path, json& out) {
@@ -177,8 +150,8 @@ StageFirstLoadData ParseFromJsonRoot(const json& j) {
             d.oceanChunkCandidates = std::move(paths);
         }
     }
-    if (j.contains("backpackGroups") && j["backpackGroups"].is_array()) {
-        d.backpackConfig = ParseBackpackConfig(j["backpackGroups"]);
+    if (j.contains("backpackGroups")) {
+        // backwards-compat: ignore old backpackGroups config, no longer used
     }
     if (j.contains("levels") && j["levels"].is_array()) {
         std::vector<LevelDef> levels;
@@ -209,9 +182,6 @@ StageFirstLoadData SanitizeLists(StageFirstLoadData d) {
     }
     if (d.levelPath.empty() && !d.levels.empty()) {
         d.levelPath = d.levels.front().mapPath;
-    }
-    if (d.backpackConfig.groups.empty()) {
-        d.backpackConfig = DefaultBackpackConfig();
     }
     if (d.oceanChunkCandidates.empty()) {
         d.oceanChunkCandidates = EmbeddedDefaults().oceanChunkCandidates;
