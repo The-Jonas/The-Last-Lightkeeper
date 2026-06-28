@@ -102,21 +102,21 @@ void StageState::IssueMovementFromInput(Character* character, GameObject* object
 
 void StageState::IssueFollowCommand(Character* follower, GameObject* followerObject, GameObject* leaderObject, bool allowCatchup) {
     companionFollowPathWorld.clear();
-
+ 
     if (!follower || !followerObject || !leaderObject) {
         return;
     }
-
+ 
     const float preferredDistance = 68.0f;
     const float overlapDistance = 40.0f;
     const float followStartDistance = 82.0f;
     const float catchupDistance = 420.0f;
-
+ 
     Vec2 leaderCenter = leaderObject->box.Center();
     Vec2 followerCenter = followerObject->box.Center();
     Vec2 toLeader = leaderCenter - followerCenter;
     float distance = toLeader.Magnitude();
-
+ 
     follower->SetSpeedMultiplier(1.0f);
     if (distance < overlapDistance) {
         if (distance > 0.01f) {
@@ -126,38 +126,51 @@ void StageState::IssueFollowCommand(Character* follower, GameObject* followerObj
         }
         return;
     }
-
+ 
     if (distance < followStartDistance) {
         return;
     }
-
+ 
     Vec2 dir = toLeader.Normalized();
     Vec2 targetPos = leaderCenter - (dir * preferredDistance);
     if (allowCatchup && distance > catchupDistance) {
         follower->SetSpeedMultiplier(1.55f);
     }
     Vec2 followTarget = targetPos;
+ 
     if (HasNavigationGrid() && !HasWalkableLine(followerCenter, targetPos, followerObject)) {
-        const std::vector<Vec2> path = FindPathWorld(followerCenter, targetPos, followerObject);
-        companionFollowPathWorld = path;
+ 
+        // ── THROTTLE: só recalcula o A* a cada kCompanionPathRefreshInterval,
+        // reaproveitando o último caminho calculado nos frames intermediários.
+        // Isso evita rodar o A* completo (caro, com checagem de colliders)
+        // 60x por segundo enquanto o seguidor estiver perto de um obstáculo.
+        if (companionPathRefreshTimer <= 0.0f) {
+            companionPathRefreshTimer = kCompanionPathRefreshInterval;
+            cachedCompanionPath = FindPathWorld(followerCenter, targetPos, followerObject);
+        }
+ 
+        companionFollowPathWorld = cachedCompanionPath;
         if (!companionFollowPathWorld.empty()) {
             if ((companionFollowPathWorld.front() - followerCenter).Magnitude() > 3.0f) {
                 companionFollowPathWorld.insert(companionFollowPathWorld.begin(), followerCenter);
             }
         } else {
-            // A* falhou: ainda mostramos o desejo de ir em linha reta até o alvo (mesmo que o movimento use só `targetPos`).
             companionFollowPathWorld = {followerCenter, targetPos};
         }
-        if (path.size() >= 2) {
-            followTarget = path[1];
-        } else if (!path.empty()) {
-            followTarget = path.front();
+ 
+        if (cachedCompanionPath.size() >= 2) {
+            followTarget = cachedCompanionPath[1];
+        } else if (!cachedCompanionPath.empty()) {
+            followTarget = cachedCompanionPath.front();
         }
     } else {
-        // Linha de visada livre (ou sem grade): mostramos o segmento direto até o ponto-alvo atrás do líder.
+        // Linha livre — não precisa de A*, zera o throttle pro próximo bloqueio
+        // recalcular imediatamente (sem esperar o intervalo穏 acumulado)
+        companionPathRefreshTimer = 0.0f;
+        cachedCompanionPath.clear();
         companionFollowPathWorld = {followerCenter, targetPos};
     }
-
+ 
     Character::Command followCommand(Character::Command::MOVE, followTarget.x, followTarget.y);
     follower->Issue(followCommand);
 }

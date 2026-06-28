@@ -315,6 +315,14 @@ private:
     int levelTitleNumber = 1;
     bool inventoryInitialized = false;
     static constexpr float kLevelTitleDuration = 3.0f;
+
+    // Tentando arrumar o pathfinding
+    float companionPathRefreshTimer = 0.0f;
+    static constexpr float kCompanionPathRefreshInterval = 0.35f; 
+    std::vector<Vec2> cachedCompanionPath;
+    mutable std::vector<GameObject*> dynamicColliderCache;
+    mutable bool dynamicColliderCacheDirty = true;
+    void RefreshDynamicColliderCache() const;
 };
 
 #endif

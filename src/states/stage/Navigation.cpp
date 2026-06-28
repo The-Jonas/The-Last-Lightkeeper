@@ -147,15 +147,14 @@ bool StageState::IsTileNavigableFor(const GameObject* agent, int tx, int ty) con
     const float fr = static_cast<float>(r);
     Rect footRect(probe.x + probe.w * 0.5f - fr, probe.y + probe.h - 2.0f * fr, 2.0f * fr, 2.0f * fr);
 
-    for (const auto& goPtr : objectArray) {
-        GameObject* go = goPtr.get();
-        if (!go || go == agent || go == bigCharacterObject || go == smallCharacterObject) {
-            continue;
-        }
+    if (dynamicColliderCacheDirty) {
+        RefreshDynamicColliderCache();
+    }
+
+    for (GameObject* go : dynamicColliderCache) {
+        if (go == agent) continue;
         Collider* col = go->GetComponent<Collider>();
-        if (!col) {
-            continue;
-        }
+        if (!col) continue;
         Rect a = footRect;
         Rect b = col->box;
         const float angleRad = static_cast<float>(go->angleDeg) * (static_cast<float>(M_PI) / 180.0f);
@@ -432,6 +431,19 @@ std::vector<Vec2> StageState::FindPathWorld(const Vec2& fromWorld, const Vec2& t
 
     std::reverse(reversedPath.begin(), reversedPath.end());
     return reversedPath;
+}
+
+void StageState::RefreshDynamicColliderCache() const {
+    dynamicColliderCache.clear();
+    for (const auto& goPtr : objectArray) {
+        GameObject* go = goPtr.get();
+        if (!go) continue;
+        if (go == bigCharacterObject || go == smallCharacterObject) continue;
+        if (go->GetComponent<Collider>() != nullptr) {
+            dynamicColliderCache.push_back(go);
+        }
+    }
+    dynamicColliderCacheDirty = false;
 }
 
 void StageState::ApplyMapBoundsAndWalkability(GameObject* characterObject, const Vec2& previousPos) {
