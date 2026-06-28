@@ -21,6 +21,7 @@ public:
         CHASE,                                          // Viu os irmãos e está correndo atrás (ou tocou neles no escuro)
         CAMP_CLOSET,                                    // Viu os irmãos entrarem no armário e está esperando na frente
         FLEE_LIGHT,                                     // Entrou em área muito iluminada — recua
+        LURK,                                           // Ronda nas bordas da luz, esperando ela sair/apagar
         SABOTAGE_WINDOW                                 // Vai dar prioridade a abrir a janela pra apagar as velas
     };
 
@@ -61,6 +62,7 @@ private:
     void UpdateHunt        (float dt);
     void UpdateCampCloset  (float dt);
     void UpdateFleeLigth   (float dt);
+    void UpdateLurk        (float dt);
  
     // ── Sensores ──────────────────────────────────────────────────────────────
     // Retorna true se qualquer irmão estiver iluminado E dentro do raio de visão
@@ -110,6 +112,11 @@ private:
     float damageCooldown = 0.0f;
     static constexpr float kDamageCooldownTime = 1.5f;
     static constexpr float kSanityDamageOnTouch = 30.0f;
+
+    // Propriedades do LURK
+    float lurkTimer = 0.0f;
+    static constexpr float kLurkMaxTime = 12.0f; // Desiste de rondar após esse tempo
+    static constexpr float kLurkRepositionInterval = 1.5f; // A cada quanto reavalia posição
  
     // ── Patrulha ──────────────────────────────────────────────────────────────
     std::vector<Vec2> patrolPoints;

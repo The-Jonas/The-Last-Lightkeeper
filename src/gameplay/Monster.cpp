@@ -43,7 +43,7 @@ void Monster::Update(float dt) {
     // ── Sensor de luz na própria posição ─────────────────────────────────────
     // Se entrou em área iluminada demais, foge (Exceto se estiver em HUNT)
     // nesse estado ele está tão alterado que ignora a luz por um tempo
-    if (state != MonsterState::HUNT && state != MonsterState::FLEE_LIGHT && IsSelfInLight()) {
+    if (state != MonsterState::FLEE_LIGHT && IsSelfInLight()) {
         TransitionTo(MonsterState::FLEE_LIGHT);
         return;
     }
@@ -76,6 +76,7 @@ void Monster::Update(float dt) {
         case MonsterState::HUNT:         UpdateHunt(dt);        break;
         case MonsterState::CAMP_CLOSET:  UpdateCampCloset(dt);  break;
         case MonsterState::FLEE_LIGHT:   UpdateFleeLigth(dt);   break;
+        case MonsterState::LURK:         UpdateLurk(dt);        break;
         case MonsterState::SABOTAGE_WINDOW: UpdateSabotageWindow(dt); break;
     }
 
@@ -147,24 +148,49 @@ void Monster::TransitionTo(MonsterState next) {
             campTimer = 0.0f;
             RequestPath(closetTargetPos);
             break;
-        case MonsterState::FLEE_LIGHT:
+        case MonsterState::LURK:
+            moveSpeed = kSpeedPatrol; 
+            lurkTimer = 0.0f;
+            break;
+        case MonsterState::FLEE_LIGHT: {
             moveSpeed = kSpeedChase;
-            // Procura o waypoint MAIS LONGE do jogador para garantir que a fuga é segura!
-            if (!patrolPoints.empty() && Character::player) {
-                Vec2 playerPos = Character::player->GetAssociated().box.Center();
-                int bestIdx = 0;
-                float maxDist = -1.0f;
-                for (size_t i = 0; i < patrolPoints.size(); ++i) {
-                    float d = patrolPoints[i].Distance(playerPos);
-                    if (d > maxDist) { maxDist = d; bestIdx = static_cast<int>(i); }
+            // Foge na direção OPOSTA à luz mais próxima, só uma distância
+            // curta de segurança — não vai pro fim do mapa, fica rondando.
+            StageState* stageFlee = Game::TryGetStageState();
+            Vec2 myPos = associated.box.Center();
+            Vec2 fleeDir(0.0f, 0.0f);
+            float closestThreatDist = 1e9f;
+
+            if (stageFlee) {
+                for (const auto& light : stageFlee->GetLights()) {
+                    if (!light.enabled) continue;
+                    float dist = myPos.Distance(light.worldPos);
+                    if (dist < closestThreatDist) {
+                        closestThreatDist = dist;
+                        fleeDir = myPos - light.worldPos;
+                    }
                 }
-                RequestPath(patrolPoints[bestIdx]);
+                Vec2 torchPos; float torchRadius;
+                if (stageFlee->GetActiveTorchWorldPos(torchPos, torchRadius)) {
+                    float dist = myPos.Distance(torchPos);
+                    if (dist < closestThreatDist) {
+                        closestThreatDist = dist;
+                        fleeDir = myPos - torchPos;
+                    }
+                }
+            }
+
+            if (fleeDir.Magnitude() > 0.001f) {
+                fleeDir = fleeDir.Normalized();
+                constexpr float kSafeFleeDistance = 250.0f;
+                Vec2 fleeTarget = myPos + fleeDir * kSafeFleeDistance;
+                RequestPath(fleeTarget);
             }
             break;
+        } 
         case MonsterState::SABOTAGE_WINDOW:
             moveSpeed = kSpeedInvestigate; // Ou a velocidade que preferir
             break;
-        
     }
 }
 
@@ -352,16 +378,15 @@ void Monster::UpdateFleeLigth(float dt) {
     // ==========================================
     
     if (!IsSelfInLight()) {
-        // REGRA 1: SÓ sai do modo fuga se a luz REALMENTE parou de tocar nele.
+        // Vai para LURK — ronda esperando a luz sair/apagar antes de voltar
+        // a perseguir de verdade.
         if (hasMemory) {
-            TransitionTo(MonsterState::INVESTIGATE);
+            TransitionTo(MonsterState::LURK);
         } else {
             TransitionTo(MonsterState::PATROL);
         }
-    } 
+    }
     else if (HasReachedTarget() && !currentPath.empty()) {
-        // REGRA 2: Chegou no ponto de fuga, mas a luz do jogador continua tocando nele?
-        // Ao invés de parar e travar, ele reseta o estado de fuga pra procurar um lugar ainda mais longe!
         TransitionTo(MonsterState::FLEE_LIGHT);
     }
 }
@@ -380,6 +405,14 @@ void Monster::NotifyClosetOccupied(Vec2 closetWorldPos) {
         closetTargetPos = closetWorldPos;
         TransitionTo(MonsterState::CAMP_CLOSET);
     }
+}
+
+static float DistanceFromRectToPoint(const Rect& rect, const Vec2& point) {
+    float closestX = std::max(rect.x, std::min(point.x, rect.x + rect.w));
+    float closestY = std::max(rect.y, std::min(point.y, rect.y + rect.h));
+    float dx = point.x - closestX;
+    float dy = point.y - closestY;
+    return std::sqrt(dx * dx + dy * dy);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -439,8 +472,34 @@ bool Monster::IsWorldPosInAnyLight(Vec2 worldPos, float extraRadius) const {
 }
 
 bool Monster::IsSelfInLight() const {
-    const float myRadius = associated.box.w * 0.45f;
-    return IsWorldPosInAnyLight(associated.box.Center(), myRadius);
+    StageState* stage = Game::TryGetStageState();
+    if (!stage) return false;
+
+    // Encolhe a box em 5% de cada lado (10% total) pra ignorar bordas
+    // transparentes do sprite — considera o corpo todo, não só o centro
+    Rect myBox = associated.box;
+    myBox.x += myBox.w * 0.05f;
+    myBox.y += myBox.h * 0.05f;
+    myBox.w *= 0.90f;
+    myBox.h *= 0.90f;
+
+    for (const auto& light : stage->GetLights()) {
+        if (!light.enabled) continue;
+        const float radius = light.params.falloffRadiusPx;
+        if (radius <= 0.0f) continue;
+
+        const float dist = DistanceFromRectToPoint(myBox, light.worldPos);
+        if (dist < radius) return true;
+    }
+
+    Vec2 torchPos;
+    float torchRadius = 0.0f;
+    if (stage->GetActiveTorchWorldPos(torchPos, torchRadius)) {
+        const float dist = DistanceFromRectToPoint(myBox, torchPos);
+        if (dist < torchRadius) return true;
+    }
+
+    return false;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -561,5 +620,51 @@ void Monster::UpdateSabotageWindow(float dt) {
             RequestPath(winPos);
         }
         MoveAlongPath(dt, moveSpeed);
+    }
+}
+
+void Monster::UpdateLurk(float dt) {
+    lurkTimer += dt;
+ 
+    // Desistiu de esperar — esquece e volta a patrulhar normalmente
+    if (lurkTimer >= kLurkMaxTime) {
+        hasMemory = false;
+        TransitionTo(MonsterState::PATROL);
+        return;
+    }
+ 
+    // A cada kLurkRepositionInterval segundos, escolhe um ponto seguro
+    // PRÓXIMO da memória (não direto nela, e não fugindo pro mapa inteiro)
+    if (pathRefreshTimer >= kLurkRepositionInterval) {
+        pathRefreshTimer = 0.0f;
+ 
+        // Escolhe um ângulo aleatório ao redor da última posição conhecida,
+        // a uma distância que normalmente fica fora do raio de luz comum
+        constexpr float kLurkOrbitRadius = 220.0f;
+        float angle = static_cast<float>(rand() % 360) * (3.14159265f / 180.0f);
+        Vec2 orbitOffset(std::cos(angle) * kLurkOrbitRadius, std::sin(angle) * kLurkOrbitRadius);
+        Vec2 lurkTarget = lastKnownPlayerPos + orbitOffset;
+ 
+        // Só vai pra lá se esse ponto específico não estiver na luz
+        if (!IsWorldPosInAnyLight(lurkTarget)) {
+            RequestPath(lurkTarget);
+        }
+    }
+ 
+    MoveAlongPath(dt, moveSpeed);
+ 
+    // Se a luz realmente sumiu da memória por completo, ataca a chance
+    if (CanSeeLitBrother(lastKnownPlayerPos)) {
+        // Os irmãos baixaram a guarda de novo e estão visíveis — persegue!
+        TransitionTo(MonsterState::CHASE);
+        return;
+    }
+ 
+    // Se entrar na luz de novo enquanto ronda, foge — já tratado pelo sensor
+    // global no Update(), então não precisa duplicar a lógica aqui.
+ 
+    // Memória expirou naturalmente (mesmo timer de sempre)
+    if (!hasMemory) {
+        TransitionTo(MonsterState::PATROL);
     }
 }

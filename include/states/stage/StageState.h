@@ -15,6 +15,7 @@
 #include "gameplay/Inventory.h"
 #include "core/LevelManager.h"
 #include "core/SaveData.h"
+#include "gameplay/Character.h"
 #include "states/stage/FirstLoadData.h"
 #include "states/stage/OceanAmbientController.h"
 #include "math/Vec2.h"

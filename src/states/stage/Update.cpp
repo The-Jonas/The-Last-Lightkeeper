@@ -362,7 +362,7 @@ void StageState::Update(float dt){
             ? sanityOverlayObj->GetComponent<SpriteRenderer>() : nullptr;
  
         if (overlaySprite) {
-            constexpr float kSanityOverlayThreshold = 60.0f; // mesmo limiar de antes
+            constexpr float kSanityOverlayThreshold = 80.0f; 
  
             if (lowestSanityUpdate < kSanityOverlayThreshold) {
                 // intensity: 0.0 (sanidade = threshold) até 1.0 (sanidade = 0)
