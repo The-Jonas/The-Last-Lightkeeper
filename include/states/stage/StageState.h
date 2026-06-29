@@ -13,6 +13,7 @@
 #include "lighting/LightTweakPanel.h"
 #include "lighting/TopDownLightShadows.h"
 #include "gameplay/Inventory.h"
+#include "gameplay/Character.h"
 #include "core/LevelManager.h"
 #include "core/SaveData.h"
 #include "states/stage/FirstLoadData.h"
@@ -23,14 +24,12 @@
 #include <unordered_set>
 #include <vector>
 
-class Character;
 class GameObject;
 class TileMap;
 class Box;
 class ItemPickup;
 class Jornal;
 class Candlestick;
-class InventoryGrid;
 class Window;
 
 class StageState : public State {
@@ -274,7 +273,7 @@ private:
 
     Inventory inventory;
     GameObject* hotbarObject = nullptr;
-    GameObject* inventoryGridObject = nullptr;
+    GameObject* inventoryWheelObject = nullptr;
     std::vector<class ItemPickup*> itemPickups;
     std::vector<Jornal*> jornals;
 

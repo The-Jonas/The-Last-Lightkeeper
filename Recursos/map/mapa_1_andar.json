@@ -337,7 +337,7 @@
                 }, 
                 {
                  "gid":8,
-                 "height":86,
+                 "height":64,
                  "id":682,
                  "name":"",
                  "opacity":1,
@@ -355,12 +355,12 @@
                         {
                          "name":"itemName",
                          "type":"string",
-                         "value":"Lighter Fuel"
+                         "value":"Apple"
                         }],
                  "rotation":0,
                  "type":"ItemSpawn",
                  "visible":true,
-                 "width":40,
+                 "width":64,
                  "x":1067.33333333333,
                  "y":1614.66666666667
                 }, 

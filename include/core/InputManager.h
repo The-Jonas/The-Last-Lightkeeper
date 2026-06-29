@@ -47,6 +47,8 @@ public:
     int GetMouseX();
     int GetMouseY();
 
+    int GetMouseWheel();
+
     bool QuitRequested();                                           // Retorna se o usuário pediu pra sair do jogo
 
 private:
@@ -67,6 +69,7 @@ private:
     bool quitRequested;
     int updateCounter;
     int mouseX, mouseY;
+    int mouseWheel;
 
 };
 

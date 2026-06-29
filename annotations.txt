@@ -1,0 +1,21 @@
+ - Use only ONE shaddow per objetct, closest light source wins the race.
+ - A* pathing causes MASSIVE fps drops; analyze barriers from the game map (bugged?). A* on every other frame, not every frame. Same for shadows.
+ - Inventory: wheel on the botttom-left corner; (carroussel fantasma de itens). We see one clear item, in the center. Rest of them is transparent.
+ - conditional pop up: show a tooltip for changing player control if they are too far apart from each other. The tool tip stays for a few seconds, then vanishes. Show it 3 times only. If the player keeps the distance, keep showing it. If the player swaps, the timer stops, 5 seconds and the tip vanishes.
+
+ - Executable game
+ - Main title options are selectable (w, s, enter for select);
+ - Base walk speed increase
+ - Better VFX
+ - Elevated/grounded players fix
+ - Use the dubbed files
+ - Better debug options!!!
+
+ - Iteração com itens deve possuir tooltips (consistencia)
+
+ - Implement radio item!
+ - Loading inicial muito longo (audios on wav)
+
+ - Better tooltips on the first level
+
+ - 

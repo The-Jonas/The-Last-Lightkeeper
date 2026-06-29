@@ -4,44 +4,41 @@
 #include "gameplay/Item.h"
 #include "lighting/LightMaskTypes.h"
 
-#include <optional>
+#include <string>
 #include <vector>
 
 enum class HeldPropVisual { None, Lighter, Lamp };
 
 class Inventory {
 public:
-    static constexpr int kGridWidth = 5;
-    static constexpr int kGridHeight = 5;
-    static constexpr int kTotalSlots = kGridWidth * kGridHeight;
+    struct ItemStack {
+        ItemDef def;
+        int count;
+        std::vector<int> durabilities;
+    };
+
+    static constexpr int kMaxStackSize = 5;
 
     bool AddItem(const ItemDef& def, int durability);
     void ClearAll();
-    bool SelectSlot(int slotIndex);
-    void DeselectSlot();
-    int GetSelectedSlot() const { return selectedSlot; }
-    bool HasSelection() const { return selectedSlot >= 0; }
 
-    int TotalItemCount() const;
-    bool IsInventoryFull() const;
-    bool CanAcceptItem(const ItemDef& def) const;
+    int GetActiveIndex() const { return activeIndex; }
+    void SetActiveIndex(int index);
+    void CycleLeft();
+    void CycleRight();
 
-    void MoveItem(int fromSlot, int toSlot);
-    bool TryCombineOil(int oilSlot, int lightSlot);
-    void RemoveFromSlot(int slotIndex);
+    const ItemStack* GetActiveStack() const;
+    ItemStack* GetActiveStackMutable();
+    const ItemStack* GetStack(int index) const;
+    int GetStackCount() const { return static_cast<int>(stacks.size()); }
+    int GetVisibleStackIndex(int visibleOffset, int visibleCount) const;
 
-    const ItemInstance* GetSelectedItem() const;
-    ItemInstance* GetSelectedItemMutable();
-    const ItemInstance* GetItem(int slotIndex) const;
-    const std::optional<ItemInstance>& GetSlot(int slotIndex) const;
-
-    int FindBestFlashlight() const;
-    int FindBestLamp() const;
-    int FindFirstFlashlight() const;
-    int FindFirstLamp() const;
-    int FindSlotWithFuel() const;
-    int FindSlotWithName(const std::string& name) const;
-    bool HasItem(const std::string& name) const;
+    bool IsOilPrimed() const { return primedOilDurability > 0; }
+    int GetPrimedOilDurability() const { return primedOilDurability; }
+    const std::string& GetPrimedOilSpritePath() const { return primedOilSpritePath; }
+    bool TryPrimeOil();
+    bool TryCombineOil();
+    void CancelOil();
 
     bool TryTurnLightOn();
     HeldPropVisual GetHeldPropVisual() const;
@@ -57,16 +54,23 @@ public:
     void ReadFromSave(const struct SaveGameState& state,
                       const std::vector<ItemDef>& itemCatalog);
 
+    bool CanAcceptItem(const ItemDef& def) const;
+    bool HasItem(const std::string& name) const;
+    bool TryConsumeItem(const std::string& name);
+    int FindStackWithName(const std::string& name) const;
+    int FindStackWithProperty(ItemProperty prop) const;
+
     bool isLightToggledOn = false;
 
 private:
-    void SyncUsingSlotMirror();
-    bool IsLightSlot(int slotIndex) const;
-
-    std::vector<std::optional<ItemInstance>> slots;
-    int selectedSlot = -1;
-    std::optional<ItemInstance> usingSlot;
+    std::vector<ItemStack> stacks;
+    int activeIndex = -1;
+    int primedOilDurability = 0;
+    std::string primedOilSpritePath;
     float usingDrainAccum = 0.0f;
+
+    int FindBestFlashlight() const;
+    int FindBestLamp() const;
 };
 
 #endif

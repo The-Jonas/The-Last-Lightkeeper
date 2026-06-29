@@ -14,6 +14,7 @@ InputManager::InputManager(){
     updateCounter = 0;
     mouseX = 0;
     mouseY = 0;
+    mouseWheel = 0;
 }
 
 InputManager::~InputManager(){
@@ -28,6 +29,7 @@ InputManager& InputManager::GetInstance(){              // Ao invés de dar new 
 void InputManager::Update(){
     updateCounter ++;                                   // Incrementa o contador de frame
     SDL_GetMouseState(&mouseX, &mouseY);                // Obtém as coordenadas do mouse
+    mouseWheel = 0;
     quitRequested = false;                              // Reinicia a flag de quit
 
     SDL_Event event;
@@ -58,6 +60,10 @@ void InputManager::Update(){
             // Botão do mouse foi solto
             mouseState[event.button.button] = false;
             mouseUpdate[event.button.button] = updateCounter;
+            break;
+
+        case SDL_MOUSEWHEEL:
+            mouseWheel += event.wheel.y;
             break;
 
         case SDL_QUIT:
@@ -120,4 +126,8 @@ int InputManager::GetMouseY(){
 
 bool InputManager::QuitRequested(){
     return quitRequested;
+}
+
+int InputManager::GetMouseWheel() {
+    return mouseWheel;
 }

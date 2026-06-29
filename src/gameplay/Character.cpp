@@ -101,7 +101,7 @@ Character::Character(GameObject& associated, std::string spritePath, bool useIrm
     constexpr int PLAYER_FRAMES_PER_ROW = 1;
     constexpr int PLAYER_ROWS = 1;
 
-    linearSpeed = 250.0f;
+    linearSpeed = 325.0f;
     speedMultiplier = 1.0f;
     acceleration = 1000.0f;
     deceleration = 1400.0f;

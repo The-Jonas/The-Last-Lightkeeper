@@ -8,13 +8,12 @@
 #include "gameplay/Box.h"
 #include "audio/GameSfx.h"
 #include "gameplay/Character.h"
-#include "gameplay/BackpackVisuals.h"
 #include "gameplay/HotbarComponent.h"
 #include "gameplay/Item.h"
 #include "states/EndState.h"
 #include "states/LevelTransitionLoadingState.h"
 #include "ui/Text.h"
-#include "ui/InventoryGrid.h"
+#include "ui/InventoryWheel.h"
 #include "world/SpawnFactory.h"
 
 #define INCLUDE_SDL_TTF
@@ -52,7 +51,7 @@ void StageState::ClearGameplayWorld() {
     hudLine3 = nullptr;
     hudFps = nullptr;
     hotbarObject = nullptr;
-    inventoryGridObject = nullptr;
+    inventoryWheelObject = nullptr;
     itemPickups.clear();
     jornals.clear();
     reachableJornal = nullptr;
@@ -170,21 +169,21 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
     hudLine1 = new GameObject();
     hudLine1->z = 100;
     hudLine1->AddComponent(new Text(*hudLine1, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
-                                    "WASD mover | Ctrl trocar irmao | Q junto/separado | Esc sair",
+                                     "WASD mover | 1/3 girar item | Ctrl trocar irmao | Q junto/separado",
                                     hudColor));
     AddObject(hudLine1);
 
     hudLine2 = new GameObject();
     hudLine2->z = 100;
     hudLine2->AddComponent(new Text(*hudLine2, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
-                                     "E interagir/pegar | 1 isqueiro | 2 lamparina | F luz | I inventario",
+                                     "E interagir/pegar/acender/consertar | F usar item/luz/oleo | Esc sair",
                                     hudColor));
     AddObject(hudLine2);
 
     hudLine3 = new GameObject();
     hudLine3->z = 100;
     hudLine3->AddComponent(new Text(*hudLine3, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
-                                    "Irmaozinho: E visao de monstro",
+                                     "T trovao | L luzes | O sombras | M musica | B fisica | X luz cursor | C criar luz | P painel luz",
                                     hudColor));
     AddObject(hudLine3);
 
@@ -201,19 +200,16 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
                                                     return ClampPickupTopLeft(tl, w, h);
                                                 });
     hotbarObj->AddComponent(hotbarComp);
-    hotbarObj->AddComponent(new BackpackVisuals(*hotbarObj, inventory, bigComp));
     hotbarObj->z = 200;
     AddObject(hotbarObj);
     hotbarObject = hotbarObj;
 
-    GameObject* gridObj = new GameObject();
-    InventoryGrid* gridComp = new InventoryGrid(*gridObj, inventory, bigCharacter, &itemPickups,
-                                                [this](GameObject* obj) { AddObject(obj); });
-    gridObj->AddComponent(gridComp);
-    gridObj->z = 300;
-    AddObject(gridObj);
-    inventoryGridObject = gridObj;
-    hotbarComp->SetInventoryGrid(gridComp);
+    GameObject* wheelObj = new GameObject();
+    InventoryWheel* wheelComp = new InventoryWheel(*wheelObj, inventory);
+    wheelObj->AddComponent(wheelComp);
+    wheelObj->z = 300;
+    AddObject(wheelObj);
+    inventoryWheelObject = wheelObj;
 
     RefreshCameraTargets();
     UpdateControlledCharacterVisuals();

@@ -64,9 +64,7 @@ void Repairable::Update(float dt) {
             if (InputManager::GetInstance().KeyPress(SDLK_e)) {
 
                 if (!requiredItem.empty()) {
-                    int slot = stage->GetInventory().FindSlotWithName(requiredItem);
-                    if (slot < 0) return;
-                    stage->GetInventory().RemoveFromSlot(slot);
+                    if (!stage->GetInventory().TryConsumeItem(requiredItem)) return;
                 }
 
                 if (soundPath != "") {

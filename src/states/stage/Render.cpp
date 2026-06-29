@@ -241,7 +241,7 @@ void StageState::Render(){
             renderedLights++;
         }
 
-        constexpr size_t kMaxSpriteShadowsPerPlayer = 2;
+        constexpr size_t kMaxSpriteShadowsPerPlayer = 1;
         std::sort(bigShadowCasts.begin(), bigShadowCasts.end(), [](const SpriteShadowCast& a, const SpriteShadowCast& b) { return a.touch > b.touch; });
         std::sort(smallShadowCasts.begin(), smallShadowCasts.end(), [](const SpriteShadowCast& a, const SpriteShadowCast& b) { return a.touch > b.touch; });
         

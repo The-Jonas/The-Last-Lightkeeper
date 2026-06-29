@@ -5,7 +5,6 @@
 #include "gameplay/Character.h"
 #include "gameplay/ItemPickup.h"
 #include "states/stage/StageState.h"
-#include "ui/InventoryGrid.h"
 #include "audio/Sound.h"
 #include "audio/GameSfx.h"
 
@@ -41,9 +40,6 @@ void PlayRandomPickupSound() {
 void PerformPickup(Inventory& inventory, ItemPickup* closest, std::vector<ItemPickup*>& itemPickups,
                    Character* bigChar) {
     const ItemDef& def = *closest->GetDef();
-    if (!inventory.CanAcceptItem(def)) {
-        return;
-    }
     if (!inventory.AddItem(def, closest->GetDurability())) {
         return;
     }
@@ -122,47 +118,14 @@ ItemPickup* HotbarComponent::FindClosestReachablePickup() const {
     return closest;
 }
 
-void HotbarComponent::TryInventoryToggle() {
-    InputManager& input = InputManager::GetInstance();
-    if (!input.KeyPress(SDLK_i)) return;
-    if (!inventoryGrid) return;
-    inventoryGrid->Toggle();
-}
-
-void HotbarComponent::TryCloseGridOnEKey() {
-    InputManager& input = InputManager::GetInstance();
-    if (!input.KeyPress(SDLK_e)) return;
-    if (!inventoryGrid || !inventoryGrid->IsOpen()) return;
-    inventoryGrid->Close();
-}
-
-void HotbarComponent::TrySelectSlotOnKeyPress() {
+void HotbarComponent::TryCycleWheel() {
     InputManager& input = InputManager::GetInstance();
 
     if (input.KeyPress(SDLK_1)) {
-        const int slot = inventory.FindBestFlashlight();
-        if (slot >= 0) {
-            const bool wasSelected = inventory.GetSelectedSlot() == slot;
-            if (!inventory.SelectSlot(slot)) return;
-            if (!bigCharacter) return;
-            if (!wasSelected) {
-                bigCharacter->NotifyInventoryLightChanged();
-            }
-        }
+        inventory.CycleLeft();
     }
-
-    if (input.KeyPress(SDLK_2)) {
-        const int slot = inventory.FindBestLamp();
-        if (slot >= 0) {
-            const bool wasSelected = inventory.GetSelectedSlot() == slot;
-            if (!inventory.SelectSlot(slot)) return;
-            if (!bigCharacter) return;
-            if (wasSelected) {
-                bigCharacter->PlayPickLampAnimation();
-            } else {
-                bigCharacter->NotifyInventoryLightChanged();
-            }
-        }
+    if (input.KeyPress(SDLK_3)) {
+        inventory.CycleRight();
     }
 }
 
@@ -172,14 +135,36 @@ void HotbarComponent::TryUseActiveItemOnKeyPress() {
         return;
     }
 
-    const ItemInstance* active = inventory.GetSelectedItem();
-    if (!active) {
+    if (inventory.IsOilPrimed()) {
+        if (input.KeyPress(SDLK_ESCAPE)) {
+            inventory.CancelOil();
+            return;
+        }
+
+        const Inventory::ItemStack* active = inventory.GetActiveStack();
+        if (active && active->def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
+            if (inventory.TryCombineOil()) {
+                if (bigCharacter) {
+                    bigCharacter->NotifyInventoryLightChanged();
+                }
+                return;
+            }
+        }
+        inventory.CancelOil();
         return;
     }
 
-    if (!active->def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
+    const Inventory::ItemStack* active = inventory.GetActiveStack();
+    if (!active) return;
+
+    if (active->def.HasProperty(ItemProperty::FUEL)) {
+        if (inventory.TryPrimeOil()) {
+            return;
+        }
         return;
     }
+
+    if (!active->def.HasProperty(ItemProperty::LIGHT_SOURCE)) return;
 
     const bool wasOn = inventory.isLightToggledOn;
     const bool isLighter = inventory.IsActiveLightLighter();
@@ -206,10 +191,6 @@ void HotbarComponent::TryPickupOnKeyPress() {
         return;
     }
 
-    if (inventoryGrid && inventoryGrid->IsOpen()) {
-        return;
-    }
-
     ItemPickup* closest = stage->GetReachablePickup();
     if (!closest) {
         return;
@@ -229,9 +210,6 @@ void HotbarComponent::TryPickupOnKeyPress() {
 
     const int hLevel = closest->GetHeightLevel();
     if (hLevel == 0 || hLevel == 1) {
-        if (!inventory.CanAcceptItem(*closest->GetDef())) {
-            return;
-        }
         PerformPickup(inventory, closest, itemPickups, bigCharacter);
         if (Character::player) {
             Character::player->currentState = Character::ActionState::INTERACTING;
@@ -246,7 +224,7 @@ void HotbarComponent::TryPickupOnKeyPress() {
     if (hLevel == 2 && Character::littleBrother) {
         const float distBrothers = Character::player->GetFootCircleCenter().Distance(
             Character::littleBrother->GetFootCircleCenter());
-        if (distBrothers > 170.0f || !inventory.CanAcceptItem(*closest->GetDef())) {
+        if (distBrothers > 170.0f) {
             return;
         }
 
@@ -268,9 +246,7 @@ void HotbarComponent::Update(float dt) {
         return;
     }
 
-    TryInventoryToggle();
-    TryCloseGridOnEKey();
-    TrySelectSlotOnKeyPress();
+    TryCycleWheel();
     TryUseActiveItemOnKeyPress();
     TryPickupOnKeyPress();
 }
