@@ -121,11 +121,20 @@ ItemPickup* HotbarComponent::FindClosestReachablePickup() const {
 void HotbarComponent::TryCycleWheel() {
     InputManager& input = InputManager::GetInstance();
 
+    bool cycled = false;
     if (input.KeyPress(SDLK_1)) {
         inventory.CycleLeft();
+        cycled = true;
     }
     if (input.KeyPress(SDLK_3)) {
         inventory.CycleRight();
+        cycled = true;
+    }
+
+    // The item that just moved to the wheel's center is now the usable item, so
+    // refresh the held-prop visual (lighter/lamp in hand) right away.
+    if (cycled && bigCharacter) {
+        bigCharacter->NotifyInventoryLightChanged();
     }
 }
 
@@ -136,21 +145,14 @@ void HotbarComponent::TryUseActiveItemOnKeyPress() {
     }
 
     if (inventory.IsOilPrimed()) {
-        if (input.KeyPress(SDLK_ESCAPE)) {
-            inventory.CancelOil();
-            return;
-        }
-
-        const Inventory::ItemStack* active = inventory.GetActiveStack();
-        if (active && active->def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
-            if (inventory.TryCombineOil()) {
-                if (bigCharacter) {
-                    bigCharacter->NotifyInventoryLightChanged();
-                }
-                return;
+        // In oil-apply mode, F pours the oil into the centered lighter/lamp. On
+        // an empty or invalid slot it does nothing (the oil is kept). ESC, which
+        // exits this mode, is handled in the stage update.
+        if (inventory.TryCombineOil()) {
+            if (bigCharacter) {
+                bigCharacter->NotifyInventoryLightChanged();
             }
         }
-        inventory.CancelOil();
         return;
     }
 

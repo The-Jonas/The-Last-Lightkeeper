@@ -5,6 +5,7 @@
 #define INCLUDE_SDL_TTF
 #include "SDL_include.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cmath>
 
@@ -50,7 +51,7 @@ void InventoryWheel::GetSlotScreenPos(int visibleOffset, int visibleCount, float
                                        float& outX, float& outY) const {
     int half = visibleCount / 2;
     float baseOffset = static_cast<float>(visibleOffset - half);
-    float shiftedOffset = baseOffset - scrollOffset;
+    float shiftedOffset = baseOffset + scrollOffset;
 
     float angleStep = (visibleCount <= 3) ? 50.0f : 37.0f;
     float angleDeg = 90.0f + shiftedOffset * angleStep;
@@ -153,6 +154,11 @@ void InventoryWheel::DrawSlot(SDL_Renderer* renderer, int stackIndex, float x, f
 void InventoryWheel::DrawPrimedOil(SDL_Renderer* renderer, float activeX, float activeY) {
     if (!inventory.IsOilPrimed()) return;
 
+    // When the centered slot can't take the oil (empty slot or a non-light /
+    // already-full item), keep the floating icon faded so the player sees it.
+    const bool canUse = inventory.CanCombineOilWithActive();
+    const Uint8 iconAlpha = canUse ? 240 : 70;
+
     float bobOffset = std::sin(bobTimer * 3.0f) * 7.0f;
 
     const float iconSize = kIconSize * 0.85f;
@@ -162,8 +168,12 @@ void InventoryWheel::DrawPrimedOil(SDL_Renderer* renderer, float activeX, float 
     auto tex = Resources::GetImage(inventory.GetPrimedOilSpritePath());
     if (tex) {
         const SDL_FRect dst{iconX, iconY, iconSize, iconSize};
-        SDL_SetTextureAlphaMod(tex.get(), 240);
-        SDL_SetTextureColorMod(tex.get(), 255, 255, 220);
+        SDL_SetTextureAlphaMod(tex.get(), iconAlpha);
+        if (canUse) {
+            SDL_SetTextureColorMod(tex.get(), 255, 255, 220);
+        } else {
+            SDL_SetTextureColorMod(tex.get(), 150, 150, 160);
+        }
         SDL_RenderCopyExF(renderer, tex.get(), nullptr, &dst, 0.0, nullptr, SDL_FLIP_NONE);
     }
 
@@ -171,7 +181,8 @@ void InventoryWheel::DrawPrimedOil(SDL_Renderer* renderer, float activeX, float 
     if (font) {
         char buf[16];
         std::snprintf(buf, sizeof(buf), "%d", inventory.GetPrimedOilDurability());
-        SDL_Color textColor{255, 215, 40, 230};
+        SDL_Color textColor = canUse ? SDL_Color{255, 215, 40, 230}
+                                     : SDL_Color{170, 170, 170, 90};
         SDL_Surface* surface = TTF_RenderText_Blended(font.get(), buf, textColor);
         if (surface) {
             SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
@@ -192,7 +203,14 @@ void InventoryWheel::Render() {
     if (!renderer) return;
 
     int count = inventory.GetStackCount();
-    int visibleCount = (count >= 3) ? 5 : 3;
+    // <=3 items -> 3 slots (empty slots fill the gaps).
+    // >=4 items -> 5 slots (4 items still leave one empty slot).
+    int visibleCount = (count >= 4) ? 5 : 3;
+    // The circular ring spans every logical position: when there are fewer
+    // items than slots the ring matches the slot count (so empty slots appear);
+    // once there are more items than slots the extra ones live off-screen and
+    // are revealed by cycling.
+    int ringSize = std::max(count, visibleCount);
 
     float scrollOffset = displayActiveIndex - std::round(displayActiveIndex);
 
@@ -215,7 +233,7 @@ void InventoryWheel::Render() {
         if (count > 0) {
             int center = visibleCount / 2;
             int idx = i - static_cast<int>(std::round(displayActiveIndex)) - center;
-            idx = ((idx % visibleCount) + visibleCount) % visibleCount;
+            idx = ((idx % ringSize) + ringSize) % ringSize;
             if (idx < count) {
                 stackIndex = idx;
             }

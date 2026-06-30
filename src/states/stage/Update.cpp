@@ -107,6 +107,9 @@ void StageState::Update(float dt){
     if (input.KeyPress(ESCAPE_KEY)) {
         if (inventory.IsOilPrimed()) {
             inventory.CancelOil();
+            if (bigCharacter) {
+                bigCharacter->NotifyInventoryLightChanged();
+            }
             return;
         }
         quitConfirmOpen = true;

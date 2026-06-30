@@ -2,23 +2,27 @@
 #include "core/SaveData.h"
 
 #include <algorithm>
+#include <cmath>
 
 void Inventory::ClearAll() {
     stacks.clear();
     activeIndex = -1;
-    primedOilDurability = 0;
+    oilApplyMode = false;
+    oilApplySourceIndex = -1;
+    oilApplyReturnActiveIndex = 0;
     primedOilSpritePath.clear();
     usingDrainAccum = 0.0f;
     isLightToggledOn = false;
 }
 
 bool Inventory::AddItem(const ItemDef& def, int durability) {
+    const bool wasEmpty = stacks.empty();
     ItemStack stack;
     stack.def = def;
     stack.count = 1;
     stack.durabilities.push_back(durability);
     stacks.push_back(stack);
-    if (activeIndex < 0) {
+    if (wasEmpty) {
         activeIndex = 0;
     }
     return true;
@@ -30,10 +34,14 @@ void Inventory::SetActiveIndex(int index) {
 
 void Inventory::CycleLeft() {
     activeIndex--;
+    // Moving the wheel deselects whatever was lit; the item must be re-activated
+    // (press F) when it returns to the center.
+    isLightToggledOn = false;
 }
 
 void Inventory::CycleRight() {
     activeIndex++;
+    isLightToggledOn = false;
 }
 
 int Inventory::GetVisibleStackIndex(int visibleOffset, int visibleCount) const {
@@ -46,14 +54,49 @@ int Inventory::GetVisibleStackIndex(int visibleOffset, int visibleCount) const {
     return idx;
 }
 
+int Inventory::GetVisibleSlotCount() const {
+    return (GetStackCount() >= 4) ? 5 : 3;
+}
+
+int Inventory::GetRingSize() const {
+    return std::max(GetStackCount(), GetVisibleSlotCount());
+}
+
+int Inventory::GetSelectedStackIndex() const {
+    const int count = GetStackCount();
+    if (count <= 0) return -1;
+    const int ring = GetRingSize();
+    // The wheel renders its center slot as ((-activeIndex) mod ring); gameplay
+    // must select that exact stack. Positions beyond the item count are empty.
+    const int center = ((-activeIndex) % ring + ring) % ring;
+    return (center < count) ? center : -1;
+}
+
+void Inventory::SetSelectedStackIndex(int stackIndex) {
+    const int count = GetStackCount();
+    if (count <= 0) {
+        activeIndex = 0;
+        return;
+    }
+    stackIndex = std::max(0, std::min(stackIndex, count - 1));
+    const int ring = GetRingSize();
+    // Solve ((-activeIndex) mod ring) == stackIndex, picking the representative
+    // nearest the current activeIndex so the wheel takes the short way around.
+    const int base = ((-stackIndex) % ring + ring) % ring;
+    const int k = static_cast<int>(std::lround(static_cast<double>(activeIndex - base) / ring));
+    activeIndex = base + k * ring;
+}
+
 const Inventory::ItemStack* Inventory::GetActiveStack() const {
-    if (activeIndex < 0 || activeIndex >= static_cast<int>(stacks.size())) return nullptr;
-    return &stacks[static_cast<size_t>(activeIndex)];
+    const int idx = GetSelectedStackIndex();
+    if (idx < 0) return nullptr;
+    return &stacks[static_cast<size_t>(idx)];
 }
 
 Inventory::ItemStack* Inventory::GetActiveStackMutable() {
-    if (activeIndex < 0 || activeIndex >= static_cast<int>(stacks.size())) return nullptr;
-    return &stacks[static_cast<size_t>(activeIndex)];
+    const int idx = GetSelectedStackIndex();
+    if (idx < 0) return nullptr;
+    return &stacks[static_cast<size_t>(idx)];
 }
 
 const Inventory::ItemStack* Inventory::GetStack(int index) const {
@@ -61,57 +104,99 @@ const Inventory::ItemStack* Inventory::GetStack(int index) const {
     return &stacks[static_cast<size_t>(index)];
 }
 
+int Inventory::GetPrimedOilDurability() const {
+    if (!oilApplyMode) return 0;
+    if (oilApplySourceIndex < 0 || oilApplySourceIndex >= static_cast<int>(stacks.size())) return 0;
+    const std::vector<int>& dur = stacks[static_cast<size_t>(oilApplySourceIndex)].durabilities;
+    return dur.empty() ? 0 : dur.front();
+}
+
+bool Inventory::CanCombineOilWithActive() const {
+    if (!oilApplyMode) return false;
+    const int targetIdx = GetSelectedStackIndex();
+    if (targetIdx < 0 || targetIdx == oilApplySourceIndex) return false;  // empty slot or the oil itself
+    const ItemStack& target = stacks[static_cast<size_t>(targetIdx)];
+    if (!target.def.HasProperty(ItemProperty::LIGHT_SOURCE)) return false;
+    if (target.durabilities.empty()) return false;
+    const int maxDur = target.def.maxDurability;
+    if (maxDur > 0 && target.durabilities.front() >= maxDur) return false;  // already full
+    return true;
+}
+
+void Inventory::ExitOilApplyMode() {
+    oilApplyMode = false;
+    oilApplySourceIndex = -1;
+    primedOilSpritePath.clear();
+    // Return the wheel to the slot the oil was in when the player started.
+    activeIndex = oilApplyReturnActiveIndex;
+}
+
 bool Inventory::TryPrimeOil() {
-    if (IsOilPrimed()) return false;
-    ItemStack* active = GetActiveStackMutable();
-    if (!active) return false;
-    if (!active->def.HasProperty(ItemProperty::FUEL)) return false;
-    if (active->durabilities.empty()) return false;
+    if (oilApplyMode) return false;
+    const int sel = GetSelectedStackIndex();
+    if (sel < 0) return false;
+    const ItemStack& active = stacks[static_cast<size_t>(sel)];
+    if (!active.def.HasProperty(ItemProperty::FUEL)) return false;
+    if (active.durabilities.empty() || active.durabilities.front() <= 0) return false;
 
-    int durability = active->durabilities.front();
-    if (durability <= 0) return false;
-
-    primedOilDurability = durability;
-    primedOilSpritePath = active->def.spritePath;
-
-    active->durabilities.erase(active->durabilities.begin());
-    active->count--;
-
-    if (active->count <= 0) {
-        stacks.erase(stacks.begin() + activeIndex);
-    }
-
+    // Enter apply mode. The oil stays where it is; remember its slot so we can
+    // return there (showing it, or an empty slot if it gets used up).
+    oilApplyMode = true;
+    oilApplySourceIndex = sel;
+    oilApplyReturnActiveIndex = activeIndex;
+    primedOilSpritePath = active.def.spritePath;
     return true;
 }
 
 bool Inventory::TryCombineOil() {
-    if (!IsOilPrimed()) return false;
-
-    ItemStack* active = GetActiveStackMutable();
-    if (!active) return false;
-    if (!active->def.HasProperty(ItemProperty::LIGHT_SOURCE)) return false;
-    if (active->durabilities.empty()) return false;
-
-    int& targetDurability = active->durabilities.front();
-    int maxDur = active->def.maxDurability;
-
-    if (maxDur > 0 && targetDurability >= maxDur) return false;
-
-    targetDurability += primedOilDurability;
-    if (maxDur > 0 && targetDurability > maxDur) {
-        int overflow = targetDurability - maxDur;
-        primedOilDurability = overflow;
-        targetDurability = maxDur;
-    } else {
-        primedOilDurability = 0;
-        primedOilSpritePath.clear();
+    if (!oilApplyMode) return false;
+    if (oilApplySourceIndex < 0 || oilApplySourceIndex >= static_cast<int>(stacks.size())) {
+        ExitOilApplyMode();
+        return false;
     }
+
+    const int targetIdx = GetSelectedStackIndex();
+    if (targetIdx < 0 || targetIdx == oilApplySourceIndex) return false;  // empty slot or the oil itself
+
+    ItemStack& target = stacks[static_cast<size_t>(targetIdx)];
+    if (!target.def.HasProperty(ItemProperty::LIGHT_SOURCE)) return false;
+    if (target.durabilities.empty()) return false;
+
+    const int maxDur = target.def.maxDurability;
+    int& targetDurability = target.durabilities.front();
+    if (maxDur > 0 && targetDurability >= maxDur) return false;  // already full
+
+    ItemStack& oil = stacks[static_cast<size_t>(oilApplySourceIndex)];
+    if (oil.durabilities.empty() || oil.durabilities.front() <= 0) {
+        ExitOilApplyMode();
+        return false;
+    }
+
+    int oilAmount = oil.durabilities.front();
+    const int room = (maxDur > 0) ? (maxDur - targetDurability) : oilAmount;
+    const int transfer = std::min(room, oilAmount);
+    targetDurability += transfer;
+    oilAmount -= transfer;
+
+    if (oilAmount > 0) {
+        oil.durabilities.front() = oilAmount;
+    } else {
+        // Oil unit fully spent: remove it. The oil only leaves the wheel here,
+        // when its durability hits 0.
+        oil.durabilities.erase(oil.durabilities.begin());
+        oil.count--;
+        if (oil.count <= 0) {
+            stacks.erase(stacks.begin() + oilApplySourceIndex);
+        }
+    }
+
+    ExitOilApplyMode();
     return true;
 }
 
 void Inventory::CancelOil() {
-    primedOilDurability = 0;
-    primedOilSpritePath.clear();
+    if (!oilApplyMode) return;
+    ExitOilApplyMode();
 }
 
 bool Inventory::TryTurnLightOn() {
@@ -188,8 +273,10 @@ LightMaskParams Inventory::BuildLampLightParams(const LightMaskParams& base) con
 
 void Inventory::TickUsingDurability(float dt) {
     if (!IsUsableLightActive()) return;
-    ItemStack* active = GetActiveStackMutable();
-    if (!active || active->durabilities.empty()) return;
+    const int sel = GetSelectedStackIndex();
+    if (sel < 0) return;
+    ItemStack* active = &stacks[static_cast<size_t>(sel)];
+    if (active->durabilities.empty()) return;
     if (active->def.maxDurability <= 0 || active->durabilities.front() <= 0) return;
 
     const float drainInterval = (active->def.name == "Lamp") ? 2.0f : 1.0f;
@@ -201,7 +288,10 @@ void Inventory::TickUsingDurability(float dt) {
             active->durabilities.erase(active->durabilities.begin());
             active->count--;
             if (active->count <= 0) {
-                stacks.erase(stacks.begin() + activeIndex);
+                stacks.erase(stacks.begin() + sel);
+                if (!stacks.empty()) {
+                    SetSelectedStackIndex(sel);
+                }
                 isLightToggledOn = false;
                 break;
             }
@@ -229,11 +319,17 @@ bool Inventory::TryConsumeItem(const std::string& name) {
     }
 
     if (stack.count <= 0) {
+        int sel = GetSelectedStackIndex();
         stacks.erase(stacks.begin() + idx);
-        if (activeIndex >= static_cast<int>(stacks.size())) {
-            activeIndex = stacks.empty() ? -1 : static_cast<int>(stacks.size()) - 1;
-        } else if (activeIndex > idx) {
-            activeIndex--;
+        if (stacks.empty()) {
+            activeIndex = 0;
+        } else {
+            if (sel > idx) {
+                sel--;  // the selected item shifted down a slot
+            } else if (sel < 0) {
+                sel = 0;
+            }
+            SetSelectedStackIndex(sel);
         }
     }
 
@@ -306,10 +402,13 @@ void Inventory::WriteToSave(SaveGameState& state) const {
         saved.durabilities = stack.durabilities;
         state.inventoryStacks.push_back(saved);
     }
-    state.activeStackIndex = activeIndex;
-    state.primedOilDurability = primedOilDurability;
+    const int selectedIndex = GetSelectedStackIndex();
+    state.activeStackIndex = selectedIndex;
+    // Oil is now a normal fuel stack saved with the rest of the inventory; the
+    // transient apply-mode state is not persisted.
+    state.primedOilDurability = 0;
 
-    state.selectedSlot = activeIndex;
+    state.selectedSlot = selectedIndex;
     state.inventorySlots.clear();
     state.selectedBackpackGroup = -1;
     state.backpackGroups.clear();
@@ -332,16 +431,10 @@ void Inventory::ReadFromSave(const SaveGameState& state, const std::vector<ItemD
             stack.durabilities = saved.durabilities;
             stacks.push_back(stack);
         }
-        activeIndex = state.activeStackIndex;
-        if (activeIndex < 0 || activeIndex >= static_cast<int>(stacks.size())) {
-            activeIndex = stacks.empty() ? -1 : 0;
-        }
-        primedOilDurability = state.primedOilDurability;
-        if (primedOilDurability > 0) {
-            const ItemDef* oilDef = FindItemDefByName("Fuel", itemCatalog);
-            if (oilDef) {
-                primedOilSpritePath = oilDef->spritePath;
-            }
+        if (stacks.empty()) {
+            activeIndex = -1;
+        } else {
+            SetSelectedStackIndex(state.activeStackIndex);
         }
         return;
     }
@@ -353,9 +446,10 @@ void Inventory::ReadFromSave(const SaveGameState& state, const std::vector<ItemD
             if (!def) continue;
             AddItem(*def, state.inventorySlots[i]->durability);
         }
-        activeIndex = state.selectedSlot;
-        if (activeIndex < 0 || activeIndex >= static_cast<int>(stacks.size())) {
-            activeIndex = stacks.empty() ? -1 : 0;
+        if (stacks.empty()) {
+            activeIndex = -1;
+        } else {
+            SetSelectedStackIndex(state.selectedSlot);
         }
         return;
     }
@@ -367,17 +461,21 @@ void Inventory::ReadFromSave(const SaveGameState& state, const std::vector<ItemD
                 if (def) AddItem(*def, saved.durability);
             }
         }
+        int sel = -1;
         if (state.selectedBackpackGroup >= 0 && state.selectedBackpackGroup < static_cast<int>(state.backpackGroups.size())) {
             const auto& oldGroup = state.backpackGroups[static_cast<size_t>(state.selectedBackpackGroup)];
             if (!oldGroup.items.empty()) {
-                activeIndex = FindStackWithName(oldGroup.items.front().name);
+                sel = FindStackWithName(oldGroup.items.front().name);
             }
         }
-        if (activeIndex < 0) {
-            activeIndex = FindBestFlashlight();
+        if (sel < 0) {
+            sel = FindBestFlashlight();
         }
-        if (activeIndex < 0 && !stacks.empty()) {
-            activeIndex = 0;
+        if (sel < 0 && !stacks.empty()) {
+            sel = 0;
+        }
+        if (sel >= 0) {
+            SetSelectedStackIndex(sel);
         }
         return;
     }
@@ -389,20 +487,25 @@ void Inventory::ReadFromSave(const SaveGameState& state, const std::vector<ItemD
             if (!def) continue;
             AddItem(*def, state.slots[i]->durability);
         }
+        int sel = -1;
         if (state.usingItem.has_value()) {
-            activeIndex = FindStackWithName(state.usingItem->name);
+            sel = FindStackWithName(state.usingItem->name);
         }
-        if (activeIndex < 0) {
-            activeIndex = FindBestFlashlight();
+        if (sel < 0) {
+            sel = FindBestFlashlight();
         }
-        if (activeIndex < 0 && !stacks.empty()) {
-            activeIndex = 0;
+        if (sel < 0 && !stacks.empty()) {
+            sel = 0;
+        }
+        if (sel >= 0) {
+            SetSelectedStackIndex(sel);
         }
         return;
     }
 
     if (!stacks.empty()) {
-        activeIndex = FindBestFlashlight();
-        if (activeIndex < 0) activeIndex = 0;
+        int sel = FindBestFlashlight();
+        if (sel < 0) sel = 0;
+        SetSelectedStackIndex(sel);
     }
 }

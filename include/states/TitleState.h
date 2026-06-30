@@ -46,9 +46,10 @@ private:
     GameObject* newGameMenuText = nullptr;
 
     bool hasContinueSave = false;
-    int menuSelection = 1;
+    int menuSelection = 0;
 
     void LayoutMenuOptions();
+    void RenderSelectionIndicator(SDL_Renderer* renderer);
     void StartNewGame();
     void StartContinue();
     void ActivateMenuSelection();

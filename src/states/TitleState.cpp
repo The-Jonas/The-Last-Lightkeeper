@@ -314,8 +314,61 @@ void TitleState::Update(float dt) {
     UpdateArray(dt);
 }
 
+void TitleState::RenderSelectionIndicator(SDL_Renderer* renderer) {
+    if (!renderer) {
+        return;
+    }
+    // Only show the marker once the menu has fully faded in (matches the
+    // moment the selected option starts pulsing in golden tones).
+    if (fadeAlpha < 250.0f) {
+        return;
+    }
+
+    GameObject* selected = (menuSelection == 1 && hasContinueSave) ? continueMenuText
+                                                                   : newGameMenuText;
+    if (!selected) {
+        return;
+    }
+
+    const float screenX = selected->box.x - Camera::pos.x;
+    const float screenY = selected->box.y - Camera::pos.y;
+    const float cy = screenY + selected->box.h * 0.5f;
+
+    // Pulse the marker in sync with the selected option's golden pulse.
+    const float s = (std::sin(pulseTimer * 2.0f) + 1.0f) * 0.5f;
+    const Uint8 r = static_cast<Uint8>(200.0f + s * 55.0f);
+    const Uint8 g = static_cast<Uint8>(160.0f + s * 55.0f);
+    const Uint8 b = static_cast<Uint8>(40.0f + s * 40.0f);
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, r, g, b, 255);
+
+    constexpr float kTriH = 22.0f;
+    constexpr float kTriW = 16.0f;
+    constexpr float kGap = 14.0f;
+
+    // Right-pointing triangle to the left of the option (tip toward the text).
+    const float leftTipX = screenX - kGap;
+    const float leftBaseX = leftTipX - kTriW;
+    for (float x = leftBaseX; x <= leftTipX; x += 1.0f) {
+        const float t = (x - leftBaseX) / kTriW;
+        const float halfH = (kTriH * 0.5f) * (1.0f - t);
+        SDL_RenderDrawLineF(renderer, x, cy - halfH, x, cy + halfH);
+    }
+
+    // Left-pointing triangle to the right of the option (tip toward the text).
+    const float rightTipX = screenX + selected->box.w + kGap;
+    const float rightBaseX = rightTipX + kTriW;
+    for (float x = rightTipX; x <= rightBaseX; x += 1.0f) {
+        const float t = (x - rightTipX) / kTriW;
+        const float halfH = (kTriH * 0.5f) * t;
+        SDL_RenderDrawLineF(renderer, x, cy - halfH, x, cy + halfH);
+    }
+}
+
 void TitleState::Render() {
     RenderArray();
+    RenderSelectionIndicator(Game::GetInstance().GetRenderer());
     RenderSliders(Game::GetInstance().GetRenderer());
 }
 
