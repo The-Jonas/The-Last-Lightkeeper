@@ -1,0 +1,91 @@
+======================================================================
+                        A LUZ DO FAROL (The Last Lightkeeper)
+                              Versao para Windows
+======================================================================
+
+COMO EXECUTAR
+----------------------------------------------------------------------
+1. Descompacte o arquivo .zip em qualquer pasta do seu computador.
+2. Entre na pasta que foi extraida (ex: "A-Luz-do-Farol_2026-06-30").
+3. Execute o arquivo "JOGO.exe" (clique duas vezes).
+
+   ATENCAO: O Windows SmartScreen pode exibir um aviso de "Windows
+   protegeu o seu PC" por se tratar de um executavel nao assinado.
+   Clique em "Mais informacoes" e depois em "Executar mesmo assim".
+
+IMPORTANTE: O jogo espera encontrar a pasta "Recursos" no mesmo
+diretorio do executavel JOGO.exe. Nao mova o .exe para fora da
+pasta extraida, e nao renomeie a pasta Recursos.
+
+
+REQUISITOS
+----------------------------------------------------------------------
+- Windows 10 ou Windows 11 (64-bit ou 32-bit)
+- Nao requer instalacao. Nao requer DirectX, MSVC Runtime, nem
+  nenhum outro software adicional. Todas as dependencias (SDL2)
+  ja estao incluidas na pasta.
+
+
+CONTROLES
+----------------------------------------------------------------------
+
+  MOVIMENTO
+    W / A / S / D ........... Mover o personagem
+
+  INTERACAO
+    E ....................... Interagir (pegar itens, abrir janelas,
+                              acender/apagar velas, ler jornal,
+                              empurrar caixas, entrar/sair armario,
+                              consertar objetos)
+    F ....................... Usar item ativo (ligar/desligar fonte
+                              de luz, preparar oleo na lamparina)
+    ESC ..................... Cancelar acao / Abrir menu de salvar
+
+  CONTROLE DE GRUPO
+    Ctrl (Esq ou Dir) ....... Alternar entre irmao maior e menor
+    Q ....................... Alternar modo: JUNTOS / INDEPENDENTE
+    Botao Direito Mouse ..... Clicar no personagem para controla-lo
+
+  INVENTARIO
+    1 ....................... Selecionar item anterior
+    3 ....................... Selecionar proximo item
+
+  MENUS
+    ESC ..................... Sair do jogo / Voltar ao menu
+    W / Seta Cima ........... Navegar para cima
+    S / Seta Baixo .......... Navegar para baixo
+    Enter / Espaco / F ...... Confirmar
+    Mouse Esquerdo .......... Clicar em botoes e sliders
+
+
+SALVAMENTO
+----------------------------------------------------------------------
+O progresso e salvo automaticamente ao abrir o menu de pausa (ESC)
+e escolher "Save". Os arquivos de save ficam em:
+
+  %APPDATA%\UnB\A-Luz-do-Farol\save.json
+
+
+CONFIGURACAO (opcional)
+----------------------------------------------------------------------
+Para personalizar volume e tamanho da janela, edite os arquivos
+abaixo na mesma pasta do JOGO.exe:
+
+  .env
+    MASTER_VOLUME=70      (0-100, volume geral)
+    AMBIENT_VOLUME=50     (0-100, volume do ambiente)
+    THUNDER_VOLUME=100    (0-100, volume dos trovao)
+
+  config\settings.json
+    {
+      "window_width": 1920,
+      "window_height": 1080
+    }
+
+
+CREDITOS
+----------------------------------------------------------------------
+Projeto desenvolvido como trabalho da disciplina de Introducao
+aos Jogos Eletronicos - UnB (Universidade de Brasilia).
+
+======================================================================
