@@ -19,8 +19,7 @@ struct StageFirstLoadData {
     float navWorldW = 4358.0f;
     float navWorldH = 3276.0f;
     int navTilePx = 64;
-    int itemPickupCount = 35;
-    int startingFlashlightDurability = 50;
+    int startingFlashlightDurability = 100;
     ItemDef startingFlashlight;
     std::vector<ItemDef> pickupCycle;
     std::vector<std::string> oceanChunkCandidates;

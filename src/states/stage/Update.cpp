@@ -27,6 +27,7 @@
 #include "gameplay/StairTrigger.h"
 #include "core/Resources.h"
 #include "audio/GameSfx.h"
+#include "audio/Sound.h"
 #include <iostream>
 #include <fstream>
 #include <algorithm>
@@ -46,6 +47,25 @@
 #endif
 
 using namespace stage_internal;
+
+namespace {
+// SFX de impacto do monstro, carregados sob demanda.
+Sound gMonsterHitSfx[2];
+bool gMonsterHitSfxLoaded = false;
+}
+
+void StageState::TriggerMonsterHitFeedback() {
+    if (!gMonsterHitSfxLoaded) {
+        gMonsterHitSfx[0].Open("Recursos/audio/Hit0.wav");
+        gMonsterHitSfx[1].Open("Recursos/audio/Hit1.wav");
+        gMonsterHitSfxLoaded = true;
+    }
+    gMonsterHitSfx[rand() % 2].Play();
+    Camera::AddTrauma(0.65f);          // tremor seco de impacto
+    damageFlashTimer = kDamageFlashDuration; // clarão vermelho
+    lastMonsterHitTimer = kMonsterHitDeathWindow; // p/ atribuir a causa da morte (6.5)
+}
+
 void StageState::Update(float dt){
 
     lastFrameDt = dt;
@@ -109,7 +129,28 @@ void StageState::Update(float dt){
         }
     }
 
-    // ESC -> cancela oleo primed, ou abre confirmação de saída
+    if (damageFlashTimer > 0.0f) {
+        damageFlashTimer -= dt;
+        if (damageFlashTimer < 0.0f) {
+            damageFlashTimer = 0.0f;
+        }
+    }
+
+    if (saveToastTimer > 0.0f) {
+        saveToastTimer -= dt;
+        if (saveToastTimer < 0.0f) {
+            saveToastTimer = 0.0f;
+        }
+    }
+
+    if (lastMonsterHitTimer > 0.0f) {
+        lastMonsterHitTimer -= dt;
+        if (lastMonsterHitTimer < 0.0f) {
+            lastMonsterHitTimer = 0.0f;
+        }
+    }
+
+    // ESC -> cancela oleo primed; fecha o painel de config; senão alterna o menu.
     if (input.KeyPress(ESCAPE_KEY)) {
         if (inventory.IsOilPrimed()) {
             inventory.CancelOil();
@@ -118,36 +159,58 @@ void StageState::Update(float dt){
             }
             return;
         }
-        quitConfirmOpen = true;
-        quitConfirmSelection = 0;
+        if (!pauseMenuOpen) {
+            pauseMenuOpen = true;       // nada aberto: abre o menu de pausa
+            pauseMenuSelection = 0;
+            return;  // consome o ESC deste frame
+        }
+        // Algum overlay aberto: o ESC é tratado pelos handlers abaixo (fecha/volta).
+    }
+
+    // Menu de pausa aberto: processa a navegação do overlay ativo, mas NÃO retorna
+    // — o mundo continua simulando (input do jogador congelado mais abaixo).
+    if (pauseMenuOpen) {
+        if (controlsPanelOpen) {
+            HandleControlsPanelInput();
+        } else if (settingsPanelOpen) {
+            HandleSettingsPanelInput();
+        } else {
+            HandlePauseMenuInput();
+        }
+    }
+    // "Reiniciar nível" agenda pop + recarrega: não rode o resto do frame.
+    if (popRequested) {
         return;
     }
 
-    if (input.KeyPress(LIGHTS_TOGGLE_KEY)) {
-        lightsEnabled = !lightsEnabled;
-    }
-    if (input.KeyPress(SHADOWS_TOGGLE_KEY)) {
-        shadowsEnabled = !shadowsEnabled;
-    }
-    if (input.KeyPress(MUSIC_MUTE_TOGGLE_KEY)) {
-        musicMuted = !musicMuted;
-        const int masterVolume = (MIX_MAX_VOLUME * Game::masterVolumePercent) / 100;
-        Mix_VolumeMusic(musicMuted ? 0 : masterVolume);
-        oceanAmbient_.RefreshVolume();
-    }
-    if (input.KeyPress(MAP_PHYSICS_DEBUG_KEY)) {
-        showMapPhysicsDebug = !showMapPhysicsDebug;
-    }
-    if (input.KeyPress(CURSOR_PREVIEW_LIGHT_TOGGLE_KEY)) {
-        cursorPreviewLightEnabled = !cursorPreviewLightEnabled;
+    // Atalhos de desenvolvedor — só ativos quando debugMode (ver Game::debugMode).
+    if (Game::debugMode) {
+        if (input.KeyPress(LIGHTS_TOGGLE_KEY)) {
+            lightsEnabled = !lightsEnabled;
+        }
+        if (input.KeyPress(SHADOWS_TOGGLE_KEY)) {
+            shadowsEnabled = !shadowsEnabled;
+        }
+        if (input.KeyPress(MUSIC_MUTE_TOGGLE_KEY)) {
+            musicMuted = !musicMuted;
+            const int masterVolume = (MIX_MAX_VOLUME * Game::masterVolumePercent) / 100;
+            Mix_VolumeMusic(musicMuted ? 0 : masterVolume);
+            oceanAmbient_.RefreshVolume();
+        }
+        if (input.KeyPress(MAP_PHYSICS_DEBUG_KEY)) {
+            showMapPhysicsDebug = !showMapPhysicsDebug;
+        }
+        if (input.KeyPress(CURSOR_PREVIEW_LIGHT_TOGGLE_KEY)) {
+            cursorPreviewLightEnabled = !cursorPreviewLightEnabled;
+        }
+
+        if (input.KeyPress(CREATE_LIGHT_KEY) &&
+            (lightMaskShape == LightMaskShape::Circle || lightMaskShape == LightMaskShape::Torch)) {
+            CreateLightAtCursor();
+        }
     }
 
-    if (input.KeyPress(CREATE_LIGHT_KEY) &&
-        (lightMaskShape == LightMaskShape::Circle || lightMaskShape == LightMaskShape::Torch)) {
-        CreateLightAtCursor();
-    }
-
-    if (IsPartyReady()) {
+    if (!pauseMenuOpen && IsPartyReady()) {
         HandlePartyInput();
         IssueMovementFromInput(controlledCharacter, controlledCharacterObject);
         if (companionStartDelay > 0) {
@@ -157,12 +220,15 @@ void StageState::Update(float dt){
         UpdateCompanionBehavior();
     }
 
-    UpdateBoxInteraction();
-    TryOpenJournalOnKeyPress();
-    TryInteractCandleOnKeyPress();
-    TryInteractWindowOnKeyPress();
+    if (!pauseMenuOpen) {
+        UpdateBoxInteraction();
+        TryOpenJournalOnKeyPress();
+        TryInteractCandleOnKeyPress();
+        TryInteractWindowOnKeyPress();
+    }
     UpdateInventoryLight();
 
+    reachableCloset = nullptr;   // recomputado pelos Closet::Update neste frame
     UpdateArray(dt);                                                                    // Percorre o vetor de GameObjects chamando o Update de cada um
 
     reachablePickup = FindClosestReachableItem();
@@ -188,7 +254,7 @@ void StageState::Update(float dt){
 
     UpdateHudInstructions();
 
-    if (lightTweakPanel) {
+    if (Game::debugMode && lightTweakPanel) {
         lightTweakPanel->Update(input, dt, Game::GetInstance().GetWindowsWidth(), Game::GetInstance().GetWindowsHeight());
         if (lightTweakPanel->ConsumeCreateLightRequest()) {
             CreateLightAtCursor();
@@ -352,7 +418,7 @@ void StageState::Update(float dt){
 
     GameSfx::UpdateThunder(dt);
 
-    if (input.KeyPress(THUNDER_TEST_KEY)) {
+    if (Game::debugMode && input.KeyPress(THUNDER_TEST_KEY)) {
         GameSfx::TriggerThunderStrike();
     }
 
@@ -412,6 +478,9 @@ void StageState::Update(float dt){
                 overlaySprite->SetTint(255, 255, 255, alpha);
             }
         }
+
+        // Vertigem da câmera acompanha a intensidade do desespero (3.3).
+        Camera::SetVertigo(sanityOverlaySmoothedIntensity);
     }
 
     // VERIFICAÇÃO DE FIM DE JOGO
@@ -424,6 +493,7 @@ void StageState::Update(float dt){
     if (sanityDefeat || !IsPartyReady()) {
         SaveManager::RevertCurrentToCheckpoint();
         GameData::playerVictory = false;
+        GameData::deathByMonster = (lastMonsterHitTimer > 0.0f); // causa da morte (6.5)
 
         popRequested = true;
         Game::GetInstance().Push(new EndState());

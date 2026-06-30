@@ -15,7 +15,6 @@
   ],
   "navWorld": { "w": 4358, "h": 3276 },
   "navTilePx": 64,
-  "itemPickupCount": 35,
   "startingFlashlightDurability": 100,
   "startingFlashlight": {
     "name": "Flashlight",

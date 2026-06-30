@@ -480,6 +480,36 @@ void StageState::Render(){
 
     SDL_RenderCopy(renderer, renderTarget, nullptr, nullptr);
 
+    // Brilho do jogador (overlay): <100 escurece, >100 clareia (lift de sombras).
+    const int brightness = Game::brightnessPercent;
+    if (brightness < 100) {
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        const Uint8 a = static_cast<Uint8>((100 - brightness) / 100.0f * 175.0f);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, a);
+        const SDL_Rect r{0, 0, winW, winH};
+        SDL_RenderFillRect(renderer, &r);
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    } else if (brightness > 100) {
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
+        const Uint8 a = static_cast<Uint8>((brightness - 100) / 50.0f * 95.0f);
+        SDL_SetRenderDrawColor(renderer, 120, 120, 120, a);
+        const SDL_Rect r{0, 0, winW, winH};
+        SDL_RenderFillRect(renderer, &r);
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    }
+
+    // Flash vermelho de dano (toque do monstro) — decai com damageFlashTimer.
+    if (damageFlashTimer > 0.0f) {
+        const float t = damageFlashTimer / kDamageFlashDuration;
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        const Uint8 flashAlpha = static_cast<Uint8>(std::min(255.0f, 150.0f * t));
+        SDL_SetRenderDrawColor(renderer, 150, 10, 10, flashAlpha);
+        const SDL_Rect dmgRect{0, 0, winW, winH};
+        SDL_RenderFillRect(renderer, &dmgRect);
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    }
+
     const float thunderFlash = GameSfx::GetThunderFlashStrength();
     if (thunderFlash > 0.01f) {
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
@@ -583,9 +613,39 @@ void StageState::Render(){
     DrawSanityBar(Character::player);
     DrawSanityBar(Character::littleBrother);
 
+    // Indicador "quem estou controlando" — seta dourada apontando para o irmão
+    // controlado, acima da cabeça (4.4).
+    if (controlledCharacter) {
+        const float zoom = Camera::GetZoom();
+        const Rect& cbox = controlledCharacter->GetAssociated().box;
+        const int screenX = static_cast<int>((cbox.x - Camera::pos.x) * zoom);
+        const int screenY = static_cast<int>((cbox.y - Camera::pos.y) * zoom);
+        const int charW = static_cast<int>(cbox.w * zoom);
+        const int cx = screenX + charW / 2;
+        const int w = static_cast<int>(20 * zoom);   // largura da base
+        const int h = static_cast<int>(15 * zoom);   // altura
+        const int topY = screenY - static_cast<int>(34 * zoom);  // acima da barra de sanidade
+
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer, 235, 205, 90, 235);   // dourado
+        // Triângulo apontando para baixo (base no topo, vértice embaixo).
+        for (int row = 0; row < h; ++row) {
+            const float t = (h > 0) ? static_cast<float>(row) / static_cast<float>(h) : 0.0f;
+            const int halfW = static_cast<int>((w / 2) * (1.0f - t));
+            SDL_RenderDrawLine(renderer, cx - halfW, topY + row, cx + halfW, topY + row);
+        }
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    }
+
+    RenderInteractionPrompt(renderer);
     RenderLevelTitleBanner(renderer);
+    RenderPauseMenu(renderer);
+    RenderSettingsPanel(renderer);
+    RenderControlsPanel(renderer);
     RenderQuitConfirmModal(renderer);
     RenderJournalViewer(renderer);
+    RenderSaveToast(renderer);
 }
 
 void StageState::RenderGameplayCollisionDebug(SDL_Renderer* renderer) const {

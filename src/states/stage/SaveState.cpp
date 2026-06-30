@@ -1,5 +1,6 @@
 #include "states/stage/StageState.h"
 #include "states/stage/FirstLoadData.h"
+#include "states/LoadingState.h"
 #include "core/SaveManager.h"
 #include "core/Game.h"
 #include "core/Resources.h"
@@ -8,6 +9,7 @@
 #include "gameplay/Character.h"
 #include "gameplay/Box.h"
 #include "gameplay/Candlestick.h"
+#include "gameplay/Window.h"
 #include "gameplay/Repairable.h"
 #include "gameplay/ItemPickup.h"
 #include "gameplay/Item.h"
@@ -16,6 +18,7 @@
 #include "SDL_include.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <unordered_set>
 
 namespace {
@@ -407,7 +410,640 @@ void StageState::RenderQuitConfirmModal(SDL_Renderer* renderer) {
         }
     };
 
-    drawText("Are you sure? You may lose your unsaved progress doing this.", panelX + 40, panelY + 36, 22);
-    drawButton(quitConfirmSaveBtn, quitConfirmSelection == 0, "Save and quit");
-    drawButton(quitConfirmCancelBtn, quitConfirmSelection == 1, "Cancel");
+    drawText("Tem certeza? Voce pode perder o progresso nao salvo.", panelX + 40, panelY + 36, 22);
+    drawButton(quitConfirmSaveBtn, quitConfirmSelection == 0, "Salvar e sair");
+    drawButton(quitConfirmCancelBtn, quitConfirmSelection == 1, "Cancelar");
+}
+
+void StageState::RenderInteractionPrompt(SDL_Renderer* renderer) {
+    if (!renderer) {
+        return;
+    }
+    // Só o irmão maior interage; e não mostra durante menu/modais/jornal.
+    if (controlledCharacter != bigCharacter || IsPlayerInputFrozen()) {
+        return;
+    }
+
+    // Escolhe a AÇÃO do interagível de maior prioridade ao alcance.
+    const char* action = nullptr;
+    if (!activePushBox) {
+        if (reachablePushBox) {
+            action = "Empurrar";
+        } else if (reachableCloset) {
+            action = "Esconder";
+        } else if (reachableJornal) {
+            action = "Ler";
+        } else if (reachableCandle) {
+            action = reachableCandle->IsLit() ? "Apagar" : "Acender";
+        } else if (reachableWindow) {
+            action = (reachableWindow->GetState() == Window::WindowState::OPEN) ? "Fechar" : "Abrir";
+        } else if (reachablePickup && IsPickupStillTracked(reachablePickup) &&
+                   !IsPickupBlocked(reachablePickup)) {
+            action = "Pegar";
+        }
+    }
+    if (!action) {
+        return;
+    }
+
+    // O prefixo segue a tecla atualmente vinculada à ação Interagir (4.1).
+    const char* keyName = SDL_GetKeyName(InputManager::GetInstance().GetBinding(GameAction::Interact));
+    if (!keyName || keyName[0] == '\0') {
+        keyName = "E";
+    }
+    char label[64];
+    std::snprintf(label, sizeof(label), "[%s] %s", keyName, action);
+
+    auto font = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 24);
+    if (!font) {
+        return;
+    }
+    SDL_Color color{240, 235, 220, 255};
+    SDL_Surface* surface = TTF_RenderText_Blended(font.get(), label, color);
+    if (!surface) {
+        return;
+    }
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+    const int tw = surface->w;
+    const int th = surface->h;
+    SDL_FreeSurface(surface);
+    if (!texture) {
+        return;
+    }
+
+    Game& game = Game::GetInstance();
+    const int winW = game.GetWindowsWidth();
+    const int winH = game.GetWindowsHeight();
+    const int padX = 18;
+    const int padY = 10;
+    const int textX = (winW - tw) / 2;
+    const int textY = winH - 110;
+    const SDL_Rect bg{textX - padX, textY - padY, tw + padX * 2, th + padY * 2};
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 20, 20, 26, 185);
+    SDL_RenderFillRect(renderer, &bg);
+    SDL_SetRenderDrawColor(renderer, 200, 180, 110, 200);
+    SDL_RenderDrawRect(renderer, &bg);
+
+    const SDL_Rect dst{textX, textY, tw, th};
+    SDL_RenderCopy(renderer, texture, nullptr, &dst);
+    SDL_DestroyTexture(texture);
+}
+
+namespace {
+const char* kPauseMenuLabels[] = {"Continuar", "Salvar", "Configuracoes", "Reiniciar nivel", "Sair"};
+}
+
+void StageState::RestartLevelFromCheckpoint() {
+    // Volta o estado "current" para o início do nível e recarrega via Continue.
+    SaveManager::RevertCurrentToCheckpoint();
+    popRequested = true;
+    Game::GetInstance().Push(new LoadingState(StageState::LoadMode::Continue));
+}
+
+void StageState::HandlePauseMenuInput() {
+    InputManager& input = InputManager::GetInstance();
+
+    if (input.KeyPress(SDLK_ESCAPE)) {   // ESC fecha o menu (retoma)
+        pauseMenuOpen = false;
+        return;
+    }
+
+    if (input.KeyPress(SDLK_UP) || input.KeyPress(SDLK_w)) {
+        pauseMenuSelection = (pauseMenuSelection + kPauseMenuItemCount - 1) % kPauseMenuItemCount;
+    }
+    if (input.KeyPress(SDLK_DOWN) || input.KeyPress(SDLK_s)) {
+        pauseMenuSelection = (pauseMenuSelection + 1) % kPauseMenuItemCount;
+    }
+
+    // Hover do mouse seleciona (rects definidos no render do frame anterior).
+    SDL_Point mp{input.GetMouseX(), input.GetMouseY()};
+    for (int i = 0; i < kPauseMenuItemCount; ++i) {
+        if (SDL_PointInRect(&mp, &pauseMenuItemRects[i])) {
+            pauseMenuSelection = i;
+        }
+    }
+
+    bool activate = input.KeyPress(SDLK_RETURN) || input.KeyPress(SDLK_SPACE) || input.KeyPress(SDLK_f);
+    if (input.MousePress(SDL_BUTTON_LEFT)) {
+        for (int i = 0; i < kPauseMenuItemCount; ++i) {
+            if (SDL_PointInRect(&mp, &pauseMenuItemRects[i])) {
+                pauseMenuSelection = i;
+                activate = true;
+                break;
+            }
+        }
+    }
+    if (!activate) {
+        return;
+    }
+
+    switch (pauseMenuSelection) {
+    case 0:  // Continuar
+        pauseMenuOpen = false;
+        break;
+    case 1:  // Salvar
+        SaveCurrentProgress();
+        ShowSaveToast();
+        pauseMenuOpen = false;
+        break;
+    case 2:  // Configuracoes
+        settingsPanelOpen = true;
+        settingsSelection = 0;
+        break;
+    case 3:  // Reiniciar nivel
+        pauseMenuOpen = false;
+        RestartLevelFromCheckpoint();
+        break;
+    case 4:  // Sair
+        pauseMenuOpen = false;
+        quitConfirmOpen = true;
+        quitConfirmSelection = 0;
+        break;
+    default:
+        break;
+    }
+}
+
+void StageState::RenderPauseMenu(SDL_Renderer* renderer) {
+    if (!renderer || !pauseMenuOpen) {
+        return;
+    }
+
+    const int winW = Game::GetInstance().GetWindowsWidth();
+    const int winH = Game::GetInstance().GetWindowsHeight();
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 155);
+    const SDL_Rect full{0, 0, winW, winH};
+    SDL_RenderFillRect(renderer, &full);
+
+    const int itemW = 380;
+    const int itemH = 56;
+    const int gap = 14;
+    const int totalH = kPauseMenuItemCount * itemH + (kPauseMenuItemCount - 1) * gap;
+    const int startY = (winH - totalH) / 2;
+    const int x = (winW - itemW) / 2;
+
+    if (auto titleFont = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 44)) {
+        SDL_Color tc{220, 200, 140, 255};
+        SDL_Surface* s = TTF_RenderText_Blended(titleFont.get(), "PAUSA", tc);
+        if (s) {
+            SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, s);
+            const SDL_Rect d{(winW - s->w) / 2, startY - 80, s->w, s->h};
+            SDL_FreeSurface(s);
+            if (t) {
+                SDL_RenderCopy(renderer, t, nullptr, &d);
+                SDL_DestroyTexture(t);
+            }
+        }
+    }
+
+    auto font = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 28);
+    for (int i = 0; i < kPauseMenuItemCount; ++i) {
+        const SDL_Rect r{x, startY + i * (itemH + gap), itemW, itemH};
+        pauseMenuItemRects[i] = r;
+        const bool sel = (i == pauseMenuSelection);
+
+        SDL_SetRenderDrawColor(renderer, sel ? 70 : 35, sel ? 60 : 35, sel ? 40 : 42, 235);
+        SDL_RenderFillRect(renderer, &r);
+        SDL_SetRenderDrawColor(renderer, sel ? 220 : 120, sel ? 190 : 120, sel ? 110 : 120, 255);
+        SDL_RenderDrawRect(renderer, &r);
+
+        if (font) {
+            SDL_Color c = sel ? SDL_Color{245, 235, 205, 255} : SDL_Color{185, 185, 185, 255};
+            SDL_Surface* s = TTF_RenderText_Blended(font.get(), kPauseMenuLabels[i], c);
+            if (s) {
+                SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, s);
+                const SDL_Rect d{r.x + (r.w - s->w) / 2, r.y + (r.h - s->h) / 2, s->w, s->h};
+                SDL_FreeSurface(s);
+                if (t) {
+                    SDL_RenderCopy(renderer, t, nullptr, &d);
+                    SDL_DestroyTexture(t);
+                }
+            }
+        }
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+}
+
+void StageState::RenderSaveToast(SDL_Renderer* renderer) {
+    if (!renderer || saveToastTimer <= 0.0f) {
+        return;
+    }
+    auto font = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 22);
+    if (!font) {
+        return;
+    }
+    float alpha = 1.0f;
+    if (saveToastTimer < 0.5f) {
+        alpha = saveToastTimer / 0.5f;  // fade out nos últimos 0.5s
+    }
+    const Uint8 a = static_cast<Uint8>(std::min(255.0f, alpha * 255.0f));
+
+    SDL_Color c{225, 240, 215, 255};
+    SDL_Surface* s = TTF_RenderText_Blended(font.get(), "Progresso salvo", c);
+    if (!s) {
+        return;
+    }
+    SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, s);
+    const int tw = s->w;
+    const int th = s->h;
+    SDL_FreeSurface(s);
+    if (!t) {
+        return;
+    }
+    SDL_SetTextureAlphaMod(t, a);
+
+    const int winW = Game::GetInstance().GetWindowsWidth();
+    const int padX = 16;
+    const int padY = 8;
+    const int x = winW - tw - 44;
+    const int y = 44;
+    const SDL_Rect bg{x - padX, y - padY, tw + padX * 2, th + padY * 2};
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 20, 30, 20, static_cast<Uint8>(alpha * 175.0f));
+    SDL_RenderFillRect(renderer, &bg);
+    SDL_SetRenderDrawColor(renderer, 120, 160, 110, static_cast<Uint8>(alpha * 205.0f));
+    SDL_RenderDrawRect(renderer, &bg);
+
+    const SDL_Rect d{x, y, tw, th};
+    SDL_RenderCopy(renderer, t, nullptr, &d);
+    SDL_DestroyTexture(t);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+}
+
+namespace {
+const char* kSettingsLabels[] = {"Volume Master", "Volume Ambiente", "Volume Trovao",
+                                 "Brilho", "Tela cheia", "Controles", "Voltar"};
+void SettingsRowRange(int row, int& lo, int& hi) {
+    lo = (row == 3) ? 50 : 0;     // brilho 50..150; volumes 0..100
+    hi = (row == 3) ? 150 : 100;
+}
+int SettingsRowValue(int row) {
+    switch (row) {
+    case 0: return Game::masterVolumePercent;
+    case 1: return Game::ambientVolumePercent;
+    case 2: return Game::thunderVolumePercent;
+    case 3: return Game::brightnessPercent;
+    default: return 0;
+    }
+}
+}  // namespace
+
+void StageState::HandleSettingsPanelInput() {
+    InputManager& input = InputManager::GetInstance();
+
+    auto applyValue = [this](int row, int v) {
+        switch (row) {
+        case 0: Game::SetMasterVolume(v); break;
+        case 1: Game::SetAmbientVolume(v); oceanAmbient_.RefreshVolume(); break;
+        case 2: Game::SetThunderVolume(v); break;
+        case 3: Game::SetBrightness(v); break;
+        default: break;
+        }
+    };
+    auto closePanel = [this]() {
+        settingsPanelOpen = false;
+        settingsDragging = false;
+        Game::SaveSettings();
+    };
+    auto openControls = [this]() {
+        controlsPanelOpen = true;
+        controlsSelection = 0;
+        awaitingRebind = false;
+    };
+
+    if (input.KeyPress(SDLK_ESCAPE)) {   // ESC volta ao menu de pausa (salva)
+        closePanel();
+        return;
+    }
+
+    if (input.KeyPress(SDLK_UP) || input.KeyPress(SDLK_w)) {
+        settingsSelection = (settingsSelection + kSettingsRowCount - 1) % kSettingsRowCount;
+    }
+    if (input.KeyPress(SDLK_DOWN) || input.KeyPress(SDLK_s)) {
+        settingsSelection = (settingsSelection + 1) % kSettingsRowCount;
+    }
+
+    // Ajuste por teclado nas linhas de slider; setas alternam a tela cheia.
+    if (settingsSelection < kSettingsSliderCount) {
+        int delta = 0;
+        if (input.KeyPress(SDLK_LEFT) || input.KeyPress(SDLK_a)) delta = -5;
+        if (input.KeyPress(SDLK_RIGHT) || input.KeyPress(SDLK_d)) delta = 5;
+        if (delta != 0) {
+            int lo, hi;
+            SettingsRowRange(settingsSelection, lo, hi);
+            int v = SettingsRowValue(settingsSelection) + delta;
+            if (v < lo) v = lo;
+            if (v > hi) v = hi;
+            applyValue(settingsSelection, v);
+        }
+    } else if (settingsSelection == 4) {
+        if (input.KeyPress(SDLK_LEFT) || input.KeyPress(SDLK_RIGHT) ||
+            input.KeyPress(SDLK_a) || input.KeyPress(SDLK_d)) {
+            Game::SetFullscreen(!Game::fullscreen);
+        }
+    }
+
+    // Mouse: hover seleciona; clique/arrasto nos sliders; clique no toggle/voltar.
+    SDL_Point mp{input.GetMouseX(), input.GetMouseY()};
+    for (int i = 0; i < kSettingsRowCount; ++i) {
+        if (SDL_PointInRect(&mp, &settingsRowRects[i])) {
+            settingsSelection = i;
+        }
+    }
+    if (input.MousePress(SDL_BUTTON_LEFT)) {
+        bool onSlider = false;
+        for (int i = 0; i < kSettingsSliderCount; ++i) {
+            if (SDL_PointInRect(&mp, &settingsSliderRects[i])) {
+                settingsSelection = i;
+                settingsDragging = true;
+                onSlider = true;
+                break;
+            }
+        }
+        if (!onSlider) {
+            if (SDL_PointInRect(&mp, &settingsRowRects[4])) {
+                Game::SetFullscreen(!Game::fullscreen);
+            } else if (SDL_PointInRect(&mp, &settingsRowRects[5])) {
+                openControls();
+                return;
+            } else if (SDL_PointInRect(&mp, &settingsRowRects[6])) {
+                closePanel();
+                return;
+            }
+        }
+    }
+    if (settingsDragging) {
+        if (input.IsMouseDown(SDL_BUTTON_LEFT) && settingsSelection < kSettingsSliderCount) {
+            const SDL_Rect& sr = settingsSliderRects[settingsSelection];
+            int lo, hi;
+            SettingsRowRange(settingsSelection, lo, hi);
+            float frac = (sr.w > 0) ? static_cast<float>(mp.x - sr.x) / static_cast<float>(sr.w) : 0.0f;
+            if (frac < 0.0f) frac = 0.0f;
+            if (frac > 1.0f) frac = 1.0f;
+            applyValue(settingsSelection, lo + static_cast<int>(frac * (hi - lo) + 0.5f));
+        } else {
+            settingsDragging = false;
+        }
+    }
+
+    // Enter/Espaco/F: alterna tela cheia, abre Controles ou ativa Voltar.
+    if (input.KeyPress(SDLK_RETURN) || input.KeyPress(SDLK_SPACE) || input.KeyPress(SDLK_f)) {
+        if (settingsSelection == 4) {
+            Game::SetFullscreen(!Game::fullscreen);
+        } else if (settingsSelection == 5) {
+            openControls();
+            return;
+        } else if (settingsSelection == 6) {
+            closePanel();
+            return;
+        }
+    }
+}
+
+void StageState::RenderSettingsPanel(SDL_Renderer* renderer) {
+    if (!renderer || !settingsPanelOpen) {
+        return;
+    }
+    const int winW = Game::GetInstance().GetWindowsWidth();
+    const int winH = Game::GetInstance().GetWindowsHeight();
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 185);
+    const SDL_Rect full{0, 0, winW, winH};
+    SDL_RenderFillRect(renderer, &full);
+
+    const int panelW = 640;
+    const int rowH = 50;
+    const int gap = 10;
+    const int contentTop = 96;
+    const int panelH = contentTop + kSettingsRowCount * (rowH + gap) + 20;
+    const int px = (winW - panelW) / 2;
+    const int py = (winH - panelH) / 2;
+
+    SDL_SetRenderDrawColor(renderer, 30, 30, 38, 242);
+    const SDL_Rect panel{px, py, panelW, panelH};
+    SDL_RenderFillRect(renderer, &panel);
+    SDL_SetRenderDrawColor(renderer, 180, 160, 100, 255);
+    SDL_RenderDrawRect(renderer, &panel);
+
+    auto labelFont = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 20);
+    auto titleFont = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 32);
+
+    auto drawText = [&](const char* str, int tx, int ty, SDL_Color c, TTF_Font* fnt, bool centerX, int centerW) {
+        if (!fnt || !str) return;
+        SDL_Surface* sf = TTF_RenderText_Blended(fnt, str, c);
+        if (!sf) return;
+        SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, sf);
+        const int w = sf->w;
+        const int h = sf->h;
+        SDL_FreeSurface(sf);
+        if (!t) return;
+        const int dx = centerX ? (tx + (centerW - w) / 2) : tx;
+        const SDL_Rect d{dx, ty, w, h};
+        SDL_RenderCopy(renderer, t, nullptr, &d);
+        SDL_DestroyTexture(t);
+    };
+
+    drawText("Configuracoes", px, py + 28, SDL_Color{220, 200, 140, 255}, titleFont.get(), true, panelW);
+
+    for (int i = 0; i < kSettingsRowCount; ++i) {
+        const int rowY = py + contentTop + i * (rowH + gap);
+        const SDL_Rect rowRect{px + 30, rowY, panelW - 60, rowH};
+        settingsRowRects[i] = rowRect;
+        const bool sel = (i == settingsSelection);
+
+        if (sel) {
+            SDL_SetRenderDrawColor(renderer, 60, 55, 40, 220);
+            SDL_RenderFillRect(renderer, &rowRect);
+        }
+
+        const SDL_Color labelColor = sel ? SDL_Color{245, 235, 205, 255} : SDL_Color{195, 195, 195, 255};
+        drawText(kSettingsLabels[i], rowRect.x + 18, rowY + (rowH - 24) / 2, labelColor, labelFont.get(), false, 0);
+
+        if (i < kSettingsSliderCount) {
+            const int barX = px + 280;
+            const int barW = 230;
+            const int barY = rowY + rowH / 2 - 5;
+            const int barH = 10;
+            const SDL_Rect sliderHit{barX, rowY + 8, barW, rowH - 16};
+            settingsSliderRects[i] = sliderHit;
+
+            int lo, hi;
+            SettingsRowRange(i, lo, hi);
+            const int val = SettingsRowValue(i);
+            const float frac = (hi > lo) ? static_cast<float>(val - lo) / static_cast<float>(hi - lo) : 0.0f;
+
+            SDL_SetRenderDrawColor(renderer, 60, 60, 66, 255);
+            const SDL_Rect barBg{barX, barY, barW, barH};
+            SDL_RenderFillRect(renderer, &barBg);
+            SDL_SetRenderDrawColor(renderer, sel ? 220 : 150, sel ? 190 : 140, sel ? 90 : 70, 255);
+            const SDL_Rect barFill{barX, barY, static_cast<int>(barW * frac), barH};
+            SDL_RenderFillRect(renderer, &barFill);
+            const SDL_Rect handle{barX + static_cast<int>(barW * frac) - 4, barY - 5, 8, barH + 10};
+            SDL_SetRenderDrawColor(renderer, 230, 220, 180, 255);
+            SDL_RenderFillRect(renderer, &handle);
+
+            char valBuf[16];
+            std::snprintf(valBuf, sizeof(valBuf), "%d", val);
+            drawText(valBuf, barX + barW + 18, rowY + (rowH - 24) / 2, labelColor, labelFont.get(), false, 0);
+        } else if (i == 4) {
+            drawText(Game::fullscreen ? "Ligado" : "Desligado", px + 280, rowY + (rowH - 24) / 2,
+                     labelColor, labelFont.get(), false, 0);
+        }
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+}
+
+void StageState::HandleControlsPanelInput() {
+    InputManager& input = InputManager::GetInstance();
+
+    // Capturando a próxima tecla para a ação selecionada.
+    if (awaitingRebind) {
+        if (input.KeyPress(SDLK_ESCAPE)) {   // ESC cancela a captura
+            awaitingRebind = false;
+            return;
+        }
+        const int key = input.PollAnyKeyPressed();
+        if (key != 0) {
+            input.SetBinding(rebindAction, key);
+            awaitingRebind = false;
+        }
+        return;
+    }
+
+    if (input.KeyPress(SDLK_ESCAPE)) {   // ESC volta para Configurações (salva)
+        controlsPanelOpen = false;
+        Game::SaveSettings();
+        return;
+    }
+
+    if (input.KeyPress(SDLK_UP) || input.KeyPress(SDLK_w)) {
+        controlsSelection = (controlsSelection + kControlsRowCount - 1) % kControlsRowCount;
+    }
+    if (input.KeyPress(SDLK_DOWN) || input.KeyPress(SDLK_s)) {
+        controlsSelection = (controlsSelection + 1) % kControlsRowCount;
+    }
+
+    SDL_Point mp{input.GetMouseX(), input.GetMouseY()};
+    for (int i = 0; i < kControlsRowCount; ++i) {
+        if (SDL_PointInRect(&mp, &controlsRowRects[i])) {
+            controlsSelection = i;
+        }
+    }
+
+    bool activate = input.KeyPress(SDLK_RETURN) || input.KeyPress(SDLK_SPACE) || input.KeyPress(SDLK_f);
+    if (input.MousePress(SDL_BUTTON_LEFT)) {
+        for (int i = 0; i < kControlsRowCount; ++i) {
+            if (SDL_PointInRect(&mp, &controlsRowRects[i])) {
+                controlsSelection = i;
+                activate = true;
+                break;
+            }
+        }
+    }
+    if (!activate) {
+        return;
+    }
+
+    if (controlsSelection < InputManager::ActionCount) {
+        awaitingRebind = true;
+        rebindAction = static_cast<GameAction>(controlsSelection);
+    } else if (controlsSelection == InputManager::ActionCount) {  // Restaurar padrão
+        input.ResetBindingsToDefault();
+    } else {  // Voltar
+        controlsPanelOpen = false;
+        Game::SaveSettings();
+    }
+}
+
+void StageState::RenderControlsPanel(SDL_Renderer* renderer) {
+    if (!renderer || !controlsPanelOpen) {
+        return;
+    }
+    const int winW = Game::GetInstance().GetWindowsWidth();
+    const int winH = Game::GetInstance().GetWindowsHeight();
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 200);
+    const SDL_Rect full{0, 0, winW, winH};
+    SDL_RenderFillRect(renderer, &full);
+
+    const int panelW = 580;
+    const int rowH = 38;
+    const int gap = 6;
+    const int contentTop = 84;
+    const int panelH = contentTop + kControlsRowCount * (rowH + gap) + 20;
+    const int px = (winW - panelW) / 2;
+    const int py = (winH - panelH) / 2;
+
+    SDL_SetRenderDrawColor(renderer, 30, 30, 38, 244);
+    const SDL_Rect panel{px, py, panelW, panelH};
+    SDL_RenderFillRect(renderer, &panel);
+    SDL_SetRenderDrawColor(renderer, 180, 160, 100, 255);
+    SDL_RenderDrawRect(renderer, &panel);
+
+    auto labelFont = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 18);
+    auto titleFont = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 30);
+
+    // align: 0 = esquerda em tx, 1 = centralizado em [tx, tx+refW], 2 = direita em tx
+    auto drawText = [&](const char* str, int tx, int ty, SDL_Color c, TTF_Font* fnt, int align, int refW) {
+        if (!fnt || !str) return;
+        SDL_Surface* sf = TTF_RenderText_Blended(fnt, str, c);
+        if (!sf) return;
+        SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, sf);
+        const int w = sf->w;
+        const int h = sf->h;
+        SDL_FreeSurface(sf);
+        if (!t) return;
+        int dx = tx;
+        if (align == 1) dx = tx + (refW - w) / 2;
+        else if (align == 2) dx = tx - w;
+        const SDL_Rect d{dx, ty, w, h};
+        SDL_RenderCopy(renderer, t, nullptr, &d);
+        SDL_DestroyTexture(t);
+    };
+
+    drawText("Controles", px, py + 24, SDL_Color{220, 200, 140, 255}, titleFont.get(), 1, panelW);
+
+    for (int i = 0; i < kControlsRowCount; ++i) {
+        const int rowY = py + contentTop + i * (rowH + gap);
+        const SDL_Rect rr{px + 24, rowY, panelW - 48, rowH};
+        controlsRowRects[i] = rr;
+        const bool sel = (i == controlsSelection);
+        if (sel) {
+            SDL_SetRenderDrawColor(renderer, 60, 55, 40, 220);
+            SDL_RenderFillRect(renderer, &rr);
+        }
+        const SDL_Color lc = sel ? SDL_Color{245, 235, 205, 255} : SDL_Color{195, 195, 195, 255};
+        const int textY = rowY + (rowH - 22) / 2;
+
+        if (i < InputManager::ActionCount) {
+            const GameAction a = static_cast<GameAction>(i);
+            drawText(InputManager::ActionLabel(a), rr.x + 14, textY, lc, labelFont.get(), 0, 0);
+
+            const char* keyStr;
+            const bool capturing = (awaitingRebind && rebindAction == a);
+            if (capturing) {
+                keyStr = "Pressione uma tecla...";
+            } else {
+                keyStr = SDL_GetKeyName(InputManager::GetInstance().GetBinding(a));
+                if (!keyStr || keyStr[0] == '\0') keyStr = "?";
+            }
+            const SDL_Color kc = capturing ? SDL_Color{230, 200, 90, 255} : lc;
+            drawText(keyStr, rr.x + rr.w - 14, textY, kc, labelFont.get(), 2, 0);
+        } else if (i == InputManager::ActionCount) {
+            drawText("Restaurar padrao", rr.x + 14, textY, lc, labelFont.get(), 0, 0);
+        } else {
+            drawText("Voltar", rr.x + 14, textY, lc, labelFont.get(), 0, 0);
+        }
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }

@@ -23,6 +23,9 @@ Game* Game::instance = nullptr;
 int Game::masterVolumePercent = Game::MASTER_VOLUME_PERCENT;
 int Game::ambientVolumePercent = Game::AMBIENT_VOLUME_PERCENT;
 int Game::thunderVolumePercent = Game::THUNDER_VOLUME_PERCENT;
+int Game::brightnessPercent = 100;
+bool Game::fullscreen = false;
+bool Game::debugMode = false;
 
 namespace {
 
@@ -109,6 +112,10 @@ void Game::LoadEnvVolume() {
                 }
             } catch (const std::exception&) {
             }
+        } else if (key == "DEBUG") {
+            if (value == "1" || value == "true" || value == "TRUE") {
+                debugMode = true;
+            }
         }
     }
 }
@@ -134,6 +141,103 @@ void Game::SetThunderVolume(int percent) {
     thunderVolumePercent = percent;
 }
 
+void Game::SetBrightness(int percent) {
+    if (percent < 50) percent = 50;
+    if (percent > 150) percent = 150;
+    brightnessPercent = percent;
+}
+
+void Game::SetFullscreen(bool on) {
+    fullscreen = on;
+    if (instance && instance->window) {
+        SDL_SetWindowFullscreen(instance->window, on ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+    }
+}
+
+void Game::LoadSettings() {
+    std::ifstream f("config/settings.json");
+    if (!f.is_open()) {
+        return;
+    }
+    try {
+        nlohmann::json j;
+        f >> j;
+        auto readPercent = [&](const char* key, int& out) {
+            if (j.contains(key) && j[key].is_number_integer()) {
+                const int v = j[key].get<int>();
+                if (v >= 0 && v <= 100) out = v;
+            }
+        };
+        readPercent("master_volume", masterVolumePercent);
+        readPercent("ambient_volume", ambientVolumePercent);
+        readPercent("thunder_volume", thunderVolumePercent);
+        if (j.contains("brightness") && j["brightness"].is_number_integer()) {
+            const int b = j["brightness"].get<int>();
+            if (b >= 50 && b <= 150) brightnessPercent = b;
+        }
+        if (j.contains("fullscreen") && j["fullscreen"].is_boolean()) {
+            fullscreen = j["fullscreen"].get<bool>();
+        }
+        if (j.contains("debug") && j["debug"].is_boolean() && j["debug"].get<bool>()) {
+            debugMode = true;
+        }
+        if (j.contains("keybindings") && j["keybindings"].is_object()) {
+            InputManager& im = InputManager::GetInstance();
+            for (int i = 0; i < InputManager::ActionCount; ++i) {
+                const GameAction action = static_cast<GameAction>(i);
+                const char* name = InputManager::ActionName(action);
+                if (j["keybindings"].contains(name) && j["keybindings"][name].is_string()) {
+                    const std::string keyName = j["keybindings"][name].get<std::string>();
+                    const SDL_Keycode kc = SDL_GetKeyFromName(keyName.c_str());
+                    if (kc != SDLK_UNKNOWN) {
+                        im.SetBinding(action, kc);
+                    }
+                }
+            }
+        }
+    } catch (const std::exception& ex) {
+        std::cerr << "config/settings.json ignorado (parse): " << ex.what() << std::endl;
+    }
+}
+
+void Game::SaveSettings() {
+    // Preserva chaves existentes (window_width/height/debug) lendo antes de gravar.
+    nlohmann::json j = nlohmann::json::object();
+    {
+        std::ifstream f("config/settings.json");
+        if (f.is_open()) {
+            try {
+                f >> j;
+            } catch (const std::exception&) {
+                j = nlohmann::json::object();
+            }
+        }
+    }
+    if (!j.is_object()) {
+        j = nlohmann::json::object();
+    }
+    j["master_volume"] = masterVolumePercent;
+    j["ambient_volume"] = ambientVolumePercent;
+    j["thunder_volume"] = thunderVolumePercent;
+    j["brightness"] = brightnessPercent;
+    j["fullscreen"] = fullscreen;
+
+    {
+        InputManager& im = InputManager::GetInstance();
+        nlohmann::json kb = nlohmann::json::object();
+        for (int i = 0; i < InputManager::ActionCount; ++i) {
+            const GameAction action = static_cast<GameAction>(i);
+            kb[InputManager::ActionName(action)] = SDL_GetKeyName(im.GetBinding(action));
+        }
+        j["keybindings"] = kb;
+    }
+
+    std::ofstream out("config/settings.json", std::ios::trunc);
+    if (out.is_open()) {
+        out << j.dump(2) << std::endl;
+    }
+}
+
 Game::Game(std::string title) {
     if (instance != nullptr) {
         std::cerr << "Erro: Já existe uma instância do Game rodando!" << std::endl;
@@ -142,7 +246,11 @@ Game::Game(std::string title) {
 
     instance = this;                  // Define a instância atual
 
-    LoadEnvVolume();                  // Carrega volume do .env
+    LoadEnvVolume();                  // Carrega volume (e flag DEBUG) do .env (legado)
+    LoadSettings();                   // config/settings.json sobrescreve (fonte unificada)
+    if (IsDebugBuild()) {
+        debugMode = true;             // builds de debug sempre habilitam ferramentas de dev
+    }
     srand(time(NULL));                // Inicializando o gerador de números aleátorios
 
     // Inicializa SDL
@@ -222,6 +330,10 @@ Game::Game(std::string title) {
     windowsHeight = winH;
     frameStart = 0;
     dt = 0.0f;
+
+    if (fullscreen) {
+        SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+    }
 }
 
 // Destrutor

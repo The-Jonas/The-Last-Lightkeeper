@@ -182,7 +182,7 @@ void TitleState::LoadAssets() {
     newGameGO->z = 10;
     SDL_Color menuColor = {0, 0, 0, 0};
     Text* newGameText = new Text(*newGameGO, "Recursos/font/times.ttf", 40, Text::BLENDED,
-                                  "New Game", menuColor);
+                                  "Novo Jogo", menuColor);
     newGameGO->AddComponent(newGameText);
     AddObject(newGameGO);
     newGameMenuText = newGameGO;
@@ -190,7 +190,7 @@ void TitleState::LoadAssets() {
     GameObject* continueGO = new GameObject();
     continueGO->z = 10;
     Text* continueText = new Text(*continueGO, "Recursos/font/times.ttf", 40, Text::BLENDED,
-                                   "Continue", menuColor);
+                                   "Continuar", menuColor);
     continueGO->AddComponent(continueText);
     AddObject(continueGO);
     continueMenuText = continueGO;

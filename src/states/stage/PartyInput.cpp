@@ -59,11 +59,11 @@ void StageState::SwapControlledCharacter() {
 void StageState::HandlePartyInput() {
     InputManager& input = InputManager::GetInstance();
 
-    if (input.KeyPress(SDLK_LCTRL) || input.KeyPress(SDLK_RCTRL)) {
+    if (input.ActionPress(GameAction::SwapBrother)) {
         SwapControlledCharacter();
     }
 
-    if (input.KeyPress(TOGGLE_MODE_KEY)) {
+    if (input.ActionPress(GameAction::ToggleMode)) {
         if (partyMode == PartyMode::TOGETHER) {
             partyMode = PartyMode::INDEPENDENT;
         } else {
@@ -80,16 +80,16 @@ void StageState::IssueMovementFromInput(Character* character, GameObject* object
     InputManager& input = InputManager::GetInstance();
     Vec2 direction(0.0f, 0.0f);
 
-    if (input.IsKeyDown(SDLK_w)) {
+    if (input.ActionDown(GameAction::MoveUp)) {
         direction.y -= 1.0f;
     }
-    if (input.IsKeyDown(SDLK_s)) {
+    if (input.ActionDown(GameAction::MoveDown)) {
         direction.y += 1.0f;
     }
-    if (input.IsKeyDown(SDLK_a)) {
+    if (input.ActionDown(GameAction::MoveLeft)) {
         direction.x -= 1.0f;
     }
-    if (input.IsKeyDown(SDLK_d)) {
+    if (input.ActionDown(GameAction::MoveRight)) {
         direction.x += 1.0f;
     }
 

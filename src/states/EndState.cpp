@@ -50,22 +50,36 @@ void EndState::LoadAssets() {
         titleGO->z = 10;
         SDL_Color titleColor = {220, 220, 220, 255};
         Text* titleText = new Text(*titleGO, "Recursos/font/TradeWinds-Regular.ttf", 56, Text::BLENDED,
-                                   "Game Over", titleColor);
+                                   "Fim de Jogo", titleColor);
         titleGO->AddComponent(titleText);
         AddObject(titleGO);
         gameOverTitle = titleGO;
+
+        // Subtítulo com a causa da derrota (6.5)
+        GameObject* causeGO = new GameObject();
+        causeGO->z = 10;
+        SDL_Color causeColor = {190, 120, 120, 230};
+        const char* causeText = GameData::deathByMonster
+            ? "O monstro alcancou voces na escuridao."
+            : "A escuridao consumiu a sanidade de voces.";
+        Text* cause = new Text(*causeGO, "Recursos/font/TradeWinds-Regular.ttf", 24, Text::BLENDED,
+                               causeText, causeColor);
+        causeGO->AddComponent(cause);
+        AddObject(causeGO);
+        causeSubtitle = causeGO;
     }
 
     GameObject* textGO = new GameObject();
     textGO->z = 10;
     SDL_Color color = {180, 180, 180, 255};
     Text* text = new Text(*textGO, "Recursos/font/TradeWinds-Regular.ttf", 28, Text::BLENDED,
-                          "Press Space to continue", color);
+                          "Pressione Espaco para continuar", color);
     textGO->AddComponent(text);
     AddObject(textGO);
     continuePrompt = textGO;
 
     LayoutCenteredText(gameOverTitle, -80.0f);
+    LayoutCenteredText(causeSubtitle, -20.0f);
     LayoutCenteredText(continuePrompt, 60.0f);
 }
 

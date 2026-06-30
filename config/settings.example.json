@@ -1,4 +1,21 @@
 {
   "window_width": 1920,
-  "window_height": 1080
+  "window_height": 1080,
+  "master_volume": 70,
+  "ambient_volume": 50,
+  "thunder_volume": 100,
+  "brightness": 100,
+  "fullscreen": false,
+  "keybindings": {
+    "move_up": "W",
+    "move_down": "S",
+    "move_left": "A",
+    "move_right": "D",
+    "interact": "E",
+    "use_item": "F",
+    "cycle_prev": "1",
+    "cycle_next": "3",
+    "swap_brother": "Left Ctrl",
+    "toggle_mode": "Q"
+  }
 }

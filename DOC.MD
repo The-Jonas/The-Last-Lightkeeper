@@ -123,9 +123,9 @@ The core of the game. Features:
 - **Party modes:**
   - `TOGETHER` - Companion follows the controlled character with A* pathfinding
   - `INDEPENDENT` - Only the controlled character moves
-- **TAB** - Switch controlled character
-- **F** - Toggle party mode (together/independent)
-- **WASD** - Movement (command queue system with acceleration/deceleration)
+- **Ctrl** - Switch controlled character (default; rebindable in Settings → Controles)
+- **Q** - Toggle party mode (together/independent) (default; rebindable)
+- **WASD** - Movement (command queue system with acceleration/deceleration; rebindable)
 - **Right-click on character** - Lock preview light to that character
 
 #### Dynamic Lighting System
@@ -243,10 +243,10 @@ One of the most sophisticated features. The mouse cursor acts as a **light sourc
 
 | Key | Action |
 |-----|--------|
-| WASD | Move controlled character |
-| TAB | Switch controlled character |
-| F | Toggle party mode (together/independent) |
-| K | Cycle light shape |
+| WASD | Move controlled character (rebindable) |
+| Ctrl | Switch controlled character (rebindable) |
+| Q | Toggle party mode (together/independent) (rebindable) |
+| K | Cycle light shape (debug only) |
 | C | Create permanent light at cursor |
 | P | Toggle light tweaking panel |
 | L | Toggle lights on/off |
@@ -417,7 +417,7 @@ TTF_Init()
 1. **Title Screen** → Press Space
 2. **Gameplay** → Navigate the tile-based map with two characters using WASD
 3. Use the mouse cursor as a dynamic light source to reveal the dark map
-4. Switch between characters (TAB) to solve cooperative puzzles
+4. Switch between characters (Ctrl) to solve cooperative puzzles
 5. Place permanent lights (C) at strategic positions
 6. **Game Over** → `GameData::playerVictory` determines Win/Lose screen
 7. Return to menu or quit

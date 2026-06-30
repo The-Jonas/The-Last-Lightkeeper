@@ -52,7 +52,6 @@ StageFirstLoadData EmbeddedDefaults() {
     d.navWorldW = 4358.0f;
     d.navWorldH = 3276.0f;
     d.navTilePx = 64;
-    d.itemPickupCount = 35;
     d.startingFlashlightDurability = 100;
 
     ItemDef apple{"Apple", "Recursos/img/items/apple.png", -1, false, 1, {}};
@@ -122,9 +121,6 @@ StageFirstLoadData ParseFromJsonRoot(const json& j) {
     }
     if (j.contains("navTilePx")) {
         d.navTilePx = j.at("navTilePx").get<int>();
-    }
-    if (j.contains("itemPickupCount")) {
-        d.itemPickupCount = j.at("itemPickupCount").get<int>();
     }
     if (j.contains("startingFlashlightDurability")) {
         d.startingFlashlightDurability = j.at("startingFlashlightDurability").get<int>();

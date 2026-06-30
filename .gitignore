@@ -9,3 +9,9 @@ dist/
 game.zip
 *.zip
 .env
+
+# runtime user settings (only config/settings.example.json is tracked)
+config/settings.json
+
+# deploy staging folder (created/removed by scripts/deploy.ps1)
+A-Luz-do-Farol_*/

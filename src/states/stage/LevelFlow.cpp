@@ -164,34 +164,38 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
     }
     inventoryInitialized = true;
 
-    SDL_Color hudColor = {230, 230, 230, 220};
+    // HUD de desenvolvedor (instruções + FPS) — só criado em debugMode; jogadores
+    // não veem essas linhas. As referências ficam nullptr fora de debug.
+    if (Game::debugMode) {
+        SDL_Color hudColor = {230, 230, 230, 220};
 
-    hudLine1 = new GameObject();
-    hudLine1->z = 100;
-    hudLine1->AddComponent(new Text(*hudLine1, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
-                                     "WASD mover | 1/3 girar item | Ctrl trocar irmao | Q junto/separado",
-                                    hudColor));
-    AddObject(hudLine1);
+        hudLine1 = new GameObject();
+        hudLine1->z = 100;
+        hudLine1->AddComponent(new Text(*hudLine1, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
+                                         "WASD mover | 1/3 girar item | Ctrl trocar irmao | Q junto/separado",
+                                        hudColor));
+        AddObject(hudLine1);
 
-    hudLine2 = new GameObject();
-    hudLine2->z = 100;
-    hudLine2->AddComponent(new Text(*hudLine2, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
-                                     "E interagir/pegar/acender/consertar | F usar item/luz/oleo | Esc sair",
-                                    hudColor));
-    AddObject(hudLine2);
+        hudLine2 = new GameObject();
+        hudLine2->z = 100;
+        hudLine2->AddComponent(new Text(*hudLine2, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
+                                         "E interagir/pegar/acender/consertar | F usar item/luz/oleo | Esc sair",
+                                        hudColor));
+        AddObject(hudLine2);
 
-    hudLine3 = new GameObject();
-    hudLine3->z = 100;
-    hudLine3->AddComponent(new Text(*hudLine3, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
-                                     "T trovao | L luzes | O sombras | M musica | B fisica | X luz cursor | C criar luz | P painel luz",
-                                    hudColor));
-    AddObject(hudLine3);
+        hudLine3 = new GameObject();
+        hudLine3->z = 100;
+        hudLine3->AddComponent(new Text(*hudLine3, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
+                                         "T trovao | L luzes | O sombras | M musica | B fisica | X luz cursor | C criar luz | P painel luz",
+                                        hudColor));
+        AddObject(hudLine3);
 
-    hudFps = new GameObject();
-    hudFps->z = 100;
-    hudFps->AddComponent(new Text(*hudFps, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED, "FPS: 60",
-                                  hudColor));
-    AddObject(hudFps);
+        hudFps = new GameObject();
+        hudFps->z = 100;
+        hudFps->AddComponent(new Text(*hudFps, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED, "FPS: 60",
+                                      hudColor));
+        AddObject(hudFps);
+    }
 
     GameObject* hotbarObj = new GameObject();
     HotbarComponent* hotbarComp = new HotbarComponent(*hotbarObj, inventory, bigCharacter, &controlledCharacter,

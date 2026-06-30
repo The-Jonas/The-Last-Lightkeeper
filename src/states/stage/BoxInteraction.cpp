@@ -257,7 +257,7 @@ bool StageState::IsCandleClosestForInteraction(Candlestick* candle) const {
 
 void StageState::TryInteractCandleOnKeyPress() {
     InputManager& input = InputManager::GetInstance();
-    if (!input.KeyPress(SDLK_e) || !reachableCandle) {
+    if (!input.ActionPress(GameAction::Interact) || !reachableCandle) {
         return;
     }
 
@@ -321,7 +321,7 @@ bool StageState::IsWindowClosestForInteraction(Window* window) const {
 
 void StageState::TryInteractWindowOnKeyPress() {
     InputManager& input = InputManager::GetInstance();
-    if (!input.KeyPress(SDLK_e) || !reachableWindow) {
+    if (!input.ActionPress(GameAction::Interact) || !reachableWindow) {
         return;
     }
 
@@ -403,7 +403,7 @@ void StageState::UpdateBoxInteraction() {
     GameSfx::UpdateCandleProximity(IsPlayerNearLitCandle());
 
     InputManager& input = InputManager::GetInstance();
-    const bool eHeld = input.IsKeyDown(SDLK_e);
+    const bool eHeld = input.ActionDown(GameAction::Interact);
     const bool boxPushBlocked = IsHoldingLamp(inventory);
     ItemPickup* reachableItem = FindClosestReachableItem();
 

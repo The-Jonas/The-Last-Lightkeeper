@@ -20,12 +20,24 @@ public:
     static int masterVolumePercent;
     static int ambientVolumePercent;
     static int thunderVolumePercent;
+    static int brightnessPercent;   // 50..150, 100 = normal (overlay de brilho)
+    static bool fullscreen;         // janela em tela cheia (borderless desktop)
     static void LoadEnvVolume();
     static void SetMasterVolume(int percent);
     static void SetAmbientVolume(int percent);
     static void SetThunderVolume(int percent);
+    static void SetBrightness(int percent);
+    static void SetFullscreen(bool on);
+    // Configurações unificadas em config/settings.json (volume/brilho/fullscreen/debug).
+    static void LoadSettings();
+    static void SaveSettings();
     static constexpr int WINDOW_WIDTH = 1920;
     static constexpr int WINDOW_HEIGHT = 1080;
+
+    // Runtime debug toggle. True for debug builds (-DDEBUG) or when opted in via
+    // `DEBUG=1` in .env. Gates developer-only keys and the on-screen dev HUD so
+    // players never see them.
+    static bool debugMode;
 
     static Game& GetInstance();                 // Retorna instância única (singleton)
     SDL_Renderer* GetRenderer();                // Retorna o renderizador SDL

@@ -85,6 +85,9 @@ void Closet::Update(float dt) {
     // Checa se ainda há combustível no isqueiro (usando o sistema existente de inventário)
     bool hasLight = stage && stage->GetInventory().IsUsableLightActive();
 
+    // Congela a interação enquanto um overlay (menu/modal) está ativo.
+    const bool inputFrozen = stage && stage->IsPlayerInputFrozen();
+
     if (isOccupied) {
         // Atualiza a fresta: apaga se o isqueiro acabar, acende se tiver combustível
         if (stage && frestaLightId != -1) {
@@ -101,7 +104,7 @@ void Closet::Update(float dt) {
         PinChar(Character::player);
         PinChar(Character::littleBrother);
 
-        if (InputManager::GetInstance().KeyPress(SDLK_e)) {
+        if (!inputFrozen && InputManager::GetInstance().ActionPress(GameAction::Interact)) {
             ExitCloset();
         }
 
@@ -112,7 +115,10 @@ void Closet::Update(float dt) {
         // Só exibe a opção de esconder se encostar na FRENTE da porta correta
         if (SDL_HasIntersection(&reachBox, &interactZone)) {
             showPrompt = true;
-            if (InputManager::GetInstance().KeyPress(SDLK_e)) {
+            if (stage) {
+                stage->SetReachableCloset(this);   // alimenta o prompt central do rodapé
+            }
+            if (!inputFrozen && InputManager::GetInstance().ActionPress(GameAction::Interact)) {
                 EnterCloset();
             }
         }
@@ -120,13 +126,7 @@ void Closet::Update(float dt) {
 }
 
 void Closet::Render() {
-    if (showPrompt && textObj && !isOccupied) {
-        SDL_Rect zone = GetInteractionRect();
-        // Posiciona o texto acima da zona de interação, não acima do armário inteiro
-        textObj->box.x = zone.x + (zone.w / 2.0f) - (textObj->box.w / 2.0f);
-        textObj->box.y = zone.y - 24;
-        textObj->Render();
-    }
+    // Rótulo flutuante removido — indicação só no prompt central do rodapé.
 
 #ifdef DEBUG
     // --- DEBUG: DESENHA A ZONA DE INTERAÇÃO COM A CÂMERA ---

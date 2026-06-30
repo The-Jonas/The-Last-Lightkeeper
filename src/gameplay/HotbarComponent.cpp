@@ -122,11 +122,11 @@ void HotbarComponent::TryCycleWheel() {
     InputManager& input = InputManager::GetInstance();
 
     bool cycled = false;
-    if (input.KeyPress(SDLK_1)) {
+    if (input.ActionPress(GameAction::CyclePrev)) {
         inventory.CycleLeft();
         cycled = true;
     }
-    if (input.KeyPress(SDLK_3)) {
+    if (input.ActionPress(GameAction::CycleNext)) {
         inventory.CycleRight();
         cycled = true;
     }
@@ -140,7 +140,7 @@ void HotbarComponent::TryCycleWheel() {
 
 void HotbarComponent::TryUseActiveItemOnKeyPress() {
     InputManager& input = InputManager::GetInstance();
-    if (!input.KeyPress(SDLK_f)) {
+    if (!input.ActionPress(GameAction::UseItem)) {
         return;
     }
 
@@ -189,7 +189,7 @@ void HotbarComponent::TryPickupOnKeyPress() {
         return;
     }
 
-    if (!input.KeyPress(SDLK_e)) {
+    if (!input.ActionPress(GameAction::Interact)) {
         return;
     }
 
@@ -245,6 +245,10 @@ void HotbarComponent::Update(float dt) {
         return;
     }
     if (*controlledCharacterPtr != bigCharacter) {
+        return;
+    }
+    // Congela o input do hotbar quando um overlay (menu de pausa/modal) está ativo.
+    if (StageState* stage = Game::TryGetStageState(); stage && stage->IsPlayerInputFrozen()) {
         return;
     }
 

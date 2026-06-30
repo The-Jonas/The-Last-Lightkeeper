@@ -64,11 +64,8 @@ void Candlestick::UpdatePromptText() {
 }
 
 void Candlestick::Render() {
-    if (showPrompt && textObj) {
-        textObj->box.x = associated.box.Center().x - (textObj->box.w / 2.0f);
-        textObj->box.y = associated.box.y - 30;
-        textObj->Render();
-    }
+    // O rótulo flutuante foi removido — a indicação agora é só o prompt
+    // estilizado no rodapé central (StageState::RenderInteractionPrompt).
 }
 
 void Candlestick::SetLit(bool lit) {

@@ -231,7 +231,7 @@ void Monster::CheckDamageCollision() {
         if (Character::player->sanity < 0.0f) Character::player->sanity = 0.0f;
         lastKnownPlayerPos = Character::player->GetAssociated().box.Center();
         hit = true;
-        std::cout << "[Monster] Dano no Irmaozao! Sanidade -= " << kSanityDamageOnTouch << "\n";
+        if (Game::debugMode) std::cout << "[Monster] Dano no Irmaozao! Sanidade -= " << kSanityDamageOnTouch << "\n";
     }
     // Checa o Irmãozinho (só se não bateu no mais velho neste frame)
     else if (CheckPlayerHit(Character::littleBrother)) {
@@ -239,13 +239,18 @@ void Monster::CheckDamageCollision() {
         if (Character::littleBrother->sanity < 0.0f) Character::littleBrother->sanity = 0.0f;
         lastKnownPlayerPos = Character::littleBrother->GetAssociated().box.Center();
         hit = true;
-        std::cout << "[Monster] Dano no Irmaozinho! Sanidade -= " << kSanityDamageOnTouch << "\n";
+        if (Game::debugMode) std::cout << "[Monster] Dano no Irmaozinho! Sanidade -= " << kSanityDamageOnTouch << "\n";
     }
 
     if (hit) {
         damageCooldown = kDamageCooldownTime;
         hasMemory      = true;
         memoryDecayTimer = 0.0f;
+
+        // Feedback de impacto: SFX + tremor de tela + flash vermelho (3.1).
+        if (StageState* stage = Game::TryGetStageState()) {
+            stage->TriggerMonsterHitFeedback();
+        }
 
         // Toque no escuro → HUNT (mais agressivo)
         if (state != MonsterState::HUNT)

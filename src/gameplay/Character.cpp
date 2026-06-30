@@ -570,7 +570,8 @@ void Character::Update(float dt) {
         bool isBeingControlled = stageCtrl && stageCtrl->GetControlledCharacter() == this;
 
         // Funciona independente de quem está sendo controlado
-        if (isBeingControlled && InputManager::GetInstance().KeyPress(SDLK_e) &&
+        const bool inputFrozen = stageCtrl && stageCtrl->IsPlayerInputFrozen();
+        if (isBeingControlled && !inputFrozen && InputManager::GetInstance().ActionPress(GameAction::Interact) &&
             visionPowerTimer <= 0.0f && visionCooldown <= 0.0f &&
             currentState != ActionState::INTERACTING) {
 
