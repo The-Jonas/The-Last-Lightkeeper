@@ -49,6 +49,7 @@ using namespace stage_internal;
 void StageState::Update(float dt){
 
     lastFrameDt = dt;
+    dynamicColliderCacheDirty = true;
 
     // Chamadas a Mix_PlayMusic em todo frame fazem SDL_mixer reorganizar música e pode matar/samples atrasarem ondas.
     if (!musicMuted && music.IsOpen() && Mix_PlayingMusic() == 0) {
@@ -79,6 +80,11 @@ void StageState::Update(float dt){
     }
     if (smallCharacterObject) {
         prevSmallPos = Vec2(smallCharacterObject->box.x, smallCharacterObject->box.y);
+    }
+
+    // ── Decrementa o throttle do pathfinding do companion ──────────────
+    if (companionPathRefreshTimer > 0.0f) {
+        companionPathRefreshTimer -= dt;
     }
 
     // QuitRequested (Clicar no X da janela) -> Fecha o jogo
@@ -344,14 +350,6 @@ void StageState::Update(float dt){
         }    
     }
 
-    for (size_t i = 0; i < objectArray.size();) {               
-        if(objectArray[i]->IsDead()) {                          // Se o GameObject está morto 
-            objectArray.erase(objectArray.begin() + i);         // Remova-o do array (Com iterador do ínicio somado á posição do elemento)
-        } else {
-            i++;                                                // Se não, avança para o próximo
-        }
-    }
-
     GameSfx::UpdateThunder(dt);
 
     if (input.KeyPress(THUNDER_TEST_KEY)) {
@@ -369,7 +367,7 @@ void StageState::Update(float dt){
             ? sanityOverlayObj->GetComponent<SpriteRenderer>() : nullptr;
  
         if (overlaySprite) {
-            constexpr float kSanityOverlayThreshold = 60.0f; // mesmo limiar de antes
+            constexpr float kSanityOverlayThreshold = 80.0f; 
  
             if (lowestSanityUpdate < kSanityOverlayThreshold) {
                 // intensity: 0.0 (sanidade = threshold) até 1.0 (sanidade = 0)
