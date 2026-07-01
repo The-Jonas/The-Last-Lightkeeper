@@ -468,7 +468,7 @@ void LightTweakPanel::rebuildRowLabel(SDL_Renderer* renderer, int logicalRow) {
     rowLabelW[logicalRow] = 0;
     rowLabelH[logicalRow] = 0;
 
-    auto font = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 14);
+    auto font = Resources::GetFont("Recursos/font/times.ttf", 14);
     if (!font) {
         return;
     }
@@ -653,7 +653,7 @@ void LightTweakPanel::Render(SDL_Renderer* renderer, int windowW, int /*windowH*
 
     char title[112];
     std::snprintf(title, sizeof(title), "Afina luz [%s]  K=forma P=ocultar", shapeName());
-    auto font = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 15);
+    auto font = Resources::GetFont("Recursos/font/times.ttf", 15);
     if (font) {
         SDL_Color tc{255, 240, 200, 255};
         SDL_Surface* ts = TTF_RenderUTF8_Blended(font.get(), title, tc);

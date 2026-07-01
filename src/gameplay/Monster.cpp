@@ -264,9 +264,9 @@ void Monster::CheckDamageCollision() {
 void Monster::UpdatePatrol(float dt) {
     MoveAlongPath(dt, moveSpeed);
 
-    if (HasReachedTarget()) {
-        // Ao invés de spammar, ele espera 0.5 segundos ao chegar no ponto antes de escolher o próximo.
-        // Isso resolve o bug dele travar se o pathfinder falhar.
+    // Chegou ao ponto OU o pathfinder falhou (sem caminho): espera 0.5s e escolhe
+    // o próximo ponto — evita travar quando o destino é inalcançável (1.7).
+    if (HasReachedTarget() || HasNoPath()) {
         if (stateTimer >= 0.5f) {
             PickNextPatrolPoint();
             stateTimer = 0.0f;
@@ -282,15 +282,24 @@ void Monster::UpdatePatrol(float dt) {
 }
 
 void Monster::UpdateInvestigate(float dt) {
+    // Memória expirou (kMemoryDecayTime) → volta a patrulhar. Isso é o timeout
+    // confiável quando o alvo é inalcançável (path falhando) — antes dependia de
+    // HasReachedTarget()==true num path vazio, o que era prematuro. 1.7
+    if (!hasMemory) {
+        TransitionTo(MonsterState::PATROL);
+        return;
+    }
+
     MoveAlongPath(dt, moveSpeed);
- 
+
     if (HasReachedTarget()) {
-        // Chegou na última posição conhecida — não achou ninguém, volta a patrulhar
+        // Chegou de verdade na última posição conhecida — não achou ninguém.
         hasMemory = false;
         TransitionTo(MonsterState::PATROL);
+        return;
     }
- 
-    // Atualiza o path se a memória ainda está fresca
+
+    // Atualiza o path enquanto a memória está fresca (tenta de novo se falhou).
     if (pathRefreshTimer >= kPathRefreshInterval && hasMemory) {
         pathRefreshTimer = 0.0f;
         RequestPath(lastKnownPlayerPos);
@@ -312,8 +321,9 @@ void Monster::UpdateChase(float dt) {
     } else {
         // Perdeu a visão — vai até onde viu pela última vez
         MoveAlongPath(dt, moveSpeed);
-        if (HasReachedTarget()) {
-            // Chegou no último ponto e não achou — investiga por perto
+        // Chegou ao último ponto OU não tem caminho pra seguir → investiga por perto
+        // (sem caminho não fica parado eternamente no CHASE). 1.7
+        if (HasReachedTarget() || HasNoPath()) {
             TransitionTo(MonsterState::INVESTIGATE);
         }
     }
@@ -435,8 +445,13 @@ bool Monster::CanSeeLitBrother(Vec2& outPos) const {
         Vec2 myPos   = associated.box.Center();
         float dist   = myPos.Distance(charPos);
         if (dist > kSightRadius) return false;
- 
-        // Está iluminado e dentro do raio — monstro enxerga
+
+        // 1.6 — Linha de visão: não enxerga através de paredes.
+        if (!stage->HasWalkableLine(myPos, charPos, &associated, kSightLosRadius)) {
+            return false;
+        }
+
+        // Está iluminado, dentro do raio e com linha livre — monstro enxerga
         outPos = charPos;
         return true;
     };
@@ -516,13 +531,13 @@ void Monster::RequestPath(Vec2 destination) {
 
     targetPos   = destination;
 
-    if (!stage->IsWorldPosNavigableFor(destination, &associated)) {
+    if (!stage->IsWorldPosNavigableFor(destination, &associated, kNavFootRadius)) {
         currentPath.clear();
         pathStep = 0;
         return;
     }
 
-    currentPath = stage->FindPathWorld(associated.box.Center(), destination, &associated);
+    currentPath = stage->FindPathWorld(associated.box.Center(), destination, &associated, 4096, kNavFootRadius);
     pathStep    = 0;
 }
  
@@ -547,8 +562,14 @@ void Monster::MoveAlongPath(float dt, float speed) {
 }
  
 bool Monster::HasReachedTarget() const {
-    if (currentPath.empty()) return true;
+    // Caminho VAZIO = falha do pathfinder, NÃO "chegou" (antes era conflado e
+    // causava trocas de estado prematuras — INVESTIGATE/CHASE desistiam sem andar). 1.7
+    if (currentPath.empty()) return false;
     return pathStep >= static_cast<int>(currentPath.size());
+}
+
+bool Monster::HasNoPath() const {
+    return currentPath.empty();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

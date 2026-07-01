@@ -57,9 +57,11 @@ void TitleState::InitSliders() {
     sliders[static_cast<int>(VolumeSliderKind::Master)] = {
         VolumeSliderKind::Master, "Master", Game::masterVolumePercent};
     sliders[static_cast<int>(VolumeSliderKind::Ambient)] = {
-        VolumeSliderKind::Ambient, "Ambiente", Game::ambientVolumePercent};
-    sliders[static_cast<int>(VolumeSliderKind::Thunder)] = {
-        VolumeSliderKind::Thunder, "Trovao", Game::thunderVolumePercent};
+        VolumeSliderKind::Ambient, "Fundo", Game::ambientVolumePercent};
+    sliders[static_cast<int>(VolumeSliderKind::Vfx)] = {
+        VolumeSliderKind::Vfx, "Efeitos", Game::sfxVolumePercent};
+    sliders[static_cast<int>(VolumeSliderKind::Voice)] = {
+        VolumeSliderKind::Voice, "Dublagem", Game::voiceVolumePercent};
 }
 
 void TitleState::ApplySliderValue(VolumeSliderKind kind, int percent) {
@@ -70,8 +72,11 @@ void TitleState::ApplySliderValue(VolumeSliderKind kind, int percent) {
     case VolumeSliderKind::Ambient:
         Game::SetAmbientVolume(percent);
         break;
-    case VolumeSliderKind::Thunder:
-        Game::SetThunderVolume(percent);
+    case VolumeSliderKind::Vfx:
+        Game::SetSfxVolume(percent);
+        break;
+    case VolumeSliderKind::Voice:
+        Game::SetVoiceVolume(percent);
         break;
     case VolumeSliderKind::Count:
         break;
@@ -134,7 +139,7 @@ void TitleState::RenderSliders(SDL_Renderer* renderer) {
         return;
     }
 
-    auto font = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 14);
+    auto font = Resources::GetFont("Recursos/font/times.ttf", 14);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
     for (const VolumeSliderUi& slider : sliders) {
@@ -275,6 +280,11 @@ void TitleState::Update(float dt) {
         }
     }
 
+    // The selected option must be visible (golden) immediately — only its alpha
+    // fades in with the rest of the menu, never the highlight itself.
+    pulseTimer += dt;
+    const float pulse = (std::sin(pulseTimer * 2.0f) + 1.0f) * 0.5f;
+
     auto applyMenuColor = [&](GameObject* option, bool selected) {
         if (!option) {
             return;
@@ -283,19 +293,13 @@ void TitleState::Update(float dt) {
         if (!text) {
             return;
         }
-        if (t < 1.0f) {
-            text->SetColor({0, 0, 0, a});
-            return;
-        }
         if (selected) {
-            pulseTimer += dt;
-            float s = (std::sin(pulseTimer * 2.0f) + 1.0f) * 0.5f;
-            Uint8 r = static_cast<Uint8>(200.0f + s * 55.0f);
-            Uint8 g = static_cast<Uint8>(160.0f + s * 55.0f);
-            Uint8 b = static_cast<Uint8>(40.0f + s * 40.0f);
-            text->SetColor({r, g, b, 255});
+            Uint8 r = static_cast<Uint8>(200.0f + pulse * 55.0f);
+            Uint8 g = static_cast<Uint8>(160.0f + pulse * 55.0f);
+            Uint8 b = static_cast<Uint8>(40.0f + pulse * 40.0f);
+            text->SetColor({r, g, b, a});
         } else {
-            text->SetColor({130, 130, 130, 255});
+            text->SetColor({130, 130, 130, a});
         }
     };
 
@@ -305,7 +309,7 @@ void TitleState::Update(float dt) {
     } else if (continueMenuText) {
         Text* text = continueMenuText->GetComponent<Text>();
         if (text) {
-            text->SetColor({100, 100, 100, static_cast<Uint8>(t < 1.0f ? a : 120)});
+            text->SetColor({100, 100, 100, static_cast<Uint8>(a * 120 / 255)});
         }
     }
 
@@ -318,11 +322,12 @@ void TitleState::RenderSelectionIndicator(SDL_Renderer* renderer) {
     if (!renderer) {
         return;
     }
-    // Only show the marker once the menu has fully faded in (matches the
-    // moment the selected option starts pulsing in golden tones).
-    if (fadeAlpha < 250.0f) {
+    // Show the marker as soon as the menu starts fading in, sharing the menu's
+    // alpha so the selected option and its marker appear together (instantly).
+    if (fadeAlpha < 8.0f) {
         return;
     }
+    const Uint8 markerAlpha = static_cast<Uint8>(std::min(255.0f, fadeAlpha));
 
     GameObject* selected = (menuSelection == 1 && hasContinueSave) ? continueMenuText
                                                                    : newGameMenuText;
@@ -341,7 +346,7 @@ void TitleState::RenderSelectionIndicator(SDL_Renderer* renderer) {
     const Uint8 b = static_cast<Uint8>(40.0f + s * 40.0f);
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, r, g, b, 255);
+    SDL_SetRenderDrawColor(renderer, r, g, b, markerAlpha);
 
     constexpr float kTriH = 22.0f;
     constexpr float kTriW = 16.0f;

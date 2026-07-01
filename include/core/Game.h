@@ -16,18 +16,24 @@ class Game {
 public:
     static constexpr int MASTER_VOLUME_PERCENT = 20;
     static constexpr int AMBIENT_VOLUME_PERCENT = 50;
-    static constexpr int THUNDER_VOLUME_PERCENT = 100;
+    static constexpr int SFX_VOLUME_PERCENT = 100;
+    static constexpr int VOICE_VOLUME_PERCENT = 100;   // dublagem (falas dos irmãos)
     static int masterVolumePercent;
     static int ambientVolumePercent;
-    static int thunderVolumePercent;
+    static int sfxVolumePercent;
+    static int voiceVolumePercent;
     static int brightnessPercent;   // 50..150, 100 = normal (overlay de brilho)
     static bool fullscreen;         // janela em tela cheia (borderless desktop)
     static void LoadEnvVolume();
     static void SetMasterVolume(int percent);
     static void SetAmbientVolume(int percent);
-    static void SetThunderVolume(int percent);
+    static void SetSfxVolume(int percent);
+    static void SetVoiceVolume(int percent);
     static void SetBrightness(int percent);
     static void SetFullscreen(bool on);
+    // Volume da música/fundo constante = master × "Fundo" (ambientVolumePercent).
+    // 0..MIX_MAX_VOLUME. Toda música de fundo deve usar isto (não o master puro).
+    static int MusicVolume();
     // Configurações unificadas em config/settings.json (volume/brilho/fullscreen/debug).
     static void LoadSettings();
     static void SaveSettings();

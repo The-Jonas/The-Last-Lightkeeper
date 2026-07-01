@@ -90,6 +90,102 @@
                  "y":193.424242424242
                 }, 
                 {
+                 "gid":1,
+                 "height":265,
+                 "id":679,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"isStatic",
+                         "type":"bool",
+                         "value":false
+                        }, 
+                        {
+                         "name":"z",
+                         "type":"int",
+                         "value":2
+                        }],
+                 "rotation":0,
+                 "type":"Caixa",
+                 "visible":true,
+                 "width":188,
+                 "x":3266.66666666667,
+                 "y":1022.33333333333
+                }, 
+                {
+                 "gid":1,
+                 "height":265,
+                 "id":701,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"isStatic",
+                         "type":"bool",
+                         "value":false
+                        }, 
+                        {
+                         "name":"z",
+                         "type":"int",
+                         "value":2
+                        }],
+                 "rotation":0,
+                 "type":"Caixa",
+                 "visible":true,
+                 "width":188,
+                 "x":3222.66666666666,
+                 "y":1160.83333333333
+                }, 
+                {
+                 "gid":1,
+                 "height":265,
+                 "id":702,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"isStatic",
+                         "type":"bool",
+                         "value":false
+                        }, 
+                        {
+                         "name":"z",
+                         "type":"int",
+                         "value":2
+                        }],
+                 "rotation":0,
+                 "type":"Caixa",
+                 "visible":true,
+                 "width":188,
+                 "x":3360.66666666666,
+                 "y":1186.16666666667
+                }, 
+                {
+                 "gid":1,
+                 "height":265,
+                 "id":699,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"isStatic",
+                         "type":"bool",
+                         "value":false
+                        }, 
+                        {
+                         "name":"z",
+                         "type":"int",
+                         "value":2
+                        }],
+                 "rotation":0,
+                 "type":"Caixa",
+                 "visible":true,
+                 "width":188,
+                 "x":3065.33333333333,
+                 "y":1001.5
+                }, 
+                {
                  "gid":2,
                  "height":1347,
                  "id":173,
@@ -130,8 +226,8 @@
                  "type":"PlayerSpawn_Small",
                  "visible":true,
                  "width":126,
-                 "x":2035.90909090909,
-                 "y":2446.81818181818
+                 "x":1705.60606060606,
+                 "y":2701.36363636363
                 }, 
                 {
                  "gid":5,
@@ -143,8 +239,8 @@
                  "type":"PlayerSpawn_Big",
                  "visible":true,
                  "width":127,
-                 "x":1697,
-                 "y":2453
+                 "x":1833.36363636364,
+                 "y":2725.72727272727
                 }, 
                 {
                  "gid":12,
@@ -244,32 +340,8 @@
                  "type":"Caixa",
                  "visible":true,
                  "width":188,
-                 "x":1008.66666666667,
-                 "y":1321
-                }, 
-                {
-                 "gid":1,
-                 "height":265,
-                 "id":679,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"isStatic",
-                         "type":"bool",
-                         "value":false
-                        }, 
-                        {
-                         "name":"z",
-                         "type":"int",
-                         "value":2
-                        }],
-                 "rotation":0,
-                 "type":"Caixa",
-                 "visible":true,
-                 "width":188,
-                 "x":2608.66666666667,
-                 "y":1487
+                 "x":1278.36363636364,
+                 "y":1448.27272727273
                 }, 
                 {
                  "gid":1,
@@ -339,8 +411,8 @@
                  "type":"",
                  "visible":true,
                  "width":80,
-                 "x":1900,
-                 "y":2442
+                 "x":1963.63636363636,
+                 "y":2472.30303030303
                 }, 
                 {
                  "gid":40,
@@ -426,8 +498,8 @@
                  "type":"Monstro",
                  "visible":true,
                  "width":574,
-                 "x":2181,
-                 "y":957
+                 "x":832.212121212121,
+                 "y":2380.75757575758
                 }, 
                 {
                  "gid":10,
@@ -568,6 +640,64 @@
                  "width":0,
                  "x":1118.17,
                  "y":790.667
+                }, 
+                {
+                 "gid":7,
+                 "height":48,
+                 "id":698,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":0
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":0
+                        }, 
+                        {
+                         "name":"itemName",
+                         "type":"string",
+                         "value":"Lamp"
+                        }, 
+                        {
+                         "name":"unique",
+                         "type":"bool",
+                         "value":true
+                        }],
+                 "rotation":0,
+                 "type":"ItemSpawn",
+                 "visible":true,
+                 "width":48,
+                 "x":1833.33333333333,
+                 "y":1495.42424242424
+                }, 
+                {
+                 "gid":2147483665,
+                 "height":698,
+                 "id":704,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":180
+                        }, 
+                        {
+                         "name":"direction",
+                         "type":"string",
+                         "value":"frente"
+                        }],
+                 "rotation":0,
+                 "type":"Armario",
+                 "visible":true,
+                 "width":1091,
+                 "x":2739.40909090909,
+                 "y":1980.45454545455
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -3043,7 +3173,7 @@
          "y":0
         }],
  "nextlayerid":28,
- "nextobjectid":698,
+ "nextobjectid":705,
  "orientation":"orthogonal",
  "properties":[
         {
@@ -3052,7 +3182,7 @@
          "value":"level_2"
         }],
  "renderorder":"right-down",
- "tiledversion":"1.12.1",
+ "tiledversion":"1.12.2",
  "tileheight":64,
  "tilesets":[
         {

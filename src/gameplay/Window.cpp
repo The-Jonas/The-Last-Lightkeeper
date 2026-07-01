@@ -24,7 +24,7 @@ Window::Window(GameObject& associated, std::string windowType, bool startsOpen, 
     // Setup do Prompt de texto
     textObj = new GameObject();
     SDL_Color textColor = {255, 255, 255, 255};
-    Text* promptText = new Text(*textObj, "Recursos/font/TradeWinds-Regular.ttf", 14, Text::SOLID, "", textColor);
+    Text* promptText = new Text(*textObj, "Recursos/font/times.ttf", 14, Text::SOLID, "", textColor);
     textObj->AddComponent(promptText);
     UpdatePromptText();
 }

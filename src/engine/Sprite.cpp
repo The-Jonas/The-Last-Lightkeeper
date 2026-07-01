@@ -44,11 +44,19 @@ Sprite::~Sprite(){                              // Destrutor
 
 void Sprite::Open(std::string file){
     sourceFile = file;
+
+    // Caminho vazio: não há arte a carregar. Silencia o spam de "SDL_RWFromFile():
+    // No file or no mode specified" quando um sprite ainda não tem arte definida.
+    if (file.empty()) {
+        texture = nullptr;
+        return;
+    }
+
     texture = Resources::GetImage(file);                                // Chamando Resources::GetImage em vez de IMG_LoadTexture
 
     if (!texture) {
         std::cerr << "Erro ao carregar imagem: " << file << " - " << SDL_GetError() << std::endl;
-        return; 
+        return;
     }
 
     if (!IsOpen()) return;

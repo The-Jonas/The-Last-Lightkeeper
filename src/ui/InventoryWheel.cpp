@@ -177,7 +177,7 @@ void InventoryWheel::DrawPrimedOil(SDL_Renderer* renderer, float activeX, float 
         SDL_RenderCopyExF(renderer, tex.get(), nullptr, &dst, 0.0, nullptr, SDL_FLIP_NONE);
     }
 
-    auto font = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 10);
+    auto font = Resources::GetFont("Recursos/font/times.ttf", 10);
     if (font) {
         char buf[16];
         std::snprintf(buf, sizeof(buf), "%d", inventory.GetPrimedOilDurability());

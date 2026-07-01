@@ -23,7 +23,7 @@ public:
     void Resume() override;
     
 private:
-    enum class VolumeSliderKind { Master, Ambient, Thunder, Count };
+    enum class VolumeSliderKind { Master, Ambient, Vfx, Voice, Count };
 
     struct VolumeSliderUi {
         VolumeSliderKind kind;

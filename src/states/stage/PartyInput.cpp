@@ -24,6 +24,7 @@
 #include "ui/FadeEffect.h"
 #include "gameplay/Repairable.h"
 #include "gameplay/StairTrigger.h"
+#include "audio/GameVoice.h"
 #include "core/Resources.h"
 #include <iostream>
 #include <fstream>
@@ -54,6 +55,8 @@ void StageState::SwapControlledCharacter() {
 
     std::swap(controlledCharacter, companionCharacter);
     std::swap(controlledCharacterObject, companionCharacterObject);
+
+    TriggerControlIndicator();   // mostra/anima o indicador no novo personagem
 }
 
 void StageState::HandlePartyInput() {
@@ -66,8 +69,17 @@ void StageState::HandlePartyInput() {
     if (input.ActionPress(GameAction::ToggleMode)) {
         if (partyMode == PartyMode::TOGETHER) {
             partyMode = PartyMode::INDEPENDENT;
+            GameVoice::OnAskToStay();   // mandou ficar parado → irmãozinho protesta
         } else {
             partyMode = PartyMode::TOGETHER;
+            // Chamou para segui-lo: "Aqui", mas só quando o irmão está longe.
+            if (bigCharacterObject && smallCharacterObject) {
+                const float dist = bigCharacterObject->box.Center().Distance(
+                    smallCharacterObject->box.Center());
+                if (dist > 350.0f) {
+                    GameVoice::OnCallToFollow();
+                }
+            }
         }
     }
 }
@@ -76,6 +88,12 @@ void StageState::IssueMovementFromInput(Character* character, GameObject* object
     if (!character || !object) {
         return;
     }
+
+    // The companion follow logic scales the follower's speed (catch-up up to
+    // 1.55x, arrival easing down to 0.45x). When control swaps onto a character
+    // that was just following, that leftover multiplier would make it move too
+    // fast/slow. The player-controlled character always moves at base speed.
+    character->SetSpeedMultiplier(1.0f);
 
     InputManager& input = InputManager::GetInstance();
     Vec2 direction(0.0f, 0.0f);
@@ -133,9 +151,20 @@ void StageState::IssueFollowCommand(Character* follower, GameObject* followerObj
  
     Vec2 dir = toLeader.Normalized();
     Vec2 targetPos = leaderCenter - (dir * preferredDistance);
+
+    // 1.1 — easing de chegada: corre quando longe (catch-up), desacelera ao se
+    // aproximar (em vez de manter velocidade cheia e ultrapassar/oscilar).
+    const float arrivalEaseDist = 210.0f;
+    float speedMul = 1.0f;
     if (allowCatchup && distance > catchupDistance) {
-        follower->SetSpeedMultiplier(1.55f);
+        speedMul = 1.55f;
+    } else if (distance < arrivalEaseDist) {
+        float t = (distance - followStartDistance) / (arrivalEaseDist - followStartDistance);
+        t = std::clamp(t, 0.0f, 1.0f);
+        speedMul = 0.45f + 0.55f * t;   // ~0.45 perto do deadband → 1.0 longe
     }
+    follower->SetSpeedMultiplier(speedMul);
+
     Vec2 followTarget = targetPos;
 
     const Character* leaderChar = leaderObject->GetComponent<Character>();
@@ -145,11 +174,10 @@ void StageState::IssueFollowCommand(Character* follower, GameObject* followerObj
 
         // ── THROTTLE: só recalcula o A* a cada kCompanionPathRefreshInterval,
         // reaproveitando o último caminho calculado nos frames intermediários.
-        // Isso evita rodar o A* completo (caro, com checagem de colliders)
-        // 60x por segundo enquanto o seguidor estiver perto de um obstáculo.
         if (companionPathRefreshTimer <= 0.0f) {
             companionPathRefreshTimer = kCompanionPathRefreshInterval;
             cachedCompanionPath = FindPathWorld(followerCenter, targetPos, followerObject);
+            companionPathIndex = (cachedCompanionPath.size() >= 2) ? 1 : 0;  // pula [0]=posição atual
         }
 
         companionFollowPathWorld = cachedCompanionPath;
@@ -160,20 +188,29 @@ void StageState::IssueFollowCommand(Character* follower, GameObject* followerObj
         } else {
             companionFollowPathWorld = {followerCenter, targetPos};
         }
- 
-        if (cachedCompanionPath.size() >= 2) {
-            followTarget = cachedCompanionPath[1];
-        } else if (!cachedCompanionPath.empty()) {
-            followTarget = cachedCompanionPath.front();
+
+        if (!cachedCompanionPath.empty()) {
+            // 1.1 — avança pelos waypoints conforme o seguidor os alcança, fluindo
+            // ao longo da rota em vez de mirar sempre o mesmo path[1] por 0.35s.
+            const int last = static_cast<int>(cachedCompanionPath.size()) - 1;
+            if (companionPathIndex > last) {
+                companionPathIndex = last;
+            }
+            const float kWaypointReachDist = 26.0f;
+            while (companionPathIndex < last &&
+                   followerCenter.Distance(cachedCompanionPath[static_cast<size_t>(companionPathIndex)]) < kWaypointReachDist) {
+                ++companionPathIndex;
+            }
+            followTarget = cachedCompanionPath[static_cast<size_t>(companionPathIndex)];
         }
     } else {
-        // Linha livre — não precisa de A*, zera o throttle pro próximo bloqueio
-        // recalcular imediatamente (sem esperar o intervalo穏 acumulado)
+        // Linha livre — não precisa de A*, zera o throttle pro próximo bloqueio.
         companionPathRefreshTimer = 0.0f;
         cachedCompanionPath.clear();
+        companionPathIndex = 0;
         companionFollowPathWorld = {followerCenter, targetPos};
     }
- 
+
     Character::Command followCommand(Character::Command::MOVE, followTarget.x, followTarget.y);
     follower->Issue(followCommand);
 }

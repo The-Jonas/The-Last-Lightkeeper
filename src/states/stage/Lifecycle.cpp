@@ -2,6 +2,7 @@
 #include "states/stage/InternalHelpers.h"
 #include "core/Game.h"
 #include "audio/GameSfx.h"
+#include "audio/GameVoice.h"
 #include "engine/GameObject.h"
 #include "engine/SpriteRenderer.h"
 #include "math/Rect.h"
@@ -57,8 +58,7 @@ void StageState::Start() {
     //SetMouseConfinedToWindow(true);
     // OST só após o nível estar carregado e empilhado (não durante o loading screen).
     if (music.IsOpen()) {
-        const int ostVol = (MIX_MAX_VOLUME * Game::masterVolumePercent) / 100;
-        Mix_VolumeMusic(musicMuted ? 0 : ostVol);
+        Mix_VolumeMusic(musicMuted ? 0 : Game::MusicVolume());
         if (!musicMuted) {
             music.Play(-1);
         }
@@ -72,10 +72,12 @@ void StageState::Start() {
     started = true;
     ambientResumeDelay = 0.85f;
     GameSfx::NotifyLoadingEnd();
+    GameVoice::NotifyLoadingEnd();
 }
 
 void StageState::Pause() {
     GameSfx::NotifyLoadingBegin();
+    GameVoice::NotifyLoadingBegin();
     if (oceanMixerChannel >= 0) {
         Mix_HaltChannel(oceanMixerChannel);
     }
@@ -85,5 +87,6 @@ void StageState::Pause() {
 void StageState::Resume() {
     ambientResumeDelay = 0.85f;
     GameSfx::NotifyLoadingEnd();
+    GameVoice::NotifyLoadingEnd();
     SetMouseConfinedToWindow(true);
 }

@@ -427,8 +427,24 @@ void StageState::Render(){
 
         // Salva a iluminação real para o sistema de Sanidade ler!
         const float thunderBoost = GameSfx::GetThunderFlashStrength() * 0.88f;
-        this->bigIlluminationLevel   = torchIsActuallyLit ? std::max(bigMaxTouch, 0.92f) : bigMaxTouch;
-        this->smallIlluminationLevel = torchIsActuallyLit ? std::max(smallMaxTouch, 0.92f) : smallMaxTouch;
+
+        // ── SANIDADE INDEPENDENTE ────────────────────────────────────────────
+        // A luz de mão (isqueiro/lâmpada) fica com o irmão GRANDE (ver
+        // GetActiveTorchWorldPos). Ela ilumina por completo só o PORTADOR; o
+        // outro irmão só recebe a luz se estiver perto o bastante. Assim um pode
+        // ficar no escuro (drenando sanidade) enquanto o outro está seguro.
+        this->bigIlluminationLevel   = bigMaxTouch;
+        this->smallIlluminationLevel = smallMaxTouch;
+        if (torchIsActuallyLit && bigCharacterObject) {
+            this->bigIlluminationLevel = std::max(bigMaxTouch, 0.92f);  // portador sempre iluminado
+            if (smallCharacterObject) {
+                const float shareRadius = std::max(1.0f, lightMaskParams.falloffRadiusPx);
+                const float dist = smallCharacterObject->box.Center().Distance(bigCharacterObject->box.Center());
+                const float falloff = std::clamp(1.0f - dist / shareRadius, 0.0f, 1.0f);
+                this->smallIlluminationLevel = std::max(smallMaxTouch, 0.92f * falloff);
+            }
+        }
+
         if (thunderBoost > 0.01f) {
             this->bigIlluminationLevel = std::max(this->bigIlluminationLevel, thunderBoost);
             this->smallIlluminationLevel = std::max(this->smallIlluminationLevel, thunderBoost);
@@ -583,7 +599,7 @@ void StageState::Render(){
 
         // Centraliza acima da cabeça 
         int posX = screenX + (charScreenW / 2) - (barW / 2);
-        int posY = screenY - static_cast<int>(20 * zoom);
+        int posY = screenY - static_cast<int>(8 * zoom);
 
         SDL_Rect bgRect = { posX, posY, barW, barH };
         SDL_Rect fgRect = { posX, posY, static_cast<int>(barW * percent), barH };
@@ -613,22 +629,40 @@ void StageState::Render(){
     DrawSanityBar(Character::player);
     DrawSanityBar(Character::littleBrother);
 
-    // Indicador "quem estou controlando" — seta dourada apontando para o irmão
-    // controlado, acima da cabeça (4.4).
-    if (controlledCharacter) {
+    // Indicador "quem estou controlando" — seta apontando para o irmão controlado,
+    // que quica + pisca branco por alguns segundos e some suavemente (4.4).
+    if (controlledCharacter && controlIndicatorTimer > 0.0f) {
         const float zoom = Camera::GetZoom();
         const Rect& cbox = controlledCharacter->GetAssociated().box;
         const int screenX = static_cast<int>((cbox.x - Camera::pos.x) * zoom);
         const int screenY = static_cast<int>((cbox.y - Camera::pos.y) * zoom);
         const int charW = static_cast<int>(cbox.w * zoom);
         const int cx = screenX + charW / 2;
-        const int w = static_cast<int>(20 * zoom);   // largura da base
-        const int h = static_cast<int>(15 * zoom);   // altura
-        const int topY = screenY - static_cast<int>(34 * zoom);  // acima da barra de sanidade
+
+        const float elapsed = kControlIndicatorDuration - controlIndicatorTimer;
+
+        // Quica para cima/baixo.
+        const float bounce = std::sin(elapsed * 9.0f) * 7.0f * zoom;
+
+        // Fade suave: entra em 0.25s, sai (eased) nos últimos 0.7s.
+        float a01 = 1.0f;
+        if (controlIndicatorTimer < 0.7f) a01 = controlIndicatorTimer / 0.7f;
+        else if (elapsed < 0.25f) a01 = elapsed / 0.25f;
+        a01 = a01 * a01 * (3.0f - 2.0f * a01);   // smoothstep (eased-out)
+
+        // Pisca branco (lerp dourado <-> branco).
+        const float flash = 0.5f + 0.5f * std::sin(elapsed * 14.0f);
+        const Uint8 r = static_cast<Uint8>(235 + (255 - 235) * flash);
+        const Uint8 g = static_cast<Uint8>(205 + (255 - 205) * flash);
+        const Uint8 b = static_cast<Uint8>(90 + (255 - 90) * flash);
+        const Uint8 a = static_cast<Uint8>(235 * a01);
+
+        const int w = static_cast<int>(22 * zoom);
+        const int h = static_cast<int>(16 * zoom);
+        const int topY = screenY - static_cast<int>(30 * zoom) + static_cast<int>(bounce);
 
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(renderer, 235, 205, 90, 235);   // dourado
-        // Triângulo apontando para baixo (base no topo, vértice embaixo).
+        SDL_SetRenderDrawColor(renderer, r, g, b, a);
         for (int row = 0; row < h; ++row) {
             const float t = (h > 0) ? static_cast<float>(row) / static_cast<float>(h) : 0.0f;
             const int halfW = static_cast<int>((w / 2) * (1.0f - t));
@@ -639,6 +673,7 @@ void StageState::Render(){
     }
 
     RenderInteractionPrompt(renderer);
+    RenderTutorials(renderer);
     RenderLevelTitleBanner(renderer);
     RenderPauseMenu(renderer);
     RenderSettingsPanel(renderer);

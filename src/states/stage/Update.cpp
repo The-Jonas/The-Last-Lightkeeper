@@ -27,6 +27,7 @@
 #include "gameplay/StairTrigger.h"
 #include "core/Resources.h"
 #include "audio/GameSfx.h"
+#include "audio/GameVoice.h"
 #include "audio/Sound.h"
 #include <iostream>
 #include <fstream>
@@ -150,6 +151,13 @@ void StageState::Update(float dt){
         }
     }
 
+    if (controlIndicatorTimer > 0.0f) {
+        controlIndicatorTimer -= dt;
+        if (controlIndicatorTimer < 0.0f) {
+            controlIndicatorTimer = 0.0f;
+        }
+    }
+
     // ESC -> cancela oleo primed; fecha o painel de config; senão alterna o menu.
     if (input.KeyPress(ESCAPE_KEY)) {
         if (inventory.IsOilPrimed()) {
@@ -193,8 +201,7 @@ void StageState::Update(float dt){
         }
         if (input.KeyPress(MUSIC_MUTE_TOGGLE_KEY)) {
             musicMuted = !musicMuted;
-            const int masterVolume = (MIX_MAX_VOLUME * Game::masterVolumePercent) / 100;
-            Mix_VolumeMusic(musicMuted ? 0 : masterVolume);
+            Mix_VolumeMusic(musicMuted ? 0 : Game::MusicVolume());
             oceanAmbient_.RefreshVolume();
         }
         if (input.KeyPress(MAP_PHYSICS_DEBUG_KEY)) {
@@ -225,6 +232,7 @@ void StageState::Update(float dt){
         TryOpenJournalOnKeyPress();
         TryInteractCandleOnKeyPress();
         TryInteractWindowOnKeyPress();
+        UpdateTutorials(dt);
     }
     UpdateInventoryLight();
 
@@ -433,11 +441,19 @@ void StageState::Update(float dt){
             ? sanityOverlayObj->GetComponent<SpriteRenderer>() : nullptr;
  
         if (overlaySprite) {
-            constexpr float kSanityOverlayThreshold = 80.0f; 
- 
+            constexpr float kSanityOverlayThreshold = 80.0f;
+            // Piso visível: ao cruzar o threshold (80%), o efeito já aparece num
+            // nível perceptível (não em alpha/frame 0) e cresce a partir daí. Sem
+            // isso, "disparar em 80%" só ficava visível lá pelos ~65% porque tanto
+            // o alpha quanto o frame partiam do zero.
+            constexpr float kSanityOverlayMinIntensity = 0.22f;
+
             if (lowestSanityUpdate < kSanityOverlayThreshold) {
-                // intensity: 0.0 (sanidade = threshold) até 1.0 (sanidade = 0)
-                const float intensity = 1.0f - (lowestSanityUpdate / kSanityOverlayThreshold);
+                // raw: 0.0 (sanidade = threshold) até 1.0 (sanidade = 0)
+                const float raw = 1.0f - (lowestSanityUpdate / kSanityOverlayThreshold);
+                // Remapeia para [kSanityOverlayMinIntensity .. 1.0] — visível já no
+                // threshold. A suavização abaixo dissolve o degrau em ~0.25s.
+                const float intensity = kSanityOverlayMinIntensity + raw * (1.0f - kSanityOverlayMinIntensity);
  
                 // ── SUAVIZAÇÃO: evita "pular" de frame bruscamente quando a
                 // sanidade muda rápido (ex.: tocada pelo monstro). Interpola
@@ -491,6 +507,12 @@ void StageState::Update(float dt){
 
     // Derrota: sanidade zerou ou personagem destruído
     if (sanityDefeat || !IsPartyReady()) {
+        // Silencia já todos os loops de gameplay (passos, vela, caixa, vento) —
+        // como o StageState para de atualizar ao empilhar o EndState, esses loops
+        // continuariam tocando indefinidamente sem um Stop explícito.
+        GameSfx::StopAllGameplay();
+        GameVoice::StopAll();
+
         SaveManager::RevertCurrentToCheckpoint();
         GameData::playerVictory = false;
         GameData::deathByMonster = (lastMonsterHitTimer > 0.0f); // causa da morte (6.5)

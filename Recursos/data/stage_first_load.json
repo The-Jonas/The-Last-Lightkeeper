@@ -10,7 +10,13 @@
     {
       "label": "level_2",
       "mapPath": "Recursos/map/mapa_2_andar.json",
-      "displayNumber": 2
+      "displayNumber": 2,
+      "startControlled": "small"
+    },
+    {
+      "label": "level_3",
+      "mapPath": "Recursos/map/mapa_3_andar.json",
+      "displayNumber": 3
     }
   ],
   "navWorld": { "w": 4358, "h": 3276 },

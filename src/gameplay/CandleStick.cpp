@@ -18,7 +18,7 @@ Candlestick::Candlestick(GameObject& associated, bool startsLit, const std::stri
     textObj = new GameObject();
     SDL_Color textColor = {255, 255, 255, 255};
     Text* promptText =
-        new Text(*textObj, "Recursos/font/TradeWinds-Regular.ttf", 14, Text::SOLID, "[E] Acender", textColor);
+        new Text(*textObj, "Recursos/font/times.ttf", 14, Text::SOLID, "[E] Acender", textColor);
     textObj->AddComponent(promptText);
 }
 

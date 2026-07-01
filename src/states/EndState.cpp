@@ -33,23 +33,42 @@ void EndState::LoadAssets() {
 
     std::string musicFile;
     if (GameData::playerVictory) {
-        musicFile = "Recursos/audio/soundtracks/Virtutes Instrumenti.mp3";
+        musicFile = "Recursos/audio/soundtracks/dark_harmonics_Dark_Rumble_Atmos_02_191.mp3";
     } else {
         musicFile = "Recursos/audio/soundtracks/Akane's Regret.mp3";
     }
 
     backgroundMusic.Open(musicFile);
     if (backgroundMusic.IsOpen()) {
-        const int musicVol = (MIX_MAX_VOLUME * Game::masterVolumePercent) / 100;
-        Mix_VolumeMusic(musicVol);
+        Mix_VolumeMusic(Game::MusicVolume());
         backgroundMusic.Play(-1);
     }
 
-    if (!GameData::playerVictory) {
+    if (GameData::playerVictory) {
+        // Vitória "por enquanto": alcançar a escada do 2º andar. Tela ambígua.
+        GameObject* titleGO = new GameObject();
+        titleGO->z = 10;
+        SDL_Color titleColor = {210, 205, 190, 255};
+        Text* titleText = new Text(*titleGO, "Recursos/font/times.ttf", 52, Text::BLENDED,
+                                   "Continua...", titleColor);
+        titleGO->AddComponent(titleText);
+        AddObject(titleGO);
+        gameOverTitle = titleGO;
+
+        GameObject* subGO = new GameObject();
+        subGO->z = 10;
+        SDL_Color subColor = {170, 175, 185, 230};
+        Text* sub = new Text(*subGO, "Recursos/font/times.ttf", 24, Text::BLENDED,
+                             "Voces subiram a escada. Mas a luz do farol ainda esta longe.",
+                             subColor);
+        subGO->AddComponent(sub);
+        AddObject(subGO);
+        causeSubtitle = subGO;
+    } else {
         GameObject* titleGO = new GameObject();
         titleGO->z = 10;
         SDL_Color titleColor = {220, 220, 220, 255};
-        Text* titleText = new Text(*titleGO, "Recursos/font/TradeWinds-Regular.ttf", 56, Text::BLENDED,
+        Text* titleText = new Text(*titleGO, "Recursos/font/times.ttf", 56, Text::BLENDED,
                                    "Fim de Jogo", titleColor);
         titleGO->AddComponent(titleText);
         AddObject(titleGO);
@@ -62,7 +81,7 @@ void EndState::LoadAssets() {
         const char* causeText = GameData::deathByMonster
             ? "O monstro alcancou voces na escuridao."
             : "A escuridao consumiu a sanidade de voces.";
-        Text* cause = new Text(*causeGO, "Recursos/font/TradeWinds-Regular.ttf", 24, Text::BLENDED,
+        Text* cause = new Text(*causeGO, "Recursos/font/times.ttf", 24, Text::BLENDED,
                                causeText, causeColor);
         causeGO->AddComponent(cause);
         AddObject(causeGO);
@@ -72,7 +91,7 @@ void EndState::LoadAssets() {
     GameObject* textGO = new GameObject();
     textGO->z = 10;
     SDL_Color color = {180, 180, 180, 255};
-    Text* text = new Text(*textGO, "Recursos/font/TradeWinds-Regular.ttf", 28, Text::BLENDED,
+    Text* text = new Text(*textGO, "Recursos/font/times.ttf", 28, Text::BLENDED,
                           "Pressione Espaco para continuar", color);
     textGO->AddComponent(text);
     AddObject(textGO);

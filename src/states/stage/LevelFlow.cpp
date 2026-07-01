@@ -7,6 +7,7 @@
 #include "engine/GameObject.h"
 #include "gameplay/Box.h"
 #include "audio/GameSfx.h"
+#include "audio/GameVoice.h"
 #include "gameplay/Character.h"
 #include "gameplay/HotbarComponent.h"
 #include "gameplay/Item.h"
@@ -153,6 +154,8 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
     companionCharacter = smallCharacter;
     partyMode = PartyMode::TOGETHER;
 
+    TriggerControlIndicator();   // anima o indicador ao iniciar/entrar no nível
+
     inventory.ClearAll();
     if (resetInventory) {
         inventory.ClearAll();
@@ -171,28 +174,28 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
 
         hudLine1 = new GameObject();
         hudLine1->z = 100;
-        hudLine1->AddComponent(new Text(*hudLine1, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
+        hudLine1->AddComponent(new Text(*hudLine1, "Recursos/font/times.ttf", 18, Text::BLENDED,
                                          "WASD mover | 1/3 girar item | Ctrl trocar irmao | Q junto/separado",
                                         hudColor));
         AddObject(hudLine1);
 
         hudLine2 = new GameObject();
         hudLine2->z = 100;
-        hudLine2->AddComponent(new Text(*hudLine2, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
+        hudLine2->AddComponent(new Text(*hudLine2, "Recursos/font/times.ttf", 18, Text::BLENDED,
                                          "E interagir/pegar/acender/consertar | F usar item/luz/oleo | Esc sair",
                                         hudColor));
         AddObject(hudLine2);
 
         hudLine3 = new GameObject();
         hudLine3->z = 100;
-        hudLine3->AddComponent(new Text(*hudLine3, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
+        hudLine3->AddComponent(new Text(*hudLine3, "Recursos/font/times.ttf", 18, Text::BLENDED,
                                          "T trovao | L luzes | O sombras | M musica | B fisica | X luz cursor | C criar luz | P painel luz",
                                         hudColor));
         AddObject(hudLine3);
 
         hudFps = new GameObject();
         hudFps->z = 100;
-        hudFps->AddComponent(new Text(*hudFps, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED, "FPS: 60",
+        hudFps->AddComponent(new Text(*hudFps, "Recursos/font/times.ttf", 18, Text::BLENDED, "FPS: 60",
                                       hudColor));
         AddObject(hudFps);
     }
@@ -220,6 +223,17 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
 }
 
 void StageState::BeginLevelTransition(int targetLevelIndex) {
+    // Por enquanto: alcançar a escada/saída do 2º andar (índice 1) encerra o jogo
+    // com uma tela de vitória ambígua, em vez de carregar o 3º andar.
+    if (currentLevelIndex == 1) {
+        GameSfx::StopAllGameplay();
+        GameVoice::StopAll();
+        GameData::playerVictory = true;
+        GameData::deathByMonster = false;
+        popRequested = true;
+        Game::GetInstance().Push(new EndState());
+        return;
+    }
     Game::GetInstance().Push(new LevelTransitionLoadingState(this, targetLevelIndex));
 }
 
@@ -269,6 +283,15 @@ void StageState::TransitionToLevel(int targetLevelIndex) {
     } else if (controlledCharacter == smallCharacter) {
         SwapControlledCharacter();
     }
+
+    // Per-level forced starting control overrides the carried-over control when
+    // entering a fresh floor (e.g. level 2 begins on the little brother).
+    if (levelDef.startControlled == "small" && controlledCharacter == bigCharacter) {
+        SwapControlledCharacter();
+    } else if (levelDef.startControlled == "big" && controlledCharacter == smallCharacter) {
+        SwapControlledCharacter();
+    }
+
     partyMode = (preserved.partyMode == "INDEPENDENT") ? PartyMode::INDEPENDENT : PartyMode::TOGETHER;
 
     ShowLevelTitleBanner();
@@ -293,7 +316,7 @@ void StageState::RenderLevelTitleBanner(SDL_Renderer* renderer) {
     char label[32];
     std::snprintf(label, sizeof(label), "Level %d", levelTitleNumber);
 
-    auto font = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 72);
+    auto font = Resources::GetFont("Recursos/font/times.ttf", 72);
     if (!font) {
         return;
     }

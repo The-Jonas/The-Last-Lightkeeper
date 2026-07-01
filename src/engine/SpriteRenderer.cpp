@@ -84,10 +84,18 @@ void SpriteRenderer::RenderHighlight(float scaleBoost, Uint8 r, Uint8 g, Uint8 b
 }
 
 void SpriteRenderer::Render() {
+    // Espelhamento vindo do Tiled (flip do tile). Só sobrescreve quando algum flip
+    // está ativo, para não zerar o flip de direção usado pelos personagens.
+    if (associated.flipH || associated.flipV) {
+        SDL_RendererFlip f = SDL_FLIP_NONE;
+        if (associated.flipH) f = static_cast<SDL_RendererFlip>(f | SDL_FLIP_HORIZONTAL);
+        if (associated.flipV) f = static_cast<SDL_RendererFlip>(f | SDL_FLIP_VERTICAL);
+        sprite.SetFlip(f);
+    }
     sprite.Render(
         associated.box.x,
-        associated.box.y, 
-        associated.box.w, 
+        associated.box.y,
+        associated.box.w,
         associated.box.h,
         associated.angleDeg);   // Chama o Render do sprite, passando os valores da box do GameObject associado
 }

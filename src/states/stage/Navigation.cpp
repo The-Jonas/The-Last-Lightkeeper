@@ -24,6 +24,7 @@
 #include "ui/FadeEffect.h"
 #include "gameplay/Repairable.h"
 #include "gameplay/StairTrigger.h"
+#include "gameplay/Monster.h"
 #include "core/Resources.h"
 #include <iostream>
 #include <fstream>
@@ -37,6 +38,7 @@
 #include <queue>
 #include <limits>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #ifndef M_PI
@@ -119,23 +121,40 @@ bool StageState::IsTileWalkable(int tx, int ty) const {
 }
 
 // Não conecta andares: usa o `isElevated` atual do agente (mesmo grafo que `Character` no chão/escada atual).
-bool StageState::IsTileNavigableFor(const GameObject* agent, int tx, int ty) const {
+bool StageState::IsTileNavigableFor(const GameObject* agent, int tx, int ty, float footRadius) const {
     if (!agent || !IsTileWalkable(tx, ty)) {
         return false;
     }
 
     const Vec2 tileCenter = TileCenterToWorld(tx, ty);
-    Rect probe;
-    probe.w = agent->box.w;
-    probe.h = agent->box.h;
-    probe.x = tileCenter.x - probe.w * 0.5f;
-    probe.y = tileCenter.y - probe.h * 0.5f;
 
-    const int r = std::max(1, static_cast<int>(probe.w * 0.25f));
     Circle footCircle;
-    footCircle.radius = r;
-    footCircle.center.x = static_cast<int>(probe.x + probe.w * 0.5f);
-    footCircle.center.y = static_cast<int>(probe.y + probe.h - r);
+    Rect footRect;
+    if (footRadius > 0.0f) {
+        // Footprint CIRCULAR centrado no tile — agentes grandes (ex.: monstro),
+        // cuja "feet-at-bottom" da box gigante ficaria deslocada do centro (1.4).
+        const int r = std::max(1, static_cast<int>(footRadius));
+        footCircle.radius = r;
+        footCircle.center.x = static_cast<int>(tileCenter.x);
+        footCircle.center.y = static_cast<int>(tileCenter.y);
+        const float fr = static_cast<float>(r);
+        footRect = Rect(tileCenter.x - fr, tileCenter.y - fr, 2.0f * fr, 2.0f * fr);
+    } else {
+        // Footprint padrão "nos pés" (parte de baixo da box do agente).
+        Rect probe;
+        probe.w = agent->box.w;
+        probe.h = agent->box.h;
+        probe.x = tileCenter.x - probe.w * 0.5f;
+        probe.y = tileCenter.y - probe.h * 0.5f;
+
+        const int r = std::max(1, static_cast<int>(probe.w * 0.25f));
+        footCircle.radius = r;
+        footCircle.center.x = static_cast<int>(probe.x + probe.w * 0.5f);
+        footCircle.center.y = static_cast<int>(probe.y + probe.h - r);
+
+        const float fr = static_cast<float>(r);
+        footRect = Rect(probe.x + probe.w * 0.5f - fr, probe.y + probe.h - 2.0f * fr, 2.0f * fr, 2.0f * fr);
+    }
 
     GameObject* agentMut = const_cast<GameObject*>(agent);
     const Character* agentChar = agentMut->GetComponent<Character>();
@@ -143,9 +162,6 @@ bool StageState::IsTileNavigableFor(const GameObject* agent, int tx, int ty) con
     if (const_cast<LevelManager&>(level).CheckCollision(footCircle, elevated)) {
         return false;
     }
-
-    const float fr = static_cast<float>(r);
-    Rect footRect(probe.x + probe.w * 0.5f - fr, probe.y + probe.h - 2.0f * fr, 2.0f * fr, 2.0f * fr);
 
     if (dynamicColliderCacheDirty) {
         RefreshDynamicColliderCache();
@@ -162,6 +178,19 @@ bool StageState::IsTileNavigableFor(const GameObject* agent, int tx, int ty) con
             return false;
         }
     }
+
+    // 1.3 — O monstro é um obstáculo de navegação para os IRMÃOS (nunca para si
+    // mesmo), para o companion rotear ao redor dele em vez de atravessá-lo.
+    if (monsterNavObstacle && agent != monsterNavObstacle) {
+        const Vec2 mc = monsterNavObstacle->box.Center();
+        const float dxm = tileCenter.x - mc.x;
+        const float dym = tileCenter.y - mc.y;
+        constexpr float kMonsterAvoidRadius = 100.0f;
+        if (dxm * dxm + dym * dym < kMonsterAvoidRadius * kMonsterAvoidRadius) {
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -201,13 +230,13 @@ bool StageState::WorldToTile(const Vec2& worldPos, int& outTx, int& outTy) const
     return false;
 }
 
-bool StageState::FindNearestWalkableTile(int startTx, int startTy, int& outTx, int& outTy, int maxRadius, const GameObject* agent) const {
+bool StageState::FindNearestWalkableTile(int startTx, int startTy, int& outTx, int& outTy, int maxRadius, const GameObject* agent, float footRadius) const {
     if (!HasNavigationGrid()) {
         return false;
     }
     auto passable = [&](int x, int y) {
         if (agent != nullptr) {
-            return IsTileNavigableFor(agent, x, y);
+            return IsTileNavigableFor(agent, x, y, footRadius);
         }
         return IsTileWalkable(x, y);
     };
@@ -245,7 +274,7 @@ bool StageState::HasWalkableLine(const Vec2& fromWorld, const Vec2& toWorld) con
     return HasWalkableLine(fromWorld, toWorld, nullptr);
 }
 
-bool StageState::HasWalkableLine(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent) const {
+bool StageState::HasWalkableLine(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent, float footRadius) const {
     if (agent == nullptr) {
         int x0 = 0;
         int y0 = 0;
@@ -290,20 +319,21 @@ bool StageState::HasWalkableLine(const Vec2& fromWorld, const Vec2& toWorld, con
         const Vec2 p = fromWorld + (toWorld - fromWorld) * t;
         int tx = 0;
         int ty = 0;
-        if (!WorldToTile(p, tx, ty) || !IsTileNavigableFor(agent, tx, ty)) {
+        if (!WorldToTile(p, tx, ty) || !IsTileNavigableFor(agent, tx, ty, footRadius)) {
             return false;
         }
     }
     return true;
 }
 
-bool StageState::IsWorldPosNavigableFor(const Vec2& worldPos, const GameObject* agent) const {
+bool StageState::IsWorldPosNavigableFor(const Vec2& worldPos, const GameObject* agent, float footRadius) const {
     int tx = 0, ty = 0;
     if (!WorldToTile(worldPos, tx, ty)) return false;
-    return IsTileNavigableFor(agent, tx, ty);
+    return IsTileNavigableFor(agent, tx, ty, footRadius);
 }
 
-std::vector<Vec2> StageState::FindPathWorld(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent, int nodeBudget) const {
+std::vector<Vec2> StageState::FindPathWorld(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent,
+                                            int nodeBudget, float footRadius) const {
     std::vector<Vec2> empty;
     if (!HasNavigationGrid()) {
         return empty;
@@ -315,56 +345,53 @@ std::vector<Vec2> StageState::FindPathWorld(const Vec2& fromWorld, const Vec2& t
         return empty;
     }
 
-    auto passable = [&](int tx, int ty) {
-        if (agent != nullptr) {
-            return IsTileNavigableFor(agent, tx, ty);
+    const int total = w * h;
+
+    // 3.1 — Memo de passabilidade por busca: cada tile é avaliado no máximo uma
+    // vez (era recomputado até 8x/tile, cada um uma varredura de colisão cheia).
+    std::vector<std::int8_t> passCache(static_cast<size_t>(total), -1);  // -1 desconhecido, 0 bloq, 1 livre
+    auto passable = [&](int tx, int ty) -> bool {
+        if (tx < 0 || ty < 0 || tx >= w || ty >= h) {
+            return false;
         }
-        return IsTileWalkable(tx, ty);
+        std::int8_t& c = passCache[static_cast<size_t>(tx + ty * w)];
+        if (c < 0) {
+            const bool ok = (agent != nullptr) ? IsTileNavigableFor(agent, tx, ty, footRadius)
+                                               : IsTileWalkable(tx, ty);
+            c = ok ? 1 : 0;
+        }
+        return c != 0;
     };
 
-    int sx = 0;
-    int sy = 0;
-    int gx = 0;
-    int gy = 0;
+    int sx = 0, sy = 0, gx = 0, gy = 0;
     if (!WorldToTile(fromWorld, sx, sy) || !WorldToTile(toWorld, gx, gy)) {
         return empty;
     }
 
     if (!passable(sx, sy)) {
-        int nearestX = sx;
-        int nearestY = sy;
-        if (!FindNearestWalkableTile(sx, sy, nearestX, nearestY, 8, agent)) {
-            return empty;
-        }
-        sx = nearestX;
-        sy = nearestY;
+        int nx = sx, ny = sy;
+        if (!FindNearestWalkableTile(sx, sy, nx, ny, 8, agent, footRadius)) return empty;
+        sx = nx; sy = ny;
     }
     if (!passable(gx, gy)) {
-        int nearestX = gx;
-        int nearestY = gy;
-        if (!FindNearestWalkableTile(gx, gy, nearestX, nearestY, 8, agent)) {
-            return empty;
-        }
-        gx = nearestX;
-        gy = nearestY;
+        int nx = gx, ny = gy;
+        if (!FindNearestWalkableTile(gx, gy, nx, ny, 8, agent, footRadius)) return empty;
+        gx = nx; gy = ny;
     }
 
     auto idxOf = [w](int x, int y) { return x + y * w; };
-    auto heuristic = [gx, gy](int x, int y) { return std::abs(gx - x) + std::abs(gy - y); };
-
-    struct Node {
-        int f;
-        int g;
-        int x;
-        int y;
+    // 2.2 — Heurística octile (custos inteiros 10 ortogonal / 14 diagonal).
+    auto heuristic = [gx, gy](int x, int y) {
+        const int dx = std::abs(gx - x);
+        const int dy = std::abs(gy - y);
+        return 10 * (dx + dy) - 6 * std::min(dx, dy);
     };
+
+    struct Node { int f; int g; int x; int y; };
     struct NodeCompare {
-        bool operator()(const Node& a, const Node& b) const {
-            return a.f > b.f;
-        }
+        bool operator()(const Node& a, const Node& b) const { return a.f > b.f; }
     };
 
-    const int total = w * h;
     const int startIdx = idxOf(sx, sy);
     const int goalIdx = idxOf(gx, gy);
     std::vector<int> gScore(static_cast<size_t>(total), std::numeric_limits<int>::max());
@@ -376,8 +403,10 @@ std::vector<Vec2> StageState::FindPathWorld(const Vec2& fromWorld, const Vec2& t
     open.push({heuristic(sx, sy), 0, sx, sy});
 
     int expanded = 0;
-    static const std::array<Vec2, 4> kDirs = {
-        Vec2(1.0f, 0.0f), Vec2(-1.0f, 0.0f), Vec2(0.0f, 1.0f), Vec2(0.0f, -1.0f)};
+    struct Dir { int dx; int dy; int cost; bool diag; };
+    static const std::array<Dir, 8> kDirs = {{
+        {1, 0, 10, false}, {-1, 0, 10, false}, {0, 1, 10, false}, {0, -1, 10, false},
+        {1, 1, 14, true},  {1, -1, 14, true},  {-1, 1, 14, true}, {-1, -1, 14, true}}};
 
     while (!open.empty() && expanded < nodeBudget) {
         const Node current = open.top();
@@ -394,13 +423,15 @@ std::vector<Vec2> StageState::FindPathWorld(const Vec2& fromWorld, const Vec2& t
             break;
         }
 
-        for (const Vec2& dir : kDirs) {
-            const int nx = current.x + static_cast<int>(dir.x);
-            const int ny = current.y + static_cast<int>(dir.y);
-            if (nx < 0 || ny < 0 || nx >= w || ny >= h) {
+        for (const Dir& d : kDirs) {
+            const int nx = current.x + d.dx;
+            const int ny = current.y + d.dy;
+            if (!passable(nx, ny)) {
                 continue;
             }
-            if (!passable(nx, ny)) {
+            // Anti-corner-cut: diagonal só passa se os dois ortogonais adjacentes
+            // também forem livres (evita "raspar" cantos de parede).
+            if (d.diag && (!passable(current.x + d.dx, current.y) || !passable(current.x, current.y + d.dy))) {
                 continue;
             }
 
@@ -409,7 +440,7 @@ std::vector<Vec2> StageState::FindPathWorld(const Vec2& fromWorld, const Vec2& t
                 continue;
             }
 
-            const int tentativeG = current.g + 1;
+            const int tentativeG = current.g + d.cost;
             if (tentativeG < gScore[static_cast<size_t>(nextIdx)]) {
                 gScore[static_cast<size_t>(nextIdx)] = tentativeG;
                 parent[static_cast<size_t>(nextIdx)] = currentIdx;
@@ -422,28 +453,52 @@ std::vector<Vec2> StageState::FindPathWorld(const Vec2& fromWorld, const Vec2& t
         return empty;
     }
 
-    std::vector<Vec2> reversedPath;
-    int idx = goalIdx;
-    reversedPath.push_back(TileCenterToWorld(gx, gy));
-    while (idx != startIdx) {
-        idx = parent[static_cast<size_t>(idx)];
-        if (idx < 0) {
-            return empty;
+    // Reconstrói o caminho (centros de tile).
+    std::vector<Vec2> path;
+    {
+        int idx = goalIdx;
+        path.push_back(TileCenterToWorld(gx, gy));
+        while (idx != startIdx) {
+            idx = parent[static_cast<size_t>(idx)];
+            if (idx < 0) {
+                return empty;
+            }
+            path.push_back(TileCenterToWorld(idx % w, idx / w));
         }
-        const int x = idx % w;
-        const int y = idx / w;
-        reversedPath.push_back(TileCenterToWorld(x, y));
+        std::reverse(path.begin(), path.end());
     }
 
-    std::reverse(reversedPath.begin(), reversedPath.end());
-    return reversedPath;
+    // 2.1 — Suavização (string-pulling): remove waypoints intermediários quando
+    // há linha livre do âncora até o waypoint seguinte, deixando trechos retos.
+    if (path.size() > 2) {
+        std::vector<Vec2> smooth;
+        smooth.push_back(path.front());
+        size_t anchor = 0;
+        size_t i = 1;
+        while (i < path.size()) {
+            if (i + 1 < path.size() && HasWalkableLine(path[anchor], path[i + 1], agent, footRadius)) {
+                ++i;  // ainda há LOS direta do âncora — pula este waypoint
+                continue;
+            }
+            smooth.push_back(path[i]);
+            anchor = i;
+            ++i;
+        }
+        path = std::move(smooth);
+    }
+
+    return path;
 }
 
 void StageState::RefreshDynamicColliderCache() const {
     dynamicColliderCache.clear();
+    monsterNavObstacle = nullptr;
     for (const auto& goPtr : objectArray) {
         GameObject* go = goPtr.get();
         if (!go) continue;
+        if (go->GetComponent<Monster>() != nullptr) {
+            monsterNavObstacle = go;   // monstro: obstáculo de nav só para os irmãos (1.3)
+        }
         if (go == bigCharacterObject || go == smallCharacterObject) continue;
         if (go->GetComponent<Collider>() != nullptr) {
             dynamicColliderCache.push_back(go);

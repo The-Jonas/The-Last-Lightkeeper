@@ -3,6 +3,7 @@
 #include "states/stage/FirstLoadData.h"
 #include "states/stage/InternalHelpers.h"
 #include "audio/GameSfx.h"
+#include "audio/GameVoice.h"
 #include "core/Game.h"
 #include "engine/GameObject.h"
 #include "engine/SpriteRenderer.h"
@@ -91,24 +92,21 @@ StageState::StageState(LoadMode mode) : loadMode(mode) {
     sanityOverlayObj->AddComponent(overlaySprite);
     overlaySprite->SetCameraFollower(true);
  
-    // ── DIMENSIONAMENTO CORRETO ─────────────────────────────────────────────
-    // Cada frame do spritesheet é QUADRADO (1920x1920), mas a tela é 16:9
-    // (1920x1080). Para cobrir a tela inteira sem distorcer o desenho,
-    // escalamos pela MAIOR dimensão da tela e centralizamos o resto.
+    // ── DIMENSIONAMENTO ─────────────────────────────────────────────────────
+    // Cada frame do spritesheet é QUADRADO (a imagem é dividida em 8x7 frames no
+    // construtor acima — o que importa é a CONTAGEM de frames, não a resolução da
+    // imagem). Para cobrir a tela 16:9 sem distorcer, usamos um quadrado do
+    // tamanho da MAIOR dimensão da tela e centralizamos. Independente do tamanho
+    // do PNG (funciona igual com a arte reduzida).
     {
         const float winW = static_cast<float>(Game::GetInstance().GetWindowsWidth());
         const float winH = static_cast<float>(Game::GetInstance().GetWindowsHeight());
-        const float frameSizePx = 1920.0f; // tamanho de UM frame do spritesheet
- 
-        // A maior dimensão da tela "ganha" — garante cobertura total sem barras vazias
-        const float scale = std::max(winW, winH) / frameSizePx;
- 
-        sanityOverlayObj->box.w = frameSizePx * scale;
-        sanityOverlayObj->box.h = frameSizePx * scale;
- 
-        // Centraliza nos dois eixos
-        sanityOverlayObj->box.x = (winW - sanityOverlayObj->box.w) * 0.5f;
-        sanityOverlayObj->box.y = (winH - sanityOverlayObj->box.h) * 0.5f;
+        const float fill = std::max(winW, winH);
+
+        sanityOverlayObj->box.w = fill;
+        sanityOverlayObj->box.h = fill;
+        sanityOverlayObj->box.x = (winW - fill) * 0.5f;
+        sanityOverlayObj->box.y = (winH - fill) * 0.5f;
     }
  
     overlaySprite->SetTint(255, 255, 255, 0); // Começa invisível (alpha 0)
@@ -127,7 +125,9 @@ StageState::StageState(LoadMode mode) : loadMode(mode) {
     }
 }
 
-StageState::~StageState(){                                
+StageState::~StageState(){
+    GameSfx::StopAllGameplay();   // garante que nenhum loop (passos/vela/caixa/vento) sobreviva ao stage
+    GameVoice::StopAll();         // e nenhuma fala em andamento
     GameSfx::UpdateCandleProximity(false);
     if (oceanMixerChannel >= 0) {
         Mix_HaltChannel(oceanMixerChannel);

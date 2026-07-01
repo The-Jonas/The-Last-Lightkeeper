@@ -38,6 +38,8 @@ public:
 
     float depthOffset = 0.0f;
     bool isStairs = false;
+    bool flipH = false;   // espelhamento horizontal (herda o flip do tile no Tiled)
+    bool flipV = false;   // espelhamento vertical
     int tiledId = -1;
     Rect box;                                       // Posição e tamanho
     double angleDeg;                                // Para os objetos terem o ângulo em graus

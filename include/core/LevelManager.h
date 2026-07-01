@@ -38,6 +38,8 @@ struct EntitySpawn {
     float h = 0.0f;
     bool isStatic;
     int z;
+    bool flipH = false;   // flags de espelhamento decodificadas do gid do Tiled
+    bool flipV = false;
 
     std::unordered_map<std::string, json> properties;
 };

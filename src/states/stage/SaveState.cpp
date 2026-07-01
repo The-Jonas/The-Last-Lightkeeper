@@ -13,6 +13,7 @@
 #include "gameplay/Repairable.h"
 #include "gameplay/ItemPickup.h"
 #include "gameplay/Item.h"
+#include "audio/GameVoice.h"
 
 #define INCLUDE_SDL_TTF
 #include "SDL_include.h"
@@ -373,7 +374,7 @@ void StageState::RenderQuitConfirmModal(SDL_Renderer* renderer) {
         SDL_SetRenderDrawColor(renderer, 220, 200, 140, 255);
         SDL_RenderDrawRect(renderer, &rect);
 
-        auto font = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 18);
+        auto font = Resources::GetFont("Recursos/font/times.ttf", 18);
         if (!font) {
             return;
         }
@@ -392,7 +393,7 @@ void StageState::RenderQuitConfirmModal(SDL_Renderer* renderer) {
     };
 
     auto drawText = [&](const char* text, int x, int y, int size) {
-        auto font = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", size);
+        auto font = Resources::GetFont("Recursos/font/times.ttf", size);
         if (!font) {
             return;
         }
@@ -454,7 +455,7 @@ void StageState::RenderInteractionPrompt(SDL_Renderer* renderer) {
     char label[64];
     std::snprintf(label, sizeof(label), "[%s] %s", keyName, action);
 
-    auto font = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 24);
+    auto font = Resources::GetFont("Recursos/font/times.ttf", 24);
     if (!font) {
         return;
     }
@@ -586,7 +587,7 @@ void StageState::RenderPauseMenu(SDL_Renderer* renderer) {
     const int startY = (winH - totalH) / 2;
     const int x = (winW - itemW) / 2;
 
-    if (auto titleFont = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 44)) {
+    if (auto titleFont = Resources::GetFont("Recursos/font/times.ttf", 44)) {
         SDL_Color tc{220, 200, 140, 255};
         SDL_Surface* s = TTF_RenderText_Blended(titleFont.get(), "PAUSA", tc);
         if (s) {
@@ -600,7 +601,7 @@ void StageState::RenderPauseMenu(SDL_Renderer* renderer) {
         }
     }
 
-    auto font = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 28);
+    auto font = Resources::GetFont("Recursos/font/times.ttf", 28);
     for (int i = 0; i < kPauseMenuItemCount; ++i) {
         const SDL_Rect r{x, startY + i * (itemH + gap), itemW, itemH};
         pauseMenuItemRects[i] = r;
@@ -633,7 +634,7 @@ void StageState::RenderSaveToast(SDL_Renderer* renderer) {
     if (!renderer || saveToastTimer <= 0.0f) {
         return;
     }
-    auto font = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 22);
+    auto font = Resources::GetFont("Recursos/font/times.ttf", 22);
     if (!font) {
         return;
     }
@@ -677,18 +678,19 @@ void StageState::RenderSaveToast(SDL_Renderer* renderer) {
 }
 
 namespace {
-const char* kSettingsLabels[] = {"Volume Master", "Volume Ambiente", "Volume Trovao",
-                                 "Brilho", "Tela cheia", "Controles", "Voltar"};
+const char* kSettingsLabels[] = {"Volume Master", "Volume Fundo", "Volume Efeitos",
+                                 "Volume Dublagem", "Brilho", "Tela cheia", "Controles", "Voltar"};
 void SettingsRowRange(int row, int& lo, int& hi) {
-    lo = (row == 3) ? 50 : 0;     // brilho 50..150; volumes 0..100
-    hi = (row == 3) ? 150 : 100;
+    lo = (row == 4) ? 50 : 0;     // brilho 50..150; volumes 0..100
+    hi = (row == 4) ? 150 : 100;
 }
 int SettingsRowValue(int row) {
     switch (row) {
     case 0: return Game::masterVolumePercent;
     case 1: return Game::ambientVolumePercent;
-    case 2: return Game::thunderVolumePercent;
-    case 3: return Game::brightnessPercent;
+    case 2: return Game::sfxVolumePercent;
+    case 3: return Game::voiceVolumePercent;
+    case 4: return Game::brightnessPercent;
     default: return 0;
     }
 }
@@ -701,8 +703,9 @@ void StageState::HandleSettingsPanelInput() {
         switch (row) {
         case 0: Game::SetMasterVolume(v); break;
         case 1: Game::SetAmbientVolume(v); oceanAmbient_.RefreshVolume(); break;
-        case 2: Game::SetThunderVolume(v); break;
-        case 3: Game::SetBrightness(v); break;
+        case 2: Game::SetSfxVolume(v); break;
+        case 3: Game::SetVoiceVolume(v); break;
+        case 4: Game::SetBrightness(v); break;
         default: break;
         }
     };
@@ -742,7 +745,7 @@ void StageState::HandleSettingsPanelInput() {
             if (v > hi) v = hi;
             applyValue(settingsSelection, v);
         }
-    } else if (settingsSelection == 4) {
+    } else if (settingsSelection == 5) {
         if (input.KeyPress(SDLK_LEFT) || input.KeyPress(SDLK_RIGHT) ||
             input.KeyPress(SDLK_a) || input.KeyPress(SDLK_d)) {
             Game::SetFullscreen(!Game::fullscreen);
@@ -767,12 +770,12 @@ void StageState::HandleSettingsPanelInput() {
             }
         }
         if (!onSlider) {
-            if (SDL_PointInRect(&mp, &settingsRowRects[4])) {
+            if (SDL_PointInRect(&mp, &settingsRowRects[5])) {
                 Game::SetFullscreen(!Game::fullscreen);
-            } else if (SDL_PointInRect(&mp, &settingsRowRects[5])) {
+            } else if (SDL_PointInRect(&mp, &settingsRowRects[6])) {
                 openControls();
                 return;
-            } else if (SDL_PointInRect(&mp, &settingsRowRects[6])) {
+            } else if (SDL_PointInRect(&mp, &settingsRowRects[7])) {
                 closePanel();
                 return;
             }
@@ -794,12 +797,12 @@ void StageState::HandleSettingsPanelInput() {
 
     // Enter/Espaco/F: alterna tela cheia, abre Controles ou ativa Voltar.
     if (input.KeyPress(SDLK_RETURN) || input.KeyPress(SDLK_SPACE) || input.KeyPress(SDLK_f)) {
-        if (settingsSelection == 4) {
+        if (settingsSelection == 5) {
             Game::SetFullscreen(!Game::fullscreen);
-        } else if (settingsSelection == 5) {
+        } else if (settingsSelection == 6) {
             openControls();
             return;
-        } else if (settingsSelection == 6) {
+        } else if (settingsSelection == 7) {
             closePanel();
             return;
         }
@@ -832,8 +835,8 @@ void StageState::RenderSettingsPanel(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, 180, 160, 100, 255);
     SDL_RenderDrawRect(renderer, &panel);
 
-    auto labelFont = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 20);
-    auto titleFont = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 32);
+    auto labelFont = Resources::GetFont("Recursos/font/times.ttf", 20);
+    auto titleFont = Resources::GetFont("Recursos/font/times.ttf", 32);
 
     auto drawText = [&](const char* str, int tx, int ty, SDL_Color c, TTF_Font* fnt, bool centerX, int centerW) {
         if (!fnt || !str) return;
@@ -892,7 +895,7 @@ void StageState::RenderSettingsPanel(SDL_Renderer* renderer) {
             char valBuf[16];
             std::snprintf(valBuf, sizeof(valBuf), "%d", val);
             drawText(valBuf, barX + barW + 18, rowY + (rowH - 24) / 2, labelColor, labelFont.get(), false, 0);
-        } else if (i == 4) {
+        } else if (i == 5) {
             drawText(Game::fullscreen ? "Ligado" : "Desligado", px + 280, rowY + (rowH - 24) / 2,
                      labelColor, labelFont.get(), false, 0);
         }
@@ -989,8 +992,8 @@ void StageState::RenderControlsPanel(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, 180, 160, 100, 255);
     SDL_RenderDrawRect(renderer, &panel);
 
-    auto labelFont = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 18);
-    auto titleFont = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 30);
+    auto labelFont = Resources::GetFont("Recursos/font/times.ttf", 18);
+    auto titleFont = Resources::GetFont("Recursos/font/times.ttf", 30);
 
     // align: 0 = esquerda em tx, 1 = centralizado em [tx, tx+refW], 2 = direita em tx
     auto drawText = [&](const char* str, int tx, int ty, SDL_Color c, TTF_Font* fnt, int align, int refW) {
@@ -1046,4 +1049,142 @@ void StageState::RenderControlsPanel(SDL_Renderer* renderer) {
     }
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+}
+
+// Contadores POR SESSÃO (persistem entre níveis/instâncias de StageState).
+namespace {
+int sLighterTutShown = 0;
+int sSwapTutShown = 0;
+int sAbilityTutShown = 0;
+bool sFarVoiceArmed = true;   // fala de medo do irmãozinho (sem limite de 3x)
+}
+
+void StageState::UpdateTutorials(float dt) {
+    if (lighterTutTimer > 0.0f) lighterTutTimer -= dt;
+    if (swapTutTimer > 0.0f) swapTutTimer -= dt;
+    if (abilityTutTimer > 0.0f) abilityTutTimer -= dt;
+
+    // Tutorial do isqueiro: perdeu ~30% de sanidade e a luz não está ativa.
+    // SÓ para o irmãozão — é ele quem usa o isqueiro/itens.
+    {
+        float lowest = Character::kMaxSanity;
+        if (Character::player) lowest = std::min(lowest, Character::player->sanity);
+        if (Character::littleBrother) lowest = std::min(lowest, Character::littleBrother->sanity);
+
+        const bool cond = (lowest < Character::kMaxSanity * 0.7f) && !inventory.IsUsableLightActive()
+                          && controlledCharacter == bigCharacter;
+        if (cond && lighterTutArmed && sLighterTutShown < kMaxTutorialShows && lighterTutTimer <= 0.0f) {
+            lighterTutTimer = kTutorialDisplayDuration;
+            sLighterTutShown++;
+            lighterTutArmed = false;
+        }
+        if (!cond) {
+            lighterTutArmed = true;   // re-arma quando a condição passa
+        }
+    }
+
+    // Tutorial de troca: irmãos longe demais (distância linear).
+    if (IsPartyReady() && bigCharacterObject && smallCharacterObject) {
+        const float dist = bigCharacterObject->box.Center().Distance(smallCharacterObject->box.Center());
+        const bool cond = dist > kSwapTutFarDist;
+        if (cond && swapTutArmed && sSwapTutShown < kMaxTutorialShows && swapTutTimer <= 0.0f) {
+            swapTutTimer = kTutorialDisplayDuration;
+            sSwapTutShown++;
+            swapTutArmed = false;
+        }
+        if (dist < kSwapTutNearDist) {
+            swapTutArmed = true;
+        }
+
+        // Fala de medo do irmãozinho ao se afastarem demais. Sem o limite de 3x
+        // do tutorial — o cooldown global de voz já evita repetição.
+        if (cond && sFarVoiceArmed) {
+            GameVoice::OnBrothersTooFar();
+            sFarVoiceArmed = false;
+        }
+        if (dist < kSwapTutNearDist) {
+            sFarVoiceArmed = true;
+        }
+    }
+
+    // Tutorial da habilidade do irmãozinho: aparece ao assumir o controle dele
+    // (ex.: ao começar o 2º andar controlando o irmãozinho).
+    if (IsPartyReady() && smallCharacter && controlledCharacter == smallCharacter) {
+        if (abilityTutArmed && sAbilityTutShown < kMaxTutorialShows && abilityTutTimer <= 0.0f) {
+            abilityTutTimer = kTutorialDisplayDuration;
+            sAbilityTutShown++;
+            abilityTutArmed = false;
+        }
+    } else {
+        abilityTutArmed = true;   // re-arma ao voltar a controlar o irmãozão
+    }
+}
+
+void StageState::RenderTutorials(SDL_Renderer* renderer) {
+    if (!renderer || IsPlayerInputFrozen()) {
+        return;
+    }
+
+    auto drawBanner = [&](float timer, const std::string& text, int y) {
+        if (timer <= 0.0f) return;
+        const float elapsed = kTutorialDisplayDuration - timer;
+        float a01 = 1.0f;
+        if (timer < 0.8f) a01 = timer / 0.8f;             // fade out
+        else if (elapsed < 0.4f) a01 = elapsed / 0.4f;    // fade in
+        a01 = a01 * a01 * (3.0f - 2.0f * a01);            // smoothstep (eased)
+
+        auto font = Resources::GetFont("Recursos/font/times.ttf", 24);
+        if (!font) return;
+        SDL_Color col{245, 232, 200, 255};
+        SDL_Surface* sf = TTF_RenderText_Blended(font.get(), text.c_str(), col);
+        if (!sf) return;
+        SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, sf);
+        const int tw = sf->w;
+        const int th = sf->h;
+        SDL_FreeSurface(sf);
+        if (!t) return;
+        SDL_SetTextureAlphaMod(t, static_cast<Uint8>(255.0f * a01));
+
+        const int winW = Game::GetInstance().GetWindowsWidth();
+        const int padX = 22;
+        const int padY = 12;
+        const int x = (winW - tw) / 2;
+        const SDL_Rect bg{x - padX, y - padY, tw + padX * 2, th + padY * 2};
+
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer, 18, 18, 24, static_cast<Uint8>(200.0f * a01));
+        SDL_RenderFillRect(renderer, &bg);
+        SDL_SetRenderDrawColor(renderer, 200, 180, 110, static_cast<Uint8>(220.0f * a01));
+        SDL_RenderDrawRect(renderer, &bg);
+        const SDL_Rect d{x, y, tw, th};
+        SDL_RenderCopy(renderer, t, nullptr, &d);
+        SDL_DestroyTexture(t);
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    };
+
+    InputManager& im = InputManager::GetInstance();
+
+    // Cada tooltip só aparece para o irmão a que se aplica.
+    const bool controllingBig = controlledCharacter == bigCharacter;
+    const bool controllingSmall = controlledCharacter == smallCharacter;
+
+    if (lighterTutTimer > 0.0f && controllingBig) {
+        const char* k = SDL_GetKeyName(im.GetBinding(GameAction::UseItem));
+        if (!k || k[0] == '\0') k = "F";
+        drawBanner(lighterTutTimer, std::string("Pressione [") + k + "] para ligar seu isqueiro", 70);
+    }
+    if (swapTutTimer > 0.0f) {
+        const char* k = SDL_GetKeyName(im.GetBinding(GameAction::SwapBrother));
+        if (!k || k[0] == '\0') k = "Ctrl";
+        const int y = (lighterTutTimer > 0.0f) ? 126 : 70;   // empilha se ambos visíveis
+        drawBanner(swapTutTimer, std::string("Pressione [") + k + "] para trocar de personagem", y);
+    }
+    if (abilityTutTimer > 0.0f && controllingSmall) {
+        const char* k = SDL_GetKeyName(im.GetBinding(GameAction::Interact));
+        if (!k || k[0] == '\0') k = "E";
+        int y = 70;                                          // empilha abaixo dos outros
+        if (lighterTutTimer > 0.0f) y += 56;
+        if (swapTutTimer > 0.0f) y += 56;
+        drawBanner(abilityTutTimer, std::string("Pressione [") + k + "] para usar a habilidade do irmaozinho", y);
+    }
 }

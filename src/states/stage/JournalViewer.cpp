@@ -219,7 +219,7 @@ void StageState::RenderJournalViewer(SDL_Renderer* renderer) {
     }
 
     if (openT > 0.85f && alphaMul > 0.2f) {
-        auto hintFont = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 16);
+        auto hintFont = Resources::GetFont("Recursos/font/times.ttf", 16);
         if (hintFont) {
             std::string keyName = SDL_GetKeyName(InputManager::GetInstance().GetBinding(GameAction::Interact));
             if (keyName.empty()) {

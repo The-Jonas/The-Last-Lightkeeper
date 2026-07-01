@@ -18,8 +18,12 @@ public:
     };
 
     static constexpr int kMaxStackSize = 5;
+    // Capacidade da bolsa: nº máximo de itens (stacks). Pegar o 6º enche a bolsa;
+    // tentar pegar o 7º é bloqueado.
+    static constexpr int kMaxCapacity = 6;
 
     bool AddItem(const ItemDef& def, int durability);
+    bool IsFull() const { return GetStackCount() >= kMaxCapacity; }
     void ClearAll();
 
     int GetActiveIndex() const { return activeIndex; }
@@ -57,10 +61,18 @@ public:
     void CancelOil();
 
     bool TryTurnLightOn();
+    // Ensures a usable light is active, preferring the lighter over the lamp.
+    // No-op (returns true) if one is already lit. Returns false when neither a
+    // lighter nor a lamp with fuel exists. Used when lighting a candle.
+    bool TryActivateBestLight();
     HeldPropVisual GetHeldPropVisual() const;
     bool IsUsableLightActive() const;
     bool IsActiveLightLamp() const;
     bool IsActiveLightLighter() const;
+    // Like IsActiveLightLighter, but reports the *type* of the centered item
+    // regardless of whether the light is currently lit. Needed for the
+    // turn-ON sound, which must be decided before the light becomes active.
+    bool IsActiveItemLighter() const;
     float GetSelectedLightFuelRatio() const;
     LightMaskParams BuildLighterLightParams(const LightMaskParams& base) const;
     LightMaskParams BuildLampLightParams(const LightMaskParams& base) const;

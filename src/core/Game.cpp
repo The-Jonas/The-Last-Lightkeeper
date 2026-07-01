@@ -22,7 +22,8 @@
 Game* Game::instance = nullptr;
 int Game::masterVolumePercent = Game::MASTER_VOLUME_PERCENT;
 int Game::ambientVolumePercent = Game::AMBIENT_VOLUME_PERCENT;
-int Game::thunderVolumePercent = Game::THUNDER_VOLUME_PERCENT;
+int Game::sfxVolumePercent = Game::SFX_VOLUME_PERCENT;
+int Game::voiceVolumePercent = Game::VOICE_VOLUME_PERCENT;
 int Game::brightnessPercent = 100;
 bool Game::fullscreen = false;
 bool Game::debugMode = false;
@@ -104,11 +105,19 @@ void Game::LoadEnvVolume() {
                 }
             } catch (const std::exception&) {
             }
-        } else if (key == "THUNDER_VOLUME") {
+        } else if (key == "VFX_VOLUME") {
             try {
                 const int vol = std::stoi(value);
                 if (vol >= 0 && vol <= 100) {
-                    thunderVolumePercent = vol;
+                    sfxVolumePercent = vol;
+                }
+            } catch (const std::exception&) {
+            }
+        } else if (key == "VOICE_VOLUME") {
+            try {
+                const int vol = std::stoi(value);
+                if (vol >= 0 && vol <= 100) {
+                    voiceVolumePercent = vol;
                 }
             } catch (const std::exception&) {
             }
@@ -120,25 +129,39 @@ void Game::LoadEnvVolume() {
     }
 }
 
+int Game::MusicVolume() {
+    int vol = (MIX_MAX_VOLUME * masterVolumePercent) / 100;
+    vol = (vol * ambientVolumePercent) / 100;   // barramento "Fundo"
+    return vol;
+}
+
 void Game::SetMasterVolume(int percent) {
     if (percent < 0) percent = 0;
     if (percent > 100) percent = 100;
     masterVolumePercent = percent;
-    const int vol = (MIX_MAX_VOLUME * masterVolumePercent) / 100;
-    Mix_Volume(-1, vol);
-    Mix_VolumeMusic(vol);
+    // Blanket master nos canais (segurança) + música pelo barramento de fundo.
+    Mix_Volume(-1, (MIX_MAX_VOLUME * masterVolumePercent) / 100);
+    Mix_VolumeMusic(MusicVolume());
 }
 
 void Game::SetAmbientVolume(int percent) {
     if (percent < 0) percent = 0;
     if (percent > 100) percent = 100;
     ambientVolumePercent = percent;
+    // "Fundo" também controla a música — atualiza ao vivo.
+    Mix_VolumeMusic(MusicVolume());
 }
 
-void Game::SetThunderVolume(int percent) {
+void Game::SetSfxVolume(int percent) {
     if (percent < 0) percent = 0;
     if (percent > 100) percent = 100;
-    thunderVolumePercent = percent;
+    sfxVolumePercent = percent;
+}
+
+void Game::SetVoiceVolume(int percent) {
+    if (percent < 0) percent = 0;
+    if (percent > 100) percent = 100;
+    voiceVolumePercent = percent;
 }
 
 void Game::SetBrightness(int percent) {
@@ -170,7 +193,8 @@ void Game::LoadSettings() {
         };
         readPercent("master_volume", masterVolumePercent);
         readPercent("ambient_volume", ambientVolumePercent);
-        readPercent("thunder_volume", thunderVolumePercent);
+        readPercent("sfx_volume", sfxVolumePercent);
+        readPercent("voice_volume", voiceVolumePercent);
         if (j.contains("brightness") && j["brightness"].is_number_integer()) {
             const int b = j["brightness"].get<int>();
             if (b >= 50 && b <= 150) brightnessPercent = b;
@@ -218,7 +242,8 @@ void Game::SaveSettings() {
     }
     j["master_volume"] = masterVolumePercent;
     j["ambient_volume"] = ambientVolumePercent;
-    j["thunder_volume"] = thunderVolumePercent;
+    j["sfx_volume"] = sfxVolumePercent;
+    j["voice_volume"] = voiceVolumePercent;
     j["brightness"] = brightnessPercent;
     j["fullscreen"] = fullscreen;
 
@@ -289,7 +314,7 @@ Game::Game(std::string title) {
     Mix_ReserveChannels(1);
     const int masterVolume = (MIX_MAX_VOLUME * masterVolumePercent) / 100;
     Mix_Volume(-1, masterVolume);
-    Mix_VolumeMusic(masterVolume);
+    Mix_VolumeMusic(MusicVolume());
 
     // Inicializa TTF
     if (TTF_Init() != 0) {

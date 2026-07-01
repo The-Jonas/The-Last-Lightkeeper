@@ -16,6 +16,9 @@ void Inventory::ClearAll() {
 }
 
 bool Inventory::AddItem(const ItemDef& def, int durability) {
+    if (IsFull()) {
+        return false;   // bolsa cheia — pegar item bloqueado
+    }
     const bool wasEmpty = stacks.empty();
     ItemStack stack;
     stack.def = def;
@@ -209,6 +212,30 @@ bool Inventory::TryTurnLightOn() {
     return false;
 }
 
+bool Inventory::TryActivateBestLight() {
+    if (IsUsableLightActive()) {
+        return true;   // already lit — nothing to do
+    }
+
+    auto hasFuel = [&](int idx) {
+        if (idx < 0 || idx >= static_cast<int>(stacks.size())) return false;
+        const std::vector<int>& d = stacks[static_cast<size_t>(idx)].durabilities;
+        return !d.empty() && d.front() > 0;
+    };
+
+    // Prefer the lighter ("Flashlight"); fall back to the lamp.
+    int idx = FindBestFlashlight();
+    if (!hasFuel(idx)) {
+        idx = FindBestLamp();
+    }
+    if (!hasFuel(idx)) {
+        return false;
+    }
+
+    SetSelectedStackIndex(idx);
+    return TryTurnLightOn();
+}
+
 HeldPropVisual Inventory::GetHeldPropVisual() const {
     const ItemStack* active = GetActiveStack();
     if (!active || !active->def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
@@ -239,6 +266,11 @@ bool Inventory::IsActiveLightLamp() const {
 
 bool Inventory::IsActiveLightLighter() const {
     if (!IsUsableLightActive()) return false;
+    const ItemStack* active = GetActiveStack();
+    return active && (active->def.name == "Flashlight" || active->def.name == "Broken Flashlight");
+}
+
+bool Inventory::IsActiveItemLighter() const {
     const ItemStack* active = GetActiveStack();
     return active && (active->def.name == "Flashlight" || active->def.name == "Broken Flashlight");
 }

@@ -81,8 +81,9 @@ StageFirstLoadData EmbeddedDefaults() {
 
     d.oceanChunkCandidates = {"Recursos/audio/waves.mp3"};
     d.levels = {
-        {"level_1", "Recursos/map/mapa_1_andar.json", 1},
-        {"level_2", "Recursos/map/mapa_2_andar.json", 2},
+        {"level_1", "Recursos/map/mapa_1_andar.json", 1, ""},
+        {"level_2", "Recursos/map/mapa_2_andar.json", 2, "small"},
+        {"level_3", "Recursos/map/mapa_3_andar.json", 3, ""},
     };
     return d;
 }
@@ -156,6 +157,7 @@ StageFirstLoadData ParseFromJsonRoot(const json& j) {
             def.label = lv.value("label", "");
             def.mapPath = lv.value("mapPath", "");
             def.displayNumber = lv.value("displayNumber", 1);
+            def.startControlled = lv.value("startControlled", "");
             if (!def.mapPath.empty()) {
                 levels.push_back(std::move(def));
             }

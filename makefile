@@ -40,6 +40,11 @@ FLAGS += -mwindows
 DFLAGS += -mconsole
 LIBS := -lmingw32 -lSDL2main $(LIBS)
 
+# Ícone do .exe: compila appicon.rc (que aponta pro appicon.ico) com windres e
+# linka o objeto resultante no executável. Só no Windows.
+WINDRES = windres
+RES_OBJ = $(BIN_PATH)/appicon.res.o
+
 EXEC := $(EXEC).exe
 
 else
@@ -68,10 +73,17 @@ endif
 
 all: $(EXEC)
 
-$(EXEC): $(OBJ_FILES)
+$(EXEC): $(OBJ_FILES) $(RES_OBJ)
 	$(COMPILER) -o $@ $^ $(LINK_PATH) $(LIBS) $(FLAGS) $(RELEASE_RUNTIME_LINK_FLAGS)
 ifeq ($(OS),Windows_NT)
 	@copy /Y "SDL2\bin\*.dll" . > nul
+endif
+
+# Objeto de recursos (ícone). Só existe/é construído no Windows (RES_OBJ vazio
+# nos demais SOs, então some da lista de pré-requisitos acima).
+ifeq ($(OS),Windows_NT)
+$(RES_OBJ): appicon.rc appicon.ico | folders
+	$(WINDRES) -I. appicon.rc -O coff -o $@
 endif
 
 $(BIN_PATH)/%.o: $(SRC_PATH)/%.cpp $(DEP_PATH)/%.d | folders

@@ -139,8 +139,14 @@ public:
     void SetReachableCloset(Closet* c) { reachableCloset = c; }
 
     // Público pra ser reutilizado pelo monstro
-    std::vector<Vec2> FindPathWorld(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent = nullptr, int nodeBudget = 4096) const;
-    bool IsWorldPosNavigableFor(const Vec2& worldPos, const GameObject* agent) const;
+    // footRadius > 0 usa um footprint CIRCULAR centrado no tile (agentes grandes,
+    // ex.: monstro); <= 0 usa o footprint padrão "nos pés" da box do agente (1.4).
+    std::vector<Vec2> FindPathWorld(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent = nullptr,
+                                    int nodeBudget = 4096, float footRadius = -1.0f) const;
+    bool IsWorldPosNavigableFor(const Vec2& worldPos, const GameObject* agent, float footRadius = -1.0f) const;
+    // Linha livre (navegável) entre dois pontos. Público: usado pelo Monster (LOS de visão).
+    bool HasWalkableLine(const Vec2& fromWorld, const Vec2& toWorld) const;
+    bool HasWalkableLine(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent, float footRadius = -1.0f) const;
     const std::vector<std::shared_ptr<GameObject>>& GetObjectArray() const { return objectArray; }
 
     // Getter para saber quem está atualmente sendo controlado
@@ -173,6 +179,26 @@ public:
     float lastMonsterHitTimer = 0.0f;
     static constexpr float kMonsterHitDeathWindow = 2.0f;
 
+    // Indicador "quem estou controlando": aparece no início e a cada troca,
+    // quica + pisca branco por alguns segundos e some (eased-out).
+    float controlIndicatorTimer = 0.0f;
+    static constexpr float kControlIndicatorDuration = 2.5f;
+    void TriggerControlIndicator() { controlIndicatorTimer = kControlIndicatorDuration; }
+
+    // Tutoriais (máx. 3x por sessão cada — contadores estáticos no .cpp).
+    float lighterTutTimer = 0.0f;
+    bool lighterTutArmed = true;
+    float swapTutTimer = 0.0f;
+    bool swapTutArmed = true;
+    float abilityTutTimer = 0.0f;   // habilidade do irmãozinho (E)
+    bool abilityTutArmed = true;
+    static constexpr float kTutorialDisplayDuration = 4.5f;
+    static constexpr int   kMaxTutorialShows = 3;
+    static constexpr float kSwapTutFarDist = 660.0f;     // dispara o tutorial de troca
+    static constexpr float kSwapTutNearDist = 340.0f;    // re-arma quando se aproximam
+    void UpdateTutorials(float dt);
+    void RenderTutorials(SDL_Renderer* renderer);
+
     // Dispara o feedback de dano do monstro: SFX + tremor de tela + flash vermelho.
     // Chamado pelo Monster ao tocar um irmão.
     void TriggerMonsterHitFeedback();
@@ -200,15 +226,13 @@ private:
     bool IsBoxWalkableOnMapLayer(const Rect& box) const;
     bool IsTileWalkable(int tx, int ty) const;
     /// Tile walkability + cenário (`LevelManager`) + colliders dinâmicos; `agent nullptr` não é usado aqui (usar `IsTileWalkable`).
-    bool IsTileNavigableFor(const GameObject* agent, int tx, int ty) const;
-    bool HasWalkableLine(const Vec2& fromWorld, const Vec2& toWorld) const;
-    bool HasWalkableLine(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent) const;
+    bool IsTileNavigableFor(const GameObject* agent, int tx, int ty, float footRadius = -1.0f) const;
     Vec2 TileCenterToWorld(int tx, int ty) const;
     /// Retângulo jogável em coordenadas de mundo (para itens não nascerem fora do mapa).
     Vec2 ClampPickupTopLeft(Vec2 topLeft, float itemW, float itemH) const;
     bool WorldToTile(const Vec2& worldPos, int& outTx, int& outTy) const;
     bool FindNearestWalkableTile(int startTx, int startTy, int& outTx, int& outTy, int maxRadius = 8,
-                                   const GameObject* agent = nullptr) const;
+                                   const GameObject* agent = nullptr, float footRadius = -1.0f) const;
 
     /// Grade A* disponível: matriz de tiles OU grade sintética (`LoadAssets` sem `TileMap` em cena).
     bool HasNavigationGrid() const;
@@ -363,8 +387,8 @@ private:
     bool settingsPanelOpen = false;
     int settingsSelection = 0;
     bool settingsDragging = false;                       // arrastando um slider com o mouse
-    static constexpr int kSettingsRowCount = 7;          // Master/Ambiente/Trovao/Brilho/TelaCheia/Controles/Voltar
-    static constexpr int kSettingsSliderCount = 4;       // as 4 primeiras linhas são sliders
+    static constexpr int kSettingsRowCount = 8;          // Master/Ambiente/Trovao/Dublagem/Brilho/TelaCheia/Controles/Voltar
+    static constexpr int kSettingsSliderCount = 5;       // as 5 primeiras linhas são sliders
     SDL_Rect settingsRowRects[kSettingsRowCount]{};
     SDL_Rect settingsSliderRects[kSettingsSliderCount]{};
 
@@ -384,10 +408,12 @@ private:
 
     // Tentando arrumar o pathfinding
     float companionPathRefreshTimer = 0.0f;
-    static constexpr float kCompanionPathRefreshInterval = 0.35f; 
+    static constexpr float kCompanionPathRefreshInterval = 0.35f;
     std::vector<Vec2> cachedCompanionPath;
+    int companionPathIndex = 0;                                          // waypoint atual no caminho em cache (1.1)
     mutable std::vector<GameObject*> dynamicColliderCache;
     mutable bool dynamicColliderCacheDirty = true;
+    mutable GameObject* monsterNavObstacle = nullptr;   // monstro como obstáculo de nav p/ os irmãos (1.3)
     void RefreshDynamicColliderCache() const;
 };
 

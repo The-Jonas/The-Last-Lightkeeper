@@ -20,8 +20,19 @@
 #include <iostream>
 #include <cstdlib> 
 
+namespace {
+// Propaga o flip do tile (decodificado do gid no Tiled) para o objeto. Inócuo em
+// objetos sem sprite (só define flags que o SpriteRenderer usa se houver sprite).
+void ApplyTiledFlip(GameObject* obj, const EntitySpawn& spawn) {
+    if (obj) {
+        obj->flipH = spawn.flipH;
+        obj->flipV = spawn.flipV;
+    }
+}
+} // namespace
+
 void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, const StageFirstLoadData& cfg) {
-    
+
     if (spawn.type == "Monstro") {
         GameObject* monsterObj = new GameObject();
         monsterObj->tiledId = spawn.tiledId;
@@ -54,6 +65,8 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         monsterObj->box.x = spawn.x;
         monsterObj->box.y = spawn.y;
  
+        ApplyTiledFlip(monsterObj, spawn);
+ 
         stage.AddObject(monsterObj);
 
         // ── Objeto filho só para a silhueta (z=100, renderiza ACIMA da escuridão) ──
@@ -62,15 +75,20 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         silhouetteObj->owner = monsterObj;   
         silhouetteObj->AddComponent(new MonsterSilhouette(*silhouetteObj, monster));
         silhouetteObj->box = monsterObj->box;
+        ApplyTiledFlip(silhouetteObj, spawn);
         stage.AddObject(silhouetteObj);
     }
     else if (spawn.type == "Caixa") {
         GameObject* boxObj = new GameObject();
         boxObj->tiledId = spawn.tiledId;
-        boxObj->z = spawn.z; 
+        boxObj->z = spawn.z;
+        if (spawn.properties.count("depthOffset")) {
+            boxObj->depthOffset = spawn.properties.at("depthOffset").get<float>();
+        }
         boxObj->AddComponent(new Box(*boxObj, spawn.isStatic));
         boxObj->box.x = spawn.x;
         boxObj->box.y = spawn.y - (boxObj->box.h);
+        ApplyTiledFlip(boxObj, spawn);
         stage.AddObject(boxObj);
         stage.RegisterTestShadowObject(boxObj);
     }
@@ -85,6 +103,8 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
 
         pilarObj->box.x = spawn.x;
         pilarObj->box.y = spawn.y - pilarObj->box.h;
+
+        ApplyTiledFlip(pilarObj, spawn);
 
         stage.AddObject(pilarObj);
     }
@@ -107,6 +127,8 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         ladderObj->box.x = spawn.x;
         ladderObj->box.y = spawn.y - ladderObj->box.h;
 
+        ApplyTiledFlip(ladderObj, spawn);
+
         stage.AddObject(ladderObj);
     }
     else if (spawn.type == "Escada") {
@@ -120,6 +142,8 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         
         ladderObj->box.x = spawn.x;
         ladderObj->box.y = spawn.y - ladderObj->box.h;
+
+        ApplyTiledFlip(ladderObj, spawn);
 
         stage.AddObject(ladderObj);
     }
@@ -142,6 +166,8 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         triggerObj->box.w = spawn.w; 
         triggerObj->box.h = spawn.h;
         
+        ApplyTiledFlip(triggerObj, spawn);
+        
         stage.AddObject(triggerObj);
     }
     else if (spawn.type == "LevelTransition") {
@@ -157,6 +183,8 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         transitionObj->box.y = spawn.y;
         transitionObj->box.w = spawn.w;
         transitionObj->box.h = spawn.h;
+
+        ApplyTiledFlip(transitionObj, spawn);
 
         stage.AddObject(transitionObj);
     }
@@ -218,6 +246,8 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
             itemObj.z = spawn.z; // Fica no mesmo andar
             itemObj.depthOffset = itemDepthOffset; 
 
+            ApplyTiledFlip(&itemObj, spawn);
+
             stage.AddObject(&itemObj);
             } 
         }
@@ -252,6 +282,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
             jornalObj.tiledId = spawn.tiledId;
             jornalObj.z = spawn.z;
             jornalObj.depthOffset = depthOffset;
+            ApplyTiledFlip(&jornalObj, spawn);
             stage.AddObject(&jornalObj);
         }
     }
@@ -276,6 +307,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
 
         candleObj->box.x = spawn.x;
         candleObj->box.y = spawn.y - candleObj->box.h;
+        ApplyTiledFlip(candleObj, spawn);
         stage.AddObject(candleObj);
     }
     else if (spawn.type == "Armario") {
@@ -296,6 +328,8 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         closetObj->box.y = spawn.y - closetObj->box.h;
  
         // Colisão daqui vem da camada "Collision_Obj" desenhada no Tiled. 
+ 
+        ApplyTiledFlip(closetObj, spawn);
  
         stage.AddObject(closetObj);
         stage.RegisterTestShadowObject(closetObj);
@@ -320,6 +354,8 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         // Colisão agora vem da camada "Collision_Obj" desenhada no Tiled.
         // Não há mais injeção manual de SDL_Rect aqui.
  
+        ApplyTiledFlip(caixasObj, spawn);
+ 
         stage.AddObject(caixasObj);
         stage.RegisterTestShadowObject(caixasObj);
     }
@@ -341,6 +377,8 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
 
         // Colisão feita no tiled (objeto na diagonal)
 
+        ApplyTiledFlip(tableObj, spawn);
+
         stage.AddObject(tableObj);
         stage.RegisterTestShadowObject(tableObj);
     }
@@ -358,6 +396,8 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         fallenChairObj->box.y = spawn.y - fallenChairObj->box.h;
 
         // Colisão feita no tiled (objeto na diagonal)
+
+        ApplyTiledFlip(fallenChairObj, spawn);
 
         stage.AddObject(fallenChairObj);
         stage.RegisterTestShadowObject(fallenChairObj);
@@ -393,6 +433,8 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
 
         // Colisão feita no Tiled
 
+        ApplyTiledFlip(barrelObj, spawn);
+
         stage.AddObject(barrelObj);
         stage.RegisterTestShadowObject(barrelObj);
     }
@@ -426,6 +468,8 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         winObj->box.x = spawn.x;
         winObj->box.y = spawn.y - winObj->box.h; 
 
+        ApplyTiledFlip(winObj, spawn);
+
         stage.AddObject(winObj);
     }
     else if (spawn.type == "Pesca_Asset") {
@@ -446,6 +490,8 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         fishingObj->box.y = spawn.y - fishingObj->box.h;
 
         // Colisão feita no Tiled
+
+        ApplyTiledFlip(fishingObj, spawn);
 
         stage.AddObject(fishingObj);
         stage.RegisterTestShadowObject(fishingObj);

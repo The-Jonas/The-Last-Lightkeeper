@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cmath>
+#include <fstream>
 
 namespace {
 
@@ -68,6 +69,11 @@ bool gBoxIsMoving = false;
 bool gFootstepLoopActive = false;
 FootstepSurface gFootstepLoopSurface = FootstepSurface::Stone;
 
+bool FileExists(const char* path) {
+    std::ifstream f(path);
+    return f.good();
+}
+
 void EnsureLoaded() {
     if (gLoaded) {
         return;
@@ -82,12 +88,30 @@ void EnsureLoaded() {
     gFootstepStairsSound.Open(kFootstepStairsPath);
     gWindowOpenSound.Open(kWindowOpenPath);
     gWindowCloseSound.Open(kWindowClosePath);
-    gWindLoopSound.Open(kWindLoopPath);
+    // VENTO_LOOP.mp3 is an optional ambience asset that may not ship. Only try to
+    // open it when present, so a missing file doesn't spam "Erro ao carregar som".
+    if (FileExists(kWindLoopPath)) {
+        gWindLoopSound.Open(kWindLoopPath);
+    }
     for (int i = 0; i < kThunderCount; ++i) {
         gThunderSounds[i].Open(kThunderPaths[i]);
     }
     gCandleLoopSound.Open(kCandleLoopPath);
     gLoaded = true;
+}
+
+// Volume final do barramento de VFX = master × efeitos (sfx).
+int SfxChannelVolume() {
+    int vol = (MIX_MAX_VOLUME * Game::masterVolumePercent) / 100;
+    vol = (vol * Game::sfxVolumePercent) / 100;
+    return vol;
+}
+
+void ApplySfxVolume(Sound& sound) {
+    const int channel = sound.GetChannel();
+    if (channel >= 0) {
+        Mix_Volume(channel, SfxChannelVolume());
+    }
 }
 
 void PlaySound(Sound& sound) {
@@ -97,17 +121,8 @@ void PlaySound(Sound& sound) {
     EnsureLoaded();
     if (sound.IsOpen()) {
         sound.Play();
+        ApplySfxVolume(sound);   // todo VFX passa pelo barramento de efeitos
     }
-}
-
-void ApplyThunderVolume(Sound& sound) {
-    const int channel = sound.GetChannel();
-    if (channel < 0) {
-        return;
-    }
-    int vol = (MIX_MAX_VOLUME * Game::masterVolumePercent) / 100;
-    vol = (vol * Game::thunderVolumePercent) / 100;
-    Mix_Volume(channel, vol);
 }
 
 Sound& FootstepSound(FootstepSurface surface) {
@@ -144,6 +159,7 @@ void StartBoxMovingLoop() {
     }
     if (gBoxMovingLoopSound.PlayLooped() >= 0) {
         gBoxMovingLoopActive = true;
+        ApplySfxVolume(gBoxMovingLoopSound);
     }
 }
 
@@ -169,6 +185,7 @@ void StartCandleLoop() {
     }
     if (gCandleLoopSound.PlayLooped() >= 0) {
         gCandleLoopActive = true;
+        ApplySfxVolume(gCandleLoopSound);
     }
 }
 
@@ -194,9 +211,9 @@ void ApplyFootstepLoopVolume(Sound& sound) {
     if (channel < 0) {
         return;
     }
-    int vol = (MIX_MAX_VOLUME * Game::masterVolumePercent) / 100;
+    int vol = SfxChannelVolume();
     vol = (vol * kFootstepVolumePercent) / 100;
-    vol = std::min(MIX_MAX_VOLUME, vol + vol / 2);
+    vol = std::min(MIX_MAX_VOLUME, vol + vol / 2);   // leve reforço nos passos
     Mix_Volume(channel, vol);
 }
 
@@ -237,7 +254,7 @@ void TriggerThunderStrikeInternal() {
     const int idx = rand() % kThunderCount;
     if (gThunderSounds[idx].IsOpen()) {
         gThunderSounds[idx].Play();
-        ApplyThunderVolume(gThunderSounds[idx]);
+        ApplySfxVolume(gThunderSounds[idx]);   // trovão é um VFX
     }
     gThunderFlashTimer = kThunderFlashDuration;
 }
@@ -365,9 +382,15 @@ void PlayWindowToggle(bool opening) {
 void StartWindLoop() {
     if (gGameplayMuted || gWindLoopActive) return;
     EnsureLoaded();
+    if (!gWindLoopSound.IsOpen()) return;   // optional asset absent → no-op
     if (gWindLoopSound.PlayLooped() >= 0) {
         gWindLoopActive = true;
+        ApplySfxVolume(gWindLoopSound);
     }
+}
+
+int CurrentSfxVolume() {
+    return SfxChannelVolume();
 }
 
 void StopWindLoop() {
@@ -375,6 +398,11 @@ void StopWindLoop() {
         gWindLoopSound.Stop();
         gWindLoopActive = false;
     }
+}
+
+void StopAllGameplay() {
+    StopAllGameplayAudio();   // passos, vela, caixa
+    StopWindLoop();           // vento
 }
 
 } // namespace GameSfx

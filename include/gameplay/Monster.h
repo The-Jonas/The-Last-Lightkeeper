@@ -77,7 +77,8 @@ private:
     // ── Movimento / Pathfinding ───────────────────────────────────────────────
     void MoveAlongPath(float dt, float speed);
     void RequestPath(Vec2 destination);
-    bool HasReachedTarget() const;
+    bool HasReachedTarget() const;   // tinha caminho e o consumiu até o fim
+    bool HasNoPath() const;          // não há caminho usável (falha do pathfinder) — 1.7
  
     std::vector<Vec2> currentPath;
     int               pathStep = 0;
@@ -131,6 +132,10 @@ private:
     static constexpr float kFleeThreshold         = 0.70f;  // Iluminação que faz ele recuar
     static constexpr float kMemoryDecayTime       = 6.0f;   // Segundos até esquecer posição
     static constexpr float kPathRefreshInterval   = 0.35f;  // Segundos entre recálculos de path
+    // Footprint de navegação reduzido (1.4): a box do sprite é gigante (~574px);
+    // usar box.w*0.25 ≈ 143px travava o monstro em corredores. ~48px o deixa passar.
+    static constexpr float kNavFootRadius         = 48.0f;
+    static constexpr float kSightLosRadius        = 18.0f;  // raio fino p/ checar parede na linha de visão (1.6)
 
     // ── Variáveis de Sabotagem ────────────────────────────────────────────────
     Window* targetWindow = nullptr;

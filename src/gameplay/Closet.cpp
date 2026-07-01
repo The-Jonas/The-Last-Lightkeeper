@@ -9,6 +9,7 @@
 #include "gameplay/Monster.h"
 #include "ui/Text.h"
 #include "core/Game.h"
+#include "audio/GameVoice.h"
 #include <iostream>
 
 // ── Parâmetros da fresta — para manipular sempre que quiser ─────────────────────
@@ -27,7 +28,7 @@ Closet::Closet(GameObject& associated, const std::string& direction)
 
     textObj = new GameObject();
     SDL_Color textColor = {255, 255, 255, 255};
-    Text* promptText = new Text(*textObj, "Recursos/font/TradeWinds-Regular.ttf", 14, Text::SOLID, "[E] Esconder", textColor);
+    Text* promptText = new Text(*textObj, "Recursos/font/times.ttf", 14, Text::SOLID, "[E] Esconder", textColor);
     textObj->AddComponent(promptText);
 }
 
@@ -103,6 +104,24 @@ void Closet::Update(float dt) {
         };
         PinChar(Character::player);
         PinChar(Character::littleBrother);
+
+        // Escondidos e o monstro se aproxima → irmãozinho sussurra apavorado.
+        // (cooldown próprio da fala evita repetir a cada frame)
+        if (stage) {
+            const Vec2 closetCenter = associated.box.Center();
+            for (const auto& goPtr : stage->GetObjectArray()) {
+                GameObject* go = goPtr.get();
+                if (!go || go->IsDead()) {
+                    continue;
+                }
+                if (go->GetComponent<Monster>()) {
+                    if (closetCenter.Distance(go->box.Center()) < 480.0f) {
+                        GameVoice::OnHidingMonsterClose();
+                    }
+                    break;
+                }
+            }
+        }
 
         if (!inputFrozen && InputManager::GetInstance().ActionPress(GameAction::Interact)) {
             ExitCloset();

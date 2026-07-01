@@ -2,6 +2,7 @@
 #include "core/Game.h"
 #include "core/InputManager.h"
 #include "audio/GameSfx.h"
+#include "audio/GameVoice.h"
 #include "engine/Camera.h"
 #include "states/stage/StageState.h"
 #include "ui/Text.h"
@@ -33,7 +34,7 @@ void LevelTransitionLoadingState::LoadAssets() {
     GameObject* textGO = new GameObject();
     textGO->z = 10;
     SDL_Color white = {220, 220, 220, 255};
-    Text* t = new Text(*textGO, "Recursos/font/TradeWinds-Regular.ttf", 40, Text::BLENDED, "Loading...", white);
+    Text* t = new Text(*textGO, "Recursos/font/times.ttf", 40, Text::BLENDED, "Loading...", white);
     textGO->AddComponent(t);
     AddObject(textGO);
     loadingLabel = textGO;
@@ -42,6 +43,7 @@ void LevelTransitionLoadingState::LoadAssets() {
 
 void LevelTransitionLoadingState::Start() {
     GameSfx::NotifyLoadingBegin();
+    GameVoice::NotifyLoadingBegin();
     LoadAssets();
     StartArray();
     started = true;

@@ -284,6 +284,12 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
                         spawn.isStatic = false;
                         spawn.z = 2;
 
+                        // O Tiled empacota as flags de flip nos 3 bits altos do gid.
+                        // Decodifica horizontal/vertical (a diagonal é rara e ignorada).
+                        const long long rawGid = obj.value("gid", 0LL);
+                        spawn.flipH = (rawGid & 0x80000000LL) != 0;
+                        spawn.flipV = (rawGid & 0x40000000LL) != 0;
+
                         // Lendo agora as propriedades customizadas
                         if (obj.contains("properties")) {
                             for (auto& prop : obj["properties"]) {

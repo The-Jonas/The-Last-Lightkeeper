@@ -10,6 +10,9 @@ struct LevelDef {
     std::string label;
     std::string mapPath;
     int displayNumber = 1;
+    // When set ("small"/"big"), control is forced onto that brother as the level
+    // begins (on entering via a stair transition). Empty = keep current control.
+    std::string startControlled;
 };
 
 /// Runtime configuration for `StageState::LoadAssets` (JSON under `Recursos/data/` + embedded fallback).
