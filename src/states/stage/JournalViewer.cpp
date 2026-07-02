@@ -150,7 +150,7 @@ void StageState::OpenJournalViewer(Jornal* jornal) {
 
 void StageState::TryOpenJournalOnKeyPress() {
     InputManager& input = InputManager::GetInstance();
-    if (!input.KeyPress(SDLK_e) || !reachableJornal) {
+    if (!input.ActionPress(GameAction::Interact) || !reachableJornal) {
         return;
     }
 
@@ -181,7 +181,7 @@ void StageState::UpdateJournalViewer(float dt) {
 
     journalAnimTimer += dt;
 
-    if (input.KeyPress(SDLK_e) || input.KeyPress(SDLK_ESCAPE)) {
+    if (input.ActionPress(GameAction::Interact) || input.KeyPress(SDLK_ESCAPE)) {
         journalViewerClosing = true;
         journalCloseTimer = 0.0f;
     }
@@ -219,11 +219,15 @@ void StageState::RenderJournalViewer(SDL_Renderer* renderer) {
     }
 
     if (openT > 0.85f && alphaMul > 0.2f) {
-        auto hintFont = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 16);
+        auto hintFont = Resources::GetFont("Recursos/font/times.ttf", 16);
         if (hintFont) {
-            const char* hint = "E / ESC — fechar";
+            std::string keyName = SDL_GetKeyName(InputManager::GetInstance().GetBinding(GameAction::Interact));
+            if (keyName.empty()) {
+                keyName = "E";
+            }
+            const std::string hintStr = keyName + " / ESC — fechar";
             SDL_Color hc{230, 225, 200, static_cast<Uint8>(240.0f * alphaMul)};
-            SDL_Surface* surf = TTF_RenderText_Blended(hintFont.get(), hint, hc);
+            SDL_Surface* surf = TTF_RenderText_Blended(hintFont.get(), hintStr.c_str(), hc);
             if (surf) {
                 SDL_Texture* hintTex = SDL_CreateTextureFromSurface(renderer, surf);
                 const int tw = surf->w;

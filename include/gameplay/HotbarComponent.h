@@ -36,9 +36,8 @@ private:
     float GetPickupReachRadius() const;
     ItemPickup* FindClosestReachablePickup() const;
     void TryPickupOnKeyPress();
-    void TrySelectGroupOnKeyPress();
+    void TryCycleWheel();
     void TryUseActiveItemOnKeyPress();
-    void TryRefuelOnKeyPress();
 };
 
 #endif

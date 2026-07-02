@@ -22,6 +22,7 @@ public:
 private:
     Music backgroundMusic;
     GameObject* gameOverTitle = nullptr;
+    GameObject* causeSubtitle = nullptr;
     GameObject* continuePrompt = nullptr;
 };
 

@@ -1,0 +1,3 @@
+// Ícone do executável (Windows). Gerado a partir de Recursos/img/ícone.png.
+// O Windows Explorer usa o grupo de ícones de menor ID como ícone do .exe.
+1 ICON "appicon.ico"

@@ -175,26 +175,21 @@ bool IsFootLit(GameObject* go, const Vec2& lightScreenPos, const LightMaskParams
 }
 
 void RenderShadowSpriteOnly(GameObject* go, SpriteRenderer* sprite, Uint8 shadowAlpha) {
-    Character* character = go->GetComponent<Character>();
-    std::string restoreSpritePath;
-    bool swappedSprite = false;
-    if (character) {
-        restoreSpritePath = character->GetCurrentStripSpritePath();
-        const std::string shadowPath = character->GetShadowSpritePath();
-        if (!shadowPath.empty() && shadowPath != restoreSpritePath) {
-            sprite->Open(shadowPath);
-            swappedSprite = true;
-        }
-    }
+    // A projeção de sombra posiciona a box assumindo pivô CENTRAL. Objetos-tile do
+    // Tiled usam pivô no rodapé-esquerdo; força o central só durante a sombra.
+    const bool savedPivot = go->rotateAroundBottomLeft;
+    go->rotateAroundBottomLeft = false;
 
+    // Renderiza a SILHUETA DO SPRITE ATUAL (mesma direção/flip/quadro do
+    // personagem). Não trocamos por outra arte: um sprite alternativo tinha
+    // dimensões nativas diferentes (o Open reajustava a box e desalinhava a
+    // sombra) e o lado esquerda/direita podia divergir (sombra espelhada).
     const Uint8 spriteShadowAlpha = static_cast<Uint8>(std::max(18, std::min(205, static_cast<int>(shadowAlpha))));
     sprite->SetTint(0, 0, 0, spriteShadowAlpha);
     sprite->Render();
-
     sprite->SetTint(255, 255, 255, 255);
-    if (swappedSprite) {
-        sprite->Open(restoreSpritePath);
-    }
+
+    go->rotateAroundBottomLeft = savedPivot;
 }
 
 void RenderProjectedSpriteShadow(GameObject* go, const Vec2& lightScreenPos, float lightTouch, float shadowLengthPx, Uint8 shadowAlpha,
@@ -221,7 +216,7 @@ void RenderProjectedSpriteShadow(GameObject* go, const Vec2& lightScreenPos, flo
 
     const float distance01 = Clamp01(1.0f - lightTouch); // 0 = close light, 1 = far light
     const float fastStretch = std::pow(distance01, 0.60f);
-    const float stretch = 0.82f + fastStretch * 2.35f;
+    const float stretch = 0.82f + fastStretch * 1.15f;   // sombra menos esticada (antes 2.35)
     const float widen = 1.00f + fastStretch * 0.26f;
 
     Rect shadowBox = originalBox;
@@ -291,7 +286,7 @@ void RenderSingleLightSpriteShadow(GameObject* go, const Vec2& lightScreenPos,
  
     const float distance01 = Clamp01(1.0f - lightTouch);
     const float fastStretch = std::pow(distance01, 0.60f);
-    const float stretch = 0.82f + fastStretch * 2.35f;
+    const float stretch = 0.82f + fastStretch * 1.15f;   // sombra menos esticada (antes 2.35)
     const float widen = 1.00f + fastStretch * 0.26f;
  
     Rect shadowBox = originalBox;

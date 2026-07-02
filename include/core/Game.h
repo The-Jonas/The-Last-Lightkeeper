@@ -16,16 +16,34 @@ class Game {
 public:
     static constexpr int MASTER_VOLUME_PERCENT = 20;
     static constexpr int AMBIENT_VOLUME_PERCENT = 50;
-    static constexpr int THUNDER_VOLUME_PERCENT = 100;
+    static constexpr int SFX_VOLUME_PERCENT = 100;
+    static constexpr int VOICE_VOLUME_PERCENT = 100;   // dublagem (falas dos irmãos)
     static int masterVolumePercent;
     static int ambientVolumePercent;
-    static int thunderVolumePercent;
+    static int sfxVolumePercent;
+    static int voiceVolumePercent;
+    static int brightnessPercent;   // 50..150, 100 = normal (overlay de brilho)
+    static bool fullscreen;         // janela em tela cheia (borderless desktop)
     static void LoadEnvVolume();
     static void SetMasterVolume(int percent);
     static void SetAmbientVolume(int percent);
-    static void SetThunderVolume(int percent);
+    static void SetSfxVolume(int percent);
+    static void SetVoiceVolume(int percent);
+    static void SetBrightness(int percent);
+    static void SetFullscreen(bool on);
+    // Volume da música/fundo constante = master × "Fundo" (ambientVolumePercent).
+    // 0..MIX_MAX_VOLUME. Toda música de fundo deve usar isto (não o master puro).
+    static int MusicVolume();
+    // Configurações unificadas em config/settings.json (volume/brilho/fullscreen/debug).
+    static void LoadSettings();
+    static void SaveSettings();
     static constexpr int WINDOW_WIDTH = 1920;
     static constexpr int WINDOW_HEIGHT = 1080;
+
+    // Runtime debug toggle. True for debug builds (-DDEBUG) or when opted in via
+    // `DEBUG=1` in .env. Gates developer-only keys and the on-screen dev HUD so
+    // players never see them.
+    static bool debugMode;
 
     static Game& GetInstance();                 // Retorna instância única (singleton)
     SDL_Renderer* GetRenderer();                // Retorna o renderizador SDL

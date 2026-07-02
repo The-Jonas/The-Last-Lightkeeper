@@ -10,6 +10,7 @@
 #include "ui/InteractionOutline.h"
 #include "world/Collider.h"
 #include "audio/GameSfx.h"
+#include "audio/GameVoice.h"
 
 #include <algorithm>
 #include <cmath>
@@ -257,7 +258,7 @@ bool StageState::IsCandleClosestForInteraction(Candlestick* candle) const {
 
 void StageState::TryInteractCandleOnKeyPress() {
     InputManager& input = InputManager::GetInstance();
-    if (!input.KeyPress(SDLK_e) || !reachableCandle) {
+    if (!input.ActionPress(GameAction::Interact) || !reachableCandle) {
         return;
     }
 
@@ -271,7 +272,19 @@ void StageState::TryInteractCandleOnKeyPress() {
         return;
     }
 
-    if (inventory.IsUsableLightActive()) {
+    // Light the candle if a usable light is active. If none is active yet, try to
+    // auto-activate one from the inventory (lighter preferred over lamp); only
+    // then does the candle light. With neither available, nothing happens.
+    const bool wasLightActive = inventory.IsUsableLightActive();
+    if (inventory.TryActivateBestLight()) {
+        // If we actually turned a lighter ON just now, play its toggle VFX —
+        // the lighter is genuinely being lit (a lamp / already-lit light: no SFX).
+        if (!wasLightActive && inventory.IsActiveLightLighter()) {
+            GameSfx::PlayLighterToggle(true);
+        }
+        if (bigCharacter) {
+            bigCharacter->NotifyInventoryLightChanged();
+        }
         reachableCandle->SetLit(true);
         SaveCurrentProgress();
     }
@@ -321,7 +334,7 @@ bool StageState::IsWindowClosestForInteraction(Window* window) const {
 
 void StageState::TryInteractWindowOnKeyPress() {
     InputManager& input = InputManager::GetInstance();
-    if (!input.KeyPress(SDLK_e) || !reachableWindow) {
+    if (!input.ActionPress(GameAction::Interact) || !reachableWindow) {
         return;
     }
 
@@ -403,9 +416,17 @@ void StageState::UpdateBoxInteraction() {
     GameSfx::UpdateCandleProximity(IsPlayerNearLitCandle());
 
     InputManager& input = InputManager::GetInstance();
-    const bool eHeld = input.IsKeyDown(SDLK_e);
+    const bool eHeld = input.ActionDown(GameAction::Interact);
+    const bool ePressed = input.ActionPress(GameAction::Interact);
     const bool boxPushBlocked = IsHoldingLamp(inventory);
     ItemPickup* reachableItem = FindClosestReachableItem();
+
+    // Apertou interagir tentando mover a caixa, mas está com a lâmpada (overlay
+    // vermelho) → não dá pra empurrar: "não consigo".
+    if (ePressed && boxPushBlocked && reachablePushBox &&
+        IsPushBoxCloserThanItem(reachableItem, reachablePushBox)) {
+        GameVoice::OnActionBlocked();
+    }
 
     if (boxPushBlocked && activePushBox) {
         GameSfx::NotifyBoxPushEnd();
@@ -419,6 +440,7 @@ void StageState::UpdateBoxInteraction() {
         if (!boxPushBlocked && !activePushBox && reachablePushBox &&
             IsPushBoxCloserThanItem(reachableItem, reachablePushBox)) {
             activePushBox = reachablePushBox;
+            GameVoice::OnDragObject();   // às vezes comenta o peso ("isso pesa")
             if (bigCharacterObject) {
                 const GameObject& boxObj = reachablePushBox->GetAssociated();
                 pushBoxOffset.x = boxObj.box.x - bigCharacterObject->box.x;

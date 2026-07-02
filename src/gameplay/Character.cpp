@@ -101,7 +101,7 @@ Character::Character(GameObject& associated, std::string spritePath, bool useIrm
     constexpr int PLAYER_FRAMES_PER_ROW = 1;
     constexpr int PLAYER_ROWS = 1;
 
-    linearSpeed = 250.0f;
+    linearSpeed = 325.0f;
     speedMultiplier = 1.0f;
     acceleration = 1000.0f;
     deceleration = 1400.0f;
@@ -570,7 +570,8 @@ void Character::Update(float dt) {
         bool isBeingControlled = stageCtrl && stageCtrl->GetControlledCharacter() == this;
 
         // Funciona independente de quem está sendo controlado
-        if (isBeingControlled && InputManager::GetInstance().KeyPress(SDLK_e) &&
+        const bool inputFrozen = stageCtrl && stageCtrl->IsPlayerInputFrozen();
+        if (isBeingControlled && !inputFrozen && InputManager::GetInstance().ActionPress(GameAction::Interact) &&
             visionPowerTimer <= 0.0f && visionCooldown <= 0.0f &&
             currentState != ActionState::INTERACTING) {
 

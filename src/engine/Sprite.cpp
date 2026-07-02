@@ -44,11 +44,19 @@ Sprite::~Sprite(){                              // Destrutor
 
 void Sprite::Open(std::string file){
     sourceFile = file;
+
+    // Caminho vazio: não há arte a carregar. Silencia o spam de "SDL_RWFromFile():
+    // No file or no mode specified" quando um sprite ainda não tem arte definida.
+    if (file.empty()) {
+        texture = nullptr;
+        return;
+    }
+
     texture = Resources::GetImage(file);                                // Chamando Resources::GetImage em vez de IMG_LoadTexture
 
     if (!texture) {
         std::cerr << "Erro ao carregar imagem: " << file << " - " << SDL_GetError() << std::endl;
-        return; 
+        return;
     }
 
     if (!IsOpen()) return;
@@ -126,7 +134,7 @@ void Sprite::RenderTintedScaled(int x, int y, int w, int h, double angleDeg, Uin
         flip);
 }
 
-void Sprite::Render(int x, int y, int w, int h, double angleDeg) {
+void Sprite::Render(int x, int y, int w, int h, double angleDeg, bool pivotBottomLeft) {
     int finalX = x;
     int finalY = y;
     int finalW = w;
@@ -145,6 +153,11 @@ void Sprite::Render(int x, int y, int w, int h, double angleDeg) {
     SDL_SetTextureColorMod(texture.get(), tintR, tintG, tintB);
     SDL_SetTextureAlphaMod(texture.get(), tintA);
 
+    // Objetos-tile do Tiled giram em torno do canto inferior-esquerdo (a origem do
+    // objeto); o resto (personagens, projeção de sombra) gira em torno do centro.
+    // Sem rotação (angleDeg==0) o pivô é irrelevante.
+    SDL_Point pivot = { 0, finalH };
+
     //SDL_RenderCopy(Game::GetInstance().GetRenderer(), texture, &clipRect, &dstRect);  // Desenha
     SDL_RenderCopyEx(
         Game::GetInstance().GetRenderer(),
@@ -152,7 +165,7 @@ void Sprite::Render(int x, int y, int w, int h, double angleDeg) {
         &clipRect,
         &dstRect,
         angleDeg,                                                       // Ângulo de rotação em graus
-        nullptr,                                                        // Determina o eixo a qual a rotação ocorre - null para a rotação acontecer em torno do centro do triângulo
+        pivotBottomLeft ? &pivot : nullptr,                            // canto inferior-esquerdo (Tiled) ou centro (padrão)
         flip                                                            // Inverte a imagem verticalmente, horizontalmente ou não inverte
     );
 }

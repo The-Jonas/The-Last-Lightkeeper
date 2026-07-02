@@ -10,12 +10,17 @@
     {
       "label": "level_2",
       "mapPath": "Recursos/map/mapa_2_andar.json",
-      "displayNumber": 2
+      "displayNumber": 2,
+      "startControlled": "small"
+    },
+    {
+      "label": "level_3",
+      "mapPath": "Recursos/map/mapa_3_andar.json",
+      "displayNumber": 3
     }
   ],
   "navWorld": { "w": 4358, "h": 3276 },
   "navTilePx": 64,
-  "itemPickupCount": 35,
   "startingFlashlightDurability": 100,
   "startingFlashlight": {
     "name": "Flashlight",
@@ -57,25 +62,22 @@
       "durabilityDecreases": true,
       "sortOrder": 4,
       "properties": [{ "prop": "LIGHT_SOURCE", "value": 1.0 }]
-    }
-  ],
-  "backpackGroups": [
-    {
-      "id": "lighter",
-      "maxItems": 3,
-      "selectKey": 1,
-      "itemNames": ["Flashlight", "Broken Flashlight"]
     },
     {
-      "id": "fuel",
-      "maxItems": 2,
-      "itemNames": ["Fuel"]
+      "name": "Tabua de Madeira",
+      "spritePath": "Recursos/img/cenario/tabua-item.png",
+      "maxDurability": 0,
+      "durabilityDecreases": false,
+      "sortOrder": 5,
+      "properties": []
     },
     {
-      "id": "lamp",
-      "maxItems": 1,
-      "selectKey": 2,
-      "itemNames": ["Lamp"]
+      "name": "Jornal",
+      "spritePath": "Recursos/img/items/old_letter.jpg",
+      "maxDurability": 0,
+      "durabilityDecreases": false,
+      "sortOrder": 6,
+      "properties": []
     }
   ],
   "oceanChunkCandidates": ["Recursos/audio/waves.mp3"]

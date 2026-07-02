@@ -12,6 +12,12 @@ struct SavedItemSlot {
     int durability = 0;
 };
 
+struct SavedInventoryStack {
+    std::string name;
+    int count = 0;
+    std::vector<int> durabilities;
+};
+
 struct SavedBackpackGroup {
     std::string groupId;
     std::vector<SavedItemSlot> items;
@@ -45,6 +51,8 @@ struct SaveGameState {
     std::string controlled = "big";
     std::string partyMode = "TOGETHER";
     bool lightOn = false;
+    int selectedSlot = -1;
+    std::vector<std::optional<SavedItemSlot>> inventorySlots;
     int selectedBackpackGroup = 0;
     std::vector<SavedBackpackGroup> backpackGroups;
     std::optional<SavedItemSlot> usingItem;
@@ -55,6 +63,9 @@ struct SaveGameState {
     std::vector<SavedDroppedItem> droppedItems;
     std::vector<int> litCandleIds;
     std::vector<int> repairedIds;
+    int activeStackIndex = -1;
+    int primedOilDurability = 0;
+    std::vector<SavedInventoryStack> inventoryStacks;
     std::vector<SavedBoxPos> boxPositions;
 };
 
@@ -70,6 +81,8 @@ struct SaveFile {
 
 void to_json(nlohmann::json& j, const SavedItemSlot& s);
 void from_json(const nlohmann::json& j, SavedItemSlot& s);
+void to_json(nlohmann::json& j, const SavedInventoryStack& s);
+void from_json(const nlohmann::json& j, SavedInventoryStack& s);
 void to_json(nlohmann::json& j, const SavedCharacter& c);
 void from_json(const nlohmann::json& j, SavedCharacter& c);
 void to_json(nlohmann::json& j, const SavedDroppedItem& d);

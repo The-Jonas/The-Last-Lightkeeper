@@ -16,7 +16,16 @@ public:
     void static Update(float dt);                   // Define a abordagem a ser usada para a câmera durante o jogo
     static float GetZoom();                         // Retorna zoom atual da câmera
 
-    Vec2 static pos;                                // Posição da câmera 
+    // Tremor de tela (trauma 0..1 que decai sozinho). Acumulativo: chame em
+    // eventos de impacto (toque do monstro, trovão forte, etc.).
+    static void AddTrauma(float amount);
+    // Vertigem por baixa sanidade (0..1) — balanço lento e desorientador.
+    // Definido a cada frame pela StageState a partir da sanidade mais baixa.
+    static void SetVertigo(float amount);
+    // Zera tremor/vertigem (ex.: ao carregar/transicionar de nível).
+    static void ResetShake();
+
+    Vec2 static pos;                                // Posição da câmera (já inclui o offset de tremor)
     Vec2 static speed;                              // Velocidade da câmera
 
 private:
@@ -25,6 +34,11 @@ private:
     static GameObject* pairB;                       // Segundo alvo do modo de dupla
     static GameObject* pairPrimary;                 // Alvo controlado (peso maior no enquadramento)
     static float zoom;                              // Fator de zoom aplicado no render
+
+    static float trauma;                            // Intensidade do tremor (0..1), decai com o tempo
+    static float vertigo;                           // Intensidade da vertigem (0..1)
+    static float fxTime;                            // Relógio interno para o ruído do tremor/balanço
+    static Vec2 shakeOffset;                        // Offset atual somado em `pos` (tremor + balanço)
 };
 
 #endif

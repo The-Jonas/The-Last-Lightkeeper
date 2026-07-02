@@ -25,9 +25,9 @@ Jornal* Jornal::Spawn(float worldX, float worldY, const std::string& path, int h
     obj->z = 2;
     obj->sub_z = -1;
 
+    // O SpriteRenderer já define box.w/h com o tamanho nativo da imagem. O
+    // SpawnFactory ajusta depois para a dimensão do objeto no Tiled (ApplyTiledBox).
     obj->AddComponent(new SpriteRenderer(*obj, path));
-    obj->box.w = 48.0f;
-    obj->box.h = 48.0f;
     Jornal* jornal = new Jornal(*obj, path, height);
     obj->AddComponent(jornal);
 

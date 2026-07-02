@@ -26,6 +26,15 @@
 #define PANEL_ROW_NEXT_KEY SDLK_RIGHTBRACKET
 #define LEFT_MOUSE_BUTTON SDL_BUTTON_LEFT
 
+// Ações de gameplay remapeáveis (4.1). A navegação de menus e as teclas de
+// debug NÃO passam por aqui — continuam fixas.
+enum class GameAction {
+    MoveUp, MoveDown, MoveLeft, MoveRight,
+    Interact, UseItem, CyclePrev, CycleNext,
+    SwapBrother, ToggleMode,
+    Count
+};
+
 class InputManager {
 public:
  
@@ -38,6 +47,20 @@ public:
     bool KeyRelease(int key);
     bool IsKeyDown(int key);
 
+    // Consulta por AÇÃO (resolve a tecla atualmente vinculada — 4.1)
+    bool ActionPress(GameAction action);
+    bool ActionDown(GameAction action);
+    int GetBinding(GameAction action) const;
+    void SetBinding(GameAction action, int keycode);
+    void ResetBindingsToDefault();
+    static constexpr int ActionCount = static_cast<int>(GameAction::Count);
+    static const char* ActionName(GameAction action);   // chave estável p/ settings.json
+    static const char* ActionLabel(GameAction action);  // rótulo p/ a UI
+
+    // Captura de remapeamento: retorna a primeira tecla pressionada neste frame
+    // (ou 0 se nenhuma). Usada pela tela de Controles.
+    int PollAnyKeyPressed();
+
     // Métodos para o mouse 
     bool MousePress(int button);
     bool MouseRelease(int button);
@@ -46,6 +69,8 @@ public:
     // Retorna as Coordenadas do Mouse
     int GetMouseX();
     int GetMouseY();
+
+    int GetMouseWheel();
 
     bool QuitRequested();                                           // Retorna se o usuário pediu pra sair do jogo
 
@@ -57,7 +82,10 @@ private:
 
     // Membros para o estado do teclado (usando tabela de hash)
     std::unordered_map<int, bool> keyState;
-    std::unordered_map<int, int> keyUpdate; 
+    std::unordered_map<int, int> keyUpdate;
+
+    int bindings[static_cast<int>(GameAction::Count)];   // tecla vinculada a cada ação
+    void InitDefaultBindings();
 
     // Membros para o estado do mouse
     bool mouseState[6]; 
@@ -67,6 +95,7 @@ private:
     bool quitRequested;
     int updateCounter;
     int mouseX, mouseY;
+    int mouseWheel;
 
 };
 

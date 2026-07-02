@@ -23,7 +23,7 @@ public:
     void Resume() override;
     
 private:
-    enum class VolumeSliderKind { Master, Ambient, Thunder, Count };
+    enum class VolumeSliderKind { Master, Ambient, Vfx, Voice, Count };
 
     struct VolumeSliderUi {
         VolumeSliderKind kind;
@@ -46,9 +46,10 @@ private:
     GameObject* newGameMenuText = nullptr;
 
     bool hasContinueSave = false;
-    int menuSelection = 1;
+    int menuSelection = 0;
 
     void LayoutMenuOptions();
+    void RenderSelectionIndicator(SDL_Renderer* renderer);
     void StartNewGame();
     void StartContinue();
     void ActivateMenuSelection();

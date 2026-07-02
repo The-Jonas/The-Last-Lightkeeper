@@ -7,13 +7,14 @@
 #include "engine/GameObject.h"
 #include "gameplay/Box.h"
 #include "audio/GameSfx.h"
+#include "audio/GameVoice.h"
 #include "gameplay/Character.h"
-#include "gameplay/BackpackVisuals.h"
 #include "gameplay/HotbarComponent.h"
 #include "gameplay/Item.h"
 #include "states/EndState.h"
 #include "states/LevelTransitionLoadingState.h"
 #include "ui/Text.h"
+#include "ui/InventoryWheel.h"
 #include "world/SpawnFactory.h"
 
 #define INCLUDE_SDL_TTF
@@ -51,6 +52,7 @@ void StageState::ClearGameplayWorld() {
     hudLine3 = nullptr;
     hudFps = nullptr;
     hotbarObject = nullptr;
+    inventoryWheelObject = nullptr;
     itemPickups.clear();
     jornals.clear();
     reachableJornal = nullptr;
@@ -152,63 +154,86 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
     companionCharacter = smallCharacter;
     partyMode = PartyMode::TOGETHER;
 
-    inventory.ApplyBackpackConfig(cfg.backpackConfig);
+    TriggerControlIndicator();   // anima o indicador ao iniciar/entrar no nível
+
+    inventory.ClearAll();
     if (resetInventory) {
         inventory.ClearAll();
-        const int lighterGroup = cfg.backpackConfig.GroupIndexForItem(cfg.startingFlashlight.name);
-        if (lighterGroup >= 0) {
-            inventory.AddItemToGroup(lighterGroup, cfg.startingFlashlight, cfg.startingFlashlightDurability);
+        inventory.AddItem(cfg.startingFlashlight, cfg.startingFlashlightDurability);
+        if (bigComp) {
             bigComp->NotifyInventoryLightChanged();
         }
         inventory.isLightToggledOn = false;
     }
     inventoryInitialized = true;
 
-    SDL_Color hudColor = {230, 230, 230, 220};
+    // HUD de desenvolvedor (instruções + FPS) — só criado em debugMode; jogadores
+    // não veem essas linhas. As referências ficam nullptr fora de debug.
+    if (Game::debugMode) {
+        SDL_Color hudColor = {230, 230, 230, 220};
 
-    hudLine1 = new GameObject();
-    hudLine1->z = 100;
-    hudLine1->AddComponent(new Text(*hudLine1, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
-                                    "WASD mover | Ctrl trocar irmao | Q junto/separado | Esc sair",
-                                    hudColor));
-    AddObject(hudLine1);
+        hudLine1 = new GameObject();
+        hudLine1->z = 100;
+        hudLine1->AddComponent(new Text(*hudLine1, "Recursos/font/times.ttf", 18, Text::BLENDED,
+                                         "WASD mover | 1/3 girar item | Ctrl trocar irmao | Q junto/separado",
+                                        hudColor));
+        AddObject(hudLine1);
 
-    hudLine2 = new GameObject();
-    hudLine2->z = 100;
-    hudLine2->AddComponent(new Text(*hudLine2, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
-                                    "E interagir/pegar/empurrar | 1 isqueiro | 2 lamparina | F luz | R abastecer",
-                                    hudColor));
-    AddObject(hudLine2);
+        hudLine2 = new GameObject();
+        hudLine2->z = 100;
+        hudLine2->AddComponent(new Text(*hudLine2, "Recursos/font/times.ttf", 18, Text::BLENDED,
+                                         "E interagir/pegar/acender/consertar | F usar item/luz/oleo | Esc sair",
+                                        hudColor));
+        AddObject(hudLine2);
 
-    hudLine3 = new GameObject();
-    hudLine3->z = 100;
-    hudLine3->AddComponent(new Text(*hudLine3, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED,
-                                    "Irmaozinho: E visao de monstro",
-                                    hudColor));
-    AddObject(hudLine3);
+        hudLine3 = new GameObject();
+        hudLine3->z = 100;
+        hudLine3->AddComponent(new Text(*hudLine3, "Recursos/font/times.ttf", 18, Text::BLENDED,
+                                         "T trovao | L luzes | O sombras | M musica | B fisica | X luz cursor | C criar luz | P painel luz",
+                                        hudColor));
+        AddObject(hudLine3);
 
-    hudFps = new GameObject();
-    hudFps->z = 100;
-    hudFps->AddComponent(new Text(*hudFps, "Recursos/font/TradeWinds-Regular.ttf", 18, Text::BLENDED, "FPS: 60",
-                                  hudColor));
-    AddObject(hudFps);
+        hudFps = new GameObject();
+        hudFps->z = 100;
+        hudFps->AddComponent(new Text(*hudFps, "Recursos/font/times.ttf", 18, Text::BLENDED, "FPS: 60",
+                                      hudColor));
+        AddObject(hudFps);
+    }
 
     GameObject* hotbarObj = new GameObject();
-    hotbarObj->AddComponent(new HotbarComponent(*hotbarObj, inventory, bigCharacter, &controlledCharacter,
+    HotbarComponent* hotbarComp = new HotbarComponent(*hotbarObj, inventory, bigCharacter, &controlledCharacter,
                                                 itemPickups, [this](GameObject* obj) { AddObject(obj); },
                                                 [this](Vec2 tl, float w, float h) {
                                                     return ClampPickupTopLeft(tl, w, h);
-                                                }));
-    hotbarObj->AddComponent(new BackpackVisuals(*hotbarObj, inventory, bigComp));
+                                                });
+    hotbarObj->AddComponent(hotbarComp);
     hotbarObj->z = 200;
     AddObject(hotbarObj);
     hotbarObject = hotbarObj;
+
+    GameObject* wheelObj = new GameObject();
+    InventoryWheel* wheelComp = new InventoryWheel(*wheelObj, inventory);
+    wheelObj->AddComponent(wheelComp);
+    wheelObj->z = 300;
+    AddObject(wheelObj);
+    inventoryWheelObject = wheelObj;
 
     RefreshCameraTargets();
     UpdateControlledCharacterVisuals();
 }
 
 void StageState::BeginLevelTransition(int targetLevelIndex) {
+    // Por enquanto: alcançar a escada/saída do 2º andar (índice 1) encerra o jogo
+    // com uma tela de vitória ambígua, em vez de carregar o 3º andar.
+    if (currentLevelIndex == 1) {
+        GameSfx::StopAllGameplay();
+        GameVoice::StopAll();
+        GameData::playerVictory = true;
+        GameData::deathByMonster = false;
+        popRequested = true;
+        Game::GetInstance().Push(new EndState());
+        return;
+    }
     Game::GetInstance().Push(new LevelTransitionLoadingState(this, targetLevelIndex));
 }
 
@@ -245,7 +270,6 @@ void StageState::TransitionToLevel(int targetLevelIndex) {
 
     std::vector<ItemDef> catalog = cfg.pickupCycle;
     catalog.push_back(cfg.startingFlashlight);
-    inventory.ApplyBackpackConfig(cfg.backpackConfig);
     inventory.ReadFromSave(preserved, catalog);
     skippedPickupSpawnIds = std::move(skippedForNextLevel);
     if (bigCharacter) {
@@ -259,6 +283,15 @@ void StageState::TransitionToLevel(int targetLevelIndex) {
     } else if (controlledCharacter == smallCharacter) {
         SwapControlledCharacter();
     }
+
+    // Per-level forced starting control overrides the carried-over control when
+    // entering a fresh floor (e.g. level 2 begins on the little brother).
+    if (levelDef.startControlled == "small" && controlledCharacter == bigCharacter) {
+        SwapControlledCharacter();
+    } else if (levelDef.startControlled == "big" && controlledCharacter == smallCharacter) {
+        SwapControlledCharacter();
+    }
+
     partyMode = (preserved.partyMode == "INDEPENDENT") ? PartyMode::INDEPENDENT : PartyMode::TOGETHER;
 
     ShowLevelTitleBanner();
@@ -283,7 +316,7 @@ void StageState::RenderLevelTitleBanner(SDL_Renderer* renderer) {
     char label[32];
     std::snprintf(label, sizeof(label), "Level %d", levelTitleNumber);
 
-    auto font = Resources::GetFont("Recursos/font/TradeWinds-Regular.ttf", 72);
+    auto font = Resources::GetFont("Recursos/font/times.ttf", 72);
     if (!font) {
         return;
     }

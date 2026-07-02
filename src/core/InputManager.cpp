@@ -14,6 +14,22 @@ InputManager::InputManager(){
     updateCounter = 0;
     mouseX = 0;
     mouseY = 0;
+    mouseWheel = 0;
+
+    InitDefaultBindings();
+}
+
+void InputManager::InitDefaultBindings() {
+    bindings[static_cast<int>(GameAction::MoveUp)]      = SDLK_w;
+    bindings[static_cast<int>(GameAction::MoveDown)]    = SDLK_s;
+    bindings[static_cast<int>(GameAction::MoveLeft)]    = SDLK_a;
+    bindings[static_cast<int>(GameAction::MoveRight)]   = SDLK_d;
+    bindings[static_cast<int>(GameAction::Interact)]    = SDLK_e;
+    bindings[static_cast<int>(GameAction::UseItem)]     = SDLK_f;
+    bindings[static_cast<int>(GameAction::CyclePrev)]   = SDLK_1;
+    bindings[static_cast<int>(GameAction::CycleNext)]   = SDLK_3;
+    bindings[static_cast<int>(GameAction::SwapBrother)] = SDLK_LCTRL;
+    bindings[static_cast<int>(GameAction::ToggleMode)]  = SDLK_q;
 }
 
 InputManager::~InputManager(){
@@ -28,6 +44,7 @@ InputManager& InputManager::GetInstance(){              // Ao invés de dar new 
 void InputManager::Update(){
     updateCounter ++;                                   // Incrementa o contador de frame
     SDL_GetMouseState(&mouseX, &mouseY);                // Obtém as coordenadas do mouse
+    mouseWheel = 0;
     quitRequested = false;                              // Reinicia a flag de quit
 
     SDL_Event event;
@@ -58,6 +75,10 @@ void InputManager::Update(){
             // Botão do mouse foi solto
             mouseState[event.button.button] = false;
             mouseUpdate[event.button.button] = updateCounter;
+            break;
+
+        case SDL_MOUSEWHEEL:
+            mouseWheel += event.wheel.y;
             break;
 
         case SDL_QUIT:
@@ -120,4 +141,71 @@ int InputManager::GetMouseY(){
 
 bool InputManager::QuitRequested(){
     return quitRequested;
+}
+
+int InputManager::GetMouseWheel() {
+    return mouseWheel;
+}
+
+// ---- Ações remapeáveis (4.1) -------------------------------------------------
+
+bool InputManager::ActionPress(GameAction action) {
+    return KeyPress(bindings[static_cast<int>(action)]);
+}
+
+bool InputManager::ActionDown(GameAction action) {
+    return IsKeyDown(bindings[static_cast<int>(action)]);
+}
+
+int InputManager::GetBinding(GameAction action) const {
+    return bindings[static_cast<int>(action)];
+}
+
+void InputManager::SetBinding(GameAction action, int keycode) {
+    bindings[static_cast<int>(action)] = keycode;
+}
+
+void InputManager::ResetBindingsToDefault() {
+    InitDefaultBindings();
+}
+
+int InputManager::PollAnyKeyPressed() {
+    for (const auto& kv : keyState) {
+        if (kv.second && keyUpdate[kv.first] == updateCounter) {
+            return kv.first;
+        }
+    }
+    return 0;
+}
+
+const char* InputManager::ActionName(GameAction action) {
+    switch (action) {
+    case GameAction::MoveUp:      return "move_up";
+    case GameAction::MoveDown:    return "move_down";
+    case GameAction::MoveLeft:    return "move_left";
+    case GameAction::MoveRight:   return "move_right";
+    case GameAction::Interact:    return "interact";
+    case GameAction::UseItem:     return "use_item";
+    case GameAction::CyclePrev:   return "cycle_prev";
+    case GameAction::CycleNext:   return "cycle_next";
+    case GameAction::SwapBrother: return "swap_brother";
+    case GameAction::ToggleMode:  return "toggle_mode";
+    default:                      return "";
+    }
+}
+
+const char* InputManager::ActionLabel(GameAction action) {
+    switch (action) {
+    case GameAction::MoveUp:      return "Mover cima";
+    case GameAction::MoveDown:    return "Mover baixo";
+    case GameAction::MoveLeft:    return "Mover esquerda";
+    case GameAction::MoveRight:   return "Mover direita";
+    case GameAction::Interact:    return "Interagir";
+    case GameAction::UseItem:     return "Usar item";
+    case GameAction::CyclePrev:   return "Item anterior";
+    case GameAction::CycleNext:   return "Proximo item";
+    case GameAction::SwapBrother: return "Trocar irmao";
+    case GameAction::ToggleMode:  return "Modo dupla";
+    default:                      return "";
+    }
 }

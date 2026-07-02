@@ -18,7 +18,7 @@ Candlestick::Candlestick(GameObject& associated, bool startsLit, const std::stri
     textObj = new GameObject();
     SDL_Color textColor = {255, 255, 255, 255};
     Text* promptText =
-        new Text(*textObj, "Recursos/font/TradeWinds-Regular.ttf", 14, Text::SOLID, "[E] Acender", textColor);
+        new Text(*textObj, "Recursos/font/times.ttf", 14, Text::SOLID, "[E] Acender", textColor);
     textObj->AddComponent(promptText);
 }
 
@@ -64,11 +64,8 @@ void Candlestick::UpdatePromptText() {
 }
 
 void Candlestick::Render() {
-    if (showPrompt && textObj) {
-        textObj->box.x = associated.box.Center().x - (textObj->box.w / 2.0f);
-        textObj->box.y = associated.box.y - 30;
-        textObj->Render();
-    }
+    // O rótulo flutuante foi removido — a indicação agora é só o prompt
+    // estilizado no rodapé central (StageState::RenderInteractionPrompt).
 }
 
 void Candlestick::SetLit(bool lit) {

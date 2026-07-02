@@ -1,5 +1,4 @@
 #include "states/stage/FirstLoadData.h"
-#include "gameplay/BackpackConfig.h"
 #include "gameplay/Item.h"
 
 #include "nlohmann/json.hpp"
@@ -53,7 +52,6 @@ StageFirstLoadData EmbeddedDefaults() {
     d.navWorldW = 4358.0f;
     d.navWorldH = 3276.0f;
     d.navTilePx = 64;
-    d.itemPickupCount = 35;
     d.startingFlashlightDurability = 100;
 
     ItemDef apple{"Apple", "Recursos/img/items/apple.png", -1, false, 1, {}};
@@ -70,7 +68,8 @@ StageFirstLoadData EmbeddedDefaults() {
                  true,
                  4,
                  {{ItemProperty::LIGHT_SOURCE, 1.0f}}};
-    d.pickupCycle = {apple, brokenFlashlight, fuel, lamp};
+    d.pickupCycle = {apple, brokenFlashlight, fuel, lamp,
+                     ItemDef{"Tabua de Madeira", "Recursos/img/cenario/tabua-item.png", 0, false, 5, {}}};
 
     d.startingFlashlight =
         ItemDef{"Flashlight",
@@ -82,37 +81,11 @@ StageFirstLoadData EmbeddedDefaults() {
 
     d.oceanChunkCandidates = {"Recursos/audio/waves.mp3"};
     d.levels = {
-        {"level_1", "Recursos/map/mapa_1_andar.json", 1},
-        {"level_2", "Recursos/map/mapa_2_andar.json", 2},
+        {"level_1", "Recursos/map/mapa_1_andar.json", 1, ""},
+        {"level_2", "Recursos/map/mapa_2_andar.json", 2, "small"},
+        {"level_3", "Recursos/map/mapa_3_andar.json", 3, ""},
     };
-    d.backpackConfig = DefaultBackpackConfig();
     return d;
-}
-
-BackpackConfig ParseBackpackConfig(const json& j) {
-    BackpackConfig cfg = DefaultBackpackConfig();
-    if (!j.is_array()) {
-        return cfg;
-    }
-    std::vector<BackpackGroupDef> groups;
-    for (const auto& g : j) {
-        BackpackGroupDef def;
-        def.id = g.value("id", "");
-        def.maxItems = g.value("maxItems", 1);
-        def.selectKey = g.value("selectKey", 0);
-        if (g.contains("itemNames") && g["itemNames"].is_array()) {
-            for (const auto& name : g["itemNames"]) {
-                def.itemNames.push_back(name.get<std::string>());
-            }
-        }
-        if (!def.id.empty()) {
-            groups.push_back(std::move(def));
-        }
-    }
-    if (!groups.empty()) {
-        cfg.groups = std::move(groups);
-    }
-    return cfg;
 }
 
 bool TryReadJsonFile(const char* path, json& out) {
@@ -150,9 +123,6 @@ StageFirstLoadData ParseFromJsonRoot(const json& j) {
     if (j.contains("navTilePx")) {
         d.navTilePx = j.at("navTilePx").get<int>();
     }
-    if (j.contains("itemPickupCount")) {
-        d.itemPickupCount = j.at("itemPickupCount").get<int>();
-    }
     if (j.contains("startingFlashlightDurability")) {
         d.startingFlashlightDurability = j.at("startingFlashlightDurability").get<int>();
     }
@@ -177,8 +147,8 @@ StageFirstLoadData ParseFromJsonRoot(const json& j) {
             d.oceanChunkCandidates = std::move(paths);
         }
     }
-    if (j.contains("backpackGroups") && j["backpackGroups"].is_array()) {
-        d.backpackConfig = ParseBackpackConfig(j["backpackGroups"]);
+    if (j.contains("backpackGroups")) {
+        // backwards-compat: ignore old backpackGroups config, no longer used
     }
     if (j.contains("levels") && j["levels"].is_array()) {
         std::vector<LevelDef> levels;
@@ -187,6 +157,7 @@ StageFirstLoadData ParseFromJsonRoot(const json& j) {
             def.label = lv.value("label", "");
             def.mapPath = lv.value("mapPath", "");
             def.displayNumber = lv.value("displayNumber", 1);
+            def.startControlled = lv.value("startControlled", "");
             if (!def.mapPath.empty()) {
                 levels.push_back(std::move(def));
             }
@@ -209,9 +180,6 @@ StageFirstLoadData SanitizeLists(StageFirstLoadData d) {
     }
     if (d.levelPath.empty() && !d.levels.empty()) {
         d.levelPath = d.levels.front().mapPath;
-    }
-    if (d.backpackConfig.groups.empty()) {
-        d.backpackConfig = DefaultBackpackConfig();
     }
     if (d.oceanChunkCandidates.empty()) {
         d.oceanChunkCandidates = EmbeddedDefaults().oceanChunkCandidates;

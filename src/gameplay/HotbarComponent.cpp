@@ -7,11 +7,16 @@
 #include "states/stage/StageState.h"
 #include "audio/Sound.h"
 #include "audio/GameSfx.h"
+#include "audio/GameVoice.h"
 
 #include <cstdlib>
 #include <iostream>
 
 namespace {
+
+// Resultado de uma tentativa de pegar item: bloqueada (bolsa cheia), pega normal,
+// ou pega que ENCHEU a bolsa (dispara fala diferente).
+enum class PickupOutcome { Blocked, PickedUp, PickedUpAndFilled };
 
 const char* kPickupSounds[] = {
     "Recursos/audio/pickup/zapsplat_foley_luggage_backpack_rucksack_grab_hard_001.mp3",
@@ -35,16 +40,18 @@ void PlayRandomPickupSound() {
     }
     const int idx = rand() % kPickupSoundCount;
     gPickupSounds[idx].Play();
+    // Pegar item é um VFX → passa pelo barramento de efeitos (master × VFX).
+    const int ch = gPickupSounds[idx].GetChannel();
+    if (ch >= 0) {
+        Mix_Volume(ch, GameSfx::CurrentSfxVolume());
+    }
 }
 
-void PerformPickup(Inventory& inventory, ItemPickup* closest, std::vector<ItemPickup*>& itemPickups,
-                   Character* bigChar) {
+PickupOutcome PerformPickup(Inventory& inventory, ItemPickup* closest, std::vector<ItemPickup*>& itemPickups,
+                            Character* bigChar) {
     const ItemDef& def = *closest->GetDef();
-    if (!inventory.CanAcceptItem(def)) {
-        return;
-    }
     if (!inventory.AddItem(def, closest->GetDurability())) {
-        return;
+        return PickupOutcome::Blocked;   // bolsa cheia
     }
     for (auto& p : itemPickups) {
         if (p == closest) {
@@ -57,6 +64,18 @@ void PerformPickup(Inventory& inventory, ItemPickup* closest, std::vector<ItemPi
     if (StageState* stage = Game::TryGetStageState()) {
         stage->NotifyItemPickupCollected(closest);
         stage->SaveCurrentProgress();
+    }
+    return inventory.IsFull() ? PickupOutcome::PickedUpAndFilled : PickupOutcome::PickedUp;
+}
+
+// Dispara a fala adequada ao resultado de pegar item: bolsa cheia → "bolsa
+// pesada" (sem a fala normal de pegar); bloqueado → "não consigo"; senão,
+// ocasionalmente comenta.
+void VoiceForPickup(PickupOutcome outcome) {
+    switch (outcome) {
+    case PickupOutcome::Blocked:           GameVoice::OnActionBlocked(); break;
+    case PickupOutcome::PickedUpAndFilled: GameVoice::OnBagFull();       break;
+    case PickupOutcome::PickedUp:          GameVoice::OnItemPickup();    break;
     }
 }
 
@@ -121,49 +140,61 @@ ItemPickup* HotbarComponent::FindClosestReachablePickup() const {
     return closest;
 }
 
-void HotbarComponent::TrySelectGroupOnKeyPress() {
+void HotbarComponent::TryCycleWheel() {
     InputManager& input = InputManager::GetInstance();
-    const BackpackConfig& cfg = inventory.GetBackpackConfig();
-    auto selectGroupById = [&](int key, const char* groupId) {
-        if (!input.KeyPress(key)) {
-            return;
-        }
-        const int g = cfg.GroupIndexForId(groupId);
-        if (g < 0 || inventory.CountInGroup(g) <= 0) {
-            return;
-        }
-        const bool wasSelected = inventory.GetSelectedGroup() == g;
-        if (!inventory.ToggleGroup(g) || !bigCharacter) {
-            return;
-        }
-        if (!wasSelected && std::string(groupId) == "lamp") {
-            bigCharacter->PlayPickLampAnimation();
-        } else {
-            bigCharacter->NotifyInventoryLightChanged();
-        }
-    };
-    selectGroupById(SDLK_1, "lighter");
-    selectGroupById(SDLK_2, "lamp");
+
+    bool cycled = false;
+    if (input.ActionPress(GameAction::CyclePrev)) {
+        inventory.CycleLeft();
+        cycled = true;
+    }
+    if (input.ActionPress(GameAction::CycleNext)) {
+        inventory.CycleRight();
+        cycled = true;
+    }
+
+    // The item that just moved to the wheel's center is now the usable item, so
+    // refresh the held-prop visual (lighter/lamp in hand) right away.
+    if (cycled && bigCharacter) {
+        bigCharacter->NotifyInventoryLightChanged();
+    }
 }
 
 void HotbarComponent::TryUseActiveItemOnKeyPress() {
     InputManager& input = InputManager::GetInstance();
-    if (!input.KeyPress(SDLK_f)) {
+    if (!input.ActionPress(GameAction::UseItem)) {
         return;
     }
 
-    const ItemInstance* active = inventory.GetActiveItem();
-    if (!active) {
+    if (inventory.IsOilPrimed()) {
+        // In oil-apply mode, F pours the oil into the centered lighter/lamp. On
+        // an empty or invalid slot it does nothing (the oil is kept). ESC, which
+        // exits this mode, is handled in the stage update.
+        if (inventory.TryCombineOil()) {
+            if (bigCharacter) {
+                bigCharacter->NotifyInventoryLightChanged();
+            }
+        }
         return;
     }
 
-    if (!active->def.HasProperty(ItemProperty::LIGHT_SOURCE)) {
+    const Inventory::ItemStack* active = inventory.GetActiveStack();
+    if (!active) return;
+
+    if (active->def.HasProperty(ItemProperty::FUEL)) {
+        if (inventory.TryPrimeOil()) {
+            return;
+        }
         return;
     }
+
+    if (!active->def.HasProperty(ItemProperty::LIGHT_SOURCE)) return;
 
     const bool wasOn = inventory.isLightToggledOn;
-    const BackpackGroupDef* group = inventory.GetBackpackConfig().GetGroup(inventory.GetSelectedGroup());
-    const bool isLighter = group && group->id == "lighter";
+    // Decide "is this a lighter?" from the item type, NOT from the lit state:
+    // IsActiveLightLighter() requires the light to already be on, so it would be
+    // false at the moment we turn it ON (no turn-on sound would play).
+    const bool isLighter = inventory.IsActiveItemLighter();
     if (wasOn) {
         inventory.isLightToggledOn = false;
         if (isLighter) {
@@ -176,25 +207,6 @@ void HotbarComponent::TryUseActiveItemOnKeyPress() {
     }
 }
 
-void HotbarComponent::TryRefuelOnKeyPress() {
-    InputManager& input = InputManager::GetInstance();
-    if (!input.KeyPress(SDLK_r)) {
-        return;
-    }
-
-    if (!inventory.TryRefuelWithFuel()) {
-        return;
-    }
-
-    PlayRandomPickupSound();
-    if (bigCharacter) {
-        bigCharacter->NotifyInventoryLightChanged();
-    }
-    if (StageState* stage = Game::TryGetStageState()) {
-        stage->SaveCurrentProgress();
-    }
-}
-
 void HotbarComponent::TryPickupOnKeyPress() {
     InputManager& input = InputManager::GetInstance();
     StageState* stage = Game::TryGetStageState();
@@ -202,8 +214,12 @@ void HotbarComponent::TryPickupOnKeyPress() {
         return;
     }
 
+    if (!input.ActionPress(GameAction::Interact)) {
+        return;
+    }
+
     ItemPickup* closest = stage->GetReachablePickup();
-    if (!input.KeyPress(SDLK_e) || !closest) {
+    if (!closest) {
         return;
     }
 
@@ -221,10 +237,11 @@ void HotbarComponent::TryPickupOnKeyPress() {
 
     const int hLevel = closest->GetHeightLevel();
     if (hLevel == 0 || hLevel == 1) {
-        if (!inventory.CanAcceptItem(*closest->GetDef())) {
-            return;
+        const PickupOutcome outcome = PerformPickup(inventory, closest, itemPickups, bigCharacter);
+        VoiceForPickup(outcome);
+        if (outcome == PickupOutcome::Blocked) {
+            return;   // bolsa cheia: nada foi pego
         }
-        PerformPickup(inventory, closest, itemPickups, bigCharacter);
         if (Character::player) {
             Character::player->currentState = Character::ActionState::INTERACTING;
             Character::player->interactTimer = 0.2f;
@@ -238,7 +255,13 @@ void HotbarComponent::TryPickupOnKeyPress() {
     if (hLevel == 2 && Character::littleBrother) {
         const float distBrothers = Character::player->GetFootCircleCenter().Distance(
             Character::littleBrother->GetFootCircleCenter());
-        if (distBrothers > 170.0f || !inventory.CanAcceptItem(*closest->GetDef())) {
+        if (distBrothers > 170.0f) {
+            return;
+        }
+
+        // Bolsa cheia: nem inicia a animação de coop — só a fala de bloqueio.
+        if (inventory.IsFull()) {
+            GameVoice::OnActionBlocked();
             return;
         }
 
@@ -247,7 +270,8 @@ void HotbarComponent::TryPickupOnKeyPress() {
         Character::littleBrother->currentState = Character::ActionState::INTERACTING;
         Character::littleBrother->interactTimer = 1.5f;
         Character::littleBrother->PositionForCoop(Character::player);
-        PerformPickup(inventory, closest, itemPickups, bigCharacter);
+        const PickupOutcome outcome = PerformPickup(inventory, closest, itemPickups, bigCharacter);
+        VoiceForPickup(outcome);
     }
 }
 
@@ -259,10 +283,13 @@ void HotbarComponent::Update(float dt) {
     if (*controlledCharacterPtr != bigCharacter) {
         return;
     }
+    // Congela o input do hotbar quando um overlay (menu de pausa/modal) está ativo.
+    if (StageState* stage = Game::TryGetStageState(); stage && stage->IsPlayerInputFrozen()) {
+        return;
+    }
 
-    TrySelectGroupOnKeyPress();
+    TryCycleWheel();
     TryUseActiveItemOnKeyPress();
-    TryRefuelOnKeyPress();
     TryPickupOnKeyPress();
 }
 

@@ -27,20 +27,20 @@ void PlayerController::Update(float dt) {
     bool isMoving = false;
     Vec2 direction(0.0f, 0.0f);
 
-    // 2. Verifica as teclas W, A, S, D para movimento.
-    if (input.IsKeyDown(SDLK_w)) {                                      // Exemplo: SDLK_w é o keycode para a tecla 'w'
+    // 2. Verifica as ações de movimento (teclas remapeáveis).
+    if (input.ActionDown(GameAction::MoveUp)) {
         direction.y -= 1.0f;
         isMoving = true;
     }
-    if (input.IsKeyDown(SDLK_s)) {
+    if (input.ActionDown(GameAction::MoveDown)) {
         direction.y += 1.0f;
         isMoving = true;
     }
-    if (input.IsKeyDown(SDLK_a)) {
+    if (input.ActionDown(GameAction::MoveLeft)) {
         direction.x -= 1.0f;
         isMoving = true;
     }
-    if (input.IsKeyDown(SDLK_d)) {
+    if (input.ActionDown(GameAction::MoveRight)) {
         direction.x += 1.0f;
         isMoving = true;
     }

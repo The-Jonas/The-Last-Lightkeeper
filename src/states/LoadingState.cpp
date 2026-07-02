@@ -3,6 +3,7 @@
 #include "core/SaveManager.h"
 #include "core/SaveData.h"
 #include "audio/GameSfx.h"
+#include "audio/GameVoice.h"
 #include "engine/GameObject.h"
 #include "core/InputManager.h"
 #include "engine/Camera.h"
@@ -34,7 +35,7 @@ void LoadingState::LoadAssets() {
     GameObject* textGO = new GameObject();
     textGO->z = 10;
     SDL_Color white = {220, 220, 220, 255};
-    Text* t = new Text(*textGO, "Recursos/font/TradeWinds-Regular.ttf", 40, Text::BLENDED, "Loading...", white);
+    Text* t = new Text(*textGO, "Recursos/font/times.ttf", 40, Text::BLENDED, "Loading...", white);
     textGO->AddComponent(t);
     AddObject(textGO);
     loadingLabel = textGO;
@@ -43,6 +44,7 @@ void LoadingState::LoadAssets() {
 
 void LoadingState::Start() {
     GameSfx::NotifyLoadingBegin();
+    GameVoice::NotifyLoadingBegin();
     Mix_HaltMusic();
     LoadAssets();
     StartArray();

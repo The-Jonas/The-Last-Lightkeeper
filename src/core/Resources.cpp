@@ -29,6 +29,10 @@ std::unordered_map<std::string, std::shared_ptr<TTF_Font>> Resources::fontTable;
 //---------------------------------------------------------------------------//
 
 std::shared_ptr<SDL_Texture> Resources::GetImage(const std::string file) {
+    // Caminho vazio: no-op silencioso (evita erro de SDL_RWFromFile com "").
+    if (file.empty()) {
+        return nullptr;
+    }
     // Se já existe retorna
     if (imageTable.find(file) != imageTable.end()) {
         return imageTable[file];

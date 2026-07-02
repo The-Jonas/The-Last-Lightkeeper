@@ -13,6 +13,35 @@ GameObject* Camera::pairA = nullptr;
 GameObject* Camera::pairB = nullptr;
 GameObject* Camera::pairPrimary = nullptr;
 float Camera::zoom = 1.0f;
+float Camera::trauma = 0.0f;
+float Camera::vertigo = 0.0f;
+float Camera::fxTime = 0.0f;
+Vec2 Camera::shakeOffset(0, 0);
+
+namespace {
+constexpr float kTraumaDecayPerSec = 1.6f;   // trauma volta a 0 em ~0.6s
+constexpr float kMaxShakePx = 22.0f;          // amplitude máxima do tremor (trauma=1)
+constexpr float kMaxSwayPx = 10.0f;           // amplitude máxima do balanço de vertigem
+}
+
+void Camera::AddTrauma(float amount) {
+    trauma += amount;
+    if (trauma > 1.0f) trauma = 1.0f;
+    if (trauma < 0.0f) trauma = 0.0f;
+}
+
+void Camera::SetVertigo(float amount) {
+    if (amount < 0.0f) amount = 0.0f;
+    if (amount > 1.0f) amount = 1.0f;
+    vertigo = amount;
+}
+
+void Camera::ResetShake() {
+    trauma = 0.0f;
+    vertigo = 0.0f;
+    pos = pos - shakeOffset;  // remove o offset aplicado para não deixar resíduo
+    shakeOffset = Vec2(0, 0);
+}
 
 void Camera::Follow(GameObject* newFocus) {             // Seta um novo foco
     focus = newFocus;
@@ -42,7 +71,11 @@ float Camera::GetZoom() {
     return zoom;
 }
 
-void Camera::Update(float dt) { 
+void Camera::Update(float dt) {
+    // Remove o offset de tremor do frame anterior para que o enquadramento
+    // interpole sobre a posição-base limpa (sem acumular o tremor).
+    pos = pos - shakeOffset;
+
     if (pairA && pairB) { // Quando a dupla está ativa, enquadra os dois personagens
         const float lookAheadMaxX = 120.0f;
         const float lookAheadMaxY = 80.0f;
@@ -131,23 +164,45 @@ void Camera::Update(float dt) {
         speed = Vec2(0, 0);
         float cameraSpeed = 400.0f;                     // Velocidade da camera em pixels por segundo
 
-        if (InputManager::GetInstance().IsKeyDown(LEFT_ARROW_KEY)) {
-            speed.x -= cameraSpeed * dt;
-        }
+        // Pan livre por setas — ferramenta de desenvolvedor apenas.
+        if (Game::debugMode) {
+            if (InputManager::GetInstance().IsKeyDown(LEFT_ARROW_KEY)) {
+                speed.x -= cameraSpeed * dt;
+            }
 
-        if (InputManager::GetInstance().IsKeyDown(RIGHT_ARROW_KEY)) {
-            speed.x += cameraSpeed * dt;
-        }
+            if (InputManager::GetInstance().IsKeyDown(RIGHT_ARROW_KEY)) {
+                speed.x += cameraSpeed * dt;
+            }
 
-        if (InputManager::GetInstance().IsKeyDown(UP_ARROW_KEY)) {
-            speed.y -= cameraSpeed * dt;
-        }
+            if (InputManager::GetInstance().IsKeyDown(UP_ARROW_KEY)) {
+                speed.y -= cameraSpeed * dt;
+            }
 
-        if (InputManager::GetInstance().IsKeyDown(DOWN_ARROW_KEY)) {
-            speed.y += cameraSpeed * dt;
+            if (InputManager::GetInstance().IsKeyDown(DOWN_ARROW_KEY)) {
+                speed.y += cameraSpeed * dt;
+            }
         }
         pos += speed;                                   // Somamos a velocidade da câmera a posição
         zoom += (1.0f - zoom) * (1.0f - std::exp(-8.0f * dt));
     }
+
+    // ── Tremor + vertigem: somados em `pos` por cima da posição-base ──
+    fxTime += dt;
+    trauma -= kTraumaDecayPerSec * dt;
+    if (trauma < 0.0f) trauma = 0.0f;
+
+    // Tremor de impacto: alta frequência, escala com trauma^2 (sensação seca).
+    const float shakeMag = kMaxShakePx * trauma * trauma;
+    const float shakeX = std::sin(fxTime * 47.0f) + 0.5f * std::sin(fxTime * 23.3f);
+    const float shakeY = std::sin(fxTime * 41.0f + 1.7f) + 0.5f * std::sin(fxTime * 29.7f);
+
+    // Vertigem: balanço lento e contínuo enquanto a sanidade está baixa.
+    const float swayMag = kMaxSwayPx * vertigo;
+    const float swayX = std::sin(fxTime * 1.6f);
+    const float swayY = std::sin(fxTime * 1.13f + 0.9f);
+
+    shakeOffset = Vec2(shakeX * shakeMag + swayX * swayMag,
+                       shakeY * shakeMag + swayY * swayMag);
+    pos += shakeOffset;
 }
 

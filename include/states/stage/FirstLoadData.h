@@ -1,7 +1,6 @@
 #ifndef STAGE_FIRST_LOAD_DATA_H
 #define STAGE_FIRST_LOAD_DATA_H
 
-#include "gameplay/BackpackConfig.h"
 #include "gameplay/Item.h"
 
 #include <string>
@@ -11,6 +10,9 @@ struct LevelDef {
     std::string label;
     std::string mapPath;
     int displayNumber = 1;
+    // When set ("small"/"big"), control is forced onto that brother as the level
+    // begins (on entering via a stair transition). Empty = keep current control.
+    std::string startControlled;
 };
 
 /// Runtime configuration for `StageState::LoadAssets` (JSON under `Recursos/data/` + embedded fallback).
@@ -20,13 +22,11 @@ struct StageFirstLoadData {
     float navWorldW = 4358.0f;
     float navWorldH = 3276.0f;
     int navTilePx = 64;
-    int itemPickupCount = 35;
-    int startingFlashlightDurability = 50;
+    int startingFlashlightDurability = 100;
     ItemDef startingFlashlight;
     std::vector<ItemDef> pickupCycle;
     std::vector<std::string> oceanChunkCandidates;
     std::vector<LevelDef> levels;
-    BackpackConfig backpackConfig = DefaultBackpackConfig();
 };
 
 int GetLevelCount(const StageFirstLoadData& cfg);

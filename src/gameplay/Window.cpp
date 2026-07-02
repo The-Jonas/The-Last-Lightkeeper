@@ -24,7 +24,7 @@ Window::Window(GameObject& associated, std::string windowType, bool startsOpen, 
     // Setup do Prompt de texto
     textObj = new GameObject();
     SDL_Color textColor = {255, 255, 255, 255};
-    Text* promptText = new Text(*textObj, "Recursos/font/TradeWinds-Regular.ttf", 14, Text::SOLID, "", textColor);
+    Text* promptText = new Text(*textObj, "Recursos/font/times.ttf", 14, Text::SOLID, "", textColor);
     textObj->AddComponent(promptText);
     UpdatePromptText();
 }
@@ -77,12 +77,7 @@ void Window::Update(float dt) {
 }
 
 void Window::Render() {
-    // Só renderiza o texto se o jogador estiver perto E a janela não estiver no meio de uma animação
-    if (showPrompt && textObj && (state == WindowState::OPEN || state == WindowState::CLOSED)) {
-        textObj->box.x = associated.box.Center().x - (textObj->box.w / 2.0f);
-        textObj->box.y = associated.box.y - 30;
-        textObj->Render();
-    }
+    // Rótulo flutuante removido — indicação só no prompt central do rodapé.
 
 #ifdef DEBUG
     // ==========================================

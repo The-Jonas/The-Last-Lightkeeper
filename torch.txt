@@ -1,0 +1,395 @@
+---
+Torch Light: Complete System Dissection
+The torch lives across 3 files: LightMaskTypes.h (params), RadialLightOverlay.cpp (rendering + animation), and RadialLightOverlay.h (interface). Here is every unit, why it exists, and how it chains together.
+---
+1. The Six Torch Parameters
+LightMaskTypes.h:72-77 — these define the torch's personality. They're stored on every LightMaskParams but only consumed when shape == Torch.
+float torchAnimSpeed = 1.0f;       // global multiplier on all animation clocks
+float torchMotionRangePx = 9.0f;   // how far the flame center drifts (pixels)
+float torchWarpStrength = 0.40f;   // 0..1, how much the boundary ripples per-pixel
+float torchPulseStrength = 0.30f;  // 0..1, breathing/brightness variation amplitude
+float torchColorWarmth = 2.0f;     // orange tint intensity (higher = deeper amber)
+float torchColorStrength = 1.0f;   // master multiplier on the warm overlay
+The reason for separating motion, warp, and pulse into three dimensions is that a real flame doesn't just scale uniformly — its center wobbles, its edge ripples, and its overall brightness breathes, all on different timescales. Independent controls let you tune a calm candle vs. a raging torch.
+---
+2. Noise Primitives — The Foundation of All Randomness
+Hash1(float x) — RadialLightOverlay.cpp:48-51
+float Hash1(float x) {
+    const float s = std::sin(x * 127.1f + 311.7f) * 43758.5453f;
+    return s - std::floor(s);
+}
+This is a classic GPU hash function ported to CPU. The formula sin(x * A + B) * C exploits two properties of sine:
+- Large frequency multiplier (127.1): A tiny change in x maps to a large phase change, scattering outputs across different sine periods.
+- Large amplitude (43758.5453): After multiplication, the result oscillates wildly through many integer wraps. Taking only the fractional part (s - floor(s)) strips the integer portion, leaving a value in [0, 1) that's indistinguishable from random but 100% deterministic.
+The constants (127.1, 311.7, 43758.5453) are prime-ish numbers chosen to avoid resonance — no two inputs produce the same output within any reasonable range.
+In summary, this functions as a module for converting any float into a pseudo-random value between 0 and 1. Determinism matters because every torch at every frame must produce the same noise given the same (time, seed) pair — otherwise the animation would jitter differently on every re-render.
+---
+SmoothNoise1D(float x, float seed) — RadialLightOverlay.cpp:53-60
+float SmoothNoise1D(float x, float seed) {
+    const float p = std::floor(x);
+    const float f = x - p;                                 // fractional part
+    const float u = f * f * (3.0f - 2.0f * f);            // smoothstep
+    const float a = Hash1(p + seed * 91.13f);              // value at left integer
+    const float b = Hash1((p + 1.0f) + seed * 91.13f);     // value at right integer
+    return a + (b - a) * u;                                 // linear blend
+}
+This is value noise with Hermite interpolation. The algorithm:
+1. Floor to find cell boundaries (p = floor(x)): The input is partitioned into unit intervals [n, n+1]. Each interval gets two random values (one at each endpoint).
+2. Compute fractional position (f = x - p): How far between the two endpoints the sample point is, as a value in [0, 1).
+3. Smoothstep remap (u = f² * (3 - 2f)): This is the cubic Hermite curve that maps [0,1] → [0,1] with zero derivatives at both ends. Without this, the noise would have sharp gradient discontinuities at cell boundaries, producing visible "creases" in the torch sway.
+4. Hash each corner (Hash1(p + seed), Hash1(p+1 + seed)): The seed * 91.13 term shifts each torch into a different noise space. Without the seed, all torches would sway identically.
+5. Lerp (a + (b-a) * u): Standard linear interpolation between the two corner values, using the smoothstep as the blend factor.
+The reason for using 1D noise rather than 2D is performance — the torch animation is purely time-driven, so x is just a scaled timeSec value. This avoids the memory and computation cost of a 2D noise lookup.
+---
+SmoothRandomDir(...) — RadialLightOverlay.cpp:62-73
+void SmoothRandomDir(float phase, float seed, float salt,
+                     float& outX, float& outY) {
+    const float k0 = std::floor(phase);
+    const float f = phase - k0;
+    const float u = f * f * (3.0f - 2.0f * f);
+    const float a0 = Hash1((k0 + salt) * 1.31f + seed * 17.0f) * 2.0f * M_PI;
+    const float a1 = Hash1((k0 + 1.0f + salt) * 1.31f + seed * 17.0f) * 2.0f * M_PI;
+    const float x = cos(a0) + (cos(a1) - cos(a0)) * u;
+    const float y = sin(a0) + (sin(a1) - sin(a0)) * u;
+    const float invLen = 1.0f / std::max(1e-4f, sqrt(x * x + y * y));
+    outX = x * invLen;
+    outY = y * invLen;
+}
+This generates a smoothly rotating unit vector. The reason for using smooth random directions instead of just using raw noise angles is to get continuous rotation without teleportation — the torch spikes should drift, not snap.
+The algorithm:
+1. Keyframes at each integer phase: k0 = floor(phase) gives the current keyframe index. A random angle a0 ∈ [0, 2π) is hashed from this keyframe.
+2. Next keyframe: a1 is hashed from k0 + 1. This is a completely independent random angle.
+3. Smooth interpolation on the circle: The direction (cos(a), sin(a)) is interpolated. This is not a simple angle lerp (which would take the shorter arc). Instead, it's a component-wise lerp on the unit circle, followed by renormalization. This produces a path that is smooth but not necessarily the shortest arc — but that's actually desirable because it makes the movement less predictable.
+4. Renormalization: The lerped vector (x, y) is divided by its length to ensure it's exactly unit-length. Without this, the vector would shrink near the midpoint, weakening the spike.
+The salt parameter (1.3, 7.9, 13.7) decorrelates the three spike axes so they don't all point in the same direction.
+---
+3. ComputeTorchAnim() — The Animation Brain
+RadialLightOverlay.cpp:75-97 — called once per torch per frame, returns a TorchAnimState:
+struct TorchAnimState {
+    float swayX, swayY;    // center displacement in pixels
+    float radialMul;       // multiplier on falloff radius (breathing)
+    float warmPulse;       // warm tint pulsation
+};
+The full body:
+TorchAnimState ComputeTorchAnim(const LightMaskParams& params,
+                                float timeSec, float seed) {
+    const float t = timeSec * std::max(0.15f, params.torchAnimSpeed);
+    const float motion = std::max(0.0f, params.torchMotionRangePx);
+    const float warp = Clamp01f(params.torchWarpStrength);
+    const float pulse = Clamp01f(params.torchPulseStrength);
+    TorchAnimState s;
+    // --- SWAY (lines 83-88) ---
+    const float sx1 = (SmoothNoise1D(t * 1.7f, seed * 1.3f + 11.0f) - 0.5f) * 2.0f;
+    const float sx2 = (SmoothNoise1D(t * 4.9f, seed * 2.1f + 37.0f) - 0.5f) * 2.0f;
+    const float sy1 = (SmoothNoise1D(t * 1.9f, seed * 2.7f + 19.0f) - 0.5f) * 2.0f;
+    const float sy2 = (SmoothNoise1D(t * 5.3f, seed * 3.4f + 53.0f) - 0.5f) * 2.0f;
+    s.swayX = motion * (0.72f * sx1 + 0.28f * sx2);
+    s.swayY = motion * (0.70f * sy1 + 0.30f * sy2);
+    // --- PULSE (lines 91-94) ---
+    const float p1 = (SmoothNoise1D(t * 2.2f, seed * 4.1f + 71.0f) - 0.5f) * 2.0f;
+    const float p2 = (SmoothNoise1D(t * 6.1f, seed * 5.7f + 97.0f) - 0.5f) * 2.0f;
+    const float pulseNoise = 0.68f * p1 + 0.32f * p2;
+    s.radialMul = clamp(0.62f, 1.70f,
+        1.0f + pulse * (0.32f * pulseNoise) + warp * (0.08f * p2));
+    s.warmPulse = clamp(0.55f, 1.45f,
+        1.0f + pulse * (0.36f * p1 + 0.12f * p2));
+    return s;
+}
+3a. The Sway Subsystem (lines 83-88)
+The torch center wobbles. But a real flame doesn't orbit in a circle — it drifts randomly in X and Y independently. Here's why each line exists:
+Two octaves per axis (frequencies 1.7/4.9 and 1.9/5.3):
+- The low-frequency octave (1.7x) creates slow, wandering drift. This is what gives the flame its "lazy sway" on one side of the torch, then the other.
+- The high-frequency octave (4.9x) creates rapid micro-jitter. Without this, the flame looks like a pendulum — too smooth, too predictable.
+- The X and Y frequencies differ (1.7 vs 1.9, 4.9 vs 5.3) so the X and Y channels never synchronize. If they were equal, the flame would sway in a diagonal line, which looks mechanical.
+The (smoothNoise - 0.5) * 2.0 transformation: SmoothNoise1D outputs [0, 1], but sway needs to go both positive and negative. Subtracting 0.5 and multiplying by 2 maps to [-1, 1].
+The blend weights (0.72/0.28): These were tuned empirically. A higher weight on the low-frequency octave makes the flame feel heavy and lazy. Too much high-frequency makes it look like static. The ratio 0.72:0.28 was the point where both octaves are visible but the slow drift dominates.
+The seed modifiers (seed * 1.3f + 11.0f, etc.): Each noise call gets a different combination of seed multiplier and constant offset. This ensures:
+- Different torches have different sway patterns (seeds differ)
+- X and Y channels on the same torch are independent (different seed formulas)
+- Low and high octaves on the same channel are independent (again, different formulas)
+3b. The Pulse Subsystem (lines 91-94)
+s.radialMul = clamp(0.62f, 1.70f,
+    1.0f + pulse*(0.32f*pulseNoise) + warp*(0.08f*p2));
+s.warmPulse = clamp(0.55f, 1.45f,
+    1.0f + pulse*(0.36f*p1 + 0.12f*p2));
+This subsystem has two outputs that are produced from the same two noise octaves but with different mixing weights. The reason for sharing the same noise source is to maintain perceptual coherence — when the torch breathes brighter, it also gets warmer, but not in lockstep (different mix weights).
+radialMul (brightness breathing): 
+- The base value is 1.0 (normal radius). 
+- pulse * 0.32 * pulseNoise adds breathing proportional to the pulseStrength slider. At max pulse (1.0), the noise contribution is ±0.32, producing radius variations of 0.68x to 1.32x. 
+- warp * 0.08 * p2 adds a small warp-dependent contribution — this makes the torch shrink slightly when the boundary is rippling hard, mimicking how a real flame contracts when disturbed.
+- The final clamp [0.62, 1.70] prevents extreme values that would look unrealistic. A torch shouldn't ever disappear or double in size.
+warmPulse (color warmth pulsation):
+- Same structure but different mix weights (0.36 and 0.12) and different octaves (p1 only for warmPulse's dominant term vs. the combined pulseNoise for radialMul). This ensures the color pulse doesn't mirror the radius pulse — they are perceptually independent but share the same underlying timing.
+- Range is [0.55, 1.45] — more conservative than radialMul because very warm torches look unnatural (too orange).
+The reason for using p2 in radialMul but p1 in warmPulse is to decorrelate the two outputs: p1 (frequency 2.2) and p2 (frequency 6.1) are far enough apart that their cross-correlation is near zero. So when the torch is at its brightest, its warmth could be high, low, or anywhere in between — it's not locked.
+---
+4. Per-Pixel AlphaAt — Torch Case
+RadialLightOverlay.cpp:169-185 — this is the function called for every grid vertex to determine how dark it is:
+case LightMaskShape::Torch: {
+    const float t = timeSec * std::max(0.15f, params.torchAnimSpeed);
+    const float warp = Clamp01f(params.torchWarpStrength);
+    const float dRaw = std::sqrt(dx * dx + dy * dy);
+    const float inv = 1.0f / std::max(1e-3f, dRaw);
+    const float nx = dx * inv;
+    const float ny = dy * inv;
+    // Directional edge noise — the boundary is not a circle
+    const float edgeNoise = warp * (
+        0.16f * sin((nx*1.70f + ny*2.30f)*9.0f + t*4.2f + seed*6.1f) +
+        0.11f * sin((nx*-2.90f + ny*1.10f)*13.0f - t*2.8f + seed*9.4f) +
+        0.08f * sin((nx*3.40f + ny*-3.80f)*7.0f + t*6.5f + seed*3.7f));
+    const float radialMul = clamp(0.62f, 1.75f, 1.0f + edgeNoise);
+    const float d = dRaw;
+    const float rEff = std::max(10.0f, rFalloff * radialMul);
+    const float tt = (rEff > 1e-4f) ? std::min(1.0f, d / rEff) : 1.0f;
+    return combine(tt);
+}
+This function determines darkness at a single pixel position (dx, dy) relative to the torch center. Let's trace through every line.
+Step 1: Compute unit direction (nx, ny): The pixel's direction from the light center is normalize(dx, dy). This direction vector is the input to all directional effects — the edge noise and spikes only depend on where on the boundary you are, not how far.
+Step 2: 3-sine boundary noise (the edgeNoise expression): This is the core of the torch's organic look. It's a sum of three sine waves, each frequency-modulated in a different direction:
+sin((nx*Ax + ny*Ay)*spatialFreq + t*temporalFreq + seed*seedFreq)
+Each sine term has three axes:
+- Spatial frequency: (nx*1.70 + ny*2.30) * 9.0 — the argument is the dot product of the pixel's direction (nx, ny) with a "wave vector" (1.70, 2.30). The dot product measures how aligned the pixel is with that wave direction. Multiplying by 9.0 makes 9 full sine cycles around the circle.
+- Temporal frequency: t * 4.2 — moves the sine pattern over time, making the boundary ripple.
+- Seed offset: seed * 6.1 — shifts the phase per-torch so they don't all ripple identically.
+The three sine terms use different wave vectors and frequencies:
+Term	Weight	Wave vector	Spatial freq
+1	0.16	(1.70, 2.30)	9.0
+2	0.11	(-2.90, 1.10)	13.0
+3	0.08	(3.40, -3.80)	7.0
+The wave vectors point in different directions across the circle. The spatial frequencies (9, 13, 7) produce different numbers of ripples per revolution. In combination, they create an irregular, non-periodic boundary that never quite repeats.
+The weights (0.16, 0.11, 0.08) sum to 0.35, which at full warp (1.0) gives edgeNoise in range [-0.35, 0.35]. This means the boundary radius varies by ±35% depending on direction — enough to see clearly, not enough to break the torch shape.
+Step 3: Effective radius (radialMul = clamp(0.62, 1.75, 1.0 + edgeNoise)): The edge noise is added to 1.0 (normal radius) and clamped to prevent extreme values. The effective radius rEff = rFalloff * radialMul varies per-pixel direction.
+Step 4: Calculate darkness (combine(tt)): The distance ratio tt = d / rEff determines how far the pixel is within or beyond the effective radius. combine applies the falloff curve (smoothstep or power) to produce the final darkness value. A pixel at the torch center has tt = 0 → fully lit; a pixel beyond the boundary has tt >= 1 → fully dark.
+---
+5. Per-Pixel Dark Mesh — Full Integration
+RadialLightOverlay.cpp:396-426 — this is the inner loop of the darkness mesh that runs for every grid vertex. The torch path was extracted from AlphaAt into inline code here for performance (2 less function calls per vertex × thousands of vertices per frame):
+if (light.shape == LightMaskShape::Torch) {
+    const float d = std::sqrt(distSq);
+    const float inv = 1.0f / std::max(1e-3f, d);
+    const float nx = lx * inv;
+    const float ny = ly * inv;
+    // 2nd-order spherical harmonic boundary deformation
+    const float dirWarp = light.torchKx * nx + light.torchKy * ny
+        + light.torchKxy * (nx * ny)
+        + light.torchKquad * (nx * nx - ny * ny);
+    // Spike protrusions (fire tongues)
+    const float s1 = std::fabs(nx * light.torchAx1 + ny * light.torchAy1);
+    const float s2 = std::fabs(nx * light.torchAx2 + ny * light.torchAy2);
+    const float s3 = std::fabs(nx * light.torchAx3 + ny * light.torchAy3);
+    const float p1 = s1*s1*s1*s1*s1*s1;  // s1^6
+    const float p2 = s2*s2*s2*s2*s2*s2;  // s2^6
+    const float p3 = s3*s3*s3*s3*s3*s3;  // s3^6
+    const float spikeWarp = light.torchSpikeAmp * std::max(p1, std::max(p2, p3));
+    const float rEff = std::max(8.0f,
+        light.rFalloff * clamp(0.60f, 1.65f, 1.0f + dirWarp + spikeWarp));
+    const float t01 = std::min(1.0f, d / rEff);
+    const float s = FalloffShape(t01, light.params);
+    const float inner = Clamp01f(light.params.innerLift);
+    a = light.dMax * (inner + (1.0f - inner) * s);
+}
+This is a richer version of AlphaAt's torch case because it adds two effects that the simpler AlphaAt path doesn't use: the spherical harmonic warp and the spike protrusions. Let's break down each.
+5a. Spherical Harmonic Boundary Deformation (lines 401-402)
+const float dirWarp = light.torchKx * nx + light.torchKy * ny
+    + light.torchKxy * (nx * ny)
+    + light.torchKquad * (nx * nx - ny * ny);
+This is a 2nd-order real spherical harmonic expansion over the circle. Each term corresponds to a specific angular deformation pattern:
+Term	Math pattern	Visual effect
+Kx * nx	cos(θ)	Offsets the torch center in X
+Ky * ny	sin(θ)	Offsets the torch center in Y
+Kxy * (nx * ny)	cos(θ)·sin(θ) = ½·sin(2θ)	Diagonal shear — opposite quadrants stretch/compress together
+Kquad * (nx² - ny²)	cos²θ - sin²θ = cos(2θ)	Quadrupole — horizontal stretch at θ=0, vertical shrink at θ=90°
+These four coefficients were computed per-frame in RenderMany()'s preparation loop (lines 290-293):
+const float tt = timeSec * std::max(0.15f, light.params.torchAnimSpeed);
+const float warp = Clamp01f(light.params.torchWarpStrength);
+torchKx    = warp * 0.26f * sin(tt * 1.7f + seed * 13.1f);
+torchKy    = warp * 0.24f * sin(tt * 2.1f + seed * 17.3f + 1.1f);
+torchKxy   = warp * 0.20f * sin(tt * 2.8f + seed * 19.7f + 2.4f);
+torchKquad = warp * 0.18f * sin(tt * 3.5f + seed * 23.9f + 0.6f);
+Each coefficient oscillates at a different frequency (1.7, 2.1, 2.8, 3.5) with a different seed offset. The magnitudes decrease from linear (0.26) to quadratic (0.18) — the linear terms should dominate because they produce the most natural-looking center drift. The quadratic terms add subtle shape deformation without overwhelming the base circle.
+The reason for choosing different frequencies for each coefficient is that if they all oscillated at the same frequency, the torch would rhythmically pulse through the same deformation cycle every few seconds. Different frequencies produce a much less predictable, more organic-looking boundary.
+5b. Spike Protrusions (lines 403-410)
+const float s1 = std::fabs(nx * light.torchAx1 + ny * light.torchAy1);
+const float s2 = std::fabs(nx * light.torchAx2 + ny * light.torchAy2);
+const float s3 = std::fabs(nx * light.torchAx3 + ny * light.torchAy3);
+This is a dot product: s = |direction · spike_axis|. The absolute value measures how aligned the current pixel's direction is with the spike axis, in either direction. Using fabs means each spike protrudes symmetrically on opposite sides of the torch — a flame tongue extends both toward the spike axis and away from it.
+The reason for having three independent spike axes is that real flames typically have 1-3 visible tongues at any moment. Three axes with smooth random rotation (from SmoothRandomDir) creates exactly this.
+const float p1 = s1*s1*s1*s1*s1*s1;  // s1^6
+The 6th power is the critical design choice here. Here's what happens:
+Power	s=1.0	s=0.9	s=0.5	s=0.2	Visual
+s¹	1.00	0.90	0.50	0.20	Wide, bloated spike
+s²	1.00	0.81	0.25	0.04	Still quite wide
+s⁴	1.00	0.66	0.06	0.0016	Getting sharper
+s⁶	1.00	0.53	0.016	0.00006	Needle-sharp
+The 6th power makes the spike contribution drop to near-zero for any direction more than ~25° away from the spike axis. This creates very sharp, directionally-specific flame tongues. Lower powers would produce bloated, indistinct protrusions that don't look like flames.
+const float spikeWarp = light.torchSpikeAmp * std::max(p1, std::max(p2, p3));
+Taking the max of the three spike contributions (rather than adding them) means only the strongest spike affects each pixel. The reason is perceptual: when two spike axes are close together, adding their contributions would create an artificially large bulge between them. Taking max keeps each tongue distinct.
+The torchSpikeAmp was computed at preparation time (line 298):
+torchSpikeAmp = warp * (0.22f + 0.28f * clamp01(torchPulseStrength));
+At full warp (1.0) and full pulse (1.0), the spike amplitude is 0.50. This is the maximum protrusion beyond the base radius, effectively stretching the torch by up to 50% in the spike direction.
+5c. Composite Effective Radius (lines 410-411)
+const float rEff = std::max(8.0f,
+    light.rFalloff * clamp(0.60f, 1.65f, 1.0f + dirWarp + spikeWarp));
+The three deformation systems are simply added together:
+- 1.0: base radius (unchanged)
+- dirWarp: spherical harmonic deformation (per-pixel, oscillating)
+- spikeWarp: flame tongue protrusions (per-pixel, rotating)
+The sum is clamped to [0.60, 1.65] to prevent the torch from vanishing or doubling in size. The effective radius rEff is multiplied by light.rFalloff, which itself already includes the global breathing multiplier (anim.radialMul).
+5d. Warm Tint Accumulation (lines 420-425)
+const float lit = 1.0f - clamp01(a / std::max(1.0f, light.dMax));
+torchWarm = std::max(torchWarm, lit * light.tintStrength);
+For each vertex (pixel in the grid mesh), after computing its darkness a:
+- lit measures how illuminated the pixel is by this torch (0 = dark, 1 = bright)
+- torchWarm accumulates the warm color contribution, taking max across all torches
+The reason for using max (not sum) for warm color is that warm tint is a substitution effect — replacing black with orange — not an additive light. If two torches overlap, the pixel doesn't become "double orange." It simply takes the warmth of the stronger torch. This prevents the overlapping zone from becoming a saturated orange blob.
+const float warm = clamp01(torchWarm);
+const Uint8 vr = std::lround((42.0f + 36.0f * torchWarmth) * warm);
+const Uint8 vg = std::lround((12.0f + 10.0f * torchWarmth) * warm);
+const Uint8 vb = std::lround((2.0f + 4.0f * torchWarmth) * warm);
+verts.push_back({{px, py}, {vr, vg, vb, alpha}, {0, 0}});
+The vertex color has a dark base (black with a tiny blue tinge: (0, 0, 2)) that tints toward orange when illuminated. The warm factor scales from 0 (black) to the full warm color. The warm base colors (42, 12, 2) are very dark orange — at full warmth they're (42+36*warmth, 12+10*warmth, 2+4*warmth).
+At torchColorWarmth = 2.0 (max) and full warm = 1.0:
+- Red = 42 + 72 = 114 → deep amber red
+- Green = 12 + 20 = 32 → barely any green
+- Blue = 2 + 8 = 10 → almost no blue
+This is rendered with SDL_BLENDMODE_BLEND, so the warm orange blends multiplicatively with the background, creating a dark amber glow rather than a bright orange overlay.
+---
+6. The Glow Pass
+RadialLightOverlay.cpp:435-465 — after the dark mesh, an additive glow for each torch:
+for (const PreparedLight& light : prep) {
+    if (light.shape != LightMaskShape::Torch || light.tintStrength <= 0.001f) {
+        continue;
+    }
+    const TorchAnimState anim = ComputeTorchAnim(light.params, timeSec, light.seed);
+    const float cx = light.x + anim.swayX * 0.25f;
+    const float cy = light.y + anim.swayY * 0.18f;
+    const float rr = std::max(20.0f,
+        light.rFalloff * (0.42f + 0.12f * (anim.radialMul - 1.0f)));
+    const float warm = light.tintWarmth;
+    const Uint8 cr = std::min(255.0f, (185.0f + 48.0f * warm) * light.tintStrength);
+    const Uint8 cg = std::min(235.0f, (95.0f + 30.0f * warm) * light.tintStrength);
+    const Uint8 cb = std::min(140.0f, (18.0f + 20.0f * warm) * light.tintStrength);
+    const Uint8 ca = std::min(140.0f, 110.0f * light.tintStrength);
+    // 12-segment fan with center alpha=ca, outer alpha=0
+    ...
+    SDL_RenderGeometry(..., SDL_BLENDMODE_ADD);
+}
+This is a fundamentally different rendering layer from the dark mesh. It uses SDL_BLENDMODE_ADD — the RGB values of the glow are added to whatever is on screen below. This means the glow brightens and warms the scene, rather than just "carving a hole in darkness."
+Key design decisions:
+Reduced sway in the glow center (0.25x and 0.18x vs. 0.55x and 0.40x for the dark mask): The glow represents the bright inner core of the flame. In real flames, the bright core wobbles less than the outer boundary. This differential sway makes the torch look physically correct — the dark border flickers more than the bright heart.
+The glow radius formula rFalloff * (0.42 + 0.12*(radialMul-1)): At normal brightness (radialMul = 1.0), the glow is 42% of the falloff radius. During brightness peaks (radialMul = 1.4), the glow expands to 46.8%. During low brightness (radialMul = 0.8), it shrinks to 39.6%. The glow breathing is more conservative than the dark mask breathing — the core of a flame is more stable than its boundary.
+The warm orange tint (185+48*warmth): At torchColorWarmth = 2.0 and full tintStrength = 1.0:
+- cr = 185 + 96 = 281 → clamped to 255 (max red)
+- cg = 95 + 60 = 155 → warm green
+- cb = 18 + 40 = 58 → very little blue
+- ca = 110 → center alpha
+The center is bright warm orange with alpha 110, fading to the same color with alpha 0 at the edge. This creates a soft warm halo.
+---
+7. Preparation Phase — Per-Frame Torch State Assembly
+RadialLightOverlay.cpp:252-337 — this is the for (const ScreenLight& light : lights) loop that builds PreparedLight entries:
+if (light.shape == LightMaskShape::Torch) {
+    const TorchAnimState anim = ComputeTorchAnim(light.params, timeSec, seed);
+    evalX += anim.swayX * 0.55f;
+    evalY += anim.swayY * 0.40f;
+    evalRFalloff = std::max(10.0f,
+        evalRFalloff * clamp(0.70f, 1.45f, anim.radialMul));
+    evalShape = LightMaskShape::Torch;
+    tintStrength = clamp01(light.params.torchColorStrength);
+    tintWarmth = clamp01(light.params.torchColorWarmth);
+    // Warp coefficients (same as described in 5a)
+    torchKx    = warp * 0.26f * sin(tt*1.7f + seed*13.1f);
+    torchKy    = warp * 0.24f * sin(tt*2.1f + seed*17.3f + 1.1f);
+    torchKxy   = warp * 0.20f * sin(tt*2.8f + seed*19.7f + 2.4f);
+    torchKquad = warp * 0.18f * sin(tt*3.5f + seed*23.9f + 0.6f);
+    // Spike axes (same as described in 5b)
+    SmoothRandomDir(tt * 0.45f, seed, 1.3f, torchAx1, torchAy1);
+    SmoothRandomDir(tt * 0.63f, seed, 7.9f, torchAx2, torchAy2);
+    SmoothRandomDir(tt * 0.39f, seed, 13.7f, torchAx3, torchAy3);
+    torchSpikeAmp = warp * (0.22f + 0.28f * clamp01(torchPulseStrength));
+}
+This is where ComputeTorchAnim is called once per torch (not per pixel). The animation result is stored in PreparedLight and reused for all per-pixel computations that frame.
+The sway is applied at partial strength (0.55x and 0.40x) to the evaluation position because full-strength sway makes the torch look like it's detached from its mount point (a wall sconce, for example, shouldn't make the torch fly off the wall). The partition is:
+- Dark mask gets 55%/40% of sway — noticeable but anchored
+- Glow pass gets 25%/18% of sway — very subtle, core only
+The culling radius for torches is extended to rFalloff * 2.0 + motionRange * 1.2 (line 323) because the sway and radius breathing mean the torch can affect vertices farther from its nominal position than a static light would. Without this extra margin, pixels at the edge of a large, breathing torch would pop in and out of darkness as the culling culled the torch too early.
+---
+8. Complete Per-Frame Torch Lifecycle
+RenderMany() called once per frame
+  │
+  ├─ timeSec = SDL_GetTicks() * 0.001          ← wall-clock seconds (animation clock)
+  │
+  ├─ FOR EACH SCREEN LIGHT:
+  │   │
+  │   ├─ Compute rGeomMax (distance to farthest screen corner)
+  │   ├─ rFalloff = min(rUser, rGeomMax)        ← limit to visible area
+  │   │
+  │   ├─ IF shape == Torch:
+  │   │   ├─ anim = ComputeTorchAnim(params, timeSec, seed)
+  │   │   │   ├─ 2× SmoothNoise1D(t*1.7, ...) → swayX
+  │   │   │   ├─ 2× SmoothNoise1D(t*1.9, ...) → swayY
+  │   │   │   ├─ 2× SmoothNoise1D(t*2.2, ...) → radialMul ∈ [0.62,1.70]
+  │   │   │   └─ 2× SmoothNoise1D same octaves → warmPulse ∈ [0.55,1.45]
+  │   │   │
+  │   │   ├─ evalPosition += sway * (0.55, 0.40)
+  │   │   ├─ rFalloff *= clamp(0.70, 1.45, radialMul)
+  │   │   │
+  │   │   ├─ Compute 4 warp coeffs (Kx, Ky, Kxy, Kquad) — sin oscillators
+  │   │   ├─ Compute 3 spike axes (Ax1..Ay3) — SmoothRandomDir
+  │   │   ├─ torchSpikeAmp = warp * (0.22 + 0.28*pulse)
+  │   │   │
+  │   │   ├─ influenceR = max(rFalloff*2 + motionRange*1.2)
+  │   │   └─ cullRadiusSq = (influenceR + margin)²
+  │   │
+  │   ├─ OCCLUSION: skip if torch tile is solid wall
+  │   └─ Push PreparedLight with all computed state
+  │
+  ├─ BUILD GRID MESH:
+  │   ├─ gridStep = clamp(12, qualityPreset, 64)
+  │   ├─ gridX = ceil(windowW / gridStep)
+  │   ├─ gridY = ceil(windowH / gridStep)
+  │   │
+  │   └─ FOR EACH GRID VERTEX (x: 0..gridX, y: 0..gridY):
+  │       ├─ alpha = 255 (fully dark)
+  │       ├─ FOR EACH NEARBY PREPARED LIGHT (within cullRadiusSq):
+  │       │   │
+  │       │   ├─ IF Torch:
+  │       │   │   ├─ d = sqrt(dx² + dy²)
+  │       │   │   ├─ (nx, ny) = normalize(dx, dy)
+  │       │   │   ├─ dirWarp = Kx*nx + Ky*ny + Kxy*(nx*ny) + Kquad*(nx²-ny²)
+  │       │   │   ├─ spikeWarp = spikeAmp * max(|nx·a1|⁶, |nx·a2|⁶, |nx·a3|⁶)
+  │       │   │   ├─ rEff = max(8, rFalloff * clamp(0.60,1.65, 1+dirWarp+spikeWarp))
+  │       │   │   ├─ t01 = min(1, d / rEff)
+  │       │   │   ├─ a = darknessMax * (innerLift + (1-innerLift) * smoothstep(t01))
+  │       │   │   └─ torchWarm = max(torchWarm, (1-a/dMax) * tintStrength)
+  │       │   └─ alpha = min(alpha, a)        ← brightest light wins
+  │       │
+  │       ├─ vr = (42 + 36*torchWarmth) * warm
+  │       ├─ vg = (12 + 10*torchWarmth) * warm
+  │       ├─ vb = (2 + 4*torchWarmth) * warm
+  │       └─ vertex = { px, py, (vr,vg,vb, alpha), uv }
+  │
+  ├─ DRAW GEOMETRY: SDL_RenderGeometry(..., SDL_BLENDMODE_BLEND)
+  │   └─ vertices with warm-tinted alpha → dark orange glow on render target
+  │
+  ├─ GLOW PASS:
+  │   └─ FOR EACH TORCH:
+  │       ├─ cx = light.x + swayX * 0.25    ← stable bright core
+  │       ├─ cy = light.y + swayY * 0.18
+  │       ├─ rr = rFalloff * (0.42 + 0.12*(radialMul-1))
+  │       ├─ color = warm orange tinted, center alpha=110
+  │       └─ 12-seg fan → SDL_RenderGeometry(..., SDL_BLENDMODE_ADD)
+  │
+  └─ [Half-res]: render to texture → upscale with linear filter
+---
+9. Summary: Why the Torch Is Structured This Way
+The torch is not a single shader or a single function. It's a pipeline of discrete stages because each stage serves a different purpose:
+Stage	Purpose	Frequency
+ComputeTorchAnim	Global torch state (sway, pulse)	Once per torch per frame
+Warp coeffs	Directional boundary deformation state	Once per torch per frame
+SmoothRandomDir	Spike axis rotation state	Once per torch per frame
+Per-pixel dark mesh	Final darkness value at each screen coordinate	Once per vertex per torch per frame
+Glow pass	Additive colored halo	Once per torch per frame
+The separation is not accidental — it's a form of temporal frequency decomposition:
+- Global state (sway/pulse) changes slowly (seconds)
+- Spike axes rotate at medium frequency (sub-second)
+- Pixel-level warp oscillates rapidly (many cycles per second)
+This layered approach means the torch has visual complexity that would be impossible to achieve with a single-time animation. It looks organic because different parts of the flame are changing at different rates, on different timescales.

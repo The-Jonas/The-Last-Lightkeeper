@@ -1,6 +1,10 @@
 @echo off
 REM Builds an optimized executable and fills .\dist with JOGO.exe + SDL DLLs + Recursos
 REM Requires: MinGW/GCC on PATH as mingw32-make (same as usual project build).
+REM
+REM NOTE: For a complete, ready-to-send distribution (also bundles .env,
+REM config\settings.json, LEIA-ME.txt, verifies DLL deps, and produces a
+REM date-stamped .zip), use scripts\deploy.bat instead.
 
 cd /d "%~dp0\.."
 

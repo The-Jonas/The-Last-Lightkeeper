@@ -59,12 +59,14 @@ void Repairable::Update(float dt) {
         // A SUA TRAVA DE SEGURANÇA AQUI:
         // O jogador precisa estar perto O SUFICIENTE e PRECISA ESTAR NA ESCADA (isElevated)
         if (distance <= interactionDistance && bigChar != nullptr && bigChar->isElevated) {
-            
-            // Aperta a tecla E
-            if (InputManager::GetInstance().KeyPress(SDLK_e)) {
 
-                // Checa o item pelo nome que foi passado (ex: "Madeira" ou "Engrenagem")
-                // if (requiredItem != "" && !Inventory::HasItem(requiredItem)) return;
+            // Aperta a tecla de interagir (congelado durante menu/modal)
+            if (!stage->IsPlayerInputFrozen() &&
+                InputManager::GetInstance().ActionPress(GameAction::Interact)) {
+
+                if (!requiredItem.empty()) {
+                    if (!stage->GetInventory().TryConsumeItem(requiredItem)) return;
+                }
 
                 if (soundPath != "") {
                     //Sound* repairSound = new Sound(associated, soundPath);
@@ -81,9 +83,12 @@ void Repairable::Update(float dt) {
                 isRepaired = true;
                 
                 // Avisa o mapa que o buraco sumiu!
-                stage->level.escadaConsertada = true; 
+                stage->level.escadaConsertada = true;
 
-                std::cout << "Consertado usando: " << requiredItem << std::endl;
+                // Persiste o conserto (consome a tábua + abre o caminho) — 6.4
+                stage->SaveCurrentProgress();
+
+                if (Game::debugMode) std::cout << "Consertado usando: " << requiredItem << std::endl;
             }
         }
     }   
