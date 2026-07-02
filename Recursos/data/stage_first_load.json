@@ -70,6 +70,14 @@
       "durabilityDecreases": false,
       "sortOrder": 5,
       "properties": []
+    },
+    {
+      "name": "Jornal",
+      "spritePath": "Recursos/img/items/old_letter.jpg",
+      "maxDurability": 0,
+      "durabilityDecreases": false,
+      "sortOrder": 6,
+      "properties": []
     }
   ],
   "oceanChunkCandidates": ["Recursos/audio/waves.mp3"]

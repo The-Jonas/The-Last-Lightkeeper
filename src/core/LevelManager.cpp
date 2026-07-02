@@ -279,6 +279,7 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
 
                         spawn.w = obj.value("width", 0.0f);
                         spawn.h = obj.value("height", 0.0f);
+                        spawn.rotation = obj.value("rotation", 0.0f);
 
                         // Valores padrão caso esqueçamos de criar no Tiled
                         spawn.isStatic = false;

@@ -606,35 +606,6 @@
                  "y":1798.57575757576
                 }, 
                 {
-                 "gid":7,
-                 "height":52.6666666666665,
-                 "id":900,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":170
-                        }, 
-                        {
-                         "name":"heightLevel",
-                         "type":"int",
-                         "value":1
-                        }, 
-                        {
-                         "name":"imagePath",
-                         "type":"string",
-                         "value":"Recursos\/img\/items\/old_letter.jpg"
-                        }],
-                 "rotation":0,
-                 "type":"JornalSpawn",
-                 "visible":true,
-                 "width":48,
-                 "x":2094.60606060606,
-                 "y":1637.57575757576
-                }, 
-                {
                  "gid":25,
                  "height":548,
                  "id":725,
@@ -905,6 +876,40 @@
                  "width":129.2194092827,
                  "x":1226,
                  "y":1646
+                }, 
+                {
+                 "gid":44,
+                 "height":66,
+                 "id":904,
+                 "name":"Jornal",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":170
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":1
+                        }, 
+                        {
+                         "name":"itemName",
+                         "type":"string",
+                         "value":"Jornal"
+                        }, 
+                        {
+                         "name":"unique",
+                         "type":"bool",
+                         "value":false
+                        }],
+                 "rotation":342.112251063953,
+                 "type":"JornalSpawn",
+                 "visible":true,
+                 "width":48,
+                 "x":2102.5576437337,
+                 "y":1648.39052680138
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -1622,7 +1627,7 @@
                 }],
          "opacity":1,
          "type":"objectgroup",
-         "visible":true,
+         "visible":false,
          "x":0,
          "y":0
         }, 
@@ -4123,7 +4128,7 @@
          "y":0
         }],
  "nextlayerid":29,
- "nextobjectid":904,
+ "nextobjectid":905,
  "orientation":"orthogonal",
  "properties":[
         {

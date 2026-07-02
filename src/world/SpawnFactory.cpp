@@ -29,6 +29,19 @@ void ApplyTiledFlip(GameObject* obj, const EntitySpawn& spawn) {
         obj->flipV = spawn.flipV;
     }
 }
+
+// Ancora e dimensiona o sprite conforme o objeto no Tiled: estica para a
+// largura/altura do objeto (objetos-tile ancoram no canto inferior-esquerdo) e
+// aplica a rotação. Assim o jogo reproduz o que aparece no Tiled.
+void ApplyTiledBox(GameObject* obj, const EntitySpawn& spawn) {
+    if (!obj) return;
+    if (spawn.w > 0.0f) obj->box.w = spawn.w;
+    if (spawn.h > 0.0f) obj->box.h = spawn.h;
+    obj->box.x = spawn.x;
+    obj->box.y = spawn.y - obj->box.h;
+    obj->angleDeg = spawn.rotation;
+    obj->rotateAroundBottomLeft = true;   // objetos-tile do Tiled giram pelo rodapé-esquerdo
+}
 } // namespace
 
 void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, const StageFirstLoadData& cfg) {
@@ -86,8 +99,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
             boxObj->depthOffset = spawn.properties.at("depthOffset").get<float>();
         }
         boxObj->AddComponent(new Box(*boxObj, spawn.isStatic));
-        boxObj->box.x = spawn.x;
-        boxObj->box.y = spawn.y - (boxObj->box.h);
+        ApplyTiledBox(boxObj, spawn);
         ApplyTiledFlip(boxObj, spawn);
         stage.AddObject(boxObj);
         stage.RegisterTestShadowObject(boxObj);
@@ -101,8 +113,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         pilarObj->AddComponent(sprite);
         pilarObj->AddComponent(new FadeEffect(*pilarObj));
 
-        pilarObj->box.x = spawn.x;
-        pilarObj->box.y = spawn.y - pilarObj->box.h;
+        ApplyTiledBox(pilarObj, spawn);
 
         ApplyTiledFlip(pilarObj, spawn);
 
@@ -124,8 +135,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
             Vec2(1780, 1050)
         ));
 
-        ladderObj->box.x = spawn.x;
-        ladderObj->box.y = spawn.y - ladderObj->box.h;
+        ApplyTiledBox(ladderObj, spawn);
 
         ApplyTiledFlip(ladderObj, spawn);
 
@@ -140,8 +150,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         ladderObj->AddComponent(new SpriteRenderer(*ladderObj, "Recursos/img/cenario/escada_inteira.png"));
         ladderObj->AddComponent(new FadeEffect(*ladderObj, true));
         
-        ladderObj->box.x = spawn.x;
-        ladderObj->box.y = spawn.y - ladderObj->box.h;
+        ApplyTiledBox(ladderObj, spawn);
 
         ApplyTiledFlip(ladderObj, spawn);
 
@@ -272,16 +281,15 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
             depthOffset = spawn.properties.at("depthOffset").get<float>();
         }
 
-        const float thumbMax = 48.0f;
-        Vec2 tl(spawn.x, spawn.y - thumbMax);
-        tl = stage.ClampPickupTopLeft(tl, thumbMax, thumbMax);
-
-        Jornal* jornal = Jornal::Spawn(tl.x, tl.y, imagePath, heightLevel, stage.jornals);
+        Jornal* jornal = Jornal::Spawn(spawn.x, spawn.y, imagePath, heightLevel, stage.jornals);
         if (jornal) {
             GameObject& jornalObj = jornal->GetAssociated();
             jornalObj.tiledId = spawn.tiledId;
             jornalObj.z = spawn.z;
             jornalObj.depthOffset = depthOffset;
+            // Segue a largura/altura/rotação do objeto no Tiled (como os demais
+            // props), em vez do thumbnail fixo de 48x48.
+            ApplyTiledBox(&jornalObj, spawn);
             ApplyTiledFlip(&jornalObj, spawn);
             stage.AddObject(&jornalObj);
         }
@@ -305,8 +313,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         // ADICIONADO O FADE EFFECT
         candleObj->AddComponent(new FadeEffect(*candleObj));
 
-        candleObj->box.x = spawn.x;
-        candleObj->box.y = spawn.y - candleObj->box.h;
+        ApplyTiledBox(candleObj, spawn);
         ApplyTiledFlip(candleObj, spawn);
         stage.AddObject(candleObj);
     }
@@ -324,8 +331,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
  
         closetObj->AddComponent(new Closet(*closetObj, dir));
  
-        closetObj->box.x = spawn.x;
-        closetObj->box.y = spawn.y - closetObj->box.h;
+        ApplyTiledBox(closetObj, spawn);
  
         // Colisão daqui vem da camada "Collision_Obj" desenhada no Tiled. 
  
@@ -348,8 +354,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
 
         std::string caminho = "Recursos/img/objetos/" + name + ".png";
         caixasObj->AddComponent(new SpriteRenderer(*caixasObj, caminho));
-        caixasObj->box.x = spawn.x;
-        caixasObj->box.y = spawn.y - caixasObj->box.h;
+        ApplyTiledBox(caixasObj, spawn);
  
         // Colisão agora vem da camada "Collision_Obj" desenhada no Tiled.
         // Não há mais injeção manual de SDL_Rect aqui.
@@ -372,8 +377,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
 
         std::string caminho = "Recursos/img/objetos/mesa/Mesa_" + variation + ".png";
         tableObj->AddComponent(new SpriteRenderer(*tableObj, caminho));
-        tableObj->box.x = spawn.x;
-        tableObj->box.y = spawn.y - tableObj->box.h;
+        ApplyTiledBox(tableObj, spawn);
 
         // Colisão feita no tiled (objeto na diagonal)
 
@@ -392,8 +396,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         fallenChairObj->depthOffset = depthOff;
 
         fallenChairObj->AddComponent(new SpriteRenderer(*fallenChairObj, "Recursos/img/objetos/Cadeira_caida.png"));
-        fallenChairObj->box.x = spawn.x;
-        fallenChairObj->box.y = spawn.y - fallenChairObj->box.h;
+        ApplyTiledBox(fallenChairObj, spawn);
 
         // Colisão feita no tiled (objeto na diagonal)
 
@@ -428,8 +431,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
             barrelObj->AddComponent(new SpriteRenderer(*barrelObj, caminho));
         }
 
-        barrelObj->box.x = spawn.x;
-        barrelObj->box.y = spawn.y - barrelObj->box.h;
+        ApplyTiledBox(barrelObj, spawn);
 
         // Colisão feita no Tiled
 
@@ -465,8 +467,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
             winObj->AddComponent(new SpriteRenderer(*winObj, caminho));
         }
 
-        winObj->box.x = spawn.x;
-        winObj->box.y = spawn.y - winObj->box.h; 
+        ApplyTiledBox(winObj, spawn); 
 
         ApplyTiledFlip(winObj, spawn);
 
@@ -486,8 +487,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
 
         std::string caminho = "Recursos/img/objetos/pesca/" + object + ".png";
         fishingObj->AddComponent(new SpriteRenderer(*fishingObj, caminho));
-        fishingObj->box.x = spawn.x;
-        fishingObj->box.y = spawn.y - fishingObj->box.h;
+        ApplyTiledBox(fishingObj, spawn);
 
         // Colisão feita no Tiled
 

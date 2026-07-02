@@ -17,7 +17,7 @@ public:
 
     void Open(std::string file);                            // Carrega a textura a partir do arquivo
     void SetClip(int x, int y, int w, int h);               // Define a área a ser desenhada
-    void Render(int x, int y, int w, int h, double angleDeg = 0.0);                      // Desenha na tela (agora recebe w e h para a box)
+    void Render(int x, int y, int w, int h, double angleDeg = 0.0, bool pivotBottomLeft = false);  // Desenha na tela (recebe w/h da box; pivô opcional no canto inferior-esquerdo)
     void RenderTintedScaled(int x, int y, int w, int h, double angleDeg, Uint8 tr, Uint8 tg, Uint8 tb,
                             Uint8 ta, float scaleMul) const;
     int GetWidth();                                         // Retorna Largura

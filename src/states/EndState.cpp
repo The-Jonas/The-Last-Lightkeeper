@@ -59,7 +59,7 @@ void EndState::LoadAssets() {
         subGO->z = 10;
         SDL_Color subColor = {170, 175, 185, 230};
         Text* sub = new Text(*subGO, "Recursos/font/times.ttf", 24, Text::BLENDED,
-                             "Voces subiram a escada. Mas a luz do farol ainda esta longe.",
+                             "Vocês subiram a escada, mas o topo do farol ainda está longe.",
                              subColor);
         subGO->AddComponent(sub);
         AddObject(subGO);
@@ -79,8 +79,8 @@ void EndState::LoadAssets() {
         causeGO->z = 10;
         SDL_Color causeColor = {190, 120, 120, 230};
         const char* causeText = GameData::deathByMonster
-            ? "O monstro alcancou voces na escuridao."
-            : "A escuridao consumiu a sanidade de voces.";
+            ? "O monstro alcancou vocês na escuridão."
+            : "A escuridão consumiu a sanidade de vocês.";
         Text* cause = new Text(*causeGO, "Recursos/font/times.ttf", 24, Text::BLENDED,
                                causeText, causeColor);
         causeGO->AddComponent(cause);
@@ -92,7 +92,7 @@ void EndState::LoadAssets() {
     textGO->z = 10;
     SDL_Color color = {180, 180, 180, 255};
     Text* text = new Text(*textGO, "Recursos/font/times.ttf", 28, Text::BLENDED,
-                          "Pressione Espaco para continuar", color);
+                          "Pressione Espaço para continuar", color);
     textGO->AddComponent(text);
     AddObject(textGO);
     continuePrompt = textGO;

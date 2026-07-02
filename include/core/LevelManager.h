@@ -40,6 +40,7 @@ struct EntitySpawn {
     int z;
     bool flipH = false;   // flags de espelhamento decodificadas do gid do Tiled
     bool flipV = false;
+    float rotation = 0.0f; // rotação do objeto no Tiled (graus, horário)
 
     std::unordered_map<std::string, json> properties;
 };

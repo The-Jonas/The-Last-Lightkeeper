@@ -40,6 +40,9 @@ public:
     bool isStairs = false;
     bool flipH = false;   // espelhamento horizontal (herda o flip do tile no Tiled)
     bool flipV = false;   // espelhamento vertical
+    // Objetos-tile do Tiled giram em torno do canto inferior-esquerdo. Fora isso
+    // (personagens, projeção de sombra) usa-se o pivô central (padrão).
+    bool rotateAroundBottomLeft = false;
     int tiledId = -1;
     Rect box;                                       // Posição e tamanho
     double angleDeg;                                // Para os objetos terem o ângulo em graus

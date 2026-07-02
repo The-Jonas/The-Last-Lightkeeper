@@ -97,5 +97,6 @@ void SpriteRenderer::Render() {
         associated.box.y,
         associated.box.w,
         associated.box.h,
-        associated.angleDeg);   // Chama o Render do sprite, passando os valores da box do GameObject associado
+        associated.angleDeg,
+        associated.rotateAroundBottomLeft);   // pivô: canto inferior-esquerdo p/ props do Tiled, centro caso contrário
 }

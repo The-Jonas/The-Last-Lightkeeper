@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<tileset version="1.10" tiledversion="1.12.2" name="props_objects" tilewidth="2847" tileheight="1553" tilecount="41" columns="0">
+<tileset version="1.10" tiledversion="1.12.2" name="props_objects" tilewidth="2847" tileheight="1553" tilecount="42" columns="0">
  <grid orientation="orthogonal" width="1" height="1"/>
  <tile id="0" type="Caixa">
   <properties>
@@ -262,5 +262,14 @@
    <property name="unique" type="bool" value="true"/>
   </properties>
   <image source="../img/cenario/tabua-item.png" width="245" height="316"/>
+ </tile>
+ <tile id="43" type="JornalSpawn">
+  <properties>
+   <property name="depthOffset" type="float" value="0"/>
+   <property name="heightLevel" type="int" value="0"/>
+   <property name="itemName" value="Jornal"/>
+   <property name="unique" type="bool" value="true"/>
+  </properties>
+  <image source="../img/items/old_letter.jpg" width="736" height="979"/>
  </tile>
 </tileset>
