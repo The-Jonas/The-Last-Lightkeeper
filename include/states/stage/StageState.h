@@ -125,7 +125,8 @@ public:
         if (!torchActive) return false;
  
         outPos = bigCharacterObject->box.Center();
-        outFalloffRadiusPx = lightMaskParams.falloffRadiusPx; // ou lighterLightParams se preferir o raio específico
+        const float fuelRatio = inventory.GetSelectedLightFuelRatio();
+        outFalloffRadiusPx = lightMaskParams.falloffRadiusPx * fuelRatio;
         return true;
     }
 

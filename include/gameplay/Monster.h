@@ -87,10 +87,11 @@ private:
     float moveSpeed = 0.0f;                             // Interpolado por estado
  
     // ── Parâmetros de velocidade por estado ───────────────────────────────────
-    static constexpr float kSpeedPatrol      = 90.0f;
-    static constexpr float kSpeedInvestigate = 110.0f;
-    static constexpr float kSpeedChase       = 190.0f;
-    static constexpr float kSpeedHunt        = 200.0f;  // Mais rápido — ele está furioso
+    static constexpr float kSpeedPatrol      = 85.0f;
+    static constexpr float kSpeedInvestigate = 120.0f;
+    static constexpr float kSpeedChase       = 170.0f;
+    static constexpr float kSpeedHunt        = 185.0f;  // Mais rápido — ele está furioso
+    static constexpr float kSpeedFlee        = 220.0f;  // Foge MAIS RÁPIDO que persegue — realista e deixa o jogador sentir que a luz funciona
  
     // ── Timers e memória ──────────────────────────────────────────────────────
     float stateTimer        = 0.0f;                     // Tempo geral no estado atual
@@ -127,15 +128,16 @@ private:
     void PickNextPatrolPoint();
  
     // ── Limites de visão ──────────────────────────────────────────────────────
-    static constexpr float kSightRadius          = 320.0f;  // Raio máximo de visão na luz
+    static constexpr float kSightRadius          = 420.0f;  // Raio máximo de visão na luz
     static constexpr float kIlluminationThreshold = 0.35f;  // Mínimo de luz para detectar
     static constexpr float kFleeThreshold         = 0.70f;  // Iluminação que faz ele recuar
-    static constexpr float kMemoryDecayTime       = 6.0f;   // Segundos até esquecer posição
-    static constexpr float kPathRefreshInterval   = 0.35f;  // Segundos entre recálculos de path
-    // Footprint de navegação reduzido (1.4): a box do sprite é gigante (~574px);
-    // usar box.w*0.25 ≈ 143px travava o monstro em corredores. ~48px o deixa passar.
+    static constexpr float kMemoryDecayTime       = 10.0f;  // Segundos até esquecer posição
+    static constexpr float kPathRefreshInterval   = 0.30f;  // Segundos entre recálculos de path
     static constexpr float kNavFootRadius         = 48.0f;
+    static constexpr float kWindowRadarInterval   = 1.5f;   // Timer separado para janelas 
     static constexpr float kSightLosRadius        = 18.0f;  // raio fino p/ checar parede na linha de visão (1.6)
+
+    float windowRadarTimer = 0.0f;                          // Timer separado para o radar de janelas (não compartilhado com pathfinding)
 
     // ── Variáveis de Sabotagem ────────────────────────────────────────────────
     Window* targetWindow = nullptr;

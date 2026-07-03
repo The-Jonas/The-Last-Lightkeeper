@@ -453,11 +453,11 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         
         int typeB = 0;                                      // Seleciona o tipo do Barril que vai spawnar
         bool interactive = false;                           // Consigo interagir com o barril ou não?
-        float weight = 1.0f;                                // O peso do barril caso ele seja interativo
+        float used = 1.0f;                                  // O peso do barril caso ele seja interativo
 
         if (spawn.properties.count("depthOffset")) depthOff = spawn.properties.at("depthOffset").get<float>();
         if (spawn.properties.count("type")) typeB = spawn.properties.at("type").get<int>();
-        if (spawn.properties.count("weight")) weight = spawn.properties.at("weight").get<float>();
+        if (spawn.properties.count("used")) used = spawn.properties.at("used").get<float>();
         
         if (spawn.properties.count("interactive")) interactive = spawn.properties.at("interactive").get<bool>();
         
@@ -469,7 +469,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         std::string caminho = "Recursos/img/objetos/barril/barril_" + std::to_string(typeB) + ".png";
 
         if (interactive) {
-            barrelObj->AddComponent(new Box(*barrelObj, false, caminho, weight));
+            barrelObj->AddComponent(new Box(*barrelObj, false, caminho, used));
         } else {
             barrelObj->AddComponent(new SpriteRenderer(*barrelObj, caminho));
         }

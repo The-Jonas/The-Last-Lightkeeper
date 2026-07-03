@@ -239,8 +239,8 @@
                  "type":"PlayerSpawn_Big",
                  "visible":true,
                  "width":127,
-                 "x":1833.36363636364,
-                 "y":2725.72727272727
+                 "x":1905.36363636364,
+                 "y":2729.72727272727
                 }, 
                 {
                  "gid":12,
@@ -270,54 +270,6 @@
                  "width":48,
                  "x":1836.9696969697,
                  "y":1229.21212121212
-                }, 
-                {
-                 "gid":13,
-                 "height":99,
-                 "id":670,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"direction",
-                         "type":"string",
-                         "value":"esquerda"
-                        }, 
-                        {
-                         "name":"startsLit",
-                         "type":"bool",
-                         "value":false
-                        }],
-                 "rotation":0,
-                 "type":"Castical",
-                 "visible":true,
-                 "width":55,
-                 "x":200.272727272727,
-                 "y":692.424242424242
-                }, 
-                {
-                 "gid":15,
-                 "height":99,
-                 "id":671,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"direction",
-                         "type":"string",
-                         "value":"direita"
-                        }, 
-                        {
-                         "name":"startsLit",
-                         "type":"bool",
-                         "value":false
-                        }],
-                 "rotation":0,
-                 "type":"Castical",
-                 "visible":true,
-                 "width":55,
-                 "x":3654.81818181818,
-                 "y":895.454545454545
                 }, 
                 {
                  "gid":1,
@@ -402,19 +354,6 @@
                  "y":2036
                 }, 
                 {
-                 "gid":39,
-                 "height":147,
-                 "id":687,
-                 "name":"",
-                 "opacity":1,
-                 "rotation":0,
-                 "type":"",
-                 "visible":true,
-                 "width":80,
-                 "x":1963.63636363636,
-                 "y":2472.30303030303
-                }, 
-                {
                  "gid":40,
                  "height":597,
                  "id":689,
@@ -492,13 +431,13 @@
                         {
                          "name":"waypoints",
                          "type":"string",
-                         "value":"549,921;1589,2081;2757,1949;2181,957"
+                         "value":"612,1780;556,740;1824,608;2224,1192;2656,1860;2284,2592"
                         }],
                  "rotation":0,
                  "type":"Monstro",
                  "visible":true,
                  "width":574,
-                 "x":832.212121212121,
+                 "x":868.212121212121,
                  "y":2380.75757575758
                 }, 
                 {
@@ -672,8 +611,56 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":80,
-                 "x":1819,
-                 "y":1636
+                 "x":2119,
+                 "y":2500
+                }, 
+                {
+                 "gid":14,
+                 "height":198,
+                 "id":710,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"direction",
+                         "type":"string",
+                         "value":"esquerda"
+                        }, 
+                        {
+                         "name":"startsLit",
+                         "type":"bool",
+                         "value":false
+                        }],
+                 "rotation":0,
+                 "type":"Castical",
+                 "visible":true,
+                 "width":110,
+                 "x":127,
+                 "y":663.333333333333
+                }, 
+                {
+                 "gid":16,
+                 "height":198,
+                 "id":711,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"direction",
+                         "type":"string",
+                         "value":"direita"
+                        }, 
+                        {
+                         "name":"startsLit",
+                         "type":"bool",
+                         "value":false
+                        }],
+                 "rotation":0,
+                 "type":"Castical",
+                 "visible":true,
+                 "width":110,
+                 "x":3536.33333333333,
+                 "y":729.606060606061
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -3184,7 +3171,7 @@
          "y":0
         }],
  "nextlayerid":29,
- "nextobjectid":710,
+ "nextobjectid":712,
  "orientation":"orthogonal",
  "properties":[
         {

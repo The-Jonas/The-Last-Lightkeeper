@@ -15,12 +15,9 @@ Monster::Monster(GameObject& associated): Component(associated) {}
 Monster::~Monster() {}
 
 void Monster::Start() {
-    // Sprite placeholder — troca quando tiver o asset final
     SpriteRenderer* sr = new SpriteRenderer(associated, "Recursos/img/personagens/monstro/monstro_placeholder.png");
     associated.AddComponent(sr);
     associated.box.y -= associated.box.h;
- 
-    // Começa patrulhando
     TransitionTo(MonsterState::PATROL);
 }
 
@@ -28,39 +25,82 @@ void Monster::Start() {
 //  UPDATE PRINCIPAL
 // ─────────────────────────────────────────────────────────────────────────────
 void Monster::Update(float dt) {
-    stateTimer += dt;
+    stateTimer       += dt;
     pathRefreshTimer += dt;
+    windowRadarTimer += dt;  // timer separado para radar de janelas
 
-    if (damageCooldown > 0.0f) damageCooldown -= dt;
-    if (visionRevealTimer > 0.0f) visionRevealTimer -= dt;
-    if (hasMemory) {
-        memoryDecayTimer += dt;
-        if (memoryDecayTimer >= kMemoryDecayTime) {
-            hasMemory = false;                          // Esqueceu - volta a patrulhar
+    // DEBUG: imprime estado atual a cada ~1s
+    static float dbgTimer = 0.0f;
+    dbgTimer += dt;
+    if (dbgTimer >= 1.0f) {
+        dbgTimer = 0.0f;
+        const char* stateName = "?";
+        switch (state) {
+            case MonsterState::PATROL:          stateName = "PATROL";          break;
+            case MonsterState::INVESTIGATE:     stateName = "INVESTIGATE";     break;
+            case MonsterState::CHASE:           stateName = "CHASE";           break;
+            case MonsterState::HUNT:            stateName = "HUNT";            break;
+            case MonsterState::CAMP_CLOSET:     stateName = "CAMP_CLOSET";     break;
+            case MonsterState::FLEE_LIGHT:      stateName = "FLEE_LIGHT";      break;
+            case MonsterState::LURK:            stateName = "LURK";            break;
+            case MonsterState::SABOTAGE_WINDOW: stateName = "SABOTAGE_WINDOW"; break;
+        }
+        std::cout << "[MONSTER] state=" << stateName
+                  << " hasMemory=" << hasMemory
+                  << " memoryDecay=" << memoryDecayTimer
+                  << " pathSize=" << currentPath.size()
+                  << " pathStep=" << pathStep
+                  << " stateTimer=" << stateTimer
+                  << " windowRadar=" << windowRadarTimer
+                  << " pos=(" << associated.box.Center().x << "," << associated.box.Center().y << ")"
+                  << "\n";
+        if (state == MonsterState::SABOTAGE_WINDOW && targetWindow) {
+            Vec2 winPos = targetWindow->GetAssociated().box.Center();
+            std::cout << "  -> janela em (" << winPos.x << "," << winPos.y << ")"
+                      << " dist=" << associated.box.Center().Distance(winPos)
+                      << "\n";
+        }
+        if (state == MonsterState::PATROL) {
+            std::cout << "  -> patrolPoints=" << patrolPoints.size()
+                      << " patrolIndex=" << patrolIndex << "\n";
         }
     }
 
-    // ── Sensor de luz na própria posição ─────────────────────────────────────
-    // Se entrou em área iluminada demais, foge (Exceto se estiver em HUNT)
-    // nesse estado ele está tão alterado que ignora a luz por um tempo
+    if (damageCooldown    > 0.0f) damageCooldown    -= dt;
+    if (visionRevealTimer > 0.0f) visionRevealTimer -= dt;
+
+    if (hasMemory) {
+        memoryDecayTimer += dt;
+        if (memoryDecayTimer >= kMemoryDecayTime) {
+            hasMemory = false;
+        }
+    }
+
+    // ── 1. Sensor de luz — prioridade máxima ─────────────────────────────────
     if (state != MonsterState::FLEE_LIGHT && IsSelfInLight()) {
         TransitionTo(MonsterState::FLEE_LIGHT);
         return;
     }
 
-    // ── Sensor de visão ───────────────────────────────────────────────────────
+    // ── 2. Sensor de visão ────────────────────────────────────────────────────
+    // Bloqueia em HUNT e FLEE_LIGHT (fugindo não enxerga para atacar)
     Vec2 seenPos;
-    if (state != MonsterState::HUNT && state != MonsterState::FLEE_LIGHT && CanSeeLitBrother(seenPos)) {
+    if (state != MonsterState::HUNT &&
+        state != MonsterState::FLEE_LIGHT &&
+        CanSeeLitBrother(seenPos)) {
         lastKnownPlayerPos = seenPos;
         hasMemory          = true;
         memoryDecayTimer   = 0.0f;
- 
         if (state != MonsterState::CHASE)
             TransitionTo(MonsterState::CHASE);
     }
 
-    // ── Radar de Janelas (Só quando não está em combate ou fugindo) ───────────
-    if ((state == MonsterState::PATROL || state == MonsterState::INVESTIGATE) && pathRefreshTimer >= kPathRefreshInterval) {
+    // ── 3. Radar de janelas — timer PRÓPRIO, não interfere com pathfinding ───
+    // Só atua quando livre (sem memória dos irmãos) e em estados ociosos
+    if (!hasMemory &&
+        (state == MonsterState::PATROL || state == MonsterState::INVESTIGATE) &&
+        windowRadarTimer >= kWindowRadarInterval) {
+        windowRadarTimer = 0.0f;
         Window* nearbyWin = FindNearbyClosedWindow();
         if (nearbyWin) {
             targetWindow = nearbyWin;
@@ -68,15 +108,17 @@ void Monster::Update(float dt) {
         }
     }
 
-    // ── Despacha para o sub-update do estado atual ────────────────────────────
+    
+
+    // ── 4. Despacha para o sub-update ─────────────────────────────────────────
     switch (state) {
-        case MonsterState::PATROL:       UpdatePatrol(dt);      break;
-        case MonsterState::INVESTIGATE:  UpdateInvestigate(dt); break;
-        case MonsterState::CHASE:        UpdateChase(dt);       break;
-        case MonsterState::HUNT:         UpdateHunt(dt);        break;
-        case MonsterState::CAMP_CLOSET:  UpdateCampCloset(dt);  break;
-        case MonsterState::FLEE_LIGHT:   UpdateFleeLigth(dt);   break;
-        case MonsterState::LURK:         UpdateLurk(dt);        break;
+        case MonsterState::PATROL:          UpdatePatrol(dt);         break;
+        case MonsterState::INVESTIGATE:     UpdateInvestigate(dt);    break;
+        case MonsterState::CHASE:           UpdateChase(dt);          break;
+        case MonsterState::HUNT:            UpdateHunt(dt);           break;
+        case MonsterState::CAMP_CLOSET:     UpdateCampCloset(dt);     break;
+        case MonsterState::FLEE_LIGHT:      UpdateFleeLigth(dt);      break;
+        case MonsterState::LURK:            UpdateLurk(dt);           break;
         case MonsterState::SABOTAGE_WINDOW: UpdateSabotageWindow(dt); break;
     }
 
@@ -85,38 +127,112 @@ void Monster::Update(float dt) {
 
 void Monster::Render() {
     // Silhueta é desenhada pelo MonsterSilhouette (z=100, acima da escuridão)
-    
+
 #ifdef DEBUG
-    // ── DEBUG: CAIXA DE DANO (Vermelha) ──
-    // Recalculamos a mesma caixa usada no CheckDamageCollision
+    SDL_Renderer* dbgR = Game::GetInstance().GetRenderer();
+    SDL_SetRenderDrawBlendMode(dbgR, SDL_BLENDMODE_BLEND);
+ 
+    // Caixa de dano — vermelho
     SDL_Rect dmgBox = {
-        static_cast<int>(associated.box.x + associated.box.w * 0.1f),
-        static_cast<int>(associated.box.y + associated.box.h * 0.1f),
-        static_cast<int>(associated.box.w * 0.8f),
-        static_cast<int>(associated.box.h * 0.8f)
+        static_cast<int>(associated.box.x + associated.box.w * 0.1f) - static_cast<int>(Camera::pos.x),
+        static_cast<int>(associated.box.y + associated.box.h * 0.1f) - static_cast<int>(Camera::pos.y),
+        static_cast<int>(associated.box.w * 0.85f),
+        static_cast<int>(associated.box.h * 0.85f)
     };
-
-    // Subtrai a câmera para desenhar no lugar certo da tela
-    dmgBox.x -= Camera::pos.x;
-    dmgBox.y -= Camera::pos.y;
-
-    // Desenha um retângulo vermelho translúcido
-    SDL_SetRenderDrawBlendMode(Game::GetInstance().GetRenderer(), SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(Game::GetInstance().GetRenderer(), 255, 0, 0, 100); 
-    SDL_RenderFillRect(Game::GetInstance().GetRenderer(), &dmgBox);
-    
-    // Desenha também a borda da Hitbox sólida (amarela, opcional, pra ver onde ele colide com parede)
+    SDL_SetRenderDrawColor(dbgR, 255, 0, 0, 100);
+    SDL_RenderFillRect(dbgR, &dmgBox);
+ 
+    // Box física — amarelo
     SDL_Rect physBox = {
         static_cast<int>(associated.box.x) - static_cast<int>(Camera::pos.x),
         static_cast<int>(associated.box.y) - static_cast<int>(Camera::pos.y),
         static_cast<int>(associated.box.w),
         static_cast<int>(associated.box.h)
     };
-    SDL_SetRenderDrawColor(Game::GetInstance().GetRenderer(), 255, 255, 0, 255); 
-    SDL_RenderDrawRect(Game::GetInstance().GetRenderer(), &physBox);
+    SDL_SetRenderDrawColor(dbgR, 255, 255, 0, 255);
+    SDL_RenderDrawRect(dbgR, &physBox);
+ 
+    // Estado atual — texto via círculo colorido no centro
+    // (cada estado tem uma cor diferente para identificação visual rápida)
+    {
+        Uint8 r = 255, g = 255, b = 255;
+        switch (state) {
+            case MonsterState::PATROL:          r=100; g=255; b=100; break; // verde
+            case MonsterState::INVESTIGATE:     r=255; g=200; b=0;   break; // amarelo
+            case MonsterState::CHASE:           r=255; g=100; b=0;   break; // laranja
+            case MonsterState::HUNT:            r=255; g=0;   b=0;   break; // vermelho
+            case MonsterState::FLEE_LIGHT:      r=0;   g=100; b=255; break; // azul
+            case MonsterState::LURK:            r=150; g=0;   b=255; break; // roxo
+            case MonsterState::SABOTAGE_WINDOW: r=0;   g=255; b=255; break; // ciano
+            case MonsterState::CAMP_CLOSET:     r=255; g=0;   b=150; break; // rosa
+        }
+        // Desenha um quadrado 10x10 colorido no centro do monstro
+        SDL_Rect stateIndicator = {
+            static_cast<int>(associated.box.Center().x) - 5 - static_cast<int>(Camera::pos.x),
+            static_cast<int>(associated.box.Center().y) - 5 - static_cast<int>(Camera::pos.y),
+            10, 10
+        };
+        SDL_SetRenderDrawColor(dbgR, r, g, b, 255);
+        SDL_RenderFillRect(dbgR, &stateIndicator);
+    }
+ 
+    // Raio de interação da janela — círculo CIANO quando em SABOTAGE_WINDOW
+    if (state == MonsterState::SABOTAGE_WINDOW && targetWindow) {
+        Vec2 winPos   = targetWindow->GetAssociated().box.Center();
+        float winX    = winPos.x - Camera::pos.x;
+        float winY    = winPos.y - Camera::pos.y;
+        constexpr float kInteractRadius = 350.0f;
+ 
+        // Desenha o círculo de interação como polígono de 32 segmentos
+        SDL_SetRenderDrawColor(dbgR, 0, 255, 255, 180);
+        constexpr int kSegs = 32;
+        for (int i = 0; i < kSegs; i++) {
+            float a0 = (static_cast<float>(i)     / kSegs) * 2.0f * 3.14159265f;
+            float a1 = (static_cast<float>(i + 1) / kSegs) * 2.0f * 3.14159265f;
+            SDL_RenderDrawLine(dbgR,
+                static_cast<int>(winX + std::cos(a0) * kInteractRadius),
+                static_cast<int>(winY + std::sin(a0) * kInteractRadius),
+                static_cast<int>(winX + std::cos(a1) * kInteractRadius),
+                static_cast<int>(winY + std::sin(a1) * kInteractRadius));
+        }
+ 
+        // Linha do monstro até a janela
+        SDL_SetRenderDrawColor(dbgR, 0, 255, 255, 120);
+        SDL_RenderDrawLine(dbgR,
+            static_cast<int>(associated.box.Center().x - Camera::pos.x),
+            static_cast<int>(associated.box.Center().y - Camera::pos.y),
+            static_cast<int>(winX),
+            static_cast<int>(winY));
+ 
+        // Pontos de approach tentados (círculos pequenos)
+        SDL_SetRenderDrawColor(dbgR, 255, 255, 0, 200);
+        constexpr float kApproachRadius = 200.0f;
+        constexpr int   kNumAngles      = 8;
+        for (int i = 0; i < kNumAngles; i++) {
+            float angle = (static_cast<float>(i) / kNumAngles) * 2.0f * 3.14159265f;
+            int px = static_cast<int>(winPos.x + std::cos(angle) * kApproachRadius - Camera::pos.x);
+            int py = static_cast<int>(winPos.y + std::sin(angle) * kApproachRadius - Camera::pos.y);
+            SDL_Rect dot = { px - 4, py - 4, 8, 8 };
+            SDL_RenderFillRect(dbgR, &dot);
+        }
+    }
+ 
+    // Path atual — linha verde tracejada
+    if (!currentPath.empty()) {
+        SDL_SetRenderDrawColor(dbgR, 0, 255, 0, 200);
+        Vec2 prev = associated.box.Center();
+        for (size_t i = static_cast<size_t>(pathStep); i < currentPath.size(); i++) {
+            SDL_RenderDrawLine(dbgR,
+                static_cast<int>(prev.x - Camera::pos.x),
+                static_cast<int>(prev.y - Camera::pos.y),
+                static_cast<int>(currentPath[i].x - Camera::pos.x),
+                static_cast<int>(currentPath[i].y - Camera::pos.y));
+            prev = currentPath[i];
+        }
+    }
+ 
+    SDL_SetRenderDrawBlendMode(dbgR, SDL_BLENDMODE_NONE);
 #endif
-
-
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -127,54 +243,60 @@ void Monster::TransitionTo(MonsterState next) {
     stateTimer = 0.0f;
     currentPath.clear();
     pathStep = 0;
- 
+
     switch (next) {
         case MonsterState::PATROL:
             moveSpeed = kSpeedPatrol;
             PickNextPatrolPoint();
             break;
+
         case MonsterState::INVESTIGATE:
             moveSpeed = kSpeedInvestigate;
             RequestPath(lastKnownPlayerPos);
             break;
+
         case MonsterState::CHASE:
             moveSpeed = kSpeedChase;
             break;
+
         case MonsterState::HUNT:
             moveSpeed = kSpeedHunt;
             break;
+
         case MonsterState::CAMP_CLOSET:
             moveSpeed = kSpeedInvestigate;
             campTimer = 0.0f;
             RequestPath(closetTargetPos);
             break;
+
         case MonsterState::LURK:
-            moveSpeed = kSpeedPatrol; 
+            moveSpeed = kSpeedPatrol;
             lurkTimer = 0.0f;
             break;
+
         case MonsterState::FLEE_LIGHT: {
-            moveSpeed = kSpeedChase;
-            // Foge na direção OPOSTA à luz mais próxima, só uma distância
-            // curta de segurança — não vai pro fim do mapa, fica rondando.
+            moveSpeed = kSpeedFlee;  // foge mais rápido do que persegue
+
             StageState* stageFlee = Game::TryGetStageState();
-            Vec2 myPos = associated.box.Center();
-            Vec2 fleeDir(0.0f, 0.0f);
+            Vec2  myPos           = associated.box.Center();
+            Vec2  fleeDir(0.0f, 0.0f);
             float closestThreatDist = 1e9f;
 
             if (stageFlee) {
                 for (const auto& light : stageFlee->GetLights()) {
                     if (!light.enabled) continue;
-                    float dist = myPos.Distance(light.worldPos);
-                    if (dist < closestThreatDist) {
-                        closestThreatDist = dist;
+                    float d = myPos.Distance(light.worldPos);
+                    if (d < closestThreatDist) {
+                        closestThreatDist = d;
                         fleeDir = myPos - light.worldPos;
                     }
                 }
-                Vec2 torchPos; float torchRadius;
+                Vec2  torchPos;
+                float torchRadius;
                 if (stageFlee->GetActiveTorchWorldPos(torchPos, torchRadius)) {
-                    float dist = myPos.Distance(torchPos);
-                    if (dist < closestThreatDist) {
-                        closestThreatDist = dist;
+                    float d = myPos.Distance(torchPos);
+                    if (d < closestThreatDist) {
+                        closestThreatDist = d;
                         fleeDir = myPos - torchPos;
                     }
                 }
@@ -182,27 +304,27 @@ void Monster::TransitionTo(MonsterState next) {
 
             if (fleeDir.Magnitude() > 0.001f) {
                 fleeDir = fleeDir.Normalized();
-                constexpr float kSafeFleeDistance = 250.0f;
-                Vec2 fleeTarget = myPos + fleeDir * kSafeFleeDistance;
-                RequestPath(fleeTarget);
+                constexpr float kSafeFleeDistance = 280.0f;
+                RequestPath(myPos + fleeDir * kSafeFleeDistance);
             }
             break;
-        } 
+        }
+
         case MonsterState::SABOTAGE_WINDOW:
-            moveSpeed = kSpeedInvestigate; // Ou a velocidade que preferir
+            moveSpeed = kSpeedInvestigate;
+            if (targetWindow) {
+                RequestPath(targetWindow->GetAssociated().box.Center());
+            }
             break;
     }
 }
 
-
 // ─────────────────────────────────────────────────────────────────────────────
-//  COLISÃO DE DANO (Customizada pelo tamanho do Sprite)
+//  COLISÃO DE DANO
 // ─────────────────────────────────────────────────────────────────────────────
 void Monster::CheckDamageCollision() {
     if (damageCooldown > 0.0f) return;
 
-    // Criamos uma Hitbox virtual que pega 85% do tamanho da imagem inteira do monstro
-    // (Retirando 10% das bordas para não ser injusto com os pixels transparentes do sprite)
     SDL_Rect dmgBox = {
         static_cast<int>(associated.box.x + associated.box.w * 0.1f),
         static_cast<int>(associated.box.y + associated.box.h * 0.1f),
@@ -210,7 +332,6 @@ void Monster::CheckDamageCollision() {
         static_cast<int>(associated.box.h * 0.85f)
     };
 
-    // Função lambda (interna) auxiliar para checar a intersecção contra um irmão
     auto CheckPlayerHit = [&](Character* c) {
         if (!c) return false;
         SDL_Rect pBox = {
@@ -219,22 +340,18 @@ void Monster::CheckDamageCollision() {
             static_cast<int>(c->GetAssociated().box.w),
             static_cast<int>(c->GetAssociated().box.h)
         };
-        // Checa se os dois retângulos estão se batendo na tela
         return SDL_HasIntersection(&dmgBox, &pBox) == SDL_TRUE;
     };
 
     bool hit = false;
-    
-    // Checa o Irmãozão
+
     if (CheckPlayerHit(Character::player)) {
         Character::player->sanity -= kSanityDamageOnTouch;
         if (Character::player->sanity < 0.0f) Character::player->sanity = 0.0f;
         lastKnownPlayerPos = Character::player->GetAssociated().box.Center();
         hit = true;
         if (Game::debugMode) std::cout << "[Monster] Dano no Irmaozao! Sanidade -= " << kSanityDamageOnTouch << "\n";
-    }
-    // Checa o Irmãozinho (só se não bateu no mais velho neste frame)
-    else if (CheckPlayerHit(Character::littleBrother)) {
+    } else if (CheckPlayerHit(Character::littleBrother)) {
         Character::littleBrother->sanity -= kSanityDamageOnTouch;
         if (Character::littleBrother->sanity < 0.0f) Character::littleBrother->sanity = 0.0f;
         lastKnownPlayerPos = Character::littleBrother->GetAssociated().box.Center();
@@ -243,16 +360,12 @@ void Monster::CheckDamageCollision() {
     }
 
     if (hit) {
-        damageCooldown = kDamageCooldownTime;
-        hasMemory      = true;
+        damageCooldown   = kDamageCooldownTime;
+        hasMemory        = true;
         memoryDecayTimer = 0.0f;
-
-        // Feedback de impacto: SFX + tremor de tela + flash vermelho (3.1).
         if (StageState* stage = Game::TryGetStageState()) {
             stage->TriggerMonsterHitFeedback();
         }
-
-        // Toque no escuro → HUNT (mais agressivo)
         if (state != MonsterState::HUNT)
             TransitionTo(MonsterState::HUNT);
     }
@@ -264,27 +377,19 @@ void Monster::CheckDamageCollision() {
 void Monster::UpdatePatrol(float dt) {
     MoveAlongPath(dt, moveSpeed);
 
-    // Chegou ao ponto OU o pathfinder falhou (sem caminho): espera 0.5s e escolhe
-    // o próximo ponto — evita travar quando o destino é inalcançável (1.7).
     if (HasReachedTarget() || HasNoPath()) {
         if (stateTimer >= 0.5f) {
             PickNextPatrolPoint();
             stateTimer = 0.0f;
         }
     } else {
-        stateTimer = 0.0f; // Mantém o timer zerado enquanto estiver andando
+        stateTimer = 0.0f;
     }
- 
-    // Se tem memória de onde viu luz, vai investigar
-    if (hasMemory) {
-        TransitionTo(MonsterState::INVESTIGATE);
-    }
+    // Nota: a transição para INVESTIGATE acontece via sensor de visão no Update()
+    // principal — não mais aqui — para evitar o loop de vai-e-vem.
 }
 
 void Monster::UpdateInvestigate(float dt) {
-    // Memória expirou (kMemoryDecayTime) → volta a patrulhar. Isso é o timeout
-    // confiável quando o alvo é inalcançável (path falhando) — antes dependia de
-    // HasReachedTarget()==true num path vazio, o que era prematuro. 1.7
     if (!hasMemory) {
         TransitionTo(MonsterState::PATROL);
         return;
@@ -293,13 +398,21 @@ void Monster::UpdateInvestigate(float dt) {
     MoveAlongPath(dt, moveSpeed);
 
     if (HasReachedTarget()) {
-        // Chegou de verdade na última posição conhecida — não achou ninguém.
+        // Chegou na última posição conhecida sem encontrar ninguém
         hasMemory = false;
         TransitionTo(MonsterState::PATROL);
         return;
     }
 
-    // Atualiza o path enquanto a memória está fresca (tenta de novo se falhou).
+    // se ficou mais de 5s sem conseguir chegar (path vazio ou bloqueado),
+    // desiste — evita ficar preso investigando um ponto inalcançável
+    if (HasNoPath() && stateTimer >= 5.0f) {
+        hasMemory = false;
+        TransitionTo(MonsterState::PATROL);
+        return;
+    }
+
+    // Atualiza o path periodicamente (se falhou, tenta de novo)
     if (pathRefreshTimer >= kPathRefreshInterval && hasMemory) {
         pathRefreshTimer = 0.0f;
         RequestPath(lastKnownPlayerPos);
@@ -307,12 +420,11 @@ void Monster::UpdateInvestigate(float dt) {
 }
 
 void Monster::UpdateChase(float dt) {
-    // Perseguição: atualiza o path para a posição atual dos irmãos
     Vec2 seenPos;
     if (CanSeeLitBrother(seenPos)) {
         lastKnownPlayerPos = seenPos;
         memoryDecayTimer   = 0.0f;
- 
+
         if (pathRefreshTimer >= kPathRefreshInterval) {
             pathRefreshTimer = 0.0f;
             RequestPath(seenPos);
@@ -321,8 +433,6 @@ void Monster::UpdateChase(float dt) {
     } else {
         // Perdeu a visão — vai até onde viu pela última vez
         MoveAlongPath(dt, moveSpeed);
-        // Chegou ao último ponto OU não tem caminho pra seguir → investiga por perto
-        // (sem caminho não fica parado eternamente no CHASE). 1.7
         if (HasReachedTarget() || HasNoPath()) {
             TransitionTo(MonsterState::INVESTIGATE);
         }
@@ -330,19 +440,18 @@ void Monster::UpdateChase(float dt) {
 }
 
 void Monster::UpdateHunt(float dt) {
-    // HUNT: tocou nos irmãos no escuro — persegue às cegas
-    // Vai se mover para a última posição conhecida e fazer buscas em espiral
+    // Persegue às cegas — sabe que estão por ali
     if (Character::player) {
         Vec2 playerPos = Character::player->GetAssociated().box.Center();
         if (pathRefreshTimer >= kPathRefreshInterval) {
-            pathRefreshTimer = 0.0f;
+            pathRefreshTimer   = 0.0f;
             RequestPath(playerPos);
             lastKnownPlayerPos = playerPos;
         }
     }
     MoveAlongPath(dt, moveSpeed);
- 
-    // Sai do HUNT após 8 segundos sem tocar — volta a investigar a última posição
+
+    // Sai do HUNT após 8s sem tocar — investiga a última posição
     if (stateTimer >= 8.0f) {
         TransitionTo(MonsterState::INVESTIGATE);
     }
@@ -351,14 +460,12 @@ void Monster::UpdateHunt(float dt) {
 void Monster::UpdateCampCloset(float dt) {
     campTimer += dt;
     MoveAlongPath(dt, kSpeedInvestigate);
- 
-    // Depois de kCampMaxTime segundos desiste e volta a patrulhar
+
     if (campTimer >= kCampMaxTime) {
         TransitionTo(MonsterState::PATROL);
         return;
     }
- 
-    // Se os irmãos sairem do armário iluminados, entra no Chase
+
     Vec2 seenPos;
     if (CanSeeLitBrother(seenPos)) {
         lastKnownPlayerPos = seenPos;
@@ -367,61 +474,81 @@ void Monster::UpdateCampCloset(float dt) {
 }
 
 void Monster::UpdateFleeLigth(float dt) {
-    // Tenta andar pelo caminho traçado (se houver)
     if (!currentPath.empty()) {
         MoveAlongPath(dt, moveSpeed);
+    }
+
+    // 1. Saída da fuga com "Cool-down" de pânico
+    if (!IsSelfInLight()) {
+        // Se a luz não está mais tocando nele, ele continua correndo por 1.5s pra garantir!
+        if (stateTimer >= 1.5f) { 
+            if (hasMemory) {
+                TransitionTo(MonsterState::LURK);
+            } else {
+                TransitionTo(MonsterState::PATROL);
+            }
+            return;
+        }
     } else {
-        // FALLBACK MAGNÉTICO: Se não achou um caminho ou o mapa não tem Patrol Points,
-        // ele foge "na marra", correndo fisicamente na direção oposta ao jogador!
-        if (Character::player) {
-            Vec2 myPos = associated.box.Center();
-            Vec2 threatPos = Character::player->GetAssociated().box.Center();
-            
-            // Vetor que aponta do jogador PARA o monstro (direção oposta)
-            Vec2 dir = myPos - threatPos;
-            float dist = std::sqrt(dir.x * dir.x + dir.y * dir.y);
-            
-            if (dist > 0.001f) {
-                associated.box.x += (dir.x / dist) * moveSpeed * dt;
-                associated.box.y += (dir.y / dist) * moveSpeed * dt;
+        // Se a luz encostar nele durante a fuga, o pânico reseta!
+        stateTimer = 0.0f; 
+    }
+
+    // 2. Recálculo se bateu na parede ou a rota acabou (mas ainda está em pânico)
+    if ((HasReachedTarget() || HasNoPath()) && pathRefreshTimer >= kPathRefreshInterval) {
+        pathRefreshTimer = 0.0f;
+        StageState* stageFlee = Game::TryGetStageState();
+        Vec2 myPos = associated.box.Center();
+        Vec2 fleeDir(0.0f, 0.0f);
+        float closestDist = 1e9f;
+
+        if (stageFlee) {
+            for (const auto& light : stageFlee->GetLights()) {
+                if (!light.enabled) continue;
+                float d = myPos.Distance(light.worldPos);
+                if (d < closestDist) { closestDist = d; fleeDir = myPos - light.worldPos; }
+            }
+            Vec2 torchPos; float torchRadius;
+            if (stageFlee->GetActiveTorchWorldPos(torchPos, torchRadius)) {
+                float d = myPos.Distance(torchPos);
+                if (d < closestDist) { closestDist = d; fleeDir = myPos - torchPos; }
             }
         }
-    }
- 
-    // ==========================================
-    // REGRAS DE SAÍDA DA FUGA
-    // ==========================================
-    
-    if (!IsSelfInLight()) {
-        // Vai para LURK — ronda esperando a luz sair/apagar antes de voltar
-        // a perseguir de verdade.
-        if (hasMemory) {
-            TransitionTo(MonsterState::LURK);
-        } else {
-            TransitionTo(MonsterState::PATROL);
+
+        if (fleeDir.Magnitude() > 0.001f) {
+            fleeDir = fleeDir.Normalized();
+            
+            // ANTI-TRAVAMENTO: Se bateu na parede, tenta escorregar pela lateral
+            if (HasNoPath()) {
+                float angle = std::atan2(fleeDir.y, fleeDir.x) + 0.6f; 
+                fleeDir = Vec2(std::cos(angle), std::sin(angle));
+            }
+            constexpr float kSafeFleeDistance = 280.0f;
+            RequestPath(myPos + fleeDir * kSafeFleeDistance);
         }
-    }
-    else if (HasReachedTarget() && !currentPath.empty()) {
-        TransitionTo(MonsterState::FLEE_LIGHT);
     }
 }
 
 void Monster::NotifyCollision(GameObject& other) {
-// Como a checagem de dano roda na Update através da CheckDamageCollision, 
-// a Engine de física (LevelManager) cuida apenas de impedir o monstro de atravessar a parede.
+    // Colisão física tratada pelo LevelManager.
+    // Dano é checado em CheckDamageCollision() dentro do Update().
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  NOTIFICAÇÃO DO ARMÁRIO
 // ─────────────────────────────────────────────────────────────────────────────
 void Monster::NotifyClosetOccupied(Vec2 closetWorldPos) {
-    // Só vai de campana se já estava CHASE ou INVESTIGATE
-    if (state == MonsterState::CHASE || state == MonsterState::INVESTIGATE || state == MonsterState::PATROL) {
+    if (state == MonsterState::CHASE ||
+        state == MonsterState::INVESTIGATE ||
+        state == MonsterState::PATROL) {
         closetTargetPos = closetWorldPos;
         TransitionTo(MonsterState::CAMP_CLOSET);
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  SENSORES
+// ─────────────────────────────────────────────────────────────────────────────
 static float DistanceFromRectToPoint(const Rect& rect, const Vec2& point) {
     float closestX = std::max(rect.x, std::min(point.x, rect.x + rect.w));
     float closestY = std::max(rect.y, std::min(point.y, rect.y + rect.h));
@@ -430,62 +557,48 @@ static float DistanceFromRectToPoint(const Rect& rect, const Vec2& point) {
     return std::sqrt(dx * dx + dy * dy);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  SENSORES
-// ─────────────────────────────────────────────────────────────────────────────
 bool Monster::CanSeeLitBrother(Vec2& outPos) const {
     StageState* stage = Game::TryGetStageState();
     if (!stage) return false;
- 
+
     auto Check = [&](Character* c, float illumLevel) -> bool {
         if (!c) return false;
-        if (illumLevel < kIlluminationThreshold) return false;  // Não está iluminado
- 
-        Vec2 charPos = c->GetAssociated().box.Center();
-        Vec2 myPos   = associated.box.Center();
-        float dist   = myPos.Distance(charPos);
+        if (illumLevel < kIlluminationThreshold) return false;
+
+        Vec2  charPos = c->GetAssociated().box.Center();
+        Vec2  myPos   = associated.box.Center();
+        float dist    = myPos.Distance(charPos);
         if (dist > kSightRadius) return false;
 
-        // 1.6 — Linha de visão: não enxerga através de paredes.
+        // Linha de visão: não enxerga através de paredes
         if (!stage->HasWalkableLine(myPos, charPos, &associated, kSightLosRadius)) {
             return false;
         }
 
-        // Está iluminado, dentro do raio e com linha livre — monstro enxerga
         outPos = charPos;
         return true;
     };
- 
-    if (Check(Character::player,       stage->bigIlluminationLevel))   return true;
+
+    if (Check(Character::player,        stage->bigIlluminationLevel))   return true;
     if (Check(Character::littleBrother, stage->smallIlluminationLevel)) return true;
     return false;
 }
- 
+
 bool Monster::IsWorldPosInAnyLight(Vec2 worldPos, float extraRadius) const {
     StageState* stage = Game::TryGetStageState();
     if (!stage) return false;
 
-    // Checa todas as luzes do CENÁRIO (velas, lanternas fixas, etc.)
     for (const auto& light : stage->GetLights()) {
         if (!light.enabled) continue;
-
         const float radius = light.params.falloffRadiusPx;
         if (radius <= 0.0f) continue;
-
-        const float dist = worldPos.Distance(light.worldPos);
-        if (dist < (radius + extraRadius)) {
-            return true;
-        }
+        if (worldPos.Distance(light.worldPos) < (radius + extraRadius)) return true;
     }
 
-    // Checa a tocha/isqueiro do personagem (se estiver ativa)
-    Vec2 torchPos;
+    Vec2  torchPos;
     float torchRadius = 0.0f;
     if (stage->GetActiveTorchWorldPos(torchPos, torchRadius)) {
-        const float dist = worldPos.Distance(torchPos);
-        if (dist < (torchRadius + extraRadius)) {
-            return true;
-        }
+        if (worldPos.Distance(torchPos) < (torchRadius + extraRadius)) return true;
     }
 
     return false;
@@ -495,8 +608,7 @@ bool Monster::IsSelfInLight() const {
     StageState* stage = Game::TryGetStageState();
     if (!stage) return false;
 
-    // Encolhe a box em 5% de cada lado (10% total) pra ignorar bordas
-    // transparentes do sprite — considera o corpo todo, não só o centro
+    // 90% do sprite — ignora bordas transparentes
     Rect myBox = associated.box;
     myBox.x += myBox.w * 0.05f;
     myBox.y += myBox.h * 0.05f;
@@ -507,16 +619,13 @@ bool Monster::IsSelfInLight() const {
         if (!light.enabled) continue;
         const float radius = light.params.falloffRadiusPx;
         if (radius <= 0.0f) continue;
-
-        const float dist = DistanceFromRectToPoint(myBox, light.worldPos);
-        if (dist < radius) return true;
+        if (DistanceFromRectToPoint(myBox, light.worldPos) < radius) return true;
     }
 
-    Vec2 torchPos;
+    Vec2  torchPos;
     float torchRadius = 0.0f;
     if (stage->GetActiveTorchWorldPos(torchPos, torchRadius)) {
-        const float dist = DistanceFromRectToPoint(myBox, torchPos);
-        if (dist < torchRadius) return true;
+        if (DistanceFromRectToPoint(myBox, torchPos) < torchRadius) return true;
     }
 
     return false;
@@ -529,7 +638,7 @@ void Monster::RequestPath(Vec2 destination) {
     StageState* stage = Game::TryGetStageState();
     if (!stage) return;
 
-    targetPos   = destination;
+    targetPos = destination;
 
     if (!stage->IsWorldPosNavigableFor(destination, &associated, kNavFootRadius)) {
         currentPath.clear();
@@ -539,31 +648,40 @@ void Monster::RequestPath(Vec2 destination) {
 
     currentPath = stage->FindPathWorld(associated.box.Center(), destination, &associated, 4096, kNavFootRadius);
     pathStep    = 0;
+
+    // Se o A* retornou vazio mas o destino é navegável, significa que
+    // origem e destino estão no mesmo tile — trata como "já chegou"
+    // inserindo um path mínimo de 1 ponto no destino
+    if (currentPath.empty()) {
+        float dist = associated.box.Center().Distance(destination);
+        if (dist < 150.0f) {
+            // Perto o suficiente — move diretamente sem A*
+            currentPath.push_back(destination);
+        }
+    }
 }
- 
+
 void Monster::MoveAlongPath(float dt, float speed) {
     if (currentPath.empty() || pathStep >= static_cast<int>(currentPath.size())) return;
- 
-    Vec2 next      = currentPath[static_cast<size_t>(pathStep)];
-    Vec2 myCenter  = associated.box.Center();
-    Vec2 dir       = next - myCenter;
+
+    Vec2  next     = currentPath[static_cast<size_t>(pathStep)];
+    Vec2  myCenter = associated.box.Center();
+    Vec2  dir      = next - myCenter;
     float dist     = std::sqrt(dir.x * dir.x + dir.y * dir.y);
- 
+
     if (dist < 6.0f) {
         pathStep++;
         return;
     }
- 
+
     dir.x /= dist;
     dir.y /= dist;
- 
+
     associated.box.x += dir.x * speed * dt;
     associated.box.y += dir.y * speed * dt;
 }
- 
+
 bool Monster::HasReachedTarget() const {
-    // Caminho VAZIO = falha do pathfinder, NÃO "chegou" (antes era conflado e
-    // causava trocas de estado prematuras — INVESTIGATE/CHASE desistiam sem andar). 1.7
     if (currentPath.empty()) return false;
     return pathStep >= static_cast<int>(currentPath.size());
 }
@@ -578,125 +696,155 @@ bool Monster::HasNoPath() const {
 void Monster::AddPatrolPoint(Vec2 worldPos) {
     patrolPoints.push_back(worldPos);
 }
- 
+
 void Monster::PickNextPatrolPoint() {
-    if (patrolPoints.empty()) return;
- 
+    if (patrolPoints.empty()) {
+        std::cout << "[PATROL] Sem waypoints!\n";
+        return;
+    }
+
+    if (patrolPoints.size() == 1) {
+        patrolIndex = 0;
+        RequestPath(patrolPoints[0]);
+        return;
+    }
+
     if (patrolRandom) {
-        // Escolhe aleatoriamente, evitando repetir o mesmo ponto
         int next = patrolIndex;
-        if (patrolPoints.size() > 1) {
-            while (next == patrolIndex)
-                next = rand() % static_cast<int>(patrolPoints.size());
-        }
+        while (next == patrolIndex)
+            next = rand() % static_cast<int>(patrolPoints.size());
         patrolIndex = next;
     } else {
         patrolIndex = (patrolIndex + 1) % static_cast<int>(patrolPoints.size());
     }
- 
+
+    std::cout << "[PATROL] Indo para waypoint " << patrolIndex
+              << " (" << patrolPoints[patrolIndex].x << ","
+              << patrolPoints[patrolIndex].y << ")\n";
     RequestPath(patrolPoints[static_cast<size_t>(patrolIndex)]);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  INTELIGÊNCIA DE JANELAS (SABOTAGEM)
+//  JANELAS (SABOTAGEM)
 // ─────────────────────────────────────────────────────────────────────────────
 Window* Monster::FindNearbyClosedWindow() {
     StageState* stage = Game::TryGetStageState();
     if (!stage) return nullptr;
 
     Window* bestWin = nullptr;
-    float closestDist = 400.0f; // Distância que o monstro "sente" que tem uma janela
+    float closestDist = 2500.0f; // LIMITADOR: Mas detecta quase o mapa todo (2500px)
+
     Vec2 myPos = associated.box.Center();
 
-    // Varre todos os objetos do mapa atrás de janelas
     for (const auto& goPtr : stage->GetObjectArray()) {
         GameObject* go = goPtr.get();
         if (!go || go->IsDead()) continue;
 
         Window* win = go->GetComponent<Window>();
-        if (win && win->GetState() == Window::WindowState::CLOSED) {
-            Vec2 winPos = go->box.Center();
-            float dist = myPos.Distance(winPos);
-            
-            if (dist < closestDist) {
-                // O MONSTRO SÓ ABRE SE A JANELA NÃO ESTIVER ILUMINADA!
-                if (!IsWorldPosInAnyLight(winPos)) {
-                    closestDist = dist;
-                    bestWin = win;
-                }
-            }
-        }
+        if (!win || win->GetState() != Window::WindowState::CLOSED) continue;
+
+        Vec2 winPos = go->box.Center();
+        float dist = myPos.Distance(winPos);
+
+        // Se está mais longe que 800px ou se está iluminada, ignora instantaneamente
+        if (dist > closestDist || IsWorldPosInAnyLight(winPos)) continue;
+
+        closestDist = dist;
+        bestWin = win;
     }
+    
     return bestWin;
 }
 
 void Monster::UpdateSabotageWindow(float dt) {
-    // Aborta a sabotagem se: perdeu referência, a janela já foi aberta, ou alguém iluminou a janela!
-    if (!targetWindow || targetWindow->GetState() != Window::WindowState::CLOSED || IsWorldPosInAnyLight(targetWindow->GetAssociated().box.Center())) {
+    if (!targetWindow ||
+        targetWindow->GetState() != Window::WindowState::CLOSED ||
+        IsWorldPosInAnyLight(targetWindow->GetAssociated().box.Center())) {
+        
         targetWindow = nullptr;
         TransitionTo(MonsterState::PATROL);
         return;
     }
 
     Vec2 winPos = targetWindow->GetAssociated().box.Center();
-    float dist = associated.box.Center().Distance(winPos);
+    Vec2 myPos = associated.box.Center();
+    float dist = myPos.Distance(winPos);
 
-    if (dist <= 90.0f) {
-        // Chegou perto o suficiente da janela, abre!
+    // Braços longos do monstro: ele pode abrir a 200 pixels de distância
+    if (dist <= 200.0f) {
         targetWindow->Toggle();
         targetWindow = nullptr;
         TransitionTo(MonsterState::PATROL);
-    } else {
-        // Continua andando até a janela
-        if (pathRefreshTimer >= kPathRefreshInterval) {
-            pathRefreshTimer = 0.0f;
-            RequestPath(winPos);
-        }
-        MoveAlongPath(dt, moveSpeed);
+        return;
     }
+
+    if (pathRefreshTimer >= kPathRefreshInterval) {
+        pathRefreshTimer = 0.0f;
+        StageState* stage = Game::TryGetStageState();
+        
+        bool foundFloor = false;
+        
+        // CÉREBRO NOVO: Como a janela está grudada na parede, o monstro 
+        // procura um pedaço de chão livre a 200px da janela em todas as 8 direções.
+        for (int i = 0; i < 8; i++) {
+            float angle = i * (3.14159265f / 4.0f); // Tenta a cada 45 graus
+            Vec2 offset(std::cos(angle), std::sin(angle));
+            Vec2 candidate = winPos + offset * 200.0f;
+
+            // Achou um piso em que ele cabe (kNavFootRadius)? Pede o caminho pra lá!
+            if (stage && stage->IsWorldPosNavigableFor(candidate, &associated, kNavFootRadius)) {
+                RequestPath(candidate);
+                foundFloor = true;
+                break;
+            }
+        }
+
+        // Se o chão ao redor for inacessível ou o A* falhou
+        if (!foundFloor || HasNoPath()) {
+            if (Game::debugMode) std::cout << "[MONSTER] Janela bloqueada por objetos! Abortando.\n";
+            targetWindow = nullptr;
+            TransitionTo(MonsterState::PATROL);
+            return;
+        }
+    }
+
+    MoveAlongPath(dt, moveSpeed);
 }
 
 void Monster::UpdateLurk(float dt) {
     lurkTimer += dt;
- 
-    // Desistiu de esperar — esquece e volta a patrulhar normalmente
+
     if (lurkTimer >= kLurkMaxTime) {
         hasMemory = false;
         TransitionTo(MonsterState::PATROL);
         return;
     }
- 
-    // A cada kLurkRepositionInterval segundos, escolhe um ponto seguro
-    // PRÓXIMO da memória (não direto nela, e não fugindo pro mapa inteiro)
+
+    // Orbita ao redor da última posição conhecida
     if (pathRefreshTimer >= kLurkRepositionInterval) {
         pathRefreshTimer = 0.0f;
- 
-        // Escolhe um ângulo aleatório ao redor da última posição conhecida,
-        // a uma distância que normalmente fica fora do raio de luz comum
+
         constexpr float kLurkOrbitRadius = 220.0f;
         float angle = static_cast<float>(rand() % 360) * (3.14159265f / 180.0f);
-        Vec2 orbitOffset(std::cos(angle) * kLurkOrbitRadius, std::sin(angle) * kLurkOrbitRadius);
-        Vec2 lurkTarget = lastKnownPlayerPos + orbitOffset;
- 
-        // Só vai pra lá se esse ponto específico não estiver na luz
+        Vec2  orbitOffset(std::cos(angle) * kLurkOrbitRadius, std::sin(angle) * kLurkOrbitRadius);
+        Vec2  lurkTarget = lastKnownPlayerPos + orbitOffset;
+
         if (!IsWorldPosInAnyLight(lurkTarget)) {
             RequestPath(lurkTarget);
         }
     }
- 
+
     MoveAlongPath(dt, moveSpeed);
- 
-    // Se a luz realmente sumiu da memória por completo, ataca a chance
-    if (CanSeeLitBrother(lastKnownPlayerPos)) {
-        // Os irmãos baixaram a guarda de novo e estão visíveis — persegue!
+
+    // Oportunidade: viu os irmãos iluminados de novo — persegue
+    Vec2 seenPos;
+    if (CanSeeLitBrother(seenPos)) {
+        lastKnownPlayerPos = seenPos;
         TransitionTo(MonsterState::CHASE);
         return;
     }
- 
-    // Se entrar na luz de novo enquanto ronda, foge — já tratado pelo sensor
-    // global no Update(), então não precisa duplicar a lógica aqui.
- 
-    // Memória expirou naturalmente (mesmo timer de sempre)
+
+    // Memória expirou — desiste e patrulha
     if (!hasMemory) {
         TransitionTo(MonsterState::PATROL);
     }
