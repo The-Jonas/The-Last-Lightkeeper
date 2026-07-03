@@ -232,6 +232,7 @@ void StageState::Update(float dt){
         TryOpenJournalOnKeyPress();
         TryInteractCandleOnKeyPress();
         TryInteractWindowOnKeyPress();
+        TryInteractRadioOnKeyPress();
         UpdateTutorials(dt);
     }
     UpdateInventoryLight();

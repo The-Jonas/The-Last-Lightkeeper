@@ -15,6 +15,7 @@
 #include "gameplay/Jornal.h"
 #include "gameplay/Closet.h"
 #include "gameplay/Window.h"
+#include "gameplay/RadioAsset.h"
 #include "gameplay/Monster.h"
 #include "ui/MonsterSilhouette.h"
 #include <iostream>
@@ -266,29 +267,39 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         }
     }
     else if (spawn.type == "JornalSpawn") {
-        std::string imagePath = "Recursos/img/items/old_letter.jpg";
-        if (spawn.properties.count("imagePath")) {
-            imagePath = spawn.properties.at("imagePath").get<std::string>();
-        }
-
+    
+        // ── SPRITE DECORATIVO (asset físico no chão) ──────────────────────────
+        // Property no Tiled: "spriteName" (ex: "papel_amassado")
+        // Extensão sempre .png, pasta Recursos/img/items/jornais/
+        std::string spriteName = "old_letter";
+        if (spawn.properties.count("spriteName"))
+            spriteName = spawn.properties.at("spriteName").get<std::string>();
+        std::string spritePath = "Recursos/img/items/jornais/" + spriteName + ".png";
+    
+        // ── DOCUMENTO (imagem que abre ao interagir) ───────────────────────────
+        // Property no Tiled: "imageName" (ex: "carta_do_pai")
+        // Extensão sempre .jpg, pasta Recursos/img/documentos/
+        std::string imageName = "old_letter";
+        if (spawn.properties.count("imageName"))
+            imageName = spawn.properties.at("imageName").get<std::string>();
+        std::string imagePath = "Recursos/img/documentos/" + imageName + ".jpg";
+    
+        // ── OUTROS PARÂMETROS ──────────────────────────────────────────────────
         int heightLevel = 0;
-        if (spawn.properties.count("heightLevel")) {
+        if (spawn.properties.count("heightLevel"))
             heightLevel = spawn.properties.at("heightLevel").get<int>();
-        }
-
+    
         float depthOffset = 0.0f;
-        if (spawn.properties.count("depthOffset")) {
+        if (spawn.properties.count("depthOffset"))
             depthOffset = spawn.properties.at("depthOffset").get<float>();
-        }
-
-        Jornal* jornal = Jornal::Spawn(spawn.x, spawn.y, imagePath, heightLevel, stage.jornals);
+    
+        // Spawn: (spritePath = visual no chão, imagePath = conteúdo ao abrir)
+        Jornal* jornal = Jornal::Spawn(spawn.x, spawn.y, spritePath, imagePath, heightLevel, stage.jornals);
         if (jornal) {
             GameObject& jornalObj = jornal->GetAssociated();
             jornalObj.tiledId = spawn.tiledId;
             jornalObj.z = spawn.z;
             jornalObj.depthOffset = depthOffset;
-            // Segue a largura/altura/rotação do objeto no Tiled (como os demais
-            // props), em vez do thumbnail fixo de 48x48.
             ApplyTiledBox(&jornalObj, spawn);
             ApplyTiledFlip(&jornalObj, spawn);
             stage.AddObject(&jornalObj);
@@ -310,7 +321,6 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         candleObj->depthOffset = depthOff;
         candleObj->AddComponent(new Candlestick(*candleObj, startsLit, dir));
         
-        // ADICIONADO O FADE EFFECT
         candleObj->AddComponent(new FadeEffect(*candleObj));
 
         ApplyTiledBox(candleObj, spawn);
@@ -405,6 +415,39 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         stage.AddObject(fallenChairObj);
         stage.RegisterTestShadowObject(fallenChairObj);
     }
+        else if (spawn.type == "Mesa_radio") {
+        float depthOff = 0.0f;
+        if (spawn.properties.count("depthOffset"))
+            depthOff = spawn.properties.at("depthOffset").get<float>();
+ 
+        // Duração customizável pelo Tiled (padrão 8s)
+        float duration = 8.0f;
+        if (spawn.properties.count("playDuration"))
+            duration = spawn.properties.at("playDuration").get<float>();
+ 
+        // Som customizável pelo Tiled (padrão: ruído de rádio)
+        std::string soundPath = "Recursos/audio/SFX/RADIO/radio_ruido.mp3";
+        if (spawn.properties.count("soundPath"))
+            soundPath = spawn.properties.at("soundPath").get<std::string>();
+ 
+        GameObject* radioObj = new GameObject();
+        radioObj->tiledId    = spawn.tiledId;
+        radioObj->z          = spawn.z;
+        radioObj->depthOffset = depthOff;
+ 
+        radioObj->AddComponent(new SpriteRenderer(*radioObj, "Recursos/img/objetos/mesa/Mesa_radio.png"));
+        radioObj->AddComponent(new FadeEffect(*radioObj));
+ 
+        RadioAsset* radio = new RadioAsset(*radioObj, soundPath);
+        radio->playDuration = duration;  
+        radioObj->AddComponent(radio);
+ 
+        ApplyTiledBox(radioObj, spawn);
+        ApplyTiledFlip(radioObj, spawn);
+ 
+        stage.AddObject(radioObj);
+        stage.RegisterTestShadowObject(radioObj);
+    }
     else if (spawn.type == "Barril") {
         float depthOff = 0.0f;
         
@@ -487,10 +530,10 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
 
         std::string caminho = "Recursos/img/objetos/pesca/" + object + ".png";
         fishingObj->AddComponent(new SpriteRenderer(*fishingObj, caminho));
+        if (object == "rede_pendurada") {
+            fishingObj->AddComponent(new FadeEffect(*fishingObj));
+        }
         ApplyTiledBox(fishingObj, spawn);
-
-        // Colisão feita no Tiled
-
         ApplyTiledFlip(fishingObj, spawn);
 
         stage.AddObject(fishingObj);

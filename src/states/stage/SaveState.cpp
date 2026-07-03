@@ -438,6 +438,8 @@ void StageState::RenderInteractionPrompt(SDL_Renderer* renderer) {
             action = reachableCandle->IsLit() ? "Apagar" : "Acender";
         } else if (reachableWindow) {
             action = (reachableWindow->GetState() == Window::WindowState::OPEN) ? "Fechar" : "Abrir";
+        } else if (reachableRadio) {                          
+            action = reachableRadio->IsPlaying() ? "Desligar" : "Ligar";
         } else if (reachablePickup && IsPickupStillTracked(reachablePickup) &&
                    !IsPickupBlocked(reachablePickup)) {
             action = "Pegar";

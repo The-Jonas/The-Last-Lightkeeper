@@ -161,6 +161,40 @@ bool StageState::ShouldSkipPickupSpawn(int tiledId) const {
     return skippedPickupSpawnIds.count(tiledId) > 0;
 }
 
+RadioAsset* StageState::FindClosestReachableRadio() const {
+    // Qualquer irmão pode interagir (não restrito ao irmãozão como a vela)
+    Character* c = controlledCharacter;
+    if (!c) return nullptr;
+ 
+    RadioAsset* closest = nullptr;
+    float closestDist = 1e30f;
+    const Vec2 playerCenter = c->GetCenter();
+ 
+    for (const auto& goPtr : objectArray) {
+        GameObject* go = goPtr.get();
+        if (!go || go->IsDead()) continue;
+ 
+        RadioAsset* radio = go->GetComponent<RadioAsset>();
+        if (!radio) continue;
+ 
+        const Vec2 radioCenter = go->box.Center();
+        const float d = playerCenter.Distance(radioCenter);
+ 
+        constexpr float kRadioReach = 120.0f;
+        if (d < kRadioReach && d < closestDist) {
+            closestDist = d;
+            closest = radio;
+        }
+    }
+    return closest;
+}
+
+void StageState::TryInteractRadioOnKeyPress() {
+    InputManager& input = InputManager::GetInstance();
+    if (!input.ActionPress(GameAction::Interact) || !reachableRadio) return;
+    reachableRadio->Toggle();
+}
+
 Candlestick* StageState::FindClosestReachableCandle() const {
     if (!bigCharacter || controlledCharacter != bigCharacter) {
         return nullptr;
@@ -197,7 +231,6 @@ Candlestick* StageState::FindClosestReachableCandle() const {
 
     return closest;
 }
-
 
 
 bool StageState::IsPlayerNearLitCandle() const {
@@ -268,17 +301,13 @@ void StageState::TryInteractCandleOnKeyPress() {
 
     if (reachableCandle->IsLit()) {
         reachableCandle->SetLit(false);
+        GameSfx::PlayCandleBlow();   
         SaveCurrentProgress();
         return;
     }
 
-    // Light the candle if a usable light is active. If none is active yet, try to
-    // auto-activate one from the inventory (lighter preferred over lamp); only
-    // then does the candle light. With neither available, nothing happens.
     const bool wasLightActive = inventory.IsUsableLightActive();
     if (inventory.TryActivateBestLight()) {
-        // If we actually turned a lighter ON just now, play its toggle VFX —
-        // the lighter is genuinely being lit (a lamp / already-lit light: no SFX).
         if (!wasLightActive && inventory.IsActiveLightLighter()) {
             GameSfx::PlayLighterToggle(true);
         }
@@ -286,6 +315,7 @@ void StageState::TryInteractCandleOnKeyPress() {
             bigCharacter->NotifyInventoryLightChanged();
         }
         reachableCandle->SetLit(true);
+        GameSfx::PlayCandleLightUp();   
         SaveCurrentProgress();
     }
 }
@@ -412,6 +442,7 @@ void StageState::UpdateBoxInteraction() {
     reachablePickup = FindClosestReachableItem();
     reachableCandle = FindClosestReachableCandle();
     reachableWindow = FindClosestReachableWindow();
+    reachableRadio = FindClosestReachableRadio();
 
     GameSfx::UpdateCandleProximity(IsPlayerNearLitCandle());
 
@@ -534,6 +565,12 @@ void StageState::RenderInteractionGlowIfNeeded(GameObject& go) {
 
     Candlestick* candle = go.GetComponent<Candlestick>();
     if (candle && candle == reachableCandle) {
+        DrawSpriteInteractionGlow(go, 255, 255, 255, 1.14f);
+        return;
+    }
+
+    RadioAsset* radio = go.GetComponent<RadioAsset>();
+    if (radio && radio == reachableRadio) {
         DrawSpriteInteractionGlow(go, 255, 255, 255, 1.14f);
         return;
     }

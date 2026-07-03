@@ -17,8 +17,10 @@ public:
     GameObject& GetAssociated() { return associated; }
     const GameObject& GetAssociated() const { return associated; }
 
-    static Jornal* Spawn(float worldX, float worldY, const std::string& imagePath, int heightLevel,
-                         std::vector<Jornal*>& outList);
+    static Jornal* Spawn(float worldX, float worldY,
+                     const std::string& spritePath,  // asset decorativo (sprite no chão)
+                     const std::string& imagePath,   // conteúdo que abre ao interagir
+                     int height, std::vector<Jornal*>& outList);
 
     void Start() override;
     void Update(float dt) override;

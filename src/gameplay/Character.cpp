@@ -77,6 +77,8 @@ constexpr const char* kIrmaozaoIdleRoot = "Recursos/img/personagens/irmaozao_idl
 constexpr const char* kIrmaozaoWalkRoot = "Recursos/img/personagens/irmaozao_walk/";
 constexpr const char* kIrmaozaoIdleLighterRoot = "Recursos/img/personagens/irmaozao_idle_lighter/";
 constexpr const char* kIrmaozaoIdleLampRoot = "Recursos/img/personagens/irmaozao_idle_lamp/";
+constexpr const char* kIrmaozaoWalkLighterRoot = "Recursos/img/personagens/irmaozao_walk_lighter/";
+constexpr const char* kIrmaozaoWalkLampRoot    = "Recursos/img/personagens/irmaozao_walk_lamp/";
 
 // Para as animações do irmãozinho
 constexpr const char* kIrmaozinhoIdleRoot = "Recursos/img/personagens/irmaozinho_idle/";
@@ -145,9 +147,13 @@ std::string Character::GetAnimStripPath(Direction dir, int frameIndex, HeldPropV
     const char* root;
 
     if (irmaozaoIdleStrips) {
-        root = moving? kIrmaozaoWalkRoot : kIrmaozaoIdleRoot;
-        if (prop == HeldPropVisual::Lighter) root = kIrmaozaoIdleLighterRoot;
-        else if (prop == HeldPropVisual::Lamp) root = kIrmaozaoIdleLampRoot;
+        if (prop == HeldPropVisual::Lighter) {
+            root = moving ? kIrmaozaoWalkLighterRoot : kIrmaozaoIdleLighterRoot;
+        } else if (prop == HeldPropVisual::Lamp) {
+            root = moving ? kIrmaozaoWalkLampRoot : kIrmaozaoIdleLampRoot;
+        } else {
+            root = moving ? kIrmaozaoWalkRoot : kIrmaozaoIdleRoot;
+        }
     } else {
         root = moving? kIrmaozinhoWalkRoot : kIrmaozinhoIdleRoot;
 
@@ -255,15 +261,7 @@ void Character::NotifyInventoryLightChanged() {
 }
 
 void Character::PlayPickLampAnimation() {
-    if (!irmaozaoIdleStrips) {
-        return;
-    }
-    playingPickLampAnim = true;
-    pickLampAnimTimer = 0.0f;
-    pickLampFrameIndex = 0;
-    stripFrameIndex = 0;
-    stripAnimTimer = 0.0f;
-    RefreshAnimSprite();
+// Animação removida
 }
 
 void Character::RefreshAnimSprite() {
@@ -274,16 +272,11 @@ void Character::RefreshAnimSprite() {
     const float footY = associated.box.y + associated.box.h;
     const bool moving = speed.Magnitude() > kIrmaozaoMovingSpeedThreshold;
 
-    std::string path;
-    if (playingPickLampAnim) {
-        path = IrmaozaoPickLampStripPath(currentDirection, pickLampFrameIndex);
-    } else {
-        HeldPropVisual prop = HeldPropVisual::None;
-        if (StageState* stage = Game::TryGetStageState()) {
-            prop = stage->GetInventory().GetHeldPropVisual();
-        }
-        path = GetAnimStripPath(currentDirection, stripFrameIndex, prop, moving);
+    HeldPropVisual prop = HeldPropVisual::None;
+    if (StageState* stage = Game::TryGetStageState()) {
+        prop = stage->GetInventory().GetHeldPropVisual();
     }
+    std::string path = GetAnimStripPath(currentDirection, stripFrameIndex, prop, moving);
 
     if (path != lastStripSpritePath) {
         Resources::ReloadImage(path);
@@ -483,26 +476,12 @@ void Character::Update(float dt) {
             RefreshAnimSprite();
         }
         
-        if (playingPickLampAnim) {
-            pickLampAnimTimer += dt;
-            while (pickLampAnimTimer >= kIrmaozaoStripFrameSeconds) {
-                pickLampAnimTimer -= kIrmaozaoStripFrameSeconds;
-                pickLampFrameIndex++;
-                if (pickLampFrameIndex >= kIrmaozaoStripFrameCount) {
-                    playingPickLampAnim = false;
-                    pickLampFrameIndex = 0;
-                    stripFrameIndex = 0;
-                    stripAnimTimer = 0.0f;
-                }
-                RefreshAnimSprite();
-            }
-        } else {
-            stripAnimTimer += dt;
-            while (stripAnimTimer >= kIrmaozaoStripFrameSeconds) {
-                stripAnimTimer -= kIrmaozaoStripFrameSeconds;
-                stripFrameIndex = (stripFrameIndex + 1) % kIrmaozaoStripFrameCount;
-                RefreshAnimSprite();
-            }
+
+        stripAnimTimer += dt;
+        while (stripAnimTimer >= kIrmaozaoStripFrameSeconds) {
+            stripAnimTimer -= kIrmaozaoStripFrameSeconds;
+            stripFrameIndex = (stripFrameIndex + 1) % kIrmaozaoStripFrameCount;
+            RefreshAnimSprite();
         }
     }
 
@@ -695,11 +674,15 @@ void Character::PreloadAnimationFrames() {
                 // Irmãozão — precisa cobrir os 3 estados de prop também
                 // (None, Lighter, Lamp) porque cada um é uma pasta diferente
                 for (HeldPropVisual prop : {HeldPropVisual::None,
-                                            HeldPropVisual::Lighter,
-                                            HeldPropVisual::Lamp}) {
-                    for (int f = 0; f < kIrmaozaoStripFrameCount; f++) {
-                        std::string path = GetAnimStripPath(d, f, prop, moving);
-                        Resources::GetImage(path);
+                                             HeldPropVisual::Lighter,
+                                             HeldPropVisual::Lamp}) {
+                    for (bool moving : {false, true}) {  // <- moving já estava aqui, cobre automaticamente
+                        for (Direction d : allDirs) {
+                            for (int f = 0; f < kIrmaozaoStripFrameCount; f++) {
+                                std::string path = GetAnimStripPath(d, f, prop, moving);
+                                Resources::GetImage(path);
+                            }
+                        }
                     }
                 }
             } else {
@@ -708,16 +691,6 @@ void Character::PreloadAnimationFrames() {
                     std::string path = GetAnimStripPath(d, f, HeldPropVisual::None, moving);
                     Resources::GetImage(path);
                 }
-            }
-        }
-    }
- 
-    // Pré-carrega também a animação de pegar a lamparina (só irmãozão)
-    if (irmaozaoIdleStrips) {
-        for (Direction d : allDirs) {
-            for (int f = 0; f < kIrmaozaoStripFrameCount; f++) {
-                std::string path = IrmaozaoPickLampStripPath(d, f);
-                Resources::GetImage(path);
             }
         }
     }

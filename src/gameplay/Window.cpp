@@ -61,8 +61,26 @@ void Window::Update(float dt) {
             UpdateVisuals();
             UpdatePromptText();
             
-            if (state == WindowState::OPEN) GameSfx::StartWindLoop();
-            else GameSfx::StopWindLoop();
+            if (state == WindowState::OPEN) {
+                GameSfx::StartWindLoop();
+            } else {
+                // Só para o vento se NENHUMA outra janela estiver aberta
+                StageState* stage = Game::TryGetStageState();
+                bool anyWindowOpen = false;
+                if (stage) {
+                    for (const auto& go : stage->GetObjectArray()) {
+                        Window* win = go->GetComponent<Window>();
+                        if (win && win != this &&
+                           (win->GetState() == WindowState::OPEN || win->GetState() == WindowState::OPENING)) {
+                            anyWindowOpen = true;
+                            break;
+                        }
+                    }
+                }
+                if (!anyWindowOpen) {
+                    GameSfx::StopWindLoop();
+                }
+            }
         }
     }
 
@@ -144,17 +162,21 @@ void Window::BlowOutNearbyCandles() {
     if (!stage) return;
 
     Vec2 myCenter = associated.box.Center();
+    bool blewOutAny = false;
 
-    // Itera por todos os objetos da cena (ajuste "GetObjectArray()" de acordo com sua engine)
     for (const auto& go : stage->GetObjectArray()) {
         Candlestick* candle = go->GetComponent<Candlestick>();
         if (candle && candle->IsLit()) {
-            // Verifica a distância matemática entre a janela e o castiçal
             float distance = myCenter.Distance(go->box.Center());
             if (distance <= windRadius) {
                 candle->SetLit(false);
-                // Opcional: Adicione um GameSfx::PlayWindBlowOutSound() aqui!
+                blewOutAny = true;
             }
         }
+    }
+
+    // Só toca o som se realmente apagou pelo menos uma vela
+    if (blewOutAny) {
+        GameSfx::PlayCandleBlowOut();
     }
 }

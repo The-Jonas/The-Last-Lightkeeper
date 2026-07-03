@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<tileset version="1.10" tiledversion="1.12.2" name="props_objects" tilewidth="2847" tileheight="1553" tilecount="42" columns="0">
+<tileset version="1.10" tiledversion="1.12.1" name="props_objects" tilewidth="2847" tileheight="1553" tilecount="44" columns="0">
  <grid orientation="orthogonal" width="1" height="1"/>
  <tile id="0" type="Caixa">
   <properties>
@@ -52,7 +52,7 @@
    <property name="direction" value="frente"/>
    <property name="startsLit" type="bool" value="false"/>
   </properties>
-  <image source="../img/objetos/castical/castical_frente_apagado.png" width="48" height="95"/>
+  <image source="../img/objetos/castical/castical_frente_apagado.png" width="96" height="190"/>
  </tile>
  <tile id="11" type="Castical">
   <properties>
@@ -60,35 +60,35 @@
    <property name="direction" value="frente"/>
    <property name="startsLit" type="bool" value="true"/>
   </properties>
-  <image source="../img/objetos/castical/castical_frente_aceso.png" width="48" height="95"/>
+  <image source="../img/objetos/castical/castical_frente_aceso.png" width="96" height="190"/>
  </tile>
  <tile id="12" type="Castical">
   <properties>
    <property name="direction" value="esquerda"/>
    <property name="startsLit" type="bool" value="false"/>
   </properties>
-  <image source="../img/objetos/castical/castical_esquerda_apagado.png" width="55" height="99"/>
+  <image source="../img/objetos/castical/castical_esquerda_apagado.png" width="110" height="198"/>
  </tile>
  <tile id="13" type="Castical">
   <properties>
    <property name="direction" value="Direita"/>
    <property name="startsLit" type="bool" value="true"/>
   </properties>
-  <image source="../img/objetos/castical/castical_esquerda_aceso.png" width="55" height="99"/>
+  <image source="../img/objetos/castical/castical_esquerda_aceso.png" width="110" height="198"/>
  </tile>
  <tile id="14" type="Castical">
   <properties>
    <property name="direction" value="esquerda"/>
    <property name="startsLit" type="bool" value="false"/>
   </properties>
-  <image source="../img/objetos/castical/castical_direita_apagado.png" width="55" height="99"/>
+  <image source="../img/objetos/castical/castical_direita_apagado.png" width="110" height="198"/>
  </tile>
  <tile id="15" type="Castical">
   <properties>
    <property name="direction" value="esquerda"/>
    <property name="startsLit" type="bool" value="true"/>
   </properties>
-  <image source="../img/objetos/castical/castical_direita_aceso.png" width="55" height="99"/>
+  <image source="../img/objetos/castical/castical_direita_aceso.png" width="110" height="198"/>
  </tile>
  <tile id="16" type="Armario">
   <image source="../img/objetos/armario/armario_frente.png" width="775" height="746"/>
@@ -265,11 +265,28 @@
  </tile>
  <tile id="43" type="JornalSpawn">
   <properties>
-   <property name="depthOffset" type="float" value="0"/>
-   <property name="heightLevel" type="int" value="0"/>
-   <property name="itemName" value="Jornal"/>
+   <property name="depthOffset" type="float" value="170"/>
+   <property name="heightLevel" type="int" value="1"/>
+   <property name="imageName" value="old_letter"/>
+   <property name="spriteName" value="Bloco_de_papel"/>
    <property name="unique" type="bool" value="true"/>
   </properties>
-  <image source="../img/items/old_letter.jpg" width="736" height="979"/>
+  <image source="../img/items/jornais/Bloco_de_papel.png" width="120" height="118"/>
+ </tile>
+ <tile id="44" type="JornalSpawn">
+  <properties>
+   <property name="depthOffset" type="float" value="170"/>
+   <property name="heightLevel" type="int" value="1"/>
+   <property name="imageName" value="old_letter"/>
+   <property name="spriteName" value="Folha_de_papel"/>
+   <property name="unique" type="bool" value="true"/>
+  </properties>
+  <image source="../img/items/jornais/Folha_de_papel.png" width="120" height="118"/>
+ </tile>
+ <tile id="45" type="Mesa_Radio">
+  <properties>
+   <property name="playDuration" type="float" value="6"/>
+  </properties>
+  <image source="../img/objetos/mesa/Mesa_radio.png" width="163" height="265"/>
  </tile>
 </tileset>

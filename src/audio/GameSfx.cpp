@@ -31,14 +31,17 @@ constexpr const char* kThunderPaths[] = {
 };
 
 constexpr const char* kCandleLoopPath = "Recursos/audio/SFX/VELA/FOGO_VELA.mp3";
+constexpr const char* kCandleLightUpPath = "Recursos/audio/SFX/VELA/VELA_ACENDENDO.mp3";
+constexpr const char* kCandleBlowPlayerPath = "Recursos/audio/SFX/VELA/VELA_APAGANDO_JOGADOR.mp3";
 
 constexpr const char* kWindowOpenPath = "Recursos/audio/SFX/JANELA/JANELA_ABRINDO.mp3";
 constexpr const char* kWindowClosePath = "Recursos/audio/SFX/JANELA/JANELA_FECHANDO.mp3";
-constexpr const char* kWindLoopPath = "Recursos/audio/SFX/JANELA/VENTO_LOOP.mp3";
+constexpr const char* kWindLoopPath = "Recursos/audio/SFX/JANELA/VENTO_LOOP.wav";
+constexpr const char* kCandleBlowPath = "Recursos/audio/SFX/JANELA/VELA_APAGANDO.wav";
 
 constexpr int kThunderCount = 4;
 constexpr float kMinFootstepSpeed = 35.0f;
-constexpr float kThunderMinDelay = 18.0f;
+constexpr float kThunderMinDelay = 18.0f;   
 constexpr float kThunderMaxDelay = 42.0f;
 constexpr float kThunderFlashDuration = 0.42f;
 constexpr float kPostLoadingThunderDelay = 12.0f;
@@ -57,6 +60,9 @@ Sound gCandleLoopSound;
 Sound gWindowOpenSound;
 Sound gWindowCloseSound;
 Sound gWindLoopSound;
+Sound gCandleBlowOutSound;
+Sound gCandleLightUpSound;
+Sound gCandleBlowPlayerSound;
 
 bool gWindLoopActive = false;
 bool gLoaded = false;
@@ -88,11 +94,17 @@ void EnsureLoaded() {
     gFootstepStairsSound.Open(kFootstepStairsPath);
     gWindowOpenSound.Open(kWindowOpenPath);
     gWindowCloseSound.Open(kWindowClosePath);
+    
     // VENTO_LOOP.mp3 is an optional ambience asset that may not ship. Only try to
     // open it when present, so a missing file doesn't spam "Erro ao carregar som".
     if (FileExists(kWindLoopPath)) {
         gWindLoopSound.Open(kWindLoopPath);
     }
+    if (FileExists(kCandleBlowPath)) {
+        gCandleBlowOutSound.Open(kCandleBlowPath);
+    }
+    if (FileExists(kCandleLightUpPath)) gCandleLightUpSound.Open(kCandleLightUpPath);
+    if (FileExists(kCandleBlowPlayerPath)) gCandleBlowPlayerSound.Open(kCandleBlowPlayerPath);
     for (int i = 0; i < kThunderCount; ++i) {
         gThunderSounds[i].Open(kThunderPaths[i]);
     }
@@ -400,9 +412,16 @@ void StopWindLoop() {
     }
 }
 
+void PlayCandleBlowOut() {
+    PlaySound(gCandleBlowOutSound);
+}
+
 void StopAllGameplay() {
     StopAllGameplayAudio();   // passos, vela, caixa
     StopWindLoop();           // vento
 }
+
+void PlayCandleLightUp() { PlaySound(gCandleLightUpSound); }
+void PlayCandleBlow()    { PlaySound(gCandleBlowPlayerSound); }
 
 } // namespace GameSfx

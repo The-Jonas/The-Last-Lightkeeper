@@ -17,18 +17,18 @@ void Jornal::Update(float dt) {
 
 void Jornal::Render() {}
 
-Jornal* Jornal::Spawn(float worldX, float worldY, const std::string& path, int height,
-                       std::vector<Jornal*>& outList) {
+Jornal* Jornal::Spawn(float worldX, float worldY,
+                      const std::string& spritePath,
+                      const std::string& imagePath,
+                      int height, std::vector<Jornal*>& outList) {
     GameObject* obj = new GameObject();
     obj->box.x = worldX;
     obj->box.y = worldY;
     obj->z = 2;
     obj->sub_z = -1;
 
-    // O SpriteRenderer já define box.w/h com o tamanho nativo da imagem. O
-    // SpawnFactory ajusta depois para a dimensão do objeto no Tiled (ApplyTiledBox).
-    obj->AddComponent(new SpriteRenderer(*obj, path));
-    Jornal* jornal = new Jornal(*obj, path, height);
+    obj->AddComponent(new SpriteRenderer(*obj, spritePath)); // <- sprite decorativo
+    Jornal* jornal = new Jornal(*obj, imagePath, height);    // <- conteúdo que abre
     obj->AddComponent(jornal);
 
     outList.push_back(jornal);

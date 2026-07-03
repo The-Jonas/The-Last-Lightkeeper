@@ -8,6 +8,9 @@ namespace GameSfx {
 void NotifyLoadingBegin();
 void NotifyLoadingEnd();
 
+void PlayCandleLightUp();   // som de acender (fósforo/isqueiro na vela)
+void PlayCandleBlow();      // som de soprar/apagar pelo jogador
+
 /// Para imediatamente TODOS os loops de áudio de gameplay (passos, vela, caixa e
 /// vento). Usado na morte/fim de jogo para que nenhum loop continue tocando
 /// depois que o StageState para de atualizar.
@@ -33,6 +36,7 @@ float GetThunderFlashStrength();
 void PlayWindowToggle(bool opening);
 void StartWindLoop();
 void StopWindLoop();
+void PlayCandleBlowOut();
 
 /// Volume atual do barramento de VFX (master × efeitos), 0..MIX_MAX_VOLUME.
 /// Usado por sons de efeito tocados fora do GameSfx (ex.: pegar item).

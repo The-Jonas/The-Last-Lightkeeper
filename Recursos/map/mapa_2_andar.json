@@ -439,7 +439,7 @@
                         {
                          "name":"windRadius",
                          "type":"float",
-                         "value":300
+                         "value":2000
                         }],
                  "rotation":0,
                  "type":"Janela",
@@ -642,9 +642,9 @@
                  "y":790.667
                 }, 
                 {
-                 "gid":7,
-                 "height":48,
-                 "id":698,
+                 "gid":39,
+                 "height":147,
+                 "id":705,
                  "name":"",
                  "opacity":1,
                  "properties":[
@@ -671,37 +671,48 @@
                  "rotation":0,
                  "type":"ItemSpawn",
                  "visible":true,
-                 "width":48,
-                 "x":1833.33333333333,
-                 "y":1495.42424242424
-                }, 
-                {
-                 "gid":2147483665,
-                 "height":698,
-                 "id":704,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":180
-                        }, 
-                        {
-                         "name":"direction",
-                         "type":"string",
-                         "value":"frente"
-                        }],
-                 "rotation":0,
-                 "type":"Armario",
-                 "visible":true,
-                 "width":1091,
-                 "x":2739.40909090909,
-                 "y":1980.45454545455
+                 "width":80,
+                 "x":1819,
+                 "y":1636
                 }],
          "opacity":1,
          "type":"objectgroup",
          "visible":true,
+         "x":0,
+         "y":0
+        }, 
+        {
+         "draworder":"topdown",
+         "id":28,
+         "name":"FootstepZones",
+         "objects":[
+                {
+                 "height":2912,
+                 "id":707,
+                 "name":"",
+                 "opacity":1,
+                 "rotation":0,
+                 "type":"Madeira",
+                 "visible":true,
+                 "width":3828,
+                 "x":8,
+                 "y":20
+                }, 
+                {
+                 "height":0,
+                 "id":709,
+                 "name":"",
+                 "opacity":1,
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":-512,
+                 "y":2168
+                }],
+         "opacity":1,
+         "type":"objectgroup",
+         "visible":false,
          "x":0,
          "y":0
         }, 
@@ -3172,8 +3183,8 @@
          "x":0,
          "y":0
         }],
- "nextlayerid":28,
- "nextobjectid":705,
+ "nextlayerid":29,
+ "nextobjectid":710,
  "orientation":"orthogonal",
  "properties":[
         {
@@ -3182,7 +3193,7 @@
          "value":"level_2"
         }],
  "renderorder":"right-down",
- "tiledversion":"1.12.2",
+ "tiledversion":"1.12.1",
  "tileheight":64,
  "tilesets":[
         {

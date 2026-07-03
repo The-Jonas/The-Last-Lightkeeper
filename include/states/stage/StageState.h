@@ -21,6 +21,7 @@
 #include "states/stage/FirstLoadData.h"
 #include "states/stage/OceanAmbientController.h"
 #include "math/Vec2.h"
+#include "gameplay/RadioAsset.h"
 
 #include <memory>
 #include <unordered_set>
@@ -202,6 +203,8 @@ public:
     // Dispara o feedback de dano do monstro: SFX + tremor de tela + flash vermelho.
     // Chamado pelo Monster ao tocar um irmão.
     void TriggerMonsterHitFeedback();
+
+    RadioAsset* GetReachableRadio() const { return reachableRadio; }
 
 private:
 
@@ -415,6 +418,10 @@ private:
     mutable bool dynamicColliderCacheDirty = true;
     mutable GameObject* monsterNavObstacle = nullptr;   // monstro como obstáculo de nav p/ os irmãos (1.3)
     void RefreshDynamicColliderCache() const;
+
+    RadioAsset* reachableRadio = nullptr;
+    RadioAsset* FindClosestReachableRadio() const;
+    void        TryInteractRadioOnKeyPress();
 };
 
 #endif
