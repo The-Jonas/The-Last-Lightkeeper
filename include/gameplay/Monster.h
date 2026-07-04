@@ -113,7 +113,7 @@ private:
     // Dano por toque
     float damageCooldown = 0.0f;
     static constexpr float kDamageCooldownTime = 1.5f;
-    static constexpr float kSanityDamageOnTouch = 30.0f;
+    static constexpr float kSanityDamageOnTouch = 50.0f;
 
     // Propriedades do LURK
     float lurkTimer = 0.0f;

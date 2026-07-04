@@ -121,40 +121,16 @@
                          "value":-180
                         }, 
                         {
-                         "name":"direction",
+                         "name":"nameObj",
                          "type":"string",
-                         "value":"frente"
+                         "value":"Armario_galao"
                         }],
                  "rotation":0,
-                 "type":"Armario",
+                 "type":"Recipiente_Decoracao",
                  "visible":true,
                  "width":775,
                  "x":555.606060606061,
                  "y":549.909090909094
-                }, 
-                {
-                 "gid":1,
-                 "height":265,
-                 "id":679,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"isStatic",
-                         "type":"bool",
-                         "value":false
-                        }, 
-                        {
-                         "name":"z",
-                         "type":"int",
-                         "value":2
-                        }],
-                 "rotation":0,
-                 "type":"Caixa",
-                 "visible":true,
-                 "width":188,
-                 "x":1045.87878787879,
-                 "y":918.757575757578
                 }, 
                 {
                  "gid":10,
@@ -601,6 +577,30 @@
                  "y":2029
                 }, 
                 {
+                 "gid":34,
+                 "height":338,
+                 "id":917,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":-70
+                        }, 
+                        {
+                         "name":"nameObject",
+                         "type":"string",
+                         "value":"redes"
+                        }],
+                 "rotation":0,
+                 "type":"Pesca_Asset",
+                 "visible":true,
+                 "width":302,
+                 "x":25,
+                 "y":1577
+                }, 
+                {
                  "gid":36,
                  "height":500,
                  "id":732,
@@ -703,6 +703,21 @@
                  "name":"",
                  "opacity":1,
                  "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":-50
+                        }, 
+                        {
+                         "name":"empty",
+                         "type":"float",
+                         "value":0.5
+                        }, 
+                        {
+                         "name":"interactive",
+                         "type":"bool",
+                         "value":false
+                        }, 
                         {
                          "name":"type",
                          "type":"int",
@@ -1548,32 +1563,61 @@
                 }, 
                 {
                  "height":0,
-                 "id":761,
+                 "id":916,
                  "name":"",
                  "opacity":1,
                  "polygon":[
                         {
-                         "x":4,
-                         "y":-5.33333333333348
+                         "x":0,
+                         "y":0
                         }, 
                         {
-                         "x":57.3333333333334,
-                         "y":100
+                         "x":170,
+                         "y":112
                         }, 
                         {
-                         "x":214,
-                         "y":132.666666666667
+                         "x":244,
+                         "y":32
                         }, 
                         {
-                         "x":166,
-                         "y":-47.3333333333335
+                         "x":132,
+                         "y":-56
                         }],
                  "rotation":0,
                  "type":"",
                  "visible":true,
                  "width":0,
-                 "x":218,
-                 "y":1656
+                 "x":58,
+                 "y":1456
+                }, 
+                {
+                 "height":0,
+                 "id":761,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":0.304761904761904,
+                         "y":-73.60987654321
+                        }, 
+                        {
+                         "x":61.7015873015874,
+                         "y":105.185185185185
+                        }, 
+                        {
+                         "x":230.304761904762,
+                         "y":139.545679012346
+                        }, 
+                        {
+                         "x":186.647619047619,
+                         "y":-87.7876543209877
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":201.695238095238,
+                 "y":1658.45432098765
                 }, 
                 {
                  "height":0,
@@ -1635,7 +1679,7 @@
                 }],
          "opacity":1,
          "type":"objectgroup",
-         "visible":true,
+         "visible":false,
          "x":0,
          "y":0
         }, 
@@ -4136,7 +4180,7 @@
          "y":0
         }],
  "nextlayerid":29,
- "nextobjectid":916,
+ "nextobjectid":918,
  "orientation":"orthogonal",
  "properties":[
         {

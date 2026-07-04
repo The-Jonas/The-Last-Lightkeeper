@@ -362,7 +362,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         caixasObj->z = spawn.z;
         caixasObj->depthOffset = depthOff;
 
-        std::string caminho = "Recursos/img/objetos/" + name + ".png";
+        std::string caminho = "Recursos/img/objetos/mobiliario/" + name + ".png";
         caixasObj->AddComponent(new SpriteRenderer(*caixasObj, caminho));
         ApplyTiledBox(caixasObj, spawn);
  
@@ -451,13 +451,13 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
     else if (spawn.type == "Barril") {
         float depthOff = 0.0f;
         
-        int typeB = 0;                                      // Seleciona o tipo do Barril que vai spawnar
-        bool interactive = false;                           // Consigo interagir com o barril ou não?
-        float used = 1.0f;                                  // O peso do barril caso ele seja interativo
+        int typeB = 0;                                          // Seleciona o tipo do Barril que vai spawnar
+        bool interactive = false;                               // Consigo interagir com o barril ou não?
+        float empty = 1.0f;                                     // O peso do barril caso ele seja interativo
 
         if (spawn.properties.count("depthOffset")) depthOff = spawn.properties.at("depthOffset").get<float>();
         if (spawn.properties.count("type")) typeB = spawn.properties.at("type").get<int>();
-        if (spawn.properties.count("used")) used = spawn.properties.at("used").get<float>();
+        if (spawn.properties.count("empty")) empty = spawn.properties.at("empty").get<float>();
         
         if (spawn.properties.count("interactive")) interactive = spawn.properties.at("interactive").get<bool>();
         
@@ -469,7 +469,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         std::string caminho = "Recursos/img/objetos/barril/barril_" + std::to_string(typeB) + ".png";
 
         if (interactive) {
-            barrelObj->AddComponent(new Box(*barrelObj, false, caminho, used));
+            barrelObj->AddComponent(new Box(*barrelObj, false, caminho, empty));
         } else {
             barrelObj->AddComponent(new SpriteRenderer(*barrelObj, caminho));
         }

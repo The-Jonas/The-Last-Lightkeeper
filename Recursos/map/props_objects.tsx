@@ -44,7 +44,7 @@
    <property name="depthOffset" type="float" value="-200"/>
    <property name="nameObj" value="Amontoado_caixas"/>
   </properties>
-  <image source="../img/objetos/Amontoado_caixas.png" width="443" height="596"/>
+  <image source="../img/objetos/mobiliario/Amontoado_caixas.png" width="443" height="596"/>
  </tile>
  <tile id="10" type="Castical">
   <properties>
@@ -90,8 +90,11 @@
   </properties>
   <image source="../img/objetos/castical/castical_direita_aceso.png" width="110" height="198"/>
  </tile>
- <tile id="16" type="Armario">
-  <image source="../img/objetos/armario/armario_frente.png" width="775" height="746"/>
+ <tile id="16" type="Recipiente_Decoracao">
+  <properties>
+   <property name="nameObj" value="Armario_galao"/>
+  </properties>
+  <image source="../img/objetos/mobiliario/Armario_galao.png" width="775" height="746"/>
  </tile>
  <tile id="17" type="Mesa">
   <properties>
@@ -210,13 +213,13 @@
    <property name="depthOffset" type="float" value="-140"/>
    <property name="nameObj" value="Bau"/>
   </properties>
-  <image source="../img/objetos/Bau.png" width="498" height="500"/>
+  <image source="../img/objetos/mobiliario/Bau.png" width="498" height="500"/>
  </tile>
  <tile id="37" type="Recipiente_Decoracao">
   <properties>
    <property name="nameObj" value="Estante_Quebrada"/>
   </properties>
-  <image source="../img/objetos/Estante_quebrada.png" width="686" height="555"/>
+  <image source="../img/objetos/mobiliario/Estante_quebrada.png" width="686" height="555"/>
  </tile>
  <tile id="38" type="ItemSpawn">
   <properties>

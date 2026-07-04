@@ -14,7 +14,6 @@ Window::Window(GameObject& associated, std::string windowType, bool startsOpen, 
     : Component(associated), windowType(windowType), windRadius(windRadius), windTimer(0.0f), animTimer(0.0f) {
     
     state = startsOpen ? WindowState::OPEN : WindowState::CLOSED;
-    // O basePath base agora termina no sublinhado, pronto para receber o tipo
     basePath = "Recursos/img/cenario/janelas/janela_";
 
     SpriteRenderer* sprite = new SpriteRenderer(associated, "");

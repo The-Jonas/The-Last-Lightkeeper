@@ -153,7 +153,6 @@ void Monster::Render() {
     SDL_RenderDrawRect(dbgR, &physBox);
  
     // Estado atual — texto via círculo colorido no centro
-    // (cada estado tem uma cor diferente para identificação visual rápida)
     {
         Uint8 r = 255, g = 255, b = 255;
         switch (state) {
@@ -166,7 +165,6 @@ void Monster::Render() {
             case MonsterState::SABOTAGE_WINDOW: r=0;   g=255; b=255; break; // ciano
             case MonsterState::CAMP_CLOSET:     r=255; g=0;   b=150; break; // rosa
         }
-        // Desenha um quadrado 10x10 colorido no centro do monstro
         SDL_Rect stateIndicator = {
             static_cast<int>(associated.box.Center().x) - 5 - static_cast<int>(Camera::pos.x),
             static_cast<int>(associated.box.Center().y) - 5 - static_cast<int>(Camera::pos.y),
@@ -176,14 +174,14 @@ void Monster::Render() {
         SDL_RenderFillRect(dbgR, &stateIndicator);
     }
  
-    // Raio de interação da janela — círculo CIANO quando em SABOTAGE_WINDOW
+    // Raio de interação da janela — círculo CIANO
     if (state == MonsterState::SABOTAGE_WINDOW && targetWindow) {
         Vec2 winPos   = targetWindow->GetAssociated().box.Center();
         float winX    = winPos.x - Camera::pos.x;
         float winY    = winPos.y - Camera::pos.y;
-        constexpr float kInteractRadius = 350.0f;
+        constexpr float kInteractRadius = 540.0f; // Atualizado para 540!
  
-        // Desenha o círculo de interação como polígono de 32 segmentos
+        // Desenha o círculo de interação
         SDL_SetRenderDrawColor(dbgR, 0, 255, 255, 180);
         constexpr int kSegs = 32;
         for (int i = 0; i < kSegs; i++) {
@@ -204,15 +202,36 @@ void Monster::Render() {
             static_cast<int>(winX),
             static_cast<int>(winY));
  
-        // Pontos de approach tentados (círculos pequenos)
-        SDL_SetRenderDrawColor(dbgR, 255, 255, 0, 200);
-        constexpr float kApproachRadius = 200.0f;
-        constexpr int   kNumAngles      = 8;
-        for (int i = 0; i < kNumAngles; i++) {
-            float angle = (static_cast<float>(i) / kNumAngles) * 2.0f * 3.14159265f;
-            int px = static_cast<int>(winPos.x + std::cos(angle) * kApproachRadius - Camera::pos.x);
-            int py = static_cast<int>(winPos.y + std::sin(angle) * kApproachRadius - Camera::pos.y);
-            SDL_Rect dot = { px - 4, py - 4, 8, 8 };
+        // Ponto exato de navegação escolhido (Quadrado Amarelo)
+        Vec2 safeTarget = winPos;
+        StageState* stage = Game::TryGetStageState();
+        bool foundFloor = false;
+        
+        if (stage) {
+            float bestDistToMonster = 1e9f;
+            Vec2 myPos = associated.box.Center();
+            constexpr float carpetBorder = 440.0f; // O raio da borda do tapete!
+            
+            for (int i = 0; i < 8; i++) {
+                float angle = i * (3.14159265f / 4.0f);
+                Vec2 candidate = winPos + Vec2(std::cos(angle) * carpetBorder, std::sin(angle) * carpetBorder);
+                if (stage->IsWorldPosNavigableFor(candidate, &associated, kNavFootRadius)) {
+                    float distToMonster = myPos.Distance(candidate);
+                    if (distToMonster < bestDistToMonster) {
+                        bestDistToMonster = distToMonster;
+                        safeTarget = candidate;
+                        foundFloor = true;
+                    }
+                }
+            }
+        }
+        
+        // Só desenha o alvo se ele achar uma beirada válida
+        if (foundFloor) {
+            SDL_SetRenderDrawColor(dbgR, 255, 255, 0, 255);
+            int targetX = static_cast<int>(safeTarget.x - Camera::pos.x);
+            int targetY = static_cast<int>(safeTarget.y - Camera::pos.y);
+            SDL_Rect dot = { targetX - 5, targetY - 5, 10, 10 };
             SDL_RenderFillRect(dbgR, &dot);
         }
     }
@@ -312,9 +331,7 @@ void Monster::TransitionTo(MonsterState next) {
 
         case MonsterState::SABOTAGE_WINDOW:
             moveSpeed = kSpeedInvestigate;
-            if (targetWindow) {
-                RequestPath(targetWindow->GetAssociated().box.Center());
-            }
+            pathRefreshTimer = kPathRefreshInterval; // Força o A* a calcular a rota IMEDIATAMENTE!
             break;
     }
 }
@@ -376,7 +393,7 @@ void Monster::CheckDamageCollision() {
 // ─────────────────────────────────────────────────────────────────────────────
 void Monster::UpdatePatrol(float dt) {
     MoveAlongPath(dt, moveSpeed);
-
+    
     if (HasReachedTarget() || HasNoPath()) {
         if (stateTimer >= 0.5f) {
             PickNextPatrolPoint();
@@ -384,9 +401,12 @@ void Monster::UpdatePatrol(float dt) {
         }
     } else {
         stateTimer = 0.0f;
+        // Se a rota falhar fisicamente, ele recalcula o caminho a cada 2 segundos pra não ficar travado
+        if (pathRefreshTimer >= 2.0f && !patrolPoints.empty()) {
+            pathRefreshTimer = 0.0f;
+            RequestPath(patrolPoints[patrolIndex]);
+        }
     }
-    // Nota: a transição para INVESTIGATE acontece via sensor de visão no Update()
-    // principal — não mais aqui — para evitar o loop de vai-e-vem.
 }
 
 void Monster::UpdateInvestigate(float dt) {
@@ -649,14 +669,21 @@ void Monster::RequestPath(Vec2 destination) {
     currentPath = stage->FindPathWorld(associated.box.Center(), destination, &associated, 4096, kNavFootRadius);
     pathStep    = 0;
 
-    // Se o A* retornou vazio mas o destino é navegável, significa que
-    // origem e destino estão no mesmo tile — trata como "já chegou"
-    // inserindo um path mínimo de 1 ponto no destino
     if (currentPath.empty()) {
         float dist = associated.box.Center().Distance(destination);
         if (dist < 150.0f) {
             // Perto o suficiente — move diretamente sem A*
             currentPath.push_back(destination);
+        }
+    } else {
+        // A MÁGICA ANTI-TREMEDEIRA AQUI:
+        // Se o caminho tem mais de um ponto e estamos a menos de 64px (1 tile) do ponto inicial,
+        // o monstro ignora o "passo pra trás" e já mira no próximo ponto da rota!
+        if (currentPath.size() > 1) {
+            float distToFirst = associated.box.Center().Distance(currentPath[0]);
+            if (distToFirst <= 64.0f) {
+                pathStep = 1;
+            }
         }
     }
 }
@@ -669,7 +696,7 @@ void Monster::MoveAlongPath(float dt, float speed) {
     Vec2  dir      = next - myCenter;
     float dist     = std::sqrt(dir.x * dir.x + dir.y * dir.y);
 
-    if (dist < 6.0f) {
+    if (dist < 12.0f) {
         pathStep++;
         return;
     }
@@ -732,8 +759,7 @@ Window* Monster::FindNearbyClosedWindow() {
     if (!stage) return nullptr;
 
     Window* bestWin = nullptr;
-    float closestDist = 2500.0f; // LIMITADOR: Mas detecta quase o mapa todo (2500px)
-
+    float closestDist = 1500.0f; // Radar bem longo
     Vec2 myPos = associated.box.Center();
 
     for (const auto& goPtr : stage->GetObjectArray()) {
@@ -744,19 +770,21 @@ Window* Monster::FindNearbyClosedWindow() {
         if (!win || win->GetState() != Window::WindowState::CLOSED) continue;
 
         Vec2 winPos = go->box.Center();
+        
+        // Se tem luz na janela, ele ignora
+        if (IsWorldPosInAnyLight(winPos)) continue;
+
         float dist = myPos.Distance(winPos);
-
-        // Se está mais longe que 800px ou se está iluminada, ignora instantaneamente
-        if (dist > closestDist || IsWorldPosInAnyLight(winPos)) continue;
-
-        closestDist = dist;
-        bestWin = win;
+        if (dist < closestDist) {
+            closestDist = dist;
+            bestWin = win;
+        }
     }
-    
     return bestWin;
 }
 
 void Monster::UpdateSabotageWindow(float dt) {
+    // 1. Condições de cancelamento simples
     if (!targetWindow ||
         targetWindow->GetState() != Window::WindowState::CLOSED ||
         IsWorldPosInAnyLight(targetWindow->GetAssociated().box.Center())) {
@@ -766,49 +794,81 @@ void Monster::UpdateSabotageWindow(float dt) {
         return;
     }
 
+    // 2. TIMEOUT ABSOLUTO: Se demorar demais, pune o radar e desiste!
+    if (stateTimer >= 10.0f) {
+        if (Game::debugMode) std::cout << "[MONSTER] Preso em obstaculo. Desistindo da janela por 15s!\n";
+        windowRadarTimer = -15.0f; 
+        targetWindow = nullptr;
+        TransitionTo(MonsterState::PATROL);
+        return;
+    }
+
     Vec2 winPos = targetWindow->GetAssociated().box.Center();
     Vec2 myPos = associated.box.Center();
     float dist = myPos.Distance(winPos);
 
-    // Braços longos do monstro: ele pode abrir a 200 pixels de distância
-    if (dist <= 200.0f) {
+    // 3. O RAIO DE INTERAÇÃO (540 pixels)
+    if (dist <= 480.0f) {
+        if (Game::debugMode) std::cout << "[MONSTER] Abriu a janela a " << dist << "px de distancia!\n";
         targetWindow->Toggle();
         targetWindow = nullptr;
         TransitionTo(MonsterState::PATROL);
         return;
     }
 
+    // 4. ATUALIZAÇÃO DA ROTA (Testando apenas a Borda do Tapete)
     if (pathRefreshTimer >= kPathRefreshInterval) {
         pathRefreshTimer = 0.0f;
+        
+        Vec2 safeTarget; 
         StageState* stage = Game::TryGetStageState();
-        
         bool foundFloor = false;
-        
-        // CÉREBRO NOVO: Como a janela está grudada na parede, o monstro 
-        // procura um pedaço de chão livre a 200px da janela em todas as 8 direções.
-        for (int i = 0; i < 8; i++) {
-            float angle = i * (3.14159265f / 4.0f); // Tenta a cada 45 graus
-            Vec2 offset(std::cos(angle), std::sin(angle));
-            Vec2 candidate = winPos + offset * 200.0f;
 
-            // Achou um piso em que ele cabe (kNavFootRadius)? Pede o caminho pra lá!
-            if (stage && stage->IsWorldPosNavigableFor(candidate, &associated, kNavFootRadius)) {
-                RequestPath(candidate);
-                foundFloor = true;
-                break;
+        if (stage) {
+            float bestDistToMonster = 1e9f;
+            // Busca EXATAMENTE na borda do tapete (500px, pra dar 40px de margem de folga pro acionamento)
+            constexpr float carpetBorder = 440.0f; 
+
+            // Testa APENAS os 8 pontos da borda extrema
+            for (int i = 0; i < 8; i++) {
+                float angle = i * (3.14159265f / 4.0f);
+                Vec2 candidate = winPos + Vec2(std::cos(angle) * carpetBorder, std::sin(angle) * carpetBorder);
+                
+                // O monstro pode pisar nesse ponto da borda?
+                if (stage->IsWorldPosNavigableFor(candidate, &associated, kNavFootRadius)) {
+                    // É o ponto da borda mais perto do monstro? (Garante que ele não mire através da parede)
+                    float distToMonster = myPos.Distance(candidate);
+                    if (distToMonster < bestDistToMonster) {
+                        bestDistToMonster = distToMonster;
+                        safeTarget = candidate;
+                        foundFloor = true;
+                    }
+                }
             }
         }
-
-        // Se o chão ao redor for inacessível ou o A* falhou
-        if (!foundFloor || HasNoPath()) {
-            if (Game::debugMode) std::cout << "[MONSTER] Janela bloqueada por objetos! Abortando.\n";
+        
+        // Se achou um ponto válido na borda, pede o caminho pra lá! Se não, pune o radar.
+        if (foundFloor) {
+            RequestPath(safeTarget);
+        } else {
+            if (Game::debugMode) std::cout << "[MONSTER] Borda do tapete totalmente bloqueada. Desistindo!\n";
+            windowRadarTimer = -15.0f; 
             targetWindow = nullptr;
             TransitionTo(MonsterState::PATROL);
             return;
         }
     }
 
-    MoveAlongPath(dt, moveSpeed);
+    // 5. MOVIMENTAÇÃO TOTALMENTE LIMPA
+    if (!HasNoPath()) {
+        MoveAlongPath(dt, moveSpeed);
+    } else if (dist > 540.0f && stateTimer >= 2.0f) {
+        // Se o A* falhar por completo mesmo pro alvo da borda, pune o radar e sai
+        if (Game::debugMode) std::cout << "[MONSTER] Caminho impossível. Desistindo da janela por 15s!\n";
+        windowRadarTimer = -15.0f; 
+        targetWindow = nullptr;
+        TransitionTo(MonsterState::PATROL);
+    }
 }
 
 void Monster::UpdateLurk(float dt) {

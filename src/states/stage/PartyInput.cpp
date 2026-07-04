@@ -258,13 +258,10 @@ void StageState::UpdateControlledCharacterVisuals() {
         return;
     }
 
-    if (controlledCharacterObject == bigCharacterObject) {
-        bigSprite->SetTint(255, 255, 255, 255);
-        smallSprite->SetTint(120, 170, 230, 215);
-    } else {
-        bigSprite->SetTint(190, 190, 190, 220);
-        smallSprite->SetTint(170, 230, 255, 255);
-    }
+    
+    bigSprite->SetTint(255, 255, 255, 255);
+    smallSprite->SetTint(255, 255, 255, 255);
+
 }
 
 void StageState::UpdateHudInstructions() {
