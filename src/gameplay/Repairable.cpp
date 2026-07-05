@@ -37,66 +37,67 @@ void Repairable::ApplyRepairedState() {
 }
 
 void Repairable::Update(float dt) {
-    // Se já consertou, não precisa fazer mais nada
+    // Processa a animação de fade PRIMEIRO, antes de qualquer return
+    if (isRepairing) {
+        repairTimer += dt;
+
+        // No momento do fade in completo, aplica o conserto
+        if (repairTimer >= kRepairFadeIn && !isRepaired) {
+            SpriteRenderer* sprite = associated.GetComponent<SpriteRenderer>();
+            if (sprite) sprite->Open(fixedSpritePath);
+            isRepaired = true;
+            StageState* stage = Game::TryGetStageState();
+            if (stage) {
+                stage->level.escadaConsertada = true;
+                stage->SaveCurrentProgress();
+            }
+        }
+
+        // Terminou a animação completa
+        if (repairTimer >= kRepairTotal) {
+            isRepairing = false;
+        }
+        return; // enquanto anima, não processa mais nada
+    }
+
+    // Já reparado e sem animação — não faz nada
     if (isRepaired) return;
 
     StageState* stage = Game::TryGetStageState();
-    if (!stage) {
-        return;
-    }
+    if (!stage) return;
+
     GameObject* bigBro = stage->GetBigCharacter();
-    
-    if (bigBro) {
-        // Pega o componente Character do Irmãozão para podermos ler o crachá VIP dele
-        Character* bigChar = bigBro->GetComponent<Character>();
+    if (!bigBro) return;
 
-        // Cria o ponto exato onde o jogador tem que ficar
-        Vec2 exactInteractPoint(associated.box.x + interactionOffset.x, associated.box.y + interactionOffset.y);
-        
-        // Mede a distância entre o centro da escada e o centro do jogador
-        float distance = exactInteractPoint.Distance(bigBro->box.Center());
-        
-        // A SUA TRAVA DE SEGURANÇA AQUI:
-        // O jogador precisa estar perto O SUFICIENTE e PRECISA ESTAR NA ESCADA (isElevated)
-        if (distance <= interactionDistance && bigChar != nullptr && bigChar->isElevated) {
+    Character* bigChar = bigBro->GetComponent<Character>();
 
-            // Aperta a tecla de interagir (congelado durante menu/modal)
-            if (!stage->IsPlayerInputFrozen() &&
-                InputManager::GetInstance().ActionPress(GameAction::Interact)) {
+    Vec2 exactInteractPoint(associated.box.x + interactionOffset.x,
+                            associated.box.y + interactionOffset.y);
+    float distance = exactInteractPoint.Distance(bigBro->box.Center());
 
-                if (!requiredItem.empty()) {
-                    if (!stage->GetInventory().TryConsumeItem(requiredItem)) return;
-                }
+    if (distance <= interactionDistance && bigChar && bigChar->isElevated) {
 
-                if (soundPath != "") {
-                    //Sound* repairSound = new Sound(associated, soundPath);
-                    //repairSound->Play();
-                }
-
-                // Troca a imagem para a versão consertada!
-                SpriteRenderer* sprite = associated.GetComponent<SpriteRenderer>();
-                if (sprite) {
-                    sprite->Open(fixedSpritePath);
-                }
-
-                // Marca como consertado para não ativar de novo
-                isRepaired = true;
-                
-                // Avisa o mapa que o buraco sumiu!
-                stage->level.escadaConsertada = true;
-
-                // Persiste o conserto (consome a tábua + abre o caminho) — 6.4
-                stage->SaveCurrentProgress();
-
-                if (Game::debugMode) std::cout << "Consertado usando: " << requiredItem << std::endl;
-            }
+        // Só mostra o prompt se tiver o item necessário no inventário
+        if (requiredItem.empty() || stage->GetInventory().HasItem(requiredItem)) {
+            stage->SetReachableRepairable(this);
         }
-    }   
+        
+        if (!stage->IsPlayerInputFrozen() &&
+            InputManager::GetInstance().ActionPress(GameAction::Interact)) {
+
+            if (!requiredItem.empty()) {
+                if (!stage->GetInventory().TryConsumeItem(requiredItem)) return;
+            }
+
+            isRepairing = true;
+            repairTimer = 0.0f;
+            GameSfx::PlayRepair();
+        }
+    }
 }
 
 void Repairable::Render() {
-// Se a escada já foi consertada, some
-    if (isRepaired) return;
+    if (isRepaired && !isRepairing) return;
 
 #ifdef DEBUG
     
@@ -126,4 +127,18 @@ void Repairable::Render() {
     SDL_RenderDrawRect(renderer, &debugRect);
 
 #endif
+}
+
+float Repairable::GetRepairOverlayAlpha() const {
+    if (!isRepairing) return 0.0f;
+    float alpha = 0.0f;
+    if (repairTimer < kRepairFadeIn)
+        alpha = repairTimer / kRepairFadeIn;
+    else if (repairTimer < kRepairFadeIn + kRepairHold)
+        alpha = 1.0f;
+    else
+        alpha = 1.0f - (repairTimer - kRepairFadeIn - kRepairHold) / kRepairFadeOut;
+    
+    std::cout << "[REPAIR] timer=" << repairTimer << " alpha=" << alpha << "\n";
+    return alpha;
 }

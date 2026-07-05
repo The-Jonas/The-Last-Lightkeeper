@@ -537,6 +537,7 @@ void StageState::Render(){
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     }
 
+
     if (sanityOverlayObj) {
         SpriteRenderer* overlaySprite = sanityOverlayObj->GetComponent<SpriteRenderer>();
 
@@ -629,6 +630,143 @@ void StageState::Render(){
     DrawSanityBar(Character::player);
     DrawSanityBar(Character::littleBrother);
 
+    // ── HUD DO PODER DO IRMÃOZINHO ────────────────────────────────────────────
+    // Mostra uma bola no canto inferior esquerdo quando controlando o irmãozinho.
+    // Cheia = pode usar o poder. Diminuindo = poder ativo. Enchendo = cooldown.
+    // Substitui o hotbar do irmãozão (que não aparece para o irmãozinho).
+    {
+        Character* small = Character::littleBrother;
+        bool isControllingSmall = (controlledCharacter == small && small != nullptr);
+ 
+        if (isControllingSmall) {
+            // Lê os timers do poder do irmãozinho
+            float powerTimer  = small->visionPowerTimer;   // tempo restante ativo
+            float cooldown    = small->visionCooldown;     // tempo restante de recarga
+            float kDuration   = Character::kVisionDuration;
+            float kCooldown   = Character::kVisionCooldown;
+ 
+            // Calcula o preenchimento (0.0 a 1.0)
+            float fill = 1.0f;
+            if (powerTimer > 0.0f) {
+                // Poder ativo — esvazia conforme o tempo passa
+                fill = powerTimer / kDuration;
+            } else if (cooldown > 0.0f) {
+                // Recarregando — enche conforme o cooldown passa
+                fill = 1.0f - (cooldown / kCooldown);
+            }
+            // Se nem powerTimer nem cooldown > 0, fill = 1.0 (pronto pra usar)
+ 
+            // Posição: canto inferior esquerdo, mesmo lugar do hotbar
+            int cx = static_cast<int>(winW * 0.12f + 32.0f);
+            int cy = static_cast<int>(winH - 100.0f);
+            constexpr int kRadius     = 40;   // raio da bola
+            constexpr int kSegments   = 48;   // suavidade do círculo
+ 
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+            // Cor base dependendo do estado
+            Uint8 baseR, baseG, baseB;
+            if (powerTimer > 0.0f) {
+                baseR = 180; baseG = 80;  baseB = 255; // roxo — poder ativo
+            } else if (cooldown > 0.0f) {
+                baseR = 100; baseG = 100; baseB = 120; // cinza — cooldown
+            } else {
+                baseR = 255; baseG = 255; baseB = 255; // branco — pronto
+            }
+
+            // Gradiente radial: centro preto → borda na cor base
+            for (int r = 0; r <= kRadius; r++) {
+                float t       = static_cast<float>(r) / static_cast<float>(kRadius);
+                float tCurved = t * t; // concentra sombra no centro
+
+                Uint8 colR = static_cast<Uint8>(baseR * tCurved);
+                Uint8 colG = static_cast<Uint8>(baseG * tCurved);
+                Uint8 colB = static_cast<Uint8>(baseB * tCurved);
+                Uint8 colA = static_cast<Uint8>(200.0f + 55.0f * tCurved);
+
+                SDL_SetRenderDrawColor(renderer, colR, colG, colB, colA);
+
+                for (int i = 0; i < kSegments; i++) {
+                    float a0 = (static_cast<float>(i)     / kSegments) * 2.0f * 3.14159265f;
+                    float a1 = (static_cast<float>(i + 1) / kSegments) * 2.0f * 3.14159265f;
+                    SDL_RenderDrawLine(renderer,
+                        cx + static_cast<int>(std::cos(a0) * r),
+                        cy + static_cast<int>(std::sin(a0) * r),
+                        cx + static_cast<int>(std::cos(a1) * r),
+                        cy + static_cast<int>(std::sin(a1) * r));
+                }
+            }
+
+            // Preenchimento sólido com gradiente radial — centro escuro, borda brilhante
+            {
+                float startAngle = -3.14159265f / 2.0f;
+                int fillSegs = static_cast<int>(fill * kSegments);
+
+                // Cor da borda (brilhante)
+                SDL_Color edgeColor;
+                // Cor do centro (escura — mesma base mas bem mais escura)
+                SDL_Color centerColor;
+
+                if (powerTimer > 0.0f) {
+                    edgeColor   = {220, 140, 255, 210}; // roxo claro na borda
+                    centerColor = {40,  0,   80,  180}; // roxo escuro no centro
+                } else if (cooldown > 0.0f) {
+                    edgeColor   = {160, 160, 180, 180}; // cinza claro na borda
+                    centerColor = {20,  20,  30,  160}; // quase preto no centro
+                } else {
+                    edgeColor   = {255, 255, 255, 210}; // branco na borda
+                    centerColor = {40,  40,  60,  180}; // azul escuro no centro
+                }
+
+                SDL_Vertex verts[3];
+
+                for (int i = 0; i < fillSegs; i++) {
+                    float a0 = startAngle + (static_cast<float>(i)     / kSegments) * 2.0f * 3.14159265f;
+                    float a1 = startAngle + (static_cast<float>(i + 1) / kSegments) * 2.0f * 3.14159265f;
+
+                    // Centro — cor escura
+                    verts[0].position  = {static_cast<float>(cx), static_cast<float>(cy)};
+                    verts[0].color     = centerColor;
+                    verts[0].tex_coord = {0, 0};
+
+                    // Borda esquerda — cor brilhante
+                    verts[1].position = {
+                        static_cast<float>(cx) + std::cos(a0) * static_cast<float>(kRadius),
+                        static_cast<float>(cy) + std::sin(a0) * static_cast<float>(kRadius)
+                    };
+                    verts[1].color     = edgeColor;
+                    verts[1].tex_coord = {0, 0};
+
+                    // Borda direita — cor brilhante
+                    verts[2].position = {
+                        static_cast<float>(cx) + std::cos(a1) * static_cast<float>(kRadius),
+                        static_cast<float>(cy) + std::sin(a1) * static_cast<float>(kRadius)
+                    };
+                    verts[2].color     = edgeColor;
+                    verts[2].tex_coord = {0, 0};
+
+                    SDL_RenderGeometry(renderer, nullptr, verts, 3, nullptr, 0);
+                }
+            }
+
+            // Borda externa fina
+            SDL_SetRenderDrawColor(renderer, 200, 200, 220, 255);
+            for (int i = 0; i < kSegments; i++) {
+                float a0 = (static_cast<float>(i)     / kSegments) * 2.0f * 3.14159265f;
+                float a1 = (static_cast<float>(i + 1) / kSegments) * 2.0f * 3.14159265f;
+                SDL_RenderDrawLine(renderer,
+                    cx + static_cast<int>(std::cos(a0) * kRadius),
+                    cy + static_cast<int>(std::sin(a0) * kRadius),
+                    cx + static_cast<int>(std::cos(a1) * kRadius),
+                    cy + static_cast<int>(std::sin(a1) * kRadius));
+            }
+
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        }
+    }
+    // ── FIM HUD PODER ─────────────────────────────────────────────────────────
+
     // Indicador "quem estou controlando" — seta apontando para o irmão controlado,
     // que quica + pisca branco por alguns segundos e some suavemente (4.4).
     if (controlledCharacter && controlIndicatorTimer > 0.0f) {
@@ -670,6 +808,22 @@ void StageState::Render(){
         }
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    }
+
+    // Overlay de reparo da escada — cobre tudo incluindo HUD
+    for (const auto& goPtr : objectArray) {
+        Repairable* rep = goPtr->GetComponent<Repairable>();
+        if (!rep) continue;
+        float alpha = rep->GetRepairOverlayAlpha();
+        if (alpha > 0.001f) {
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0,
+                static_cast<Uint8>(std::min(255.0f, alpha * 255.0f)));
+            SDL_Rect fs = { 0, 0, winW, winH };
+            SDL_RenderFillRect(renderer, &fs);
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+            break; // só um Repairable por vez
+        }
     }
 
     RenderInteractionPrompt(renderer);

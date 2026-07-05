@@ -132,7 +132,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
             "Recursos/img/cenario/escada_tabua.png",
             "Tabua de Madeira",
             "Recursos/audio/Hit0.wav",
-            120.0f,
+            160.0f,
             Vec2(1780, 1050)
         ));
 
@@ -328,25 +328,19 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         stage.AddObject(candleObj);
     }
     else if (spawn.type == "Armario") {
-        std::string dir = "frente";
-        if (spawn.properties.count("direction")) dir = spawn.properties.at("direction").get<std::string>();
- 
         float depthOff = 0.0f;
-        if (spawn.properties.count("depthOffset")) depthOff = spawn.properties.at("depthOffset").get<float>();
- 
+        if (spawn.properties.count("depthOffset"))
+            depthOff = spawn.properties.at("depthOffset").get<float>();
+
         GameObject* closetObj = new GameObject();
-        closetObj->tiledId = spawn.tiledId;
-        closetObj->z = spawn.z;
+        closetObj->tiledId     = spawn.tiledId;
+        closetObj->z           = spawn.z;
         closetObj->depthOffset = depthOff;
- 
-        closetObj->AddComponent(new Closet(*closetObj, dir));
- 
+
+        closetObj->AddComponent(new Closet(*closetObj)); 
         ApplyTiledBox(closetObj, spawn);
- 
-        // Colisão daqui vem da camada "Collision_Obj" desenhada no Tiled. 
- 
         ApplyTiledFlip(closetObj, spawn);
- 
+
         stage.AddObject(closetObj);
         stage.RegisterTestShadowObject(closetObj);
     }

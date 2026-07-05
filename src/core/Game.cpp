@@ -309,6 +309,7 @@ Game::Game(std::string title) {
         exit(1);
     }
     Mix_AllocateChannels(32);
+    Mix_ReserveChannels(4);
     // Canais 0..N-1 não são escolhidos por Mix_PlayChannel(-1): o anel de ondas usa o canal 0 explicitamente
     // (ver StageState). Efeitos continuam em 1+.
     Mix_ReserveChannels(1);

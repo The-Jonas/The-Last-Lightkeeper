@@ -35,6 +35,7 @@ class Jornal;
 class Candlestick;
 class Window;
 class Closet;
+class Repairable;
 
 class StageState : public State {
 friend class SpawnFactory;
@@ -206,6 +207,10 @@ public:
     void TriggerMonsterHitFeedback();
 
     RadioAsset* GetReachableRadio() const { return reachableRadio; }
+    void SetReachableRepairable(Repairable* r) { reachableRepairable = r; }
+
+    Character* GetBigCharacterComponent()   const { return bigCharacter; }
+    Character* GetSmallCharacterComponent() const { return smallCharacter; }
 
 private:
 
@@ -348,6 +353,7 @@ private:
     Candlestick* reachableCandle = nullptr;
     Window* reachableWindow = nullptr;
     Closet* reachableCloset = nullptr;
+    Repairable* reachableRepairable = nullptr;
     bool journalViewerOpen = false;
     bool journalViewerClosing = false;
     float journalAnimTimer = 0.0f;

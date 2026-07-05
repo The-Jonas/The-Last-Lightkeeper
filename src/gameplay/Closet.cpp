@@ -13,76 +13,53 @@
 #include <iostream>
 
 // ── Parâmetros da fresta — para manipular sempre que quiser ─────────────────────
-static constexpr float kFrestaConeLengthPx    = 300.0f; // Comprimento do cone
-static constexpr float kFrestaHalfAngleDeg    =  80.0f; // Meia-abertura do cone
-static constexpr float kFrestaFalloffRadiusPx = 350.0f; // Raio do falloff radial
+static constexpr float kFrestaConeLengthPx    = 420.0f; // mais longo — alcança mais longe
+static constexpr float kFrestaHalfAngleDeg    =  45.0f; // muito mais fino (era 80)
+static constexpr float kFrestaFalloffRadiusPx = 420.0f; // falloff maior para acompanhar
 // ────────────────────────────────────────────────────────────────────────────────
 
-Closet::Closet(GameObject& associated, const std::string& direction)
-    : Component(associated), direction(direction), showPrompt(false), isOccupied(false), frestaLightId(-1) {
-    
-    // Caminho dinâmico baseado na direção que veio do Tiled
-    std::string basePath = "Recursos/img/objetos/armario/armario_";
-    SpriteRenderer* sprite = new SpriteRenderer(associated, basePath + direction + ".png");
-    associated.AddComponent(sprite);
+Closet::Closet(GameObject& associated)
+    : Component(associated), direction("frente"), isOccupied(false), frestaLightId(-1) {
 
-    textObj = new GameObject();
-    SDL_Color textColor = {255, 255, 255, 255};
-    Text* promptText = new Text(*textObj, "Recursos/font/times.ttf", 14, Text::SOLID, "[E] Esconder", textColor);
-    textObj->AddComponent(promptText);
+    SpriteRenderer* sprite = new SpriteRenderer(associated, "Recursos/img/objetos/Armario.png");
+    associated.AddComponent(sprite);
 }
 
 Closet::~Closet() {
-    delete textObj; 
 }
 
 void Closet::Start() {
-    StageState* stage = Game::TryGetStageState();
-    if (!stage) return;
-
-    Vec2 lightPos;
-    float coneAxisDeg;
-        
-    // ── AJUSTE DE ALTURA DA LUZ ──
-    // Aumente esse valor para fazer a luz subir ainda mais em direção ao centro da porta
-    float subirFrestaPx = 230.0f; 
-
-    // Calcula de onde a luz da fresta deve sair, agora com a altura corrigida
-    if (direction == "frente") {
-        lightPos = Vec2(associated.box.Center().x, associated.box.y + associated.box.h - subirFrestaPx);
-        coneAxisDeg = 90.0f;
-    } else if (direction == "esquerda") {
-        lightPos = Vec2(associated.box.x, associated.box.Center().y - subirFrestaPx);
-        coneAxisDeg = 180.0f;
-    } else if (direction == "direita") {
-        lightPos = Vec2(associated.box.x + associated.box.w, associated.box.Center().y - subirFrestaPx);
-        coneAxisDeg = 0.0f;
-    } else { // "costas"
-        lightPos = Vec2(associated.box.Center().x, associated.box.y - subirFrestaPx);
-        coneAxisDeg = -90.0f;
-    }
-
-    LightMaskParams frestaParams      = stage->GetLightMaskParams();
-    frestaParams.coneLengthPx         = kFrestaConeLengthPx;
-    frestaParams.coneHalfAngleDeg     = kFrestaHalfAngleDeg;
-    frestaParams.coneAxisDeg          = coneAxisDeg;
-    frestaParams.coneFollowMouse      = false;                          
-    frestaParams.falloffRadiusPx      = kFrestaFalloffRadiusPx;
-
-    frestaParams.torchAnimSpeed       = 0.4f;
-    frestaParams.torchMotionRangePx   = 3.0f;
-    frestaParams.torchWarpStrength    = 0.10f;
-    frestaParams.torchPulseStrength   = 0.08f;
-
-    frestaLightId = stage->CreateStaticLight(lightPos, false, LightMaskShape::Cone, frestaParams);
+    // Luz da fresta criada no primeiro Update() — TryGetStageState() 
+    // pode retornar nullptr aqui durante transição de level
 }
 
 void Closet::Update(float dt) {
-    showPrompt = false;
-
-    if (!Character::player) return;
-
     StageState* stage = Game::TryGetStageState();
+    if (!Character::player) return; 
+    
+    if (!stage) return;
+
+    if (frestaLightId == -1) {
+        float subirFrestaPx = 180.0f;
+        Vec2  lightPos    = Vec2(associated.box.Center().x,
+                                 associated.box.y + associated.box.h - subirFrestaPx);
+
+        LightMaskParams frestaParams    = stage->GetLightMaskParams();
+        frestaParams.coneLengthPx       = kFrestaConeLengthPx;
+        frestaParams.coneHalfAngleDeg   = kFrestaHalfAngleDeg;
+        frestaParams.coneAxisDeg        = 90.0f;
+        frestaParams.coneFollowMouse    = false;
+        frestaParams.falloffRadiusPx    = kFrestaFalloffRadiusPx;
+        frestaParams.torchAnimSpeed     = 0.4f;
+        frestaParams.torchMotionRangePx = 3.0f;
+        frestaParams.torchWarpStrength  = 0.10f;
+        frestaParams.torchPulseStrength = 0.08f;
+
+        frestaLightId = stage->CreateStaticLight(lightPos, false,
+                                                  LightMaskShape::Cone, frestaParams);
+    }
+
+
     // Checa se ainda há combustível no isqueiro (usando o sistema existente de inventário)
     bool hasLight = stage && stage->GetInventory().IsUsableLightActive();
 
@@ -133,7 +110,6 @@ void Closet::Update(float dt) {
 
         // Só exibe a opção de esconder se encostar na FRENTE da porta correta
         if (SDL_HasIntersection(&reachBox, &interactZone)) {
-            showPrompt = true;
             if (stage) {
                 stage->SetReachableCloset(this);   // alimenta o prompt central do rodapé
             }
@@ -161,34 +137,18 @@ void Closet::Render() {
 #endif
 }
 
-// ── Zona de interação na borda EXTERNA da porta ───────────────────────────────
 SDL_Rect Closet::GetInteractionRect() const {
     
-    // Profundidade (distância que o jogador pode ficar afastado para interagir)
-    int depth = 65; 
+    int w     = static_cast<int>(associated.box.w * 0.8f);                  // 80% da largura
+    int h     = 120;                                                        // aumentado de 65 para 120
+    int x     = static_cast<int>(associated.box.Center().x) - w / 2;
+    int y     = static_cast<int>(associated.box.y + associated.box.h) - 140; // borda inferior do sprite
 
-    if (direction == "frente") {
-        int w = associated.box.w * 0.5f; 
-        int h = depth;
-        // Subimos o Y um pouquinho (-10) para a zona de interação entrar de leve na colisão
-        return { (int)associated.box.Center().x - (w / 2), (int)(associated.box.y + associated.box.h) - 250, w, h };
-        
-    } else if (direction == "esquerda") {
-        int w = depth;
-        // A altura da interação pega 80% da altura total do armário
-        int h = associated.box.h * 0.8f; 
-        return { (int)associated.box.x - w + 10, (int)associated.box.Center().y - (h / 2), w, h };
-        
-    } else if (direction == "direita") {
-        int w = depth;
-        int h = associated.box.h * 0.8f; 
-        return { (int)(associated.box.x + associated.box.w) - 10, (int)associated.box.Center().y - (h / 2), w, h };
-    }
-    
-    return { (int)associated.box.x, (int)associated.box.y, (int)associated.box.w, (int)associated.box.h };
+    return { x, y, w, h };
 }
 
 void Closet::EnterCloset() {
+    GameSfx::PlayClosetOpen();
     isOccupied = true;
     
     // --- SALVA A POSIÇÃO DE ENTRADA EXATA DE CADA UM ---
@@ -226,6 +186,7 @@ void Closet::EnterCloset() {
 }
 
 void Closet::ExitCloset() {
+    GameSfx::PlayClosetClose();
     isOccupied = false;
 
     StageState* stage = Game::TryGetStageState();

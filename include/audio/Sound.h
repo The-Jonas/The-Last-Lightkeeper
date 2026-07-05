@@ -29,7 +29,7 @@ public:
 private:
 
     std::shared_ptr<Mix_Chunk> chunk;                   // Ponteiro para o bloco de som (arquivo.wav) carregado pelo SDL_Mixer
-    int channel;                                        // O canal em que o som está sendo reproduzido (Vão ter 32 canais no total)
+    int channel = -1;                                   // O canal em que o som está sendo reproduzido (Vão ter 32 canais no total)
 
 };
 

@@ -11,6 +11,7 @@
 #include "world/Collider.h"
 #include "audio/GameSfx.h"
 #include "audio/GameVoice.h"
+#include "gameplay/Character.h"
 
 #include <algorithm>
 #include <cmath>
@@ -18,9 +19,10 @@
 
 namespace {
 
-constexpr float kCandleReachPadX = 110.0f;
-constexpr float kCandleReachPadUp = 280.0f;
-constexpr float kCandleReachPadDown = 320.0f;
+
+constexpr float kCandleMaxDistX       = 120.0f;  // faixa lateral
+constexpr float kCandleMaxDistFront   = 180.0f;  // distância máxima na frente
+constexpr float kCandleBehindTolerance = 40.0f;  // tolerância pra não ser injusto
 
 bool IsHoldingLamp(const Inventory& inventory) {
     return inventory.GetHeldPropVisual() == HeldPropVisual::Lamp;
@@ -28,16 +30,23 @@ bool IsHoldingLamp(const Inventory& inventory) {
 
 bool IsCandleWithinRelaxedReach(Character& character, const Candlestick& candle) {
     const GameObject& candleObj = candle.GetAssociated();
-    const Vec2 footCenter = character.GetFootCircleCenter();
-    const Vec2 bodyCenter = character.GetAssociated().box.Center();
+    const Vec2 foot = character.GetFootCircleCenter();
 
-    Rect zone = candleObj.box;
-    zone.x -= kCandleReachPadX;
-    zone.w += kCandleReachPadX * 2.0f;
-    zone.y -= kCandleReachPadUp;
-    zone.h += kCandleReachPadUp + kCandleReachPadDown;
+    float candleFootX = candleObj.box.Center().x;
+    float candleFootY = candleObj.box.y + candleObj.box.h;
 
-    return zone.Contains(footCenter) || zone.Contains(bodyCenter);
+    float dx = std::abs(foot.x - candleFootX);
+    float dy = foot.y - candleFootY;
+
+    // Alcance frontal — maior quando olhando para cima (de frente pro objeto)
+    float maxFront = kCandleMaxDistFront;
+    if (character.GetCurrentDirection() == Character::Direction::UP) {
+        maxFront = 250.0f;
+    }
+
+    return dx <= kCandleMaxDistX &&
+           dy >= -kCandleBehindTolerance &&
+           dy <= maxFront;
 }
 
 } // namespace
@@ -368,8 +377,9 @@ void StageState::TryInteractWindowOnKeyPress() {
         return;
     }
 
-    // Só interage se a janela for o objeto mais próximo (evita conflitos)
-    if (!IsWindowClosestForInteraction(reachableWindow)) {
+    // Jogador só pode FECHAR janelas, não abrir
+    // (abrir é responsabilidade do monstro — prejudica os irmãos)
+    if (reachableWindow->GetState() != Window::WindowState::OPEN) {
         return;
     }
 

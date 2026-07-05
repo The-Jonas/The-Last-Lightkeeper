@@ -39,6 +39,11 @@ constexpr const char* kWindowClosePath = "Recursos/audio/SFX/JANELA/JANELA_FECHA
 constexpr const char* kWindLoopPath = "Recursos/audio/SFX/JANELA/VENTO_LOOP.wav";
 constexpr const char* kCandleBlowPath = "Recursos/audio/SFX/JANELA/VELA_APAGANDO.wav";
 
+constexpr const char* kRepairPath = "Recursos/audio/SFX/ESCADA/reparando.mp3";
+
+constexpr const char* kClosetOpenPath  = "Recursos/audio/SFX/ARMARIO/armario_abrindo.mp3";
+constexpr const char* kClosetClosePath = "Recursos/audio/SFX/ARMARIO/armario_fechando.mp3";
+
 constexpr int kThunderCount = 4;
 constexpr float kMinFootstepSpeed = 35.0f;
 constexpr float kThunderMinDelay = 18.0f;   
@@ -63,6 +68,9 @@ Sound gWindLoopSound;
 Sound gCandleBlowOutSound;
 Sound gCandleLightUpSound;
 Sound gCandleBlowPlayerSound;
+Sound gRepairSound;
+Sound gClosetOpenSound;
+Sound gClosetCloseSound;
 
 bool gWindLoopActive = false;
 bool gLoaded = false;
@@ -95,6 +103,7 @@ void EnsureLoaded() {
     gWindowOpenSound.Open(kWindowOpenPath);
     gWindowCloseSound.Open(kWindowClosePath);
     
+    
     // VENTO_LOOP.mp3 is an optional ambience asset that may not ship. Only try to
     // open it when present, so a missing file doesn't spam "Erro ao carregar som".
     if (FileExists(kWindLoopPath)) {
@@ -103,8 +112,11 @@ void EnsureLoaded() {
     if (FileExists(kCandleBlowPath)) {
         gCandleBlowOutSound.Open(kCandleBlowPath);
     }
+    if (FileExists(kRepairPath)) gRepairSound.Open(kRepairPath);
     if (FileExists(kCandleLightUpPath)) gCandleLightUpSound.Open(kCandleLightUpPath);
     if (FileExists(kCandleBlowPlayerPath)) gCandleBlowPlayerSound.Open(kCandleBlowPlayerPath);
+    if (FileExists(kClosetOpenPath))  gClosetOpenSound.Open(kClosetOpenPath);
+    if (FileExists(kClosetClosePath)) gClosetCloseSound.Open(kClosetClosePath);
     for (int i = 0; i < kThunderCount; ++i) {
         gThunderSounds[i].Open(kThunderPaths[i]);
     }
@@ -423,5 +435,8 @@ void StopAllGameplay() {
 
 void PlayCandleLightUp() { PlaySound(gCandleLightUpSound); }
 void PlayCandleBlow()    { PlaySound(gCandleBlowPlayerSound); }
+void PlayRepair() { PlaySound(gRepairSound); }
+void PlayClosetOpen()  { PlaySound(gClosetOpenSound); }
+void PlayClosetClose() { PlaySound(gClosetCloseSound); }
 
 } // namespace GameSfx

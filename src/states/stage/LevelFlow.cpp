@@ -163,7 +163,7 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
         if (bigComp) {
             bigComp->NotifyInventoryLightChanged();
         }
-        inventory.isLightToggledOn = false;
+        inventory.isLightToggledOn = true;
     }
     inventoryInitialized = true;
 

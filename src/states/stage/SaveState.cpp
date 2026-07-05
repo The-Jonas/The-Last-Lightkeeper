@@ -432,12 +432,16 @@ void StageState::RenderInteractionPrompt(SDL_Renderer* renderer) {
             action = "Empurrar";
         } else if (reachableCloset) {
             action = "Esconder";
+        } else if (reachableRepairable) {  
+            action = "Consertar";
         } else if (reachableJornal) {
             action = "Ler";
         } else if (reachableCandle) {
             action = reachableCandle->IsLit() ? "Apagar" : "Acender";
         } else if (reachableWindow) {
-            action = (reachableWindow->GetState() == Window::WindowState::OPEN) ? "Fechar" : "Abrir";
+            if (reachableWindow->GetState() == Window::WindowState::OPEN) {
+                action = "Fechar";
+            }
         } else if (reachableRadio) {                          
             action = reachableRadio->IsPlaying() ? "Desligar" : "Ligar";
         } else if (reachablePickup && IsPickupStillTracked(reachablePickup) &&

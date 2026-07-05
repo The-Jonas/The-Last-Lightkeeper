@@ -72,6 +72,8 @@ public:
     void NotifyInventoryLightChanged();
     void PlayPickLampAnimation();
 
+    Direction GetCurrentDirection() const { return currentDirection; }
+
     /// Sprite atual (sem props) para desenhar sombra — não inclui itens na mão.
     std::string GetShadowSpritePath() const;
     const std::string& GetCurrentStripSpritePath() const { return lastStripSpritePath; }

@@ -10,7 +10,7 @@
 
 class Closet : public Component {
 public:
-    Closet(GameObject& associated, const std::string& direction);
+    Closet(GameObject& associated);
     ~Closet();
 
     void Start() override;
@@ -19,8 +19,6 @@ public:
 
 private:
     std::string direction;
-    GameObject* textObj;
-    bool showPrompt;
     bool isOccupied;
     int frestaLightId;
 

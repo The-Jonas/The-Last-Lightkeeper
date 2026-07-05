@@ -237,7 +237,10 @@ void StageState::Update(float dt){
     }
     UpdateInventoryLight();
 
+    
+
     reachableCloset = nullptr;   // recomputado pelos Closet::Update neste frame
+    reachableRepairable = nullptr;
     UpdateArray(dt);                                                                    // Percorre o vetor de GameObjects chamando o Update de cada um
 
     reachablePickup = FindClosestReachableItem();

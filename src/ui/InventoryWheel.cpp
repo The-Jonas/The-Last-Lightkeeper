@@ -4,6 +4,7 @@
 
 #define INCLUDE_SDL_TTF
 #include "SDL_include.h"
+#include "states/stage/StageState.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -199,6 +200,13 @@ void InventoryWheel::DrawPrimedOil(SDL_Renderer* renderer, float activeX, float 
 }
 
 void InventoryWheel::Render() {
+
+    if (StageState* stage = Game::TryGetStageState()) {
+        if (stage->GetControlledCharacter() != stage->GetBigCharacterComponent()) {
+            return;
+        }
+    }
+
     SDL_Renderer* renderer = Game::GetInstance().GetRenderer();
     if (!renderer) return;
 

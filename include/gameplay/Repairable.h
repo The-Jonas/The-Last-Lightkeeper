@@ -18,6 +18,8 @@ public:
     bool IsRepaired() const { return isRepaired; }
     void ApplyRepairedState();
 
+    float GetRepairOverlayAlpha() const;
+
 private:
     std::string fixedSpritePath;
     std::string requiredItem;
@@ -25,6 +27,13 @@ private:
     float interactionDistance;
     Vec2 interactionOffset;
     bool isRepaired;
+
+    float repairTimer    = 0.0f;
+    bool  isRepairing    = false;
+    static constexpr float kRepairFadeIn  = 0.4f; // tempo para escurecer
+    static constexpr float kRepairHold    = 2.4f; // tempo parado no preto (som toca aqui)
+    static constexpr float kRepairFadeOut = 0.4f; // tempo para clarear
+    static constexpr float kRepairTotal   = kRepairFadeIn + kRepairHold + kRepairFadeOut;
 };
 
 #endif

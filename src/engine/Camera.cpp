@@ -77,8 +77,6 @@ void Camera::Update(float dt) {
     pos = pos - shakeOffset;
 
     if (pairA && pairB) { // Quando a dupla está ativa, enquadra os dois personagens
-        const float lookAheadMaxX = 120.0f;
-        const float lookAheadMaxY = 80.0f;
         const float followSmoothing = 8.0f;
         const float zoomSmoothing = 6.0f;
         const float minZoom = 0.65f;
@@ -87,7 +85,6 @@ void Camera::Update(float dt) {
         const float framePaddingY = 180.0f;
 
         Game& game = Game::GetInstance();
-        InputManager& input = InputManager::GetInstance();
         Vec2 aCenter = pairA->box.Center();
         Vec2 bCenter = pairB->box.Center();
         Vec2 midpoint((aCenter.x + bCenter.x) * 0.5f, (aCenter.y + bCenter.y) * 0.5f);
@@ -110,19 +107,8 @@ void Camera::Update(float dt) {
         float halfWidth = (winW / desiredZoom) / 2.0f;
         float halfHeight = (winH / desiredZoom) / 2.0f;
 
-        float normalizedMouseX = 0.0f;
-        float normalizedMouseY = 0.0f;
-        if (winW > 0.0f) {
-            normalizedMouseX = (input.GetMouseX() - (winW / 2.0f)) / (winW / 2.0f);
-        }
-        if (winH > 0.0f) {
-            normalizedMouseY = (input.GetMouseY() - (winH / 2.0f)) / (winH / 2.0f);
-        }
+        Vec2 lookAhead(0.0f, 0.0f);
 
-        normalizedMouseX = std::clamp(normalizedMouseX, -1.0f, 1.0f);
-        normalizedMouseY = std::clamp(normalizedMouseY, -1.0f, 1.0f);
-
-        Vec2 lookAhead(normalizedMouseX * lookAheadMaxX, normalizedMouseY * lookAheadMaxY);
         Vec2 targetPos(center.x - halfWidth + lookAhead.x, center.y - halfHeight + lookAhead.y);
 
         float posInterpolation = 1.0f - std::exp(-followSmoothing * dt);
@@ -131,29 +117,15 @@ void Camera::Update(float dt) {
         pos.y += (targetPos.y - pos.y) * posInterpolation;
         zoom += (desiredZoom - zoom) * zoomInterpolation;
     } else if (focus) {                                        // Quando so tem um personagem, centraliza no objeto
-        const float lookAheadMaxX = 180.0f;
-        const float lookAheadMaxY = 120.0f;
         const float followSmoothing = 10.0f;
 
         Game& game = Game::GetInstance();
-        InputManager& input = InputManager::GetInstance();
         Vec2 focusCenter = focus ->box.Center();
         float halfWidth = (game.GetWindowsWidth() / zoom) / 2.0f;
         float halfHeight = (game.GetWindowsHeight() / zoom) / 2.0f;
 
-        float normalizedMouseX = 0.0f;
-        float normalizedMouseY = 0.0f;
-        if (halfWidth > 0.0f) {
-            normalizedMouseX = (input.GetMouseX() - halfWidth) / halfWidth;
-        }
-        if (halfHeight > 0.0f) {
-            normalizedMouseY = (input.GetMouseY() - halfHeight) / halfHeight;
-        }
-
-        normalizedMouseX = std::clamp(normalizedMouseX, -1.0f, 1.0f);
-        normalizedMouseY = std::clamp(normalizedMouseY, -1.0f, 1.0f);
-
-        Vec2 lookAhead(normalizedMouseX * lookAheadMaxX, normalizedMouseY * lookAheadMaxY);
+        // Agora sem problemas do mouse atrapalhar a gameplay...
+        Vec2 lookAhead(0.0f, 0.0f);
         Vec2 targetPos(focusCenter.x - halfWidth + lookAhead.x, focusCenter.y - halfHeight + lookAhead.y);
         float interpolation = 1.0f - std::exp(-followSmoothing * dt);
         pos.x += (targetPos.x - pos.x) * interpolation;

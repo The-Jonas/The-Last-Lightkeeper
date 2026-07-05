@@ -21,8 +21,7 @@ Sound::~Sound() {
 
 void Sound::Play(int times) {
     // Com o parâmetro "-1" a Mixer vai escolher um canal livre e retorna-lo
-    channel = Mix_PlayChannel( -1, chunk.get(), times - 1);              // o parâmetro loops indica a quantidade de repetições e não de reproduções, por isso "times - 1"
-
+    channel = Mix_PlayChannel(-1, chunk.get(), times - 1);
     if (channel == -1) {
         std::cerr << "Erro ao reproduzir som: " << Mix_GetError() << std::endl;
     }
@@ -40,8 +39,9 @@ int Sound::PlayLooped() {
 }
 
 void Sound::Stop() {
-    if (chunk && Mix_Playing(channel)) {                                // Verifica se o som existe e se está tocando em algum canal antes de pará-lo
+    if (channel != -1 && chunk && Mix_Playing(channel)) {
         Mix_HaltChannel(channel);
+        channel = -1;  // reseta após parar
     }
 }
 
