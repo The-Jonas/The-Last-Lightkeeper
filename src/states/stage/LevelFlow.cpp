@@ -223,16 +223,15 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
 }
 
 void StageState::BeginLevelTransition(int targetLevelIndex) {
-    // Por enquanto: alcançar a escada/saída do 2º andar (índice 1) encerra o jogo
-    // com uma tela de vitória ambígua, em vez de carregar o 3º andar.
-    if (currentLevelIndex == 1) {
+    // Por enquanto o level 3 encerra o jogo e vai pro EndState...
+    if (currentLevelIndex == 2) {
         GameSfx::StopAllGameplay();
         GameVoice::StopAll();
         GameData::playerVictory = true;
         GameData::deathByMonster = false;
         popRequested = true;
         Game::GetInstance().Push(new EndState());
-        return;
+        return; 
     }
     Game::GetInstance().Push(new LevelTransitionLoadingState(this, targetLevelIndex));
 }

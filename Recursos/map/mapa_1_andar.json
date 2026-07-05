@@ -285,6 +285,35 @@
                  "y":600.666666666667
                 }, 
                 {
+                 "gid":8,
+                 "height":86,
+                 "id":668,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":150
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":2
+                        }, 
+                        {
+                         "name":"itemName",
+                         "type":"string",
+                         "value":"Fuel"
+                        }],
+                 "rotation":0,
+                 "type":"ItemSpawn",
+                 "visible":true,
+                 "width":40,
+                 "x":1472.66666666667,
+                 "y":161.33333333334
+                }, 
+                {
                  "gid":2,
                  "height":1347,
                  "id":173,
@@ -444,35 +473,6 @@
                 {
                  "gid":8,
                  "height":86,
-                 "id":681,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":50
-                        }, 
-                        {
-                         "name":"heightLevel",
-                         "type":"int",
-                         "value":1
-                        }, 
-                        {
-                         "name":"itemName",
-                         "type":"string",
-                         "value":"Fuel"
-                        }],
-                 "rotation":0,
-                 "type":"ItemSpawn",
-                 "visible":true,
-                 "width":40,
-                 "x":1119.33333333333,
-                 "y":1292
-                }, 
-                {
-                 "gid":8,
-                 "height":86,
                  "id":682,
                  "name":"",
                  "opacity":1,
@@ -496,37 +496,8 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":40,
-                 "x":1050,
-                 "y":1285.33333333334
-                }, 
-                {
-                 "gid":8,
-                 "height":86,
-                 "id":668,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":50
-                        }, 
-                        {
-                         "name":"heightLevel",
-                         "type":"int",
-                         "value":1
-                        }, 
-                        {
-                         "name":"itemName",
-                         "type":"string",
-                         "value":"Fuel"
-                        }],
-                 "rotation":0,
-                 "type":"ItemSpawn",
-                 "visible":true,
-                 "width":40,
-                 "x":1189.66666666667,
-                 "y":1293.33333333334
+                 "x":1054,
+                 "y":1275.33333333334
                 }, 
                 {
                  "gid":31,
@@ -753,6 +724,35 @@
                  "width":235,
                  "x":181,
                  "y":948
+                }, 
+                {
+                 "gid":8,
+                 "height":86,
+                 "id":681,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":250
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":2
+                        }, 
+                        {
+                         "name":"itemName",
+                         "type":"string",
+                         "value":"Fuel"
+                        }],
+                 "rotation":0,
+                 "type":"ItemSpawn",
+                 "visible":true,
+                 "width":40,
+                 "x":291.33333333333,
+                 "y":688
                 }, 
                 {
                  "gid":45,
@@ -4204,7 +4204,7 @@
          "y":0
         }],
  "nextlayerid":29,
- "nextobjectid":926,
+ "nextobjectid":927,
  "orientation":"orthogonal",
  "properties":[
         {

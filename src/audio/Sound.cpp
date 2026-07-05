@@ -38,6 +38,19 @@ int Sound::PlayLooped() {
     return channel;
 }
 
+int Sound::PlayLoopedOnChannel(int ch) {
+    // Toca em loop infinito num canal específico (reservado).
+    // Se o canal já estiver tocando esse mesmo chunk, não reinicia.
+    if (!chunk) return -1;
+    if (Mix_Playing(ch) && channel == ch) return ch; // já tocando, não reinicia
+    channel = Mix_PlayChannel(ch, chunk.get(), -1);
+    if (channel == -1) {
+        std::cerr << "Erro ao reproduzir som no canal " << ch << ": "
+                  << Mix_GetError() << std::endl;
+    }
+    return channel;
+}
+
 void Sound::Stop() {
     if (channel != -1 && chunk && Mix_Playing(channel)) {
         Mix_HaltChannel(channel);

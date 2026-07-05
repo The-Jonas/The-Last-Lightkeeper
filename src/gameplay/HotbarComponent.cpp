@@ -244,7 +244,7 @@ void HotbarComponent::TryPickupOnKeyPress() {
         }
         if (Character::player) {
             Character::player->currentState = Character::ActionState::INTERACTING;
-            Character::player->interactTimer = 0.2f;
+            Character::player->interactTimer = 0.3f;
         }
         if (bigCharacter) {
             bigCharacter->NotifyInventoryLightChanged();
@@ -252,26 +252,19 @@ void HotbarComponent::TryPickupOnKeyPress() {
         return;
     }
 
-    if (hLevel == 2 && Character::littleBrother) {
-        const float distBrothers = Character::player->GetFootCircleCenter().Distance(
-            Character::littleBrother->GetFootCircleCenter());
-        if (distBrothers > 170.0f) {
-            return;
-        }
-
-        // Bolsa cheia: nem inicia a animação de coop — só a fala de bloqueio.
-        if (inventory.IsFull()) {
-            GameVoice::OnActionBlocked();
-            return;
-        }
-
-        Character::player->currentState = Character::ActionState::INTERACTING;
-        Character::player->interactTimer = 1.5f;
-        Character::littleBrother->currentState = Character::ActionState::INTERACTING;
-        Character::littleBrother->interactTimer = 1.5f;
-        Character::littleBrother->PositionForCoop(Character::player);
+    if (hLevel == 2) {
         const PickupOutcome outcome = PerformPickup(inventory, closest, itemPickups, bigCharacter);
         VoiceForPickup(outcome);
+        if (outcome == PickupOutcome::Blocked) {
+            return;
+        }
+        if (Character::player) {
+            Character::player->currentState = Character::ActionState::INTERACTING;
+            Character::player->interactTimer = 0.4f;  
+        }
+        if (bigCharacter) {
+            bigCharacter->NotifyInventoryLightChanged();
+        }
     }
 }
 

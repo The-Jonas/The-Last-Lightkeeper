@@ -12,6 +12,14 @@
 
 namespace {
 
+constexpr int kChannelWaves    = 0;  
+constexpr int kChannelWind     = 1;
+constexpr int kChannelCandle   = 2;
+constexpr int kChannelFootstep = 3;
+constexpr int kChannelBox      = 4;
+constexpr int kChannelRadio    = 5;
+//6+ → one-shots livres (Mix_PlayChannel(-1, ...) usa a partir daqui)
+
 constexpr const char* kBoxStartPath = "Recursos/audio/SFX/CAIXAS/CAIXA_Madeira.mp3";
 constexpr const char* kBoxStopPath = "Recursos/audio/SFX/CAIXAS/CAIXA_Madeira2.mp3";
 constexpr const char* kBoxMovingLoopPath = "Recursos/audio/SFX/CAIXAS/CAIXA_MADEIRALONGO.mp3";
@@ -181,7 +189,7 @@ void StartBoxMovingLoop() {
     if (gBoxMovingLoopActive && channel >= 0 && Mix_Playing(channel)) {
         return;
     }
-    if (gBoxMovingLoopSound.PlayLooped() >= 0) {
+    if (gBoxMovingLoopSound.PlayLoopedOnChannel(kChannelBox) >= 0) {
         gBoxMovingLoopActive = true;
         ApplySfxVolume(gBoxMovingLoopSound);
     }
@@ -207,7 +215,7 @@ void StartCandleLoop() {
     if (gCandleLoopActive && channel >= 0 && Mix_Playing(channel)) {
         return;
     }
-    if (gCandleLoopSound.PlayLooped() >= 0) {
+    if (gCandleLoopSound.PlayLoopedOnChannel(kChannelCandle) >= 0) {
         gCandleLoopActive = true;
         ApplySfxVolume(gCandleLoopSound);
     }
@@ -261,7 +269,7 @@ void EnsureFootstepLoop(FootstepSurface surface) {
     if (!next.IsOpen()) {
         return;
     }
-    if (next.PlayLooped() >= 0) {
+    if (next.PlayLoopedOnChannel(kChannelFootstep) >= 0) {
         gFootstepLoopSurface = surface;
         gFootstepLoopActive = true;
         ApplyFootstepLoopVolume(next);
@@ -407,7 +415,7 @@ void StartWindLoop() {
     if (gGameplayMuted || gWindLoopActive) return;
     EnsureLoaded();
     if (!gWindLoopSound.IsOpen()) return;   // optional asset absent → no-op
-    if (gWindLoopSound.PlayLooped() >= 0) {
+    if (gWindLoopSound.PlayLoopedOnChannel(kChannelWind) >= 0) {
         gWindLoopActive = true;
         ApplySfxVolume(gWindLoopSound);
     }

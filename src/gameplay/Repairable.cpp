@@ -41,23 +41,37 @@ void Repairable::Update(float dt) {
     if (isRepairing) {
         repairTimer += dt;
 
-        // No momento do fade in completo, aplica o conserto
+        // Trava os personagens durante a animação
+        StageState* stage = Game::TryGetStageState();
+        if (stage) {
+            if (Character* big = stage->GetBigCharacterComponent())
+                big->currentState = Character::ActionState::INTERACTING;
+            if (Character* small = stage->GetSmallCharacterComponent())
+                small->currentState = Character::ActionState::INTERACTING;
+        }
+
+        // Aplica o conserto no meio do fade
         if (repairTimer >= kRepairFadeIn && !isRepaired) {
             SpriteRenderer* sprite = associated.GetComponent<SpriteRenderer>();
             if (sprite) sprite->Open(fixedSpritePath);
             isRepaired = true;
-            StageState* stage = Game::TryGetStageState();
             if (stage) {
                 stage->level.escadaConsertada = true;
                 stage->SaveCurrentProgress();
             }
         }
 
-        // Terminou a animação completa
+        // Terminou — libera os personagens
         if (repairTimer >= kRepairTotal) {
             isRepairing = false;
+            if (stage) {
+                if (Character* big = stage->GetBigCharacterComponent())
+                    big->currentState = Character::ActionState::NORMAL;
+                if (Character* small = stage->GetSmallCharacterComponent())
+                    small->currentState = Character::ActionState::NORMAL;
+            }
         }
-        return; // enquanto anima, não processa mais nada
+        return;
     }
 
     // Já reparado e sem animação — não faz nada
@@ -138,7 +152,5 @@ float Repairable::GetRepairOverlayAlpha() const {
         alpha = 1.0f;
     else
         alpha = 1.0f - (repairTimer - kRepairFadeIn - kRepairHold) / kRepairFadeOut;
-    
-    std::cout << "[REPAIR] timer=" << repairTimer << " alpha=" << alpha << "\n";
     return alpha;
 }

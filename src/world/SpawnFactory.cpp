@@ -444,20 +444,18 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
     }
     else if (spawn.type == "Barril") {
         float depthOff = 0.0f;
-        
-        int typeB = 0;                                          // Seleciona o tipo do Barril que vai spawnar
-        bool interactive = false;                               // Consigo interagir com o barril ou não?
-        float empty = 1.0f;                                     // O peso do barril caso ele seja interativo
+        int typeB = 0;
+        bool interactive = false;    
+        float empty = 0.0f;         
 
         if (spawn.properties.count("depthOffset")) depthOff = spawn.properties.at("depthOffset").get<float>();
-        if (spawn.properties.count("type")) typeB = spawn.properties.at("type").get<int>();
-        if (spawn.properties.count("empty")) empty = spawn.properties.at("empty").get<float>();
-        
+        if (spawn.properties.count("type"))        typeB    = spawn.properties.at("type").get<int>();
+        if (spawn.properties.count("empty"))       empty    = spawn.properties.at("empty").get<float>();
         if (spawn.properties.count("interactive")) interactive = spawn.properties.at("interactive").get<bool>();
-        
+
         GameObject* barrelObj = new GameObject();
-        barrelObj->tiledId = spawn.tiledId;
-        barrelObj->z = spawn.z;
+        barrelObj->tiledId    = spawn.tiledId;
+        barrelObj->z          = spawn.z;
         barrelObj->depthOffset = depthOff;
 
         std::string caminho = "Recursos/img/objetos/barril/barril_" + std::to_string(typeB) + ".png";
@@ -469,9 +467,6 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         }
 
         ApplyTiledBox(barrelObj, spawn);
-
-        // Colisão feita no Tiled
-
         ApplyTiledFlip(barrelObj, spawn);
 
         stage.AddObject(barrelObj);

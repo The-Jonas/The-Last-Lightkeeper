@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<tileset version="1.10" tiledversion="1.12.1" name="props_objects" tilewidth="2847" tileheight="1553" tilecount="44" columns="0">
+<tileset version="1.10" tiledversion="1.12.1" name="props_objects" tilewidth="2847" tileheight="1553" tilecount="45" columns="0">
  <grid orientation="orthogonal" width="1" height="1"/>
  <tile id="0" type="Caixa">
   <properties>
@@ -117,9 +117,9 @@
  <tile id="21" type="Barril">
   <properties>
    <property name="depthOffset" type="float" value="-50"/>
+   <property name="empty" type="float" value="0.5"/>
    <property name="interactive" type="bool" value="false"/>
    <property name="type" type="int" value="0"/>
-   <property name="weight" type="float" value="0.5"/>
   </properties>
   <image source="../img/objetos/barril/barril_0.png" width="235" height="343"/>
  </tile>
@@ -291,5 +291,11 @@
    <property name="playDuration" type="float" value="6"/>
   </properties>
   <image source="../img/objetos/mesa/Mesa_radio.png" width="163" height="265"/>
+ </tile>
+ <tile id="46" type="Armario">
+  <properties>
+   <property name="depthOffset" type="float" value="0"/>
+  </properties>
+  <image source="../img/objetos/Armario.png" width="442" height="638"/>
  </tile>
 </tileset>

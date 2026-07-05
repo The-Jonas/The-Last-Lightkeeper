@@ -333,23 +333,25 @@ void Character::Update(float dt) {
     // SE ESTIVER INTERAGINDO, CONGELA TUDO
     // ==========================================
     if (currentState == ActionState::INTERACTING) {
-        speed = Vec2(0, 0); // Para o personagem na hora
-        targetSpeed = Vec2(0, 0);
-        
+        speed = Vec2(0.0f, 0.0f);                       // zera a velocidade
+        targetSpeed = Vec2(0.0f, 0.0f);                 // zera o alvo também
+
+        Mix_HaltChannel(3);                             // Para o loop de passos diretamente pelo canal fixo
+
         interactTimer -= dt;
         if (interactTimer <= 0.0f) {
-            currentState = ActionState::NORMAL; // Libera o movimento quando o tempo acaba
+            currentState = ActionState::NORMAL;         // Libera o movimento quando o tempo acaba
         }
-        return; // Sai do Update prematuramente para não processar movimento!
+        return;                                         // Sai do Update prematuramente para não processar movimento!
     }
 
     //Animator* animator = associated.GetComponent<Animator>();
     bool hasMoveCommand = false;
 
     //Processa a fila de comandos
-    while (!taskQueue.empty()) {                    // Chegamos se há alguma ação na fila
-        Command cmd = taskQueue.front();            // Enquanto houver checamos o tipo e
-        taskQueue.pop();                            // quando finalizada tiramos da fila
+    while (!taskQueue.empty()) {                        // Chegamos se há alguma ação na fila
+        Command cmd = taskQueue.front();                // Enquanto houver checamos o tipo e
+        taskQueue.pop();                                // quando finalizada tiramos da fila
 
         if (cmd.type == Command::MOVE) {
             //Calcula a direção normalizada

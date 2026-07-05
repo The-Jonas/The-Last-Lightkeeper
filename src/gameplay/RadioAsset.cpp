@@ -25,7 +25,7 @@ void RadioAsset::Toggle() {
         playTimer = 0.0f;
     } else {
         if (radioSound.IsOpen()) {
-            radioSound.PlayLooped();
+            radioSound.PlayLoopedOnChannel(5);
             isPlaying = true;
             playTimer = 0.0f;
         }

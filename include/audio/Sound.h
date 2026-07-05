@@ -20,7 +20,8 @@ public:
     ~Sound();                                           // Destrutor - Desaloca o som da memória
 
     void Play(int times = 1);                           // Reproduz o som, o parâmetro "times" define quantas vezes vai ser repetido
-    int PlayLooped();                                     // Reproduz em loop infinito; retorna o canal ou -1
+    int PlayLooped();                                   // Reproduz em loop infinito; retorna o canal ou -1
+    int PlayLoopedOnChannel(int ch);                    // Canal fixo específico
     void Stop();                                        // Para a reprodução do som no canal em que ele está tocando
     int GetChannel() const { return channel; }
     void Open(const std::string file);                  // Carrega o arquivo de som a partir do caminho fornecido

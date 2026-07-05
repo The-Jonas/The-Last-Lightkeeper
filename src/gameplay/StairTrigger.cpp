@@ -38,14 +38,11 @@ void StairTrigger::Update(float dt) {
                 // ====================================================
                 // O personagem anota qual é a base dessa escada!
                 // ====================================================
-                character->stairAnchorY = this->anchorY;
-
-                std::cout << "Subiu na escada!" << std::endl; // Debug  
+                character->stairAnchorY = this->anchorY; 
             }
             // Catraca de Saída: Indo para baixo e está na escada
             else if (character->GetSpeed().y > 5.0f && character->isElevated) {
                 character->isElevated = false;
-                std::cout << "Desceu da escada!" << std::endl; // Debug
             }
         }
     };
