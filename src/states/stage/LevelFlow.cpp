@@ -189,7 +189,7 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
         hudLine3 = new GameObject();
         hudLine3->z = 100;
         hudLine3->AddComponent(new Text(*hudLine3, "Recursos/font/times.ttf", 18, Text::BLENDED,
-                                         "T trovao | L luzes | O sombras | M musica | B fisica | X luz cursor | C criar luz | P painel luz",
+                                         "T trovao | L luzes | O sombras | M musica | B fisica | X luz cursor | C criar luz | P painel luz | V fala irmao",
                                         hudColor));
         AddObject(hudLine3);
 
@@ -321,7 +321,7 @@ void StageState::RenderLevelTitleBanner(SDL_Renderer* renderer) {
     }
 
     SDL_Color color{230, 220, 180, alpha};
-    SDL_Surface* surface = TTF_RenderText_Blended(font.get(), label, color);
+    SDL_Surface* surface = TTF_RenderUTF8_Blended(font.get(), label, color);
     if (!surface) {
         return;
     }

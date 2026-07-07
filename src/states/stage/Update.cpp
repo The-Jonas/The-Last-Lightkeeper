@@ -215,6 +215,11 @@ void StageState::Update(float dt){
             (lightMaskShape == LightMaskShape::Circle || lightMaskShape == LightMaskShape::Torch)) {
             CreateLightAtCursor();
         }
+
+        // Toca uma fala aleatória do irmão atualmente controlado.
+        if (input.KeyPress(VOICE_TEST_KEY)) {
+            GameVoice::DebugPlayRandomForControlled(controlledCharacter == bigCharacter);
+        }
     }
 
     if (!pauseMenuOpen && IsPartyReady()) {

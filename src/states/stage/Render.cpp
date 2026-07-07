@@ -178,9 +178,33 @@ void StageState::Render(){
             bigMaxContact = std::max(bigMaxContact, bigContact);
             smallMaxContact = std::max(smallMaxContact, smallContact);
 
-            // Captura o nível real de luz batendo no sprite
-            bigMaxTouch = std::max(bigMaxTouch, touchBig);
-            smallMaxTouch = std::max(smallMaxTouch, touchSmall);
+            // ── Iluminação para a SANIDADE ────────────────────────────────
+            // O `touch` acima (medido só no PÉ, com raio de sombra reduzido) é
+            // ótimo para as sombras, mas cruel para a sanidade: o jogador podia
+            // estar visivelmente DENTRO do círculo de luz do castiçal e mesmo
+            // assim tomar dano "no escuro". Aqui medimos de forma generosa e
+            // coerente com o brilho VISÍVEL: pegamos o ponto do CORPO mais perto
+            // da luz (pé ou centro) e um raio casado com o falloff visível,
+            // compensando o zoom da câmera (o `touch` de sombra não compensa e
+            // por isso encolhia a área "iluminada" quando a câmera dava zoom).
+            constexpr float kSanityLitRadiusFrac = 1.25f;
+            auto sanityIllum = [&](GameObject* obj) -> float {
+                if (!obj) return 0.0f;
+                const Rect& bx = obj->box;
+                const float z = Camera::GetZoom();
+                const Vec2 footPt((bx.x + 0.5f * bx.w - Camera::pos.x) * z,
+                                  (bx.y + bx.h - Camera::pos.y) * z);
+                const Vec2 midPt((bx.x + 0.5f * bx.w - Camera::pos.x) * z,
+                                 (bx.y + 0.5f * bx.h - Camera::pos.y) * z);
+                const float d = std::min(footPt.Distance(lightScreen), midPt.Distance(lightScreen));
+                const float litRadius = std::max(8.0f, params.falloffRadiusPx) * z * kSanityLitRadiusFrac;
+                return Clamp01(1.0f - d / std::max(1.0f, litRadius));
+            };
+
+            // Captura o nível real de luz batendo no sprite (para sombras) e a
+            // iluminação generosa (para a sanidade).
+            bigMaxTouch = std::max(bigMaxTouch, std::max(touchBig, sanityIllum(bigCharacterObject)));
+            smallMaxTouch = std::max(smallMaxTouch, std::max(touchSmall, sanityIllum(smallCharacterObject)));
 
             if (touchBig > 0.0f) {
                 const float shadowLengthPx = params.shadowMaxLengthPx * distBig;

@@ -22,6 +22,7 @@
 #define THUNDER_TEST_KEY SDLK_t
 #define CURSOR_PREVIEW_LIGHT_TOGGLE_KEY SDLK_x
 #define CREATE_LIGHT_KEY SDLK_c
+#define VOICE_TEST_KEY SDLK_v          // debug: toca uma fala aleatoria do irmao controlado
 #define PANEL_ROW_PREV_KEY SDLK_LEFTBRACKET
 #define PANEL_ROW_NEXT_KEY SDLK_RIGHTBRACKET
 #define LEFT_MOUSE_BUTTON SDL_BUTTON_LEFT

@@ -159,7 +159,7 @@ void TitleState::RenderSliders(SDL_Renderer* renderer) {
         char labelBuf[64];
         std::snprintf(labelBuf, sizeof(labelBuf), "%s: %d", slider.label, slider.value);
         SDL_Color labelColor{180, 180, 180, 220};
-        SDL_Surface* labelSurface = TTF_RenderText_Blended(font.get(), labelBuf, labelColor);
+        SDL_Surface* labelSurface = TTF_RenderUTF8_Blended(font.get(), labelBuf, labelColor);
         if (!labelSurface) {
             continue;
         }

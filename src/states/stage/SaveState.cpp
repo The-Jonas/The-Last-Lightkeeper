@@ -379,7 +379,7 @@ void StageState::RenderQuitConfirmModal(SDL_Renderer* renderer) {
             return;
         }
         SDL_Color color{240, 240, 240, 255};
-        SDL_Surface* surface = TTF_RenderText_Blended(font.get(), label, color);
+        SDL_Surface* surface = TTF_RenderUTF8_Blended(font.get(), label, color);
         if (!surface) {
             return;
         }
@@ -398,7 +398,7 @@ void StageState::RenderQuitConfirmModal(SDL_Renderer* renderer) {
             return;
         }
         SDL_Color color{230, 230, 230, 255};
-        SDL_Surface* surface = TTF_RenderText_Blended_Wrapped(font.get(), text, color, panelW - 80);
+        SDL_Surface* surface = TTF_RenderUTF8_Blended_Wrapped(font.get(), text, color, panelW - 80);
         if (!surface) {
             return;
         }
@@ -466,7 +466,7 @@ void StageState::RenderInteractionPrompt(SDL_Renderer* renderer) {
         return;
     }
     SDL_Color color{240, 235, 220, 255};
-    SDL_Surface* surface = TTF_RenderText_Blended(font.get(), label, color);
+    SDL_Surface* surface = TTF_RenderUTF8_Blended(font.get(), label, color);
     if (!surface) {
         return;
     }
@@ -595,7 +595,7 @@ void StageState::RenderPauseMenu(SDL_Renderer* renderer) {
 
     if (auto titleFont = Resources::GetFont("Recursos/font/times.ttf", 44)) {
         SDL_Color tc{220, 200, 140, 255};
-        SDL_Surface* s = TTF_RenderText_Blended(titleFont.get(), "PAUSA", tc);
+        SDL_Surface* s = TTF_RenderUTF8_Blended(titleFont.get(), "PAUSA", tc);
         if (s) {
             SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, s);
             const SDL_Rect d{(winW - s->w) / 2, startY - 80, s->w, s->h};
@@ -620,7 +620,7 @@ void StageState::RenderPauseMenu(SDL_Renderer* renderer) {
 
         if (font) {
             SDL_Color c = sel ? SDL_Color{245, 235, 205, 255} : SDL_Color{185, 185, 185, 255};
-            SDL_Surface* s = TTF_RenderText_Blended(font.get(), kPauseMenuLabels[i], c);
+            SDL_Surface* s = TTF_RenderUTF8_Blended(font.get(), kPauseMenuLabels[i], c);
             if (s) {
                 SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, s);
                 const SDL_Rect d{r.x + (r.w - s->w) / 2, r.y + (r.h - s->h) / 2, s->w, s->h};
@@ -651,7 +651,7 @@ void StageState::RenderSaveToast(SDL_Renderer* renderer) {
     const Uint8 a = static_cast<Uint8>(std::min(255.0f, alpha * 255.0f));
 
     SDL_Color c{225, 240, 215, 255};
-    SDL_Surface* s = TTF_RenderText_Blended(font.get(), "Progresso salvo", c);
+    SDL_Surface* s = TTF_RenderUTF8_Blended(font.get(), "Progresso salvo", c);
     if (!s) {
         return;
     }
@@ -846,7 +846,7 @@ void StageState::RenderSettingsPanel(SDL_Renderer* renderer) {
 
     auto drawText = [&](const char* str, int tx, int ty, SDL_Color c, TTF_Font* fnt, bool centerX, int centerW) {
         if (!fnt || !str) return;
-        SDL_Surface* sf = TTF_RenderText_Blended(fnt, str, c);
+        SDL_Surface* sf = TTF_RenderUTF8_Blended(fnt, str, c);
         if (!sf) return;
         SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, sf);
         const int w = sf->w;
@@ -1004,7 +1004,7 @@ void StageState::RenderControlsPanel(SDL_Renderer* renderer) {
     // align: 0 = esquerda em tx, 1 = centralizado em [tx, tx+refW], 2 = direita em tx
     auto drawText = [&](const char* str, int tx, int ty, SDL_Color c, TTF_Font* fnt, int align, int refW) {
         if (!fnt || !str) return;
-        SDL_Surface* sf = TTF_RenderText_Blended(fnt, str, c);
+        SDL_Surface* sf = TTF_RenderUTF8_Blended(fnt, str, c);
         if (!sf) return;
         SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, sf);
         const int w = sf->w;
@@ -1062,6 +1062,11 @@ namespace {
 int sLighterTutShown = 0;
 int sSwapTutShown = 0;
 int sAbilityTutShown = 0;
+int sMoveTutShown = 0;
+int sPickupTutShown = 0;
+int sRefuelTutShown = 0;
+int sCycleTutShown = 0;        // dica de trocar item na roda (1x por sessão)
+int sLighterEmptyTutShown = 0; // aviso "luz apagou" (1x por sessão)
 bool sFarVoiceArmed = true;   // fala de medo do irmãozinho (sem limite de 3x)
 }
 
@@ -1069,16 +1074,114 @@ void StageState::UpdateTutorials(float dt) {
     if (lighterTutTimer > 0.0f) lighterTutTimer -= dt;
     if (swapTutTimer > 0.0f) swapTutTimer -= dt;
     if (abilityTutTimer > 0.0f) abilityTutTimer -= dt;
+    if (moveTutTimer > 0.0f) moveTutTimer -= dt;
+    if (pickupTutTimer > 0.0f) pickupTutTimer -= dt;
+    if (refuelTutTimer > 0.0f) refuelTutTimer -= dt;
+    if (cycleTutTimer > 0.0f) cycleTutTimer -= dt;
+    if (lighterEmptyTutTimer > 0.0f) lighterEmptyTutTimer -= dt;
 
-    // Tutorial do isqueiro: perdeu ~30% de sanidade e a luz não está ativa.
-    // SÓ para o irmãozão — é ele quem usa o isqueiro/itens.
+    InputManager& imTut = InputManager::GetInstance();
+
+    // Tutorial de MOVIMENTO (WASD): só no começo. Some para sempre assim que o
+    // jogador anda pela primeira vez; se ficar parado por uns segundos sem nunca
+    // ter andado, mostra a dica uma vez.
+    if (!moveTutDone) {
+        const bool movingInput = imTut.ActionDown(GameAction::MoveUp)   ||
+                                 imTut.ActionDown(GameAction::MoveDown) ||
+                                 imTut.ActionDown(GameAction::MoveLeft) ||
+                                 imTut.ActionDown(GameAction::MoveRight);
+        if (movingInput) {
+            moveTutDone = true;
+            moveTutTimer = 0.0f;
+        } else if (IsPartyReady() && !IsPlayerInputFrozen()) {
+            noMoveAccum += dt;
+            if (noMoveAccum > 3.0f && sMoveTutShown < 1 && moveTutTimer <= 0.0f) {
+                moveTutTimer = kTutorialDisplayDuration;
+                sMoveTutShown++;
+            }
+        }
+    }
+
+    // Tutorial de PEGAR ITEM (E): controlando o irmãozão e parado perto de um
+    // item por um tempinho sem pegá-lo.
     {
-        float lowest = Character::kMaxSanity;
-        if (Character::player) lowest = std::min(lowest, Character::player->sanity);
-        if (Character::littleBrother) lowest = std::min(lowest, Character::littleBrother->sanity);
+        const bool nearPickup = controlledCharacter == bigCharacter &&
+                                GetReachablePickup() != nullptr && !IsPlayerInputFrozen();
+        if (nearPickup) {
+            pickupNearAccum += dt;
+            if (pickupNearAccum > 1.2f && pickupTutArmed &&
+                sPickupTutShown < kMaxTutorialShows && pickupTutTimer <= 0.0f) {
+                pickupTutTimer = kTutorialDisplayDuration;
+                sPickupTutShown++;
+                pickupTutArmed = false;
+            }
+        } else {
+            pickupNearAccum = 0.0f;
+            pickupTutArmed = true;   // re-arma ao se afastar
+        }
+    }
 
-        const bool cond = (lowest < Character::kMaxSanity * 0.7f) && !inventory.IsUsableLightActive()
-                          && controlledCharacter == bigCharacter;
+    // Tutorial de TROCAR ITEM na roda (1/3): dispara ao pegar o primeiro item
+    // novo, quando a roda passa a ter mais de um item para alternar. Só uma vez
+    // por sessão. prevStackCount começa em -1 para ignorar o item inicial.
+    {
+        const int stackCount = inventory.GetStackCount();
+        if (prevStackCount < 0) {
+            prevStackCount = stackCount;            // baseline: ignora o isqueiro inicial
+        } else if (stackCount > prevStackCount) {
+            if (sCycleTutShown < 1 && stackCount >= 2 &&
+                controlledCharacter == bigCharacter && cycleTutTimer <= 0.0f) {
+                cycleTutTimer = kTutorialDisplayDuration;
+                sCycleTutShown++;
+            }
+            prevStackCount = stackCount;
+        } else if (stackCount < prevStackCount) {
+            prevStackCount = stackCount;            // usou/combinou algo; acompanha
+        }
+    }
+
+    // Aviso "luz apagou": quando a fonte de luz chega a zero pela 1ª vez, avisa
+    // que é preciso combustível para reabastecer. Só uma vez por sessão.
+    {
+        if (sLighterEmptyTutShown < 1 && controlledCharacter == bigCharacter &&
+            inventory.HasDepletedLightSource() && lighterEmptyTutTimer <= 0.0f) {
+            lighterEmptyTutTimer = kTutorialDisplayDuration;
+            sLighterEmptyTutShown++;
+        }
+    }
+
+    // Tutorial de REABASTECER (F): só quando o jogador está SEGURANDO o
+    // combustível (item selecionado na roda). Ensina a despejá-lo no isqueiro.
+    {
+        const bool holdingOil = controlledCharacter == bigCharacter &&
+                                inventory.IsActiveItemFuel();
+        if (holdingOil && refuelTutArmed &&
+            sRefuelTutShown < kMaxTutorialShows && refuelTutTimer <= 0.0f) {
+            refuelTutTimer = kTutorialDisplayDuration;
+            sRefuelTutShown++;
+            refuelTutArmed = false;
+        }
+        if (!holdingOil) {
+            refuelTutArmed = true;
+        }
+    }
+
+    // Tutorial do isqueiro ("aperte F para acender"): só aparece quando o
+    // jogador está MORRENDO no escuro (drenando sanidade por falta de luz) E
+    // está com o ISQUEIRO na mão (item selecionado) mas apagado. SÓ para o
+    // irmãozão — é ele quem usa o isqueiro/itens.
+    {
+        // Mesma darknessThreshold usada na sanidade (Character.cpp): abaixo de
+        // 10% de luz o personagem está no escuro drenando sanidade.
+        const float controlledIllum = (controlledCharacter == bigCharacter)
+                                           ? bigIlluminationLevel
+                                           : smallIlluminationLevel;
+        const bool dyingInShadow = controlledIllum < 0.1f;
+
+        const bool cond = controlledCharacter == bigCharacter &&
+                          inventory.IsActiveItemLighter() &&
+                          !inventory.IsUsableLightActive() &&
+                          dyingInShadow;
         if (cond && lighterTutArmed && sLighterTutShown < kMaxTutorialShows && lighterTutTimer <= 0.0f) {
             lighterTutTimer = kTutorialDisplayDuration;
             sLighterTutShown++;
@@ -1142,7 +1245,7 @@ void StageState::RenderTutorials(SDL_Renderer* renderer) {
         auto font = Resources::GetFont("Recursos/font/times.ttf", 24);
         if (!font) return;
         SDL_Color col{245, 232, 200, 255};
-        SDL_Surface* sf = TTF_RenderText_Blended(font.get(), text.c_str(), col);
+        SDL_Surface* sf = TTF_RenderUTF8_Blended(font.get(), text.c_str(), col);
         if (!sf) return;
         SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, sf);
         const int tw = sf->w;
@@ -1174,23 +1277,59 @@ void StageState::RenderTutorials(SDL_Renderer* renderer) {
     const bool controllingBig = controlledCharacter == bigCharacter;
     const bool controllingSmall = controlledCharacter == smallCharacter;
 
+    // Resolve a tecla vinculada a uma ação (com rótulo de reserva).
+    auto keyName = [](int code, const char* fallback) {
+        const char* k = SDL_GetKeyName(code);
+        return (k && k[0] != '\0') ? std::string(k) : std::string(fallback);
+    };
+
+    // Empilha os banners visíveis de cima para baixo, sem sobreposição.
+    int y = 70;
+
+    if (moveTutTimer > 0.0f) {
+        const std::string up = keyName(im.GetBinding(GameAction::MoveUp), "W");
+        const std::string lf = keyName(im.GetBinding(GameAction::MoveLeft), "A");
+        const std::string dn = keyName(im.GetBinding(GameAction::MoveDown), "S");
+        const std::string rt = keyName(im.GetBinding(GameAction::MoveRight), "D");
+        drawBanner(moveTutTimer, "Use [" + up + "] [" + lf + "] [" + dn + "] [" + rt + "] para se mover", y);
+        y += 56;
+    }
     if (lighterTutTimer > 0.0f && controllingBig) {
-        const char* k = SDL_GetKeyName(im.GetBinding(GameAction::UseItem));
-        if (!k || k[0] == '\0') k = "F";
-        drawBanner(lighterTutTimer, std::string("Pressione [") + k + "] para ligar seu isqueiro", 70);
+        drawBanner(lighterTutTimer,
+                   "Pressione [" + keyName(im.GetBinding(GameAction::UseItem), "F") + "] para ligar seu isqueiro", y);
+        y += 56;
+    }
+    if (pickupTutTimer > 0.0f && controllingBig) {
+        drawBanner(pickupTutTimer,
+                   "Pressione [" + keyName(im.GetBinding(GameAction::Interact), "E") + "] para pegar o item", y);
+        y += 56;
+    }
+    if (cycleTutTimer > 0.0f && controllingBig) {
+        const std::string prev = keyName(im.GetBinding(GameAction::CyclePrev), "1");
+        const std::string next = keyName(im.GetBinding(GameAction::CycleNext), "3");
+        drawBanner(cycleTutTimer,
+                   "Use [" + prev + "] e [" + next + "] para trocar de item na mochila", y);
+        y += 56;
+    }
+    if (lighterEmptyTutTimer > 0.0f && controllingBig) {
+        drawBanner(lighterEmptyTutTimer,
+                   "Sua luz apagou! Use combustivel para reabastece-la", y);
+        y += 56;
+    }
+    if (refuelTutTimer > 0.0f && controllingBig) {
+        drawBanner(refuelTutTimer,
+                   "Combustivel: aperte [" + keyName(im.GetBinding(GameAction::UseItem), "F") +
+                       "] nele e depois no isqueiro para reabastecer", y);
+        y += 56;
     }
     if (swapTutTimer > 0.0f) {
-        const char* k = SDL_GetKeyName(im.GetBinding(GameAction::SwapBrother));
-        if (!k || k[0] == '\0') k = "Ctrl";
-        const int y = (lighterTutTimer > 0.0f) ? 126 : 70;   // empilha se ambos visíveis
-        drawBanner(swapTutTimer, std::string("Pressione [") + k + "] para trocar de personagem", y);
+        drawBanner(swapTutTimer,
+                   "Pressione [" + keyName(im.GetBinding(GameAction::SwapBrother), "Ctrl") + "] para trocar de personagem", y);
+        y += 56;
     }
     if (abilityTutTimer > 0.0f && controllingSmall) {
-        const char* k = SDL_GetKeyName(im.GetBinding(GameAction::Interact));
-        if (!k || k[0] == '\0') k = "E";
-        int y = 70;                                          // empilha abaixo dos outros
-        if (lighterTutTimer > 0.0f) y += 56;
-        if (swapTutTimer > 0.0f) y += 56;
-        drawBanner(abilityTutTimer, std::string("Pressione [") + k + "] para usar a habilidade do irmaozinho", y);
+        drawBanner(abilityTutTimer,
+                   "Pressione [" + keyName(im.GetBinding(GameAction::Interact), "E") + "] para usar a habilidade do irmaozinho", y);
+        y += 56;
     }
 }

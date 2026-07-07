@@ -500,8 +500,8 @@ void Monster::UpdateFleeLigth(float dt) {
 
     // 1. Saída da fuga com "Cool-down" de pânico
     if (!IsSelfInLight()) {
-        // Se a luz não está mais tocando nele, ele continua correndo por 1.5s pra garantir!
-        if (stateTimer >= 1.5f) { 
+        // Recuo curto (0.8s) — volta a rondar/atacar rápido, mais agressivo.
+        if (stateTimer >= 0.8f) {
             if (hasMemory) {
                 TransitionTo(MonsterState::LURK);
             } else {
@@ -635,9 +635,11 @@ bool Monster::IsSelfInLight() const {
     myBox.w *= 0.90f;
     myBox.h *= 0.90f;
 
+    // Só o núcleo brilhante afugenta: fora dele (anel escuro) o monstro avança e
+    // consegue dar mordidas rápidas antes de recuar — deixa a luz menos "quebrada".
     for (const auto& light : stage->GetLights()) {
         if (!light.enabled) continue;
-        const float radius = light.params.falloffRadiusPx;
+        const float radius = light.params.falloffRadiusPx * kFleeLightCoreFraction;
         if (radius <= 0.0f) continue;
         if (DistanceFromRectToPoint(myBox, light.worldPos) < radius) return true;
     }
@@ -645,7 +647,7 @@ bool Monster::IsSelfInLight() const {
     Vec2  torchPos;
     float torchRadius = 0.0f;
     if (stage->GetActiveTorchWorldPos(torchPos, torchRadius)) {
-        if (DistanceFromRectToPoint(myBox, torchPos) < torchRadius) return true;
+        if (DistanceFromRectToPoint(myBox, torchPos) < torchRadius * kFleeLightCoreFraction) return true;
     }
 
     return false;

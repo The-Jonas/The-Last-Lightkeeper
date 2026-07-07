@@ -22,6 +22,11 @@ void OnAskToStay();          // protesta quando mandado ficar parado
 void OnBrothersTooFar();     // com medo quando os irmãos se afastam demais
 void OnHidingMonsterClose(); // escondido no armário e o monstro se aproxima
 
+// DEBUG: toca uma fala ALEATÓRIA do irmão indicado (true = irmãozão, false =
+// irmãozinho), ignorando cooldown/mute e cortando a fala atual. Usado só pelo
+// atalho de desenvolvedor (VOICE_TEST_KEY) em builds de debug.
+void DebugPlayRandomForControlled(bool bigBrother);
+
 } // namespace GameVoice
 
 #endif

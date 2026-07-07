@@ -89,7 +89,7 @@ private:
     // ── Parâmetros de velocidade por estado ───────────────────────────────────
     static constexpr float kSpeedPatrol      = 85.0f;
     static constexpr float kSpeedInvestigate = 120.0f;
-    static constexpr float kSpeedChase       = 170.0f;
+    static constexpr float kSpeedChase       = 185.0f;  // Mais relentless — persegue com fome
     static constexpr float kSpeedHunt        = 185.0f;  // Mais rápido — ele está furioso
     static constexpr float kSpeedFlee        = 220.0f;  // Foge MAIS RÁPIDO que persegue — realista e deixa o jogador sentir que a luz funciona
  
@@ -131,6 +131,9 @@ private:
     static constexpr float kSightRadius          = 420.0f;  // Raio máximo de visão na luz
     static constexpr float kIlluminationThreshold = 0.35f;  // Mínimo de luz para detectar
     static constexpr float kFleeThreshold         = 0.70f;  // Iluminação que faz ele recuar
+    // Só foge quando entra no NÚCLEO brilhante da luz (fração do raio). No anel
+    // externo (mais fraco) ele aguenta e ainda avança para "mordiscar" na luz.
+    static constexpr float kFleeLightCoreFraction = 0.60f;
     static constexpr float kMemoryDecayTime       = 10.0f;  // Segundos até esquecer posição
     static constexpr float kPathRefreshInterval   = 0.30f;  // Segundos entre recálculos de path
     static constexpr float kNavFootRadius         = 48.0f;

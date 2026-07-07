@@ -195,6 +195,25 @@ public:
     bool swapTutArmed = true;
     float abilityTutTimer = 0.0f;   // habilidade do irmãozinho (E)
     bool abilityTutArmed = true;
+    // Tutorial de movimento (WASD): aparece no começo se o jogador ficar parado
+    // sem nunca ter andado.
+    float moveTutTimer = 0.0f;
+    bool moveTutDone = false;        // vira true ao primeiro movimento; não repete
+    float noMoveAccum = 0.0f;
+    // Tutorial de pegar item (E): aparece ao ficar perto de um item sem pegar.
+    float pickupTutTimer = 0.0f;
+    bool pickupTutArmed = true;
+    float pickupNearAccum = 0.0f;
+    // Tutorial de reabastecer (F): só aparece quando o jogador está segurando o
+    // combustível (item selecionado na roda).
+    float refuelTutTimer = 0.0f;
+    bool refuelTutArmed = true;
+    // Tutorial de trocar item na roda (1/3): dispara ao pegar o 1º item novo,
+    // quando a roda passa a ter mais de um item para alternar.
+    float cycleTutTimer = 0.0f;
+    int prevStackCount = -1;
+    // Aviso "luz apagou": quando a fonte de luz chega a zero pela 1ª vez.
+    float lighterEmptyTutTimer = 0.0f;
     static constexpr float kTutorialDisplayDuration = 4.5f;
     static constexpr int   kMaxTutorialShows = 3;
     static constexpr float kSwapTutFarDist = 660.0f;     // dispara o tutorial de troca
