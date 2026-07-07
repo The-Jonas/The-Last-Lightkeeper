@@ -490,17 +490,15 @@ void StopAllGameplay() {
 void PlayMonsterScream() {
     if (gGameplayMuted) return;
     EnsureLoaded();
-    if (gMonsterScreamSound.IsOpen())
-        gMonsterScreamSound.PlayLoopedOnChannel(kChannelMonsterScream);
-        // Obs: se o grito for um one-shot (não loop), use Play() em vez de PlayLoopedOnChannel
-        // e use Mix_PlayChannel(kChannelMonsterScream, ...) direto em Sound::Play
+    if (!Mix_Playing(kChannelMonsterScream) && gMonsterScreamSound.IsOpen())
+        gMonsterScreamSound.Play();  
 }
- 
+
 void PlayMonsterSpot() {
     if (gGameplayMuted) return;
     EnsureLoaded();
-    if (gMonsterSpotSound.IsOpen())
-        gMonsterSpotSound.PlayLoopedOnChannel(kChannelMonsterSpot);
+    if (!Mix_Playing(kChannelMonsterSpot) && gMonsterSpotSound.IsOpen())
+        gMonsterSpotSound.Play();   
 }
  
 void UpdateMonsterFootsteps(float dt, float moveSpeed, float monsterX, float monsterY, float playerX, float playerY) {
@@ -516,8 +514,7 @@ void UpdateMonsterFootsteps(float dt, float moveSpeed, float monsterX, float mon
         SetChannelSpatial(kChannelMonsterSteps, monsterX, monsterY, playerX, playerY);
     } else {
         if (gMonsterStepsActive) {
-            gMonsterStepsSound.Stop();
-            ClearChannelSpatial(kChannelMonsterSteps);
+            Mix_HaltChannel(kChannelMonsterSteps);  // <- para imediatamente
             gMonsterStepsActive = false;
         }
     }
