@@ -18,7 +18,10 @@ constexpr int kChannelCandle   = 2;
 constexpr int kChannelFootstep = 3;
 constexpr int kChannelBox      = 4;
 constexpr int kChannelRadio    = 5;
-//6+ → one-shots livres (Mix_PlayChannel(-1, ...) usa a partir daqui)
+constexpr int kChannelMonsterScream  = 6;  // grito
+constexpr int kChannelMonsterSpot    = 7;  // som de ver o player
+constexpr int kChannelMonsterSteps   = 8;  // passos do monstro
+//9+ → one-shots livres (Mix_PlayChannel(-1, ...) usa a partir daqui)
 
 constexpr const char* kBoxStartPath = "Recursos/audio/SFX/CAIXAS/CAIXA_Madeira.mp3";
 constexpr const char* kBoxStopPath = "Recursos/audio/SFX/CAIXAS/CAIXA_Madeira2.mp3";
@@ -52,6 +55,10 @@ constexpr const char* kRepairPath = "Recursos/audio/SFX/ESCADA/reparando.mp3";
 constexpr const char* kClosetOpenPath  = "Recursos/audio/SFX/ARMARIO/armario_abrindo.mp3";
 constexpr const char* kClosetClosePath = "Recursos/audio/SFX/ARMARIO/armario_fechando.mp3";
 
+constexpr const char* kMonsterScreamPath = "Recursos/audio/SFX/MONSTRO/monstro_grito.wav";
+constexpr const char* kMonsterSpotPath   = "Recursos/audio/SFX/MONSTRO/monstro_ve_player.mp3";
+constexpr const char* kMonsterStepsPath  = "Recursos/audio/SFX/MONSTRO/monstro_passos.mp3";
+
 constexpr int kThunderCount = 4;
 constexpr float kMinFootstepSpeed = 35.0f;
 constexpr float kThunderMinDelay = 18.0f;   
@@ -79,7 +86,11 @@ Sound gCandleBlowPlayerSound;
 Sound gRepairSound;
 Sound gClosetOpenSound;
 Sound gClosetCloseSound;
+Sound gMonsterScreamSound;
+Sound gMonsterSpotSound;
+Sound gMonsterStepsSound;
 
+bool gMonsterStepsActive = false;
 bool gWindLoopActive = false;
 bool gLoaded = false;
 bool gGameplayMuted = false;
@@ -90,6 +101,7 @@ bool gBoxMovingLoopActive = false;
 bool gBoxIsMoving = false;
 bool gFootstepLoopActive = false;
 FootstepSurface gFootstepLoopSurface = FootstepSurface::Stone;
+
 
 bool FileExists(const char* path) {
     std::ifstream f(path);
@@ -125,6 +137,9 @@ void EnsureLoaded() {
     if (FileExists(kCandleBlowPlayerPath)) gCandleBlowPlayerSound.Open(kCandleBlowPlayerPath);
     if (FileExists(kClosetOpenPath))  gClosetOpenSound.Open(kClosetOpenPath);
     if (FileExists(kClosetClosePath)) gClosetCloseSound.Open(kClosetClosePath);
+    if (FileExists(kMonsterScreamPath)) gMonsterScreamSound.Open(kMonsterScreamPath);
+    if (FileExists(kMonsterSpotPath))   gMonsterSpotSound.Open(kMonsterSpotPath);
+    if (FileExists(kMonsterStepsPath))  gMonsterStepsSound.Open(kMonsterStepsPath);
     for (int i = 0; i < kThunderCount; ++i) {
         gThunderSounds[i].Open(kThunderPaths[i]);
     }
@@ -295,6 +310,36 @@ void TriggerThunderStrikeInternal() {
 
 namespace GameSfx {
 
+// ── Spatial audio ─────────────────────────────────────────────────────────
+void SetChannelSpatial(int channel, float srcX, float srcY, float listX, float listY) {
+    float dx   = srcX - listX;
+    float dy   = srcY - listY;
+    float dist = std::sqrt(dx * dx + dy * dy);
+
+    constexpr float kMaxAudibleDist = 800.0f;
+
+    // Volume baseado na distância
+    float volumeRatio = 1.0f - std::min(1.0f, dist / kMaxAudibleDist);
+
+    // Panorâmica baseada no eixo X
+    float panRatio = 0.0f;
+    if (dist > 0.001f) {
+        panRatio = dx / kMaxAudibleDist;
+        panRatio = std::max(-1.0f, std::min(1.0f, panRatio));
+    }
+
+    Uint8 leftVol  = static_cast<Uint8>(255.0f * volumeRatio * (1.0f - std::max(0.0f,  panRatio)));
+    Uint8 rightVol = static_cast<Uint8>(255.0f * volumeRatio * (1.0f + std::min(0.0f, panRatio)));
+
+    Mix_SetPanning(channel, leftVol, rightVol);
+}
+
+void ClearChannelSpatial(int channel) {
+    Mix_SetPanning(channel, 255, 255);
+}
+
+// ─────────────────────────────────────────────────────────
+
 void NotifyLoadingBegin() {
     gGameplayMuted = true;
     StopAllGameplayAudio();
@@ -441,10 +486,56 @@ void StopAllGameplay() {
     StopWindLoop();           // vento
 }
 
+// ── Sons do monstro ───────────────────────────────────────────────────────
+void PlayMonsterScream() {
+    if (gGameplayMuted) return;
+    EnsureLoaded();
+    if (gMonsterScreamSound.IsOpen())
+        gMonsterScreamSound.PlayLoopedOnChannel(kChannelMonsterScream);
+        // Obs: se o grito for um one-shot (não loop), use Play() em vez de PlayLoopedOnChannel
+        // e use Mix_PlayChannel(kChannelMonsterScream, ...) direto em Sound::Play
+}
+ 
+void PlayMonsterSpot() {
+    if (gGameplayMuted) return;
+    EnsureLoaded();
+    if (gMonsterSpotSound.IsOpen())
+        gMonsterSpotSound.PlayLoopedOnChannel(kChannelMonsterSpot);
+}
+ 
+void UpdateMonsterFootsteps(float dt, float moveSpeed, float monsterX, float monsterY, float playerX, float playerY) {
+    (void)dt;
+    if (gGameplayMuted) return;
+    EnsureLoaded();
+
+    if (moveSpeed > 10.0f) {
+        if (!gMonsterStepsActive) {
+            gMonsterStepsSound.PlayLoopedOnChannel(kChannelMonsterSteps);
+            gMonsterStepsActive = true;
+        }
+        SetChannelSpatial(kChannelMonsterSteps, monsterX, monsterY, playerX, playerY);
+    } else {
+        if (gMonsterStepsActive) {
+            gMonsterStepsSound.Stop();
+            ClearChannelSpatial(kChannelMonsterSteps);
+            gMonsterStepsActive = false;
+        }
+    }
+}
+ 
+void StopMonsterFootsteps() {
+    if (gMonsterStepsActive) {
+        gMonsterStepsSound.Stop();
+        ClearChannelSpatial(kChannelMonsterSteps);
+        gMonsterStepsActive = false;
+    }
+}
+
 void PlayCandleLightUp() { PlaySound(gCandleLightUpSound); }
 void PlayCandleBlow()    { PlaySound(gCandleBlowPlayerSound); }
 void PlayRepair() { PlaySound(gRepairSound); }
 void PlayClosetOpen()  { PlaySound(gClosetOpenSound); }
 void PlayClosetClose() { PlaySound(gClosetCloseSound); }
+
 
 } // namespace GameSfx

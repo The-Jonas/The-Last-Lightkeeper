@@ -122,6 +122,12 @@ void Monster::Update(float dt) {
         case MonsterState::SABOTAGE_WINDOW: UpdateSabotageWindow(dt); break;
     }
 
+    {
+    Vec2 myPos = associated.box.Center();
+    Vec2 plPos = Character::player? Character::player->GetAssociated().box.Center(): myPos;
+    GameSfx::UpdateMonsterFootsteps(dt, moveSpeed, myPos.x, myPos.y, plPos.x, plPos.y);
+    }
+
     CheckDamageCollision();
 }
 
@@ -276,10 +282,22 @@ void Monster::TransitionTo(MonsterState next) {
 
         case MonsterState::CHASE:
             moveSpeed = kSpeedChase;
+            if (Character::player) {
+                Vec2 myPos = associated.box.Center();
+                Vec2 plPos = Character::player->GetAssociated().box.Center();
+                GameSfx::PlayMonsterSpot();
+                GameSfx::SetChannelSpatial(7, myPos.x, myPos.y, plPos.x, plPos.y);
+            }
             break;
 
         case MonsterState::HUNT:
             moveSpeed = kSpeedHunt;
+            if (Character::player) {
+                Vec2 myPos = associated.box.Center();
+                Vec2 plPos = Character::player->GetAssociated().box.Center();
+                GameSfx::PlayMonsterScream();
+                GameSfx::SetChannelSpatial(6, myPos.x, myPos.y, plPos.x, plPos.y);
+            }
             break;
 
         case MonsterState::CAMP_CLOSET:
@@ -295,6 +313,7 @@ void Monster::TransitionTo(MonsterState next) {
 
         case MonsterState::FLEE_LIGHT: {
             moveSpeed = kSpeedFlee;  // foge mais rápido do que persegue
+            GameSfx::StopMonsterFootsteps();
 
             StageState* stageFlee = Game::TryGetStageState();
             Vec2  myPos           = associated.box.Center();

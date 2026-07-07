@@ -309,7 +309,7 @@ Game::Game(std::string title) {
         exit(1);
     }
     Mix_AllocateChannels(32);
-    Mix_ReserveChannels(6);
+    Mix_ReserveChannels(9);
     // Canais 0..N-1 não são escolhidos por Mix_PlayChannel(-1): o anel de ondas usa o canal 0 explicitamente
     // (ver StageState). Efeitos continuam em 1+.
     const int masterVolume = (MIX_MAX_VOLUME * masterVolumePercent) / 100;
