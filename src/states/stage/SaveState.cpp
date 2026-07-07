@@ -1205,10 +1205,18 @@ void StageState::UpdateTutorials(float dt) {
             swapTutArmed = true;
         }
 
-        // Fala de medo do irmãozinho ao se afastarem demais. Sem o limite de 3x
-        // do tutorial — o cooldown global de voz já evita repetição.
+        // Ao se afastarem demais, alterna entre o MEDO do irmãozinho e a
+        // REPREENSÃO do irmãozão ("para de ser medroso") — assim as duas falas
+        // de bronca também entram em jogo. Sem o limite de 3x do tutorial — o
+        // cooldown global de voz já evita repetição.
+        static bool sScoldTurn = false;
         if (cond && sFarVoiceArmed) {
-            GameVoice::OnBrothersTooFar();
+            if (sScoldTurn) {
+                GameVoice::OnScoldFear();
+            } else {
+                GameVoice::OnBrothersTooFar();
+            }
+            sScoldTurn = !sScoldTurn;
             sFarVoiceArmed = false;
         }
         if (dist < kSwapTutNearDist) {

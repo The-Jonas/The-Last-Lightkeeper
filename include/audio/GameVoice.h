@@ -16,6 +16,7 @@ void OnItemPickup();         // ocasionalmente comenta ao pegar um item
 void OnBagFull();            // "minha bolsa tá pesada" — bolsa encheu
 void OnDragObject();         // às vezes, ao começar a arrastar um objeto
 void OnActionBlocked();      // "não consigo" — apertou interagir e não pôde agir
+void OnScoldFear();          // repreende o irmãozinho medroso ("para de ser medroso" / "quer que o monstro te coma?")
 
 // Irmãozinho (little brother)
 void OnAskToStay();          // protesta quando mandado ficar parado
