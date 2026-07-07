@@ -89,7 +89,7 @@ private:
     // ── Parâmetros de velocidade por estado ───────────────────────────────────
     static constexpr float kSpeedPatrol      = 85.0f;
     static constexpr float kSpeedInvestigate = 120.0f;
-    static constexpr float kSpeedChase       = 185.0f;  // Mais relentless — persegue com fome
+    static constexpr float kSpeedChase       = 170.0f;
     static constexpr float kSpeedHunt        = 185.0f;  // Mais rápido — ele está furioso
     static constexpr float kSpeedFlee        = 220.0f;  // Foge MAIS RÁPIDO que persegue — realista e deixa o jogador sentir que a luz funciona
  
@@ -113,7 +113,8 @@ private:
     // Dano por toque
     float damageCooldown = 0.0f;
     static constexpr float kDamageCooldownTime = 1.5f;
-    static constexpr float kSanityDamageOnTouch = 50.0f;
+    static constexpr float kSanityDamageDark = 80.0f;  // no escuro — perigoso
+    static constexpr float kSanityDamageLit  = 50.0f;  // na luz — susto
 
     // Propriedades do LURK
     float lurkTimer = 0.0f;
@@ -128,17 +129,14 @@ private:
     void PickNextPatrolPoint();
  
     // ── Limites de visão ──────────────────────────────────────────────────────
-    static constexpr float kSightRadius          = 420.0f;  // Raio máximo de visão na luz
-    static constexpr float kIlluminationThreshold = 0.35f;  // Mínimo de luz para detectar
+    static constexpr float kSightRadius          = 800.0f;  // Raio máximo de visão na luz
+    static constexpr float kIlluminationThreshold = 0.20f;  // Mínimo de luz para detectar
     static constexpr float kFleeThreshold         = 0.70f;  // Iluminação que faz ele recuar
-    // Só foge quando entra no NÚCLEO brilhante da luz (fração do raio). No anel
-    // externo (mais fraco) ele aguenta e ainda avança para "mordiscar" na luz.
-    static constexpr float kFleeLightCoreFraction = 0.60f;
     static constexpr float kMemoryDecayTime       = 10.0f;  // Segundos até esquecer posição
     static constexpr float kPathRefreshInterval   = 0.30f;  // Segundos entre recálculos de path
     static constexpr float kNavFootRadius         = 48.0f;
-    static constexpr float kWindowRadarInterval   = 1.5f;   // Timer separado para janelas 
-    static constexpr float kSightLosRadius        = 18.0f;  // raio fino p/ checar parede na linha de visão (1.6)
+    static constexpr float kWindowRadarInterval   = 10.0f;   // Timer separado para janelas 
+    static constexpr float kSightLosRadius        = 25.0f;  // raio fino p/ checar parede na linha de visão (1.6)
 
     float windowRadarTimer = 0.0f;                          // Timer separado para o radar de janelas (não compartilhado com pathfinding)
 
@@ -146,6 +144,13 @@ private:
     Window* targetWindow = nullptr;
     Window* FindNearbyClosedWindow();
     void UpdateSabotageWindow(float dt);
+
+    // ── Imunidade a luz ────────────────────────────────────────────────
+    float chaseGraceTimer = 0.0f;
+    static constexpr float kChaseGraceDuration = 3.0f;
+    float chaseNoSightTimer = 0.0f;
+    float spotSoundCooldown = 0.0f;
+    static constexpr float kSpotSoundCooldown = 6.0f;
 };
 
 #endif

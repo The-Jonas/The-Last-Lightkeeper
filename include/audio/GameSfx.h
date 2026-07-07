@@ -1,5 +1,5 @@
 #ifndef GAME_SFX_H
-#define GAME_SFX_H
+#define GAME_SFX_H 
 
 enum class FootstepSurface { Stone, Wood, Stairs };
 
@@ -15,6 +15,11 @@ void PlayCandleBlow();      // som de soprar/apagar pelo jogador
 /// vento). Usado na morte/fim de jogo para que nenhum loop continue tocando
 /// depois que o StageState para de atualizar.
 void StopAllGameplay();
+
+// Funções para fazer o áudio ficar direcional
+void SetChannelSpatial(int channel, float srcX, float srcY, float listX, float listY);
+void ClearChannelSpatial(int channel);
+void UpdateMonsterFootsteps(float dt, float moveSpeed, float monsterX, float monsterY, float playerX, float playerY);
 
 void NotifyBoxSlide();
 void MaintainBoxPushLoop();
@@ -36,6 +41,11 @@ void PlayRepair();
 // Armario
 void PlayClosetOpen();
 void PlayClosetClose();
+
+// Monstro
+void PlayMonsterScream();          // grito do monstro
+void PlayMonsterSpot();            // som de quando vê os irmãos
+void StopMonsterFootsteps();
 
 // FUNÇÕES DA JANELA E DO VENTO
 void PlayWindowToggle(bool opening);
