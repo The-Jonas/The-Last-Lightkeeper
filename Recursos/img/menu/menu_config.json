@@ -1,0 +1,28 @@
+{
+  "character": {
+    "centerX": 1700,
+    "bottomY": 1080,
+    "width": 1300,
+    "height": 1250,
+    "shoulderDX": -150,
+    "shoulderDY": -400
+  },
+  "logo": {
+    "x": 200,
+    "y": 60,
+    "width": 1000
+  },
+  "menu": {
+    "x": 400,
+    "startY": 500,
+    "spacing": 80,
+    "fontSize": 46
+  },
+  "arm": {
+    "width": 680,
+    "height": 330,
+    "lanternAlong": 0.89,
+    "lanternPerp": 110
+  },
+  "darkness": 160
+}
