@@ -111,12 +111,12 @@
                          "type":"bool",
                          "value":false
                         }],
-                 "rotation":0,
+                 "rotation":354.136568728787,
                  "type":"Castical",
                  "visible":true,
                  "width":110,
-                 "x":3303,
-                 "y":361
+                 "x":3313.40135538324,
+                 "y":366.100724773402
                 }, 
                 {
                  "gid":2,
@@ -126,7 +126,7 @@
                  "opacity":1,
                  "rotation":0,
                  "type":"Pilar",
-                 "visible":true,
+                 "visible":false,
                  "width":2847,
                  "x":439,
                  "y":1406
