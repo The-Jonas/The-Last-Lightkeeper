@@ -5,9 +5,10 @@
 #include "core/Timer.h"
 #include "audio/Music.h"
 #include "core/Game.h"
+#include "core/InputManager.h"
+#include <array>
 
 class GameObject;
-class InputManager;
 
 class TitleState : public State {
 public:
@@ -17,56 +18,123 @@ public:
     void LoadAssets() override;
     void Update(float dt) override;
     void Render() override;
-
     void Start() override;
     void Pause() override;
     void Resume() override;
-    
-private:
-    enum class VolumeSliderKind { Master, Ambient, Vfx, Voice, Count };
 
+private:
+    // ── Sliders de volume ─────────────────────────────────────────────────────
+    enum class VolumeSliderKind { Master, Ambient, Vfx, Voice, Count };
     struct VolumeSliderUi {
         VolumeSliderKind kind;
         const char* label;
-        int value = 0;
+        int  value    = 0;
         bool dragging = false;
-        SDL_Rect bar{0, 0, 0, 0};
-        SDL_Rect handle{0, 0, 0, 0};
+        SDL_Rect bar{0,0,0,0};
+        SDL_Rect handle{0,0,0,0};
     };
+    VolumeSliderUi sliders[static_cast<int>(VolumeSliderKind::Count)];
+    static constexpr int kSliderW    = 400;
+    static constexpr int kSliderH    = 14;
+    static constexpr int kHandleW    = 22;
+    static constexpr int kSliderRowH = 60;
+    void InitSliders();
+    void RecalcSliders(int panelX, int panelY, int panelW);
+    void HandleSliderInput(int mx, int my, InputManager& input);
+    void ApplySliderValue(VolumeSliderKind kind, int percent);
+    void RenderSliders(SDL_Renderer* r, int panelX, int panelY);
+    VolumeSliderUi* FindSliderAtPoint(int mx, int my);
 
+    // ── Estado do menu ────────────────────────────────────────────────────────
     Music music;
     Timer fadeTimer;
-    float fadeAlpha = 0.0f;
-    static constexpr float kFadeDuration = 3.0f;
+    float fadeAlpha  = 0.0f;
     float pulseTimer = 0.0f;
-
-    GameObject* titleBackground = nullptr;
-    GameObject* titleText = nullptr;
-    GameObject* continueMenuText = nullptr;
-    GameObject* newGameMenuText = nullptr;
+    static constexpr float kFadeDuration = 3.0f;
 
     bool hasContinueSave = false;
-    int menuSelection = 0;
+    int  menuSelection   = 0;
+    // 0=Novo Jogo  1=Continuar  2=Configuracoes  3=Creditos  4=Sair
 
-    void LayoutMenuOptions();
-    void RenderSelectionIndicator(SDL_Renderer* renderer);
     void StartNewGame();
     void StartContinue();
     void ActivateMenuSelection();
 
-    VolumeSliderUi sliders[static_cast<int>(VolumeSliderKind::Count)];
+    // ── Assets no objectArray ─────────────────────────────────────────────────
+    GameObject* bg         = nullptr;
+    GameObject* logoGO     = nullptr;
+    GameObject* charBodyGO = nullptr;
 
-    static constexpr int kSliderW = 260;
-    static constexpr int kSliderH = 12;
-    static constexpr int kHandleW = 20;
-    static constexpr int kSliderRowH = 44;
+    // ── Assets fora do objectArray ────────────────────────────────────────────
+    GameObject* armGO        = nullptr;
+    GameObject* menuTexts[5] = {};  // 5 opcoes
 
-    void InitSliders();
-    void RecalcSliders();
-    void HandleSliderInput(int mx, int my, InputManager& input);
-    void ApplySliderValue(VolumeSliderKind kind, int percent);
-    void RenderSliders(SDL_Renderer* renderer);
-    VolumeSliderUi* FindSliderAtPoint(int mx, int my);
+    // ── Animacao do personagem ────────────────────────────────────────────────
+    static constexpr int   kCharFrames       = 5;
+    static constexpr float kCharFrameSeconds = 0.18f;
+    float charAnimTimer  = 0.0f;
+    int   charFrameIndex = 0;
+
+    // ── Braco / lanterna ─────────────────────────────────────────────────────
+    float armAngle       = 0.0f;
+    float armAngleTarget = 0.0f;
+    float shoulderX      = 0.0f;
+    float shoulderY      = 0.0f;
+
+    struct OptionPos { float cx = 0; float cy = 0; };
+    std::array<OptionPos, 5> optionPositions;
+
+    // ── Painel de configuracoes ───────────────────────────────────────────────
+    bool configOpen         = false;
+    int  configTab          = 0;   // 0=Volume  1=Controles
+    bool awaitingRebind     = false;
+    GameAction rebindAction = GameAction::MoveUp;
+    int  controlsSelection  = 0;
+    static constexpr int kControlsRowCount = InputManager::ActionCount + 2;
+    SDL_Rect controlsRowRects[InputManager::ActionCount + 2]{};
+    SDL_Rect configCloseBtn{};
+    SDL_Rect configTabVolume{};
+    SDL_Rect configTabControles{};
+
+    void OpenConfig();
+    void UpdateConfig(InputManager& input);
+    void RenderConfig(SDL_Renderer* r);
+    void RenderConfigVolume(SDL_Renderer* r, int px, int py, int pw, int ph);
+    void RenderConfigControles(SDL_Renderer* r, int px, int py, int pw, int ph);
+
+    // ── Helpers de layout ────────────────────────────────────────────────────
+    void LoadConfig();
+    void LayoutAll();
+    void UpdateCharAnim(float dt);
+    void UpdateArm(float dt);
+    void RenderLanternCone(SDL_Renderer* r);
+    void RenderArm(SDL_Renderer* r);
+    void RenderMenuTexts(SDL_Renderer* r);
+
+    // ── Layout carregado do JSON ──────────────────────────────────────────────
+    float kCharW       = 720.0f;
+    float kCharH       = 694.0f;
+    float kCharCX      = 1200.0f;
+    float kCharBottomY = 1080.0f;
+    float kShoulderDX  = -235.0f;
+    float kShoulderDY  = -390.0f;
+
+    float kLogoW = 860.0f;
+    float kLogoH = 860.0f * (809.0f / 2444.0f);
+    float kLogoX = 100.0f;
+    float kLogoY =  60.0f;
+
+    float kMenuX       = 350.0f;
+    float kMenuStartY  = 550.0f;
+    float kMenuSpacing =  80.0f;
+    int   kMenuFontSize = 46;
+
+    float kArmW         = 420.0f;
+    float kArmH         = 261.0f;
+    float kLanternAlong = 0.72f;
+    float kLanternPerp  = -18.0f;
+
+    Uint8 kDarknessAlpha = 185;
 };
 
 #endif

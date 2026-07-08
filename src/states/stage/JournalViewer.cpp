@@ -119,8 +119,13 @@ Jornal* StageState::FindClosestReachableJornal() const {
 }
 
 void StageState::OpenJournalViewer(Jornal* jornal) {
-    if (!jornal) {
-        return;
+    if (!jornal) return;
+
+    // ── Som opcional ao abrir ─────────────────────────────────────────────
+    if (!jornal->GetSoundPath().empty()) {
+        static Sound jornalSound;
+        jornalSound.Open(jornal->GetSoundPath());
+        jornalSound.Play();
     }
 
     const GameObject& obj = jornal->GetAssociated();
@@ -133,19 +138,31 @@ void StageState::OpenJournalViewer(Jornal* jornal) {
         obj.box.h * zoom,
     };
 
-    journalAnimTimer = 0.0f;
-    journalCloseTimer = 0.0f;
+    journalAnimTimer   = 0.0f;
+    journalCloseTimer  = 0.0f;
     journalViewerClosing = false;
-    journalViewerOpen = true;
+    journalViewerOpen    = true;
 
     const int winW = Game::GetInstance().GetWindowsWidth();
     const int winH = Game::GetInstance().GetWindowsHeight();
-    int texW = 1;
-    int texH = 1;
+    int texW = 1, texH = 1;
     if (auto tex = Resources::GetImage(journalViewImagePath)) {
         SDL_QueryTexture(tex.get(), nullptr, nullptr, &texW, &texH);
     }
+
+    // Calcula o rect base (cabe na tela) e aplica o zoom do item
     journalTargetScreenRect = FitTextureInWindow(winW, winH, texW, texH);
+
+    // ── Zoom opcional (1.0 = sem zoom, 1.5 = 50% maior, etc.) ────────────
+    float zf = jornal->GetZoomFactor();
+    if (zf != 1.0f) {
+        float cx = journalTargetScreenRect.x + journalTargetScreenRect.w * 0.5f;
+        float cy = journalTargetScreenRect.y + journalTargetScreenRect.h * 0.5f;
+        journalTargetScreenRect.w *= zf;
+        journalTargetScreenRect.h *= zf;
+        journalTargetScreenRect.x  = cx - journalTargetScreenRect.w * 0.5f;
+        journalTargetScreenRect.y  = cy - journalTargetScreenRect.h * 0.5f;
+    }
 }
 
 void StageState::TryOpenJournalOnKeyPress() {

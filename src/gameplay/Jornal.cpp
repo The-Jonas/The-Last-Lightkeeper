@@ -2,8 +2,13 @@
 #include "engine/GameObject.h"
 #include "engine/SpriteRenderer.h"
 
-Jornal::Jornal(GameObject& associated, std::string imagePath, int heightLevel)
-    : Component(associated), imagePath(std::move(imagePath)), heightLevel(heightLevel) {}
+Jornal::Jornal(GameObject& associated, std::string imagePath, int heightLevel,
+               std::string soundPath, float zoomFactor)
+    : Component(associated),
+      imagePath(std::move(imagePath)),
+      soundPath(std::move(soundPath)),
+      zoomFactor(zoomFactor),
+      heightLevel(heightLevel) {}
 
 Vec2 Jornal::GetCenter() const {
     return associated.box.Center();
@@ -20,17 +25,18 @@ void Jornal::Render() {}
 Jornal* Jornal::Spawn(float worldX, float worldY,
                       const std::string& spritePath,
                       const std::string& imagePath,
-                      int height, std::vector<Jornal*>& outList) {
+                      int height,
+                      std::vector<Jornal*>& outList,
+                      const std::string& soundPath,
+                      float zoomFactor) {
     GameObject* obj = new GameObject();
     obj->box.x = worldX;
     obj->box.y = worldY;
-    obj->z = 2;
+    obj->z     = 2;
     obj->sub_z = -1;
-
-    obj->AddComponent(new SpriteRenderer(*obj, spritePath)); // <- sprite decorativo
-    Jornal* jornal = new Jornal(*obj, imagePath, height);    // <- conteúdo que abre
+    obj->AddComponent(new SpriteRenderer(*obj, spritePath));
+    Jornal* jornal = new Jornal(*obj, imagePath, height, soundPath, zoomFactor);
     obj->AddComponent(jornal);
-
     outList.push_back(jornal);
     return jornal;
 }

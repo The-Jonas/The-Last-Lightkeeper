@@ -269,36 +269,44 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
     else if (spawn.type == "JornalSpawn") {
     
         // ── SPRITE DECORATIVO (asset físico no chão) ──────────────────────────
-        // Property no Tiled: "spriteName" (ex: "papel_amassado")
-        // Extensão sempre .png, pasta Recursos/img/items/jornais/
         std::string spriteName = "old_letter";
         if (spawn.properties.count("spriteName"))
             spriteName = spawn.properties.at("spriteName").get<std::string>();
         std::string spritePath = "Recursos/img/items/jornais/" + spriteName + ".png";
     
         // ── DOCUMENTO (imagem que abre ao interagir) ───────────────────────────
-        // Property no Tiled: "imageName" (ex: "carta_do_pai")
-        // Extensão sempre .jpg, pasta Recursos/img/documentos/
         std::string imageName = "old_letter";
         if (spawn.properties.count("imageName"))
             imageName = spawn.properties.at("imageName").get<std::string>();
         std::string imagePath = "Recursos/img/documentos/" + imageName + ".jpg";
+
+        // ── SOM OPCIONAL ao interagir ──────────────────────────────────────────
+        std::string soundPath = "";
+        if (spawn.properties.count("soundName")) {
+            std::string soundName = spawn.properties.at("soundName").get<std::string>();
+            soundPath = "Recursos/audio/SFX/INTERACTABLES/" + soundName + ".mp3";
+        }
     
-        // ── OUTROS PARÂMETROS ──────────────────────────────────────────────────
+        // ── ZOOM ao abrir ──────────────────────────────────────────────────────
+        float zoomFactor = 1.0f;
+        if (spawn.properties.count("zoomFactor"))
+            zoomFactor = spawn.properties.at("zoomFactor").get<float>();
+
         int heightLevel = 0;
         if (spawn.properties.count("heightLevel"))
             heightLevel = spawn.properties.at("heightLevel").get<int>();
-    
+
         float depthOffset = 0.0f;
         if (spawn.properties.count("depthOffset"))
             depthOffset = spawn.properties.at("depthOffset").get<float>();
-    
-        // Spawn: (spritePath = visual no chão, imagePath = conteúdo ao abrir)
-        Jornal* jornal = Jornal::Spawn(spawn.x, spawn.y, spritePath, imagePath, heightLevel, stage.jornals);
+
+        Jornal* jornal = Jornal::Spawn(spawn.x, spawn.y, spritePath, imagePath,
+                                       heightLevel, stage.jornals,
+                                       soundPath, zoomFactor);
         if (jornal) {
             GameObject& jornalObj = jornal->GetAssociated();
-            jornalObj.tiledId = spawn.tiledId;
-            jornalObj.z = spawn.z;
+            jornalObj.tiledId     = spawn.tiledId;
+            jornalObj.z           = spawn.z;
             jornalObj.depthOffset = depthOffset;
             ApplyTiledBox(&jornalObj, spawn);
             ApplyTiledFlip(&jornalObj, spawn);
