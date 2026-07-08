@@ -428,7 +428,7 @@ void TitleState::RenderConfig(SDL_Renderer* r) {
 
     // Titulo
     if(titleFont)
-        DrawText(r,titleFont.get(),"Configuracoes",px,py+18,{220,200,140,255},1,pw);
+        DrawText(r,titleFont.get(),"Configurações",px,py+18,{220,200,140,255},1,pw);
 
     // Botao X — canto superior INTERNO do painel
     configCloseBtn={px+pw-36,py+8,28,28};
