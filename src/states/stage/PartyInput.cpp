@@ -62,6 +62,9 @@ void StageState::SwapControlledCharacter() {
 void StageState::HandlePartyInput() {
     InputManager& input = InputManager::GetInstance();
 
+    // Trocar de irmão É permitido enquanto escondido (ex.: assumir o irmãozinho
+    // para usar o poder de visão). O que fica restrito ao irmãozão é apenas
+    // ENTRAR/SAIR do esconderijo (ver Closet.cpp).
     if (input.ActionPress(GameAction::SwapBrother)) {
         SwapControlledCharacter();
     }
@@ -125,43 +128,66 @@ void StageState::IssueFollowCommand(Character* follower, GameObject* followerObj
         return;
     }
  
+    // Ponto onde o seguidor quer ficar: `preferredDistance` atrás do líder.
     const float preferredDistance = 68.0f;
-    const float overlapDistance = 40.0f;
-    const float followStartDistance = 82.0f;
-    const float catchupDistance = 420.0f;
- 
+    const float catchupDistance   = 420.0f;
+
+    // Histerese de chegada, medida em distância até o PONTO-ALVO (não até o
+    // líder): ao encostar em holdRadius o seguidor PARA e descansa; só volta a
+    // andar quando o alvo se afasta além de resumeRadius (> holdRadius, para não
+    // ligar/desligar na borda). Antes o alvo (68) caía DENTRO da zona-morta de
+    // "não comandar" (82), então o seguidor nunca convergia e ficava oscilando
+    // em passinhos em volta dela mesmo com o líder parado.
+    const float holdRadius    = 18.0f;
+    const float resumeRadius  = 46.0f;
+    // Suavização de chegada: a velocidade cai proporcionalmente à distância até
+    // o ponto-alvo (→0 perto do hold), para o seguidor não ultrapassar com a
+    // inércia (inclusive o catch-up 1.55x) e quicar para longe/perto.
+    const float arrivalRadius = 90.0f;
+
     Vec2 leaderCenter = leaderObject->box.Center();
     Vec2 followerCenter = followerObject->box.Center();
     Vec2 toLeader = leaderCenter - followerCenter;
     float distance = toLeader.Magnitude();
- 
+
     follower->SetSpeedMultiplier(1.0f);
-    if (distance < overlapDistance) {
-        if (distance > 0.01f) {
-            Vec2 pushDir = (followerCenter - leaderCenter).Normalized();
-            Character::Command moveAway(Character::Command::MOVE, followerCenter.x + pushDir.x, followerCenter.y + pushDir.y);
-            follower->Issue(moveAway);
-        }
+
+    auto rest = [&]() {
+        // Descansa: sem comando este frame → o Character desacelera até parar.
+        companionFollowPathWorld.clear();
+        cachedCompanionPath.clear();
+        companionPathIndex = 0;
+    };
+
+    // Praticamente em cima do líder: direção indefinida — apenas descansa.
+    if (distance < 0.01f) {
+        companionHolding = true;
+        rest();
         return;
     }
- 
-    if (distance < followStartDistance) {
-        return;
-    }
- 
+
     Vec2 dir = toLeader.Normalized();
     Vec2 targetPos = leaderCenter - (dir * preferredDistance);
+    float distToTarget = (targetPos - followerCenter).Magnitude();
 
-    // 1.1 — easing de chegada: corre quando longe (catch-up), desacelera ao se
-    // aproximar (em vez de manter velocidade cheia e ultrapassar/oscilar).
-    const float arrivalEaseDist = 210.0f;
-    float speedMul = 1.0f;
+    if (companionHolding) {
+        if (distToTarget < resumeRadius) {   // ainda perto o bastante → segue parado
+            rest();
+            return;
+        }
+        companionHolding = false;            // o líder se afastou → volta a seguir
+    } else if (distToTarget < holdRadius) {  // chegou ao ponto → para e descansa
+        companionHolding = true;
+        rest();
+        return;
+    }
+
+    // Velocidade com suavização de chegada baseada na distância até o alvo.
+    float speedMul;
     if (allowCatchup && distance > catchupDistance) {
-        speedMul = 1.55f;
-    } else if (distance < arrivalEaseDist) {
-        float t = (distance - followStartDistance) / (arrivalEaseDist - followStartDistance);
-        t = std::clamp(t, 0.0f, 1.0f);
-        speedMul = 0.45f + 0.55f * t;   // ~0.45 perto do deadband → 1.0 longe
+        speedMul = 1.55f;                                        // longe: corre pra alcançar
+    } else {
+        speedMul = std::clamp(distToTarget / arrivalRadius, 0.0f, 1.0f);
     }
     follower->SetSpeedMultiplier(speedMul);
 
@@ -227,6 +253,7 @@ void StageState::UpdateCompanionBehavior() {
     }
 
     companionFollowPathWorld.clear();
+    companionHolding = false;                        // sai do modo seguir → reavalia ao voltar
     companionCharacter->SetSpeedMultiplier(1.0f);
 }
 

@@ -21,7 +21,7 @@
   ],
   "navWorld": { "w": 4358, "h": 3276 },
   "navTilePx": 64,
-  "startingFlashlightDurability": 100,
+  "startingFlashlightDurability": 20,
   "startingFlashlight": {
     "name": "Flashlight",
     "spritePath": "Recursos/img/items/Isqueiro.png",
@@ -49,11 +49,11 @@
     },
     {
       "name": "Fuel",
-      "spritePath": "Recursos/img/items/lighter_fuel.png",
-      "maxDurability": 250,
+      "spritePath": "Recursos/img/items/combustivel.png",
+      "maxDurability": 100,
       "durabilityDecreases": false,
       "sortOrder": 3,
-      "properties": [{ "prop": "FUEL", "value": 250.0}]
+      "properties": [{ "prop": "FUEL", "value": 100.0}]
     },
     {
       "name": "Lamp",

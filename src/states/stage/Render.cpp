@@ -26,6 +26,7 @@
 #include "gameplay/StairTrigger.h"
 #include "core/Resources.h"
 #include "audio/GameSfx.h"
+#include "audio/GameVoice.h"
 #include "gameplay/Window.h"
 #include <iostream>
 #include <fstream>
@@ -50,6 +51,12 @@ void StageState::Render(){
     SDL_Renderer* renderer = Game::GetInstance().GetRenderer();
     int winW = Game::GetInstance().GetWindowsWidth();
     int winH = Game::GetInstance().GetWindowsHeight();
+
+    // Já em transição com o quadro congelado: desenha só o efeito zoom-blur.
+    if (sceneTransitionActive && sceneTransitionFrame) {
+        RenderSceneTransition(renderer);
+        return;
+    }
 
     // Redireciona todos os desenhos a partir de agora para a nossa textura!
     SDL_SetRenderTarget(renderer, renderTarget);
@@ -178,9 +185,33 @@ void StageState::Render(){
             bigMaxContact = std::max(bigMaxContact, bigContact);
             smallMaxContact = std::max(smallMaxContact, smallContact);
 
-            // Captura o nível real de luz batendo no sprite
-            bigMaxTouch = std::max(bigMaxTouch, touchBig);
-            smallMaxTouch = std::max(smallMaxTouch, touchSmall);
+            // ── Iluminação para a SANIDADE ────────────────────────────────
+            // O `touch` acima (medido só no PÉ, com raio de sombra reduzido) é
+            // ótimo para as sombras, mas cruel para a sanidade: o jogador podia
+            // estar visivelmente DENTRO do círculo de luz do castiçal e mesmo
+            // assim tomar dano "no escuro". Aqui medimos de forma generosa e
+            // coerente com o brilho VISÍVEL: pegamos o ponto do CORPO mais perto
+            // da luz (pé ou centro) e um raio casado com o falloff visível,
+            // compensando o zoom da câmera (o `touch` de sombra não compensa e
+            // por isso encolhia a área "iluminada" quando a câmera dava zoom).
+            constexpr float kSanityLitRadiusFrac = 1.25f;
+            auto sanityIllum = [&](GameObject* obj) -> float {
+                if (!obj) return 0.0f;
+                const Rect& bx = obj->box;
+                const float z = Camera::GetZoom();
+                const Vec2 footPt((bx.x + 0.5f * bx.w - Camera::pos.x) * z,
+                                  (bx.y + bx.h - Camera::pos.y) * z);
+                const Vec2 midPt((bx.x + 0.5f * bx.w - Camera::pos.x) * z,
+                                 (bx.y + 0.5f * bx.h - Camera::pos.y) * z);
+                const float d = std::min(footPt.Distance(lightScreen), midPt.Distance(lightScreen));
+                const float litRadius = std::max(8.0f, params.falloffRadiusPx) * z * kSanityLitRadiusFrac;
+                return Clamp01(1.0f - d / std::max(1.0f, litRadius));
+            };
+
+            // Captura o nível real de luz batendo no sprite (para sombras) e a
+            // iluminação generosa (para a sanidade).
+            bigMaxTouch = std::max(bigMaxTouch, std::max(touchBig, sanityIllum(bigCharacterObject)));
+            smallMaxTouch = std::max(smallMaxTouch, std::max(touchSmall, sanityIllum(smallCharacterObject)));
 
             if (touchBig > 0.0f) {
                 const float shadowLengthPx = params.shadowMaxLengthPx * distBig;
@@ -517,8 +548,10 @@ void StageState::Render(){
     // Flash vermelho de dano (toque do monstro) — decai com damageFlashTimer.
     if (damageFlashTimer > 0.0f) {
         const float t = damageFlashTimer / kDamageFlashDuration;
+        // Acessibilidade: atenua o clarão de dano quando "Reduzir flashes" está ligado.
+        const float flashMul = Game::reduceFlashing ? 0.35f : 1.0f;
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-        const Uint8 flashAlpha = static_cast<Uint8>(std::min(255.0f, 150.0f * t));
+        const Uint8 flashAlpha = static_cast<Uint8>(std::min(255.0f, 150.0f * t * flashMul));
         SDL_SetRenderDrawColor(renderer, 150, 10, 10, flashAlpha);
         const SDL_Rect dmgRect{0, 0, winW, winH};
         SDL_RenderFillRect(renderer, &dmgRect);
@@ -528,8 +561,10 @@ void StageState::Render(){
 
     const float thunderFlash = GameSfx::GetThunderFlashStrength();
     if (thunderFlash > 0.01f) {
+        // Acessibilidade: o clarão do trovão é o mais forte (aditivo) — reduz bastante.
+        const float thunderMul = Game::reduceFlashing ? 0.25f : 1.0f;
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
-        const Uint8 flashAlpha = static_cast<Uint8>(std::min(255.0f, 230.0f * thunderFlash));
+        const Uint8 flashAlpha = static_cast<Uint8>(std::min(255.0f, 230.0f * thunderFlash * thunderMul));
         SDL_SetRenderDrawColor(renderer, 205, 215, 255, flashAlpha);
         const SDL_Rect flashRect{0, 0, winW, winH};
         SDL_RenderFillRect(renderer, &flashRect);
@@ -542,7 +577,9 @@ void StageState::Render(){
         SpriteRenderer* overlaySprite = sanityOverlayObj->GetComponent<SpriteRenderer>();
 
         if (overlaySprite && sanityOverlaySmoothedIntensity > 0.001f) {
-            const float offsetPx = kChromaticAberrationMaxOffsetPx * sanityOverlaySmoothedIntensity;
+            // Acessibilidade: reduz a aberração cromática (separação RGB enjoativa).
+            const float aberrationMul = Game::reduceFlashing ? 0.3f : 1.0f;
+            const float offsetPx = kChromaticAberrationMaxOffsetPx * sanityOverlaySmoothedIntensity * aberrationMul;
             const Rect baseBox = sanityOverlayObj->box;
             const Uint8 baseAlpha = static_cast<Uint8>(std::min(255.0f, 255.0f * sanityOverlaySmoothedIntensity));
 
@@ -828,6 +865,7 @@ void StageState::Render(){
 
     RenderInteractionPrompt(renderer);
     RenderTutorials(renderer);
+    RenderVoiceSubtitle(renderer);
     RenderLevelTitleBanner(renderer);
     RenderPauseMenu(renderer);
     RenderSettingsPanel(renderer);
@@ -835,6 +873,89 @@ void StageState::Render(){
     RenderQuitConfirmModal(renderer);
     RenderJournalViewer(renderer);
     RenderSaveToast(renderer);
+
+    // Status dos toggles de debug (canto superior direito) — verde=ON, cinza=OFF.
+    if (Game::debugMode) {
+        auto dfont = Resources::GetFont("Recursos/font/times.ttf", 18);
+        if (dfont) {
+            struct DbgLine { std::string text; bool on; };
+            const DbgLine dls[] = {
+                {std::string("[I] Invisivel p/ monstro: ") + (debugMonsterBlind ? "ON" : "OFF"), debugMonsterBlind},
+                {std::string("[G] Camera livre: ") + (debugFreeCam ? "ON" : "OFF"), debugFreeCam},
+            };
+            int yy = 8;
+            for (const auto& dl : dls) {
+                SDL_Color col = dl.on ? SDL_Color{80, 255, 80, 255} : SDL_Color{170, 170, 170, 220};
+                SDL_Surface* sf = TTF_RenderUTF8_Blended(dfont.get(), dl.text.c_str(), col);
+                if (!sf) continue;
+                SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, sf);
+                const int tw = sf->w, th = sf->h;
+                SDL_FreeSurface(sf);
+                if (tex) {
+                    SDL_Rect dst{winW - tw - 10, yy, tw, th};
+                    SDL_RenderCopy(renderer, tex, nullptr, &dst);
+                    SDL_DestroyTexture(tex);
+                    yy += th + 4;
+                }
+            }
+        }
+    }
+
+    // RenderFinalEscape(renderer);   // ANTIGO: clarões da luz do farol (DESATIVADO)
+
+    // Se a transição acabou de começar, congela ESTE quadro (já composto) para o
+    // efeito zoom-blur dos frames seguintes.
+    if (sceneTransitionActive && !sceneTransitionFrame) {
+        CaptureSceneFrame(renderer);
+    }
+}
+
+void StageState::RenderVoiceSubtitle(SDL_Renderer* renderer) {
+    if (!renderer) {
+        return;
+    }
+    std::string caption;
+    if (!GameVoice::GetActiveSubtitle(caption)) {
+        return;   // ninguém falando agora
+    }
+
+    const int winW = Game::GetInstance().GetWindowsWidth();
+    const int winH = Game::GetInstance().GetWindowsHeight();
+
+    auto font = Resources::GetFont("Recursos/font/times.ttf", 26);
+    if (!font) {
+        return;
+    }
+    SDL_Color col{235, 232, 220, 255};
+    const Uint32 wrap = static_cast<Uint32>(winW * 0.7f);
+    SDL_Surface* sf = TTF_RenderUTF8_Blended_Wrapped(font.get(), caption.c_str(), col, wrap);
+    if (!sf) {
+        return;
+    }
+    SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, sf);
+    const int tw = sf->w, th = sf->h;
+    SDL_FreeSurface(sf);
+    if (!tex) {
+        return;
+    }
+
+    const int pad = 14;
+    const int boxW = tw + pad * 2;
+    const int boxH = th + pad * 2;
+    const int boxX = (winW - boxW) / 2;
+    const int boxY = winH - boxH - 48;   // barra inferior, acima da borda
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 150);   // fundo semitransparente p/ legibilidade
+    SDL_Rect bg{boxX, boxY, boxW, boxH};
+    SDL_RenderFillRect(renderer, &bg);
+
+    SDL_Rect dst{boxX + pad, boxY + pad, tw, th};
+    SDL_RenderCopy(renderer, tex, nullptr, &dst);
+    SDL_DestroyTexture(tex);
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
 }
 
 void StageState::RenderGameplayCollisionDebug(SDL_Renderer* renderer) const {

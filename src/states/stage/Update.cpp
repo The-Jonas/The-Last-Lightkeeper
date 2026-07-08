@@ -25,6 +25,8 @@
 #include "ui/FadeEffect.h"
 #include "gameplay/Repairable.h"
 #include "gameplay/StairTrigger.h"
+#include "gameplay/Window.h"
+#include "gameplay/Candlestick.h"
 #include "core/Resources.h"
 #include "audio/GameSfx.h"
 #include "audio/GameVoice.h"
@@ -84,6 +86,24 @@ void StageState::Update(float dt){
     }
 
     InputManager& input = InputManager::GetInstance();
+
+    // Transição de cena zoom-blur (todas as escadas): congela o gameplay e só
+    // avança o efeito até empurrar o próximo estado (andar seguinte ou EndState).
+    if (sceneTransitionActive) {
+        if (input.QuitRequested()) {
+            quitRequested = true;
+        }
+        UpdateSceneTransition(dt);
+        return;
+    }
+    // --- ANTIGO: sequência final de relâmpagos (DESATIVADA — ver BeginLevelTransition):
+    // if (finalEscapeActive) {
+    //     if (input.QuitRequested()) {
+    //         quitRequested = true;
+    //     }
+    //     UpdateFinalEscape(dt);
+    //     return;
+    // }
 
     if (oceanWavesChunk) {
         if (ambientResumeDelay > 0.0f) {
@@ -158,6 +178,27 @@ void StageState::Update(float dt){
         }
     }
 
+    // Showcase inicial da luz: acende a lanterna sozinha logo após o nível abrir.
+    if (autoLightShowcasePending) {
+        autoLightShowcaseTimer -= dt;
+        if (autoLightShowcaseTimer <= 0.0f) {
+            autoLightShowcasePending = false;
+            // Só acende à força se a luz ainda NÃO estiver acesa — o jogador pode
+            // tê-la acendido por conta própria nesses primeiros segundos.
+            if (!inventory.IsUsableLightActive()) {
+                const bool isLighter = inventory.IsActiveItemLighter();
+                if (inventory.TryTurnLightOn()) {
+                    if (bigCharacter) {
+                        bigCharacter->NotifyInventoryLightChanged();
+                    }
+                    if (isLighter) {
+                        GameSfx::PlayLighterToggle(true);
+                    }
+                }
+            }
+        }
+    }
+
     // ESC -> cancela oleo primed; fecha o painel de config; senão alterna o menu.
     if (input.KeyPress(ESCAPE_KEY)) {
         if (inventory.IsOilPrimed()) {
@@ -210,10 +251,21 @@ void StageState::Update(float dt){
         if (input.KeyPress(CURSOR_PREVIEW_LIGHT_TOGGLE_KEY)) {
             cursorPreviewLightEnabled = !cursorPreviewLightEnabled;
         }
+        if (input.KeyPress(MONSTER_BLIND_TOGGLE_KEY)) {
+            debugMonsterBlind = !debugMonsterBlind;   // invisível para o monstro
+        }
+        if (input.KeyPress(FREE_CAMERA_TOGGLE_KEY)) {
+            debugFreeCam = !debugFreeCam;             // câmera livre com o mouse
+        }
 
         if (input.KeyPress(CREATE_LIGHT_KEY) &&
             (lightMaskShape == LightMaskShape::Circle || lightMaskShape == LightMaskShape::Torch)) {
             CreateLightAtCursor();
+        }
+
+        // Toca uma fala aleatória do irmão atualmente controlado.
+        if (input.KeyPress(VOICE_TEST_KEY)) {
+            GameVoice::DebugPlayRandomForControlled(controlledCharacter == bigCharacter);
         }
     }
 
@@ -243,6 +295,8 @@ void StageState::Update(float dt){
     reachableRepairable = nullptr;
     UpdateArray(dt);                                                                    // Percorre o vetor de GameObjects chamando o Update de cada um
 
+    UpdateWindowLockdown(dt);   // todas as janelas abertas → apaga/mantém apagadas as velas
+
     reachablePickup = FindClosestReachableItem();
 
     if (inventory.IsUsableLightActive() && (!lightTweakPanel || lightTweakPanel->durabilityEnabled)) {
@@ -260,7 +314,21 @@ void StageState::Update(float dt){
     }
 
     ApplyCoupledPushMovement(prevBigPos);
-    Camera::Update(dt);                                                                 // Atualizando a camera cada iteração do gameloop
+    if (Game::debugMode && debugFreeCam) {
+        // Câmera livre (debug): NÃO segue o jogador — vagueia conforme o mouse.
+        // Mouse no centro = parado; perto das bordas = pan rápido naquela direção.
+        const int winW = Game::GetInstance().GetWindowsWidth();
+        const int winH = Game::GetInstance().GetWindowsHeight();
+        const float halfW = std::max(1, winW) * 0.5f;
+        const float halfH = std::max(1, winH) * 0.5f;
+        const float nx = (input.GetMouseX() - halfW) / halfW;   // -1..1
+        const float ny = (input.GetMouseY() - halfH) / halfH;
+        constexpr float kFreeCamPanSpeed = 1200.0f;             // px/s nas bordas
+        Camera::pos.x += nx * kFreeCamPanSpeed * dt;
+        Camera::pos.y += ny * kFreeCamPanSpeed * dt;
+    } else {
+        Camera::Update(dt);                                                             // Atualizando a camera cada iteração do gameloop
+    }
 
 
 
@@ -503,6 +571,16 @@ void StageState::Update(float dt){
         Camera::SetVertigo(sanityOverlaySmoothedIntensity);
     }
 
+    // Batimento cardíaco: mais alto conforme a sanidade cai (feedback de perigo).
+    {
+        const float lowest = std::min(
+            Character::player ? Character::player->sanity : 100.0f,
+            Character::littleBrother ? Character::littleBrother->sanity : 100.0f);
+        constexpr float kHeartbeatStart = 60.0f;   // começa a bater abaixo de 60% de sanidade
+        const float hb = std::max(0.0f, (kHeartbeatStart - lowest) / kHeartbeatStart);
+        GameSfx::UpdateHeartbeat(std::min(1.0f, hb));
+    }
+
     // VERIFICAÇÃO DE FIM DE JOGO
 
     const bool sanityDefeat =
@@ -523,5 +601,42 @@ void StageState::Update(float dt){
 
         popRequested = true;
         Game::GetInstance().Push(new EndState());
+    }
+}
+
+// True se há ao menos uma janela e todas estão abertas (o monstro dominou o andar).
+bool StageState::AreAllWindowsOpen() const {
+    int total = 0;
+    int open = 0;
+    for (const auto& go : objectArray) {
+        if (!go) continue;
+        Window* w = go->GetComponent<Window>();
+        if (!w) continue;
+        ++total;
+        const Window::WindowState s = w->GetState();
+        if (s == Window::WindowState::OPEN || s == Window::WindowState::OPENING) {
+            ++open;
+        }
+    }
+    return total > 0 && open == total;
+}
+
+// Liga/desliga o "trancamento" das velas conforme todas as janelas abrem/fecham.
+// Na transição para trancado, apaga TODAS as velas de imediato (som de sopro).
+void StageState::UpdateWindowLockdown(float /*dt*/) {
+    const bool allOpen = AreAllWindowsOpen();
+    if (allOpen == windowLockdownActive) {
+        return;
+    }
+    windowLockdownActive = allOpen;
+
+    for (const auto& go : objectArray) {
+        if (!go) continue;
+        if (Candlestick* c = go->GetComponent<Candlestick>()) {
+            c->SetLockdown(allOpen);
+        }
+    }
+    if (allOpen) {
+        GameSfx::PlayCandleBlowOut();   // sopro geral ao trancar o andar
     }
 }

@@ -1,21 +1,19 @@
- - Use only ONE shaddow per objetct, closest light source wins the race.
- - A* pathing causes MASSIVE fps drops; analyze barriers from the game map (bugged?). A* on every other frame, not every frame. Same for shadows.
- - Inventory: wheel on the botttom-left corner; (carroussel fantasma de itens). We see one clear item, in the center. Rest of them is transparent.
- - conditional pop up: show a tooltip for changing player control if they are too far apart from each other. The tool tip stays for a few seconds, then vanishes. Show it 3 times only. If the player keeps the distance, keep showing it. If the player swaps, the timer stops, 5 seconds and the tip vanishes.
-
- - Executable game
- - Main title options are selectable (w, s, enter for select);
- - Base walk speed increase
- - Better VFX
- - Elevated/grounded players fix
- - Use the dubbed files
- - Better debug options!!!
-
- - Iteração com itens deve possuir tooltips (consistencia)
-
- - Implement radio item!
- - Loading inicial muito longo (audios on wav)
-
- - Better tooltips on the first level
-
- - 
+ - Item de oleo muito grande!
+ - Monstro não reaje quando empurrar caixas e barris 
+ - Monstro fica "parado" quando estamos muito tempo no armario escondidos
+ - Dublagem "E se o monstro estiver lá fora?" é pra usar quando estiver dentro do armario, em algum momento aleatório
+ - Patroll logo após sabotar window, criar um "delay" entre sabotagens
+ - Imagem da UnB
+ - Aumentar o HUD de inventário, usar HUD de items circular, porcentagem de durabilidade circular também
+ - Esconder barrinha de sanidade
+ - Diminiur treshhold para mostrar "spider-verse"
+ - Deixar barril mais pesado
+ - Diminuir capacidade do isqueiro
+ - Dividir steps do monstro em arquivos unicos, usar frames de animação para bus/mix de VFX, de forma cíclica
+ - Colocar Janelas no terceiro andar
+ - Aumentar velocidade do monstro em Chase
+ - Mudar textos "Level X" -> "Andar X"
+ - Animação de segurar isqueiro possui duas verões: com isqueiro ligado e com isqueiro desligado
+ - Discrepância entre Tiled assets (tamanhos, posições, angulos) com o que está sendo renderizado (FIXXX!!!!)
+ - Colocar igual bonitinha, legalzinha do flávio
+ - Mudar menu in game para menu bonitinhalegalzinha, deixar as caixas com fundo transparent e blur

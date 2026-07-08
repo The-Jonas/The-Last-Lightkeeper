@@ -26,6 +26,7 @@ int Game::sfxVolumePercent = Game::SFX_VOLUME_PERCENT;
 int Game::voiceVolumePercent = Game::VOICE_VOLUME_PERCENT;
 int Game::brightnessPercent = 100;
 bool Game::fullscreen = false;
+bool Game::reduceFlashing = false;
 bool Game::debugMode = false;
 
 namespace {
@@ -202,6 +203,9 @@ void Game::LoadSettings() {
         if (j.contains("fullscreen") && j["fullscreen"].is_boolean()) {
             fullscreen = j["fullscreen"].get<bool>();
         }
+        if (j.contains("reduce_flashing") && j["reduce_flashing"].is_boolean()) {
+            reduceFlashing = j["reduce_flashing"].get<bool>();
+        }
         if (j.contains("debug") && j["debug"].is_boolean() && j["debug"].get<bool>()) {
             debugMode = true;
         }
@@ -246,6 +250,7 @@ void Game::SaveSettings() {
     j["voice_volume"] = voiceVolumePercent;
     j["brightness"] = brightnessPercent;
     j["fullscreen"] = fullscreen;
+    j["reduce_flashing"] = reduceFlashing;
 
     {
         InputManager& im = InputManager::GetInstance();
@@ -380,7 +385,7 @@ Game::~Game() {
 
 Game& Game::GetInstance() {                         // Se não tiver instância do game, cria e retorna a instância
     if (!instance){
-        instance = new Game("The Last LightKeeper");
+        instance = new Game("The Last Lightkeeper");
     }
     return *instance;                               // O compilador resolve como uma referência
 }

@@ -37,6 +37,9 @@ private:
     void DrawSlot(SDL_Renderer* renderer, int stackIndex, float x, float y,
                   float alpha, float scale, bool isActive) const;
     void DrawPrimedOil(SDL_Renderer* renderer, float activeX, float activeY);
+    // Desenha as teclas de trocar item (1/3) nos lados corretos da roda:
+    // "anterior" à esquerda, "próximo" à direita.
+    void DrawCycleKeyHints(SDL_Renderer* renderer);
 };
 
 #endif

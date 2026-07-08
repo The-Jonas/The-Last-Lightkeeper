@@ -1,0 +1,4 @@
+Coloque aqui as artes dos Designers para os créditos finais (PNG).
+Depois referencie cada arquivo em Recursos/data/credits.json, ex.:
+  { "image": "Recursos/img/creditos/designers_1.png", "height": 360, "gap": 40 }
+Arquivos ausentes são ignorados sem quebrar o jogo.

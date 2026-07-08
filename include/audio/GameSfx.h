@@ -17,9 +17,10 @@ void PlayCandleBlow();      // som de soprar/apagar pelo jogador
 void StopAllGameplay();
 
 // Funções para fazer o áudio ficar direcional
-void SetChannelSpatial(int channel, float srcX, float srcY, float listX, float listY);
+void SetChannelSpatial(int channel, float srcX, float srcY, float listX, float listY, float maxDist = 800.0f);
 void ClearChannelSpatial(int channel);
-void UpdateMonsterFootsteps(float dt, float moveSpeed, float monsterX, float monsterY, float playerX, float playerY);
+// fleeing=true usa a variante ACELERADA dos passos (monstro fugindo da luz).
+void UpdateMonsterFootsteps(float dt, float moveSpeed, float monsterX, float monsterY, float playerX, float playerY, bool fleeing = false);
 
 void NotifyBoxSlide();
 void MaintainBoxPushLoop();
@@ -31,6 +32,10 @@ void UpdateCandleProximity(bool playerNearCandle);
 
 /// Dispara trovão imediato (som aleatório + clarão). Usado pela tecla T e pelo timer ambiental.
 void TriggerThunderStrike();
+
+/// Grande trovão: toca trovao_1 + trovao_2 JUNTOS no volume máximo. Usado no
+/// clímax do último andar (fuga para a luz).
+void PlayBigThunder();
 
 /// 0..1 — força do clarão de trovão (decai ao longo do tempo).
 float GetThunderFlashStrength();
@@ -46,6 +51,10 @@ void PlayClosetClose();
 void PlayMonsterScream();          // grito do monstro
 void PlayMonsterSpot();            // som de quando vê os irmãos
 void StopMonsterFootsteps();
+
+/// Batimento cardíaco: intensity01 0→1 (0 = silêncio, 1 = pânico). Volume do loop
+/// acompanha a sanidade baixa. Chamar todo frame durante o gameplay.
+void UpdateHeartbeat(float intensity01);
 
 // FUNÇÕES DA JANELA E DO VENTO
 void PlayWindowToggle(bool opening);

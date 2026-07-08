@@ -1,6 +1,7 @@
 #include "ui/InventoryWheel.h"
 #include "core/Game.h"
 #include "core/Resources.h"
+#include "core/InputManager.h"
 
 #define INCLUDE_SDL_TTF
 #include "SDL_include.h"
@@ -13,6 +14,30 @@
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+
+namespace {
+// Encaixa o ícone dentro de uma caixa quadrada preservando a proporção original
+// da textura (evita a distorção de "amassado" quando o PNG não é quadrado).
+SDL_FRect FitIconRect(SDL_Texture* tex, float boxX, float boxY, float boxW, float boxH) {
+    SDL_FRect dst{boxX, boxY, boxW, boxH};
+    int tw = 0, th = 0;
+    if (tex && SDL_QueryTexture(tex, nullptr, nullptr, &tw, &th) == 0 && tw > 0 && th > 0) {
+        const float ar = static_cast<float>(tw) / static_cast<float>(th);
+        float w = boxW;
+        float h = boxH;
+        if (ar >= 1.0f) {
+            h = boxW / ar;
+        } else {
+            w = boxH * ar;
+        }
+        dst.x = boxX + (boxW - w) * 0.5f;
+        dst.y = boxY + (boxH - h) * 0.5f;
+        dst.w = w;
+        dst.h = h;
+    }
+    return dst;
+}
+} // namespace
 
 InventoryWheel::InventoryWheel(GameObject& associated, Inventory& inventory)
     : Component(associated), inventory(inventory) {
@@ -114,7 +139,7 @@ void InventoryWheel::DrawSlot(SDL_Renderer* renderer, int stackIndex, float x, f
 
     auto tex = Resources::GetImage(stack->def.spritePath);
     if (tex) {
-        const SDL_FRect dst{iconX, iconY, iconSize, iconSize};
+        const SDL_FRect dst = FitIconRect(tex.get(), iconX, iconY, iconSize, iconSize);
         SDL_SetTextureAlphaMod(tex.get(), static_cast<Uint8>(std::min(255.0f, alpha)));
         SDL_SetTextureColorMod(tex.get(), 255, 255, 255);
         SDL_RenderCopyExF(renderer, tex.get(), nullptr, &dst, 0.0, nullptr, SDL_FLIP_NONE);
@@ -157,8 +182,11 @@ void InventoryWheel::DrawPrimedOil(SDL_Renderer* renderer, float activeX, float 
 
     // When the centered slot can't take the oil (empty slot or a non-light /
     // already-full item), keep the floating icon faded so the player sees it.
+    // Quando PODE recarregar, o ícone fica bem claro/quente para mostrar que
+    // está prestes a interagir com o combustível (antes ficava escuro demais
+    // contra a escuridão do cenário).
     const bool canUse = inventory.CanCombineOilWithActive();
-    const Uint8 iconAlpha = canUse ? 240 : 70;
+    const Uint8 iconAlpha = canUse ? 255 : 120;
 
     float bobOffset = std::sin(bobTimer * 3.0f) * 7.0f;
 
@@ -168,12 +196,12 @@ void InventoryWheel::DrawPrimedOil(SDL_Renderer* renderer, float activeX, float 
 
     auto tex = Resources::GetImage(inventory.GetPrimedOilSpritePath());
     if (tex) {
-        const SDL_FRect dst{iconX, iconY, iconSize, iconSize};
+        const SDL_FRect dst = FitIconRect(tex.get(), iconX, iconY, iconSize, iconSize);
         SDL_SetTextureAlphaMod(tex.get(), iconAlpha);
         if (canUse) {
-            SDL_SetTextureColorMod(tex.get(), 255, 255, 220);
+            SDL_SetTextureColorMod(tex.get(), 255, 250, 235);
         } else {
-            SDL_SetTextureColorMod(tex.get(), 150, 150, 160);
+            SDL_SetTextureColorMod(tex.get(), 175, 175, 185);
         }
         SDL_RenderCopyExF(renderer, tex.get(), nullptr, &dst, 0.0, nullptr, SDL_FLIP_NONE);
     }
@@ -184,7 +212,7 @@ void InventoryWheel::DrawPrimedOil(SDL_Renderer* renderer, float activeX, float 
         std::snprintf(buf, sizeof(buf), "%d", inventory.GetPrimedOilDurability());
         SDL_Color textColor = canUse ? SDL_Color{255, 215, 40, 230}
                                      : SDL_Color{170, 170, 170, 90};
-        SDL_Surface* surface = TTF_RenderText_Blended(font.get(), buf, textColor);
+        SDL_Surface* surface = TTF_RenderUTF8_Blended(font.get(), buf, textColor);
         if (surface) {
             SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
             const float textW = static_cast<float>(surface->w);
@@ -197,6 +225,71 @@ void InventoryWheel::DrawPrimedOil(SDL_Renderer* renderer, float activeX, float 
             }
         }
     }
+}
+
+void InventoryWheel::DrawCycleKeyHints(SDL_Renderer* renderer) {
+    // As teclas ficam SEMPRE visíveis junto da roda (mesmo com um item só).
+    const int count = inventory.GetStackCount();
+    const int visibleCount = (count >= 4) ? 5 : 3;
+
+    // i=0 é o slot mais à DIREITA da roda; i=visibleCount-1 é o mais à ESQUERDA
+    // (ver GetSlotScreenPos). CyclePrev (tecla 1 = CycleLeft) traz o item da
+    // esquerda; CycleNext (tecla 3 = CycleRight) traz o da direita.
+    float rx, ry, lx, ly;
+    GetSlotScreenPos(0, visibleCount, 0.0f, rx, ry);
+    GetSlotScreenPos(visibleCount - 1, visibleCount, 0.0f, lx, ly);
+
+    // Meia-largura do slot das pontas (para posicionar as caixas junto a ele,
+    // com um pequeno espaçamento).
+    const int half = visibleCount / 2;
+    const float edgeSlotHalf = kSlotSize * GetSlotScale(half, visibleCount) * 0.5f;
+    const float slotGap = 10.0f;   // espaçamento entre a caixa da tecla e o slot
+
+    InputManager& im = InputManager::GetInstance();
+    auto keyName = [](int code, const char* fallback) {
+        const char* k = SDL_GetKeyName(code);
+        return (k && k[0] != '\0') ? std::string(k) : std::string(fallback);
+    };
+    const std::string leftKey  = keyName(im.GetBinding(GameAction::CyclePrev), "1");
+    const std::string rightKey = keyName(im.GetBinding(GameAction::CycleNext), "3");
+
+    auto font = Resources::GetFont("Recursos/font/times.ttf", 16);   // fonte ~20% menor
+    if (!font) return;
+
+    // side = -1 (esquerda) / +1 (direita): posiciona a caixa colada ao slot da
+    // ponta, deixando `slotGap` de folga entre a borda do slot e a caixa.
+    auto drawBadge = [&](float slotCX, float slotCY, float side, const std::string& text) {
+        SDL_Color col{245, 232, 200, 255};
+        SDL_Surface* sf = TTF_RenderUTF8_Blended(font.get(), text.c_str(), col);
+        if (!sf) return;
+        SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, sf);
+        const int tw = sf->w;
+        const int th = sf->h;
+        SDL_FreeSurface(sf);
+        if (!t) return;
+
+        const float padX = 7.0f;   // caixa ~20% menor
+        const float padY = 4.0f;
+        const float bw = std::max(static_cast<float>(tw), 13.0f) + padX * 2.0f;
+        const float bh = static_cast<float>(th) + padY * 2.0f;
+        const float edge = slotCX + side * edgeSlotHalf;
+        const float cx = edge + side * (slotGap + bw * 0.5f);
+        const SDL_FRect bg{cx - bw * 0.5f, slotCY - bh * 0.5f, bw, bh};
+
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer, 18, 18, 24, 210);
+        SDL_RenderFillRectF(renderer, &bg);
+        SDL_SetRenderDrawColor(renderer, 200, 180, 110, 230);
+        SDL_RenderDrawRectF(renderer, &bg);
+
+        const SDL_FRect dst{cx - tw * 0.5f, slotCY - th * 0.5f, static_cast<float>(tw), static_cast<float>(th)};
+        SDL_RenderCopyF(renderer, t, nullptr, &dst);
+        SDL_DestroyTexture(t);
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    };
+
+    drawBadge(lx, ly, -1.0f, leftKey);
+    drawBadge(rx, ry, +1.0f, rightKey);
 }
 
 void InventoryWheel::Render() {
@@ -258,4 +351,6 @@ void InventoryWheel::Render() {
     if (inventory.IsOilPrimed()) {
         DrawPrimedOil(renderer, activeSlotX, activeSlotY);
     }
+
+    DrawCycleKeyHints(renderer);
 }

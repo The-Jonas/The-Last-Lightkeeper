@@ -21,6 +21,7 @@
 #include "SDL_include.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <unordered_set>
 #include <vector>
@@ -77,6 +78,12 @@ void StageState::ClearGameplayWorld() {
     staticShadowEdgesBuilt = false;
     companionFollowPathWorld.clear();
     level.escadaConsertada = false;
+    windowLockdownActive = false;
+    sceneTransitionActive = false;
+    if (sceneTransitionFrame) {
+        SDL_DestroyTexture(sceneTransitionFrame);
+        sceneTransitionFrame = nullptr;
+    }
 }
 
 void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInventory) {
@@ -160,10 +167,13 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
     if (resetInventory) {
         inventory.ClearAll();
         inventory.AddItem(cfg.startingFlashlight, cfg.startingFlashlightDurability);
+        // Começa APAGADO: o showcase (abaixo) acende sozinho após o nível carregar.
+        inventory.isLightToggledOn = false;
         if (bigComp) {
             bigComp->NotifyInventoryLightChanged();
         }
-        inventory.isLightToggledOn = true;
+        autoLightShowcasePending = true;
+        autoLightShowcaseTimer = kAutoLightShowcaseDelay;
     }
     inventoryInitialized = true;
 
@@ -189,7 +199,7 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
         hudLine3 = new GameObject();
         hudLine3->z = 100;
         hudLine3->AddComponent(new Text(*hudLine3, "Recursos/font/times.ttf", 18, Text::BLENDED,
-                                         "T trovao | L luzes | O sombras | M musica | B fisica | X luz cursor | C criar luz | P painel luz",
+                                         "T trovao | L luzes | O sombras | M musica | B fisica | X luz cursor | C criar luz | P painel luz | V fala irmao",
                                         hudColor));
         AddObject(hudLine3);
 
@@ -223,17 +233,211 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
 }
 
 void StageState::BeginLevelTransition(int targetLevelIndex) {
-    // Por enquanto o level 3 encerra o jogo e vai pro EndState...
+    if (sceneTransitionActive) {
+        return;   // já em transição
+    }
+
+    // Último andar: em vez de recarregar, alcançar a escada leva ao EndState
+    // (vitória + créditos). ANTES um clarão/relâmpago tomava a tela — agora usa a
+    // MESMA transição zoom-blur das outras escadas.
     if (currentLevelIndex == 2) {
+        // --- ANTIGO: sequência de relâmpagos (DESATIVADA — reativar trocando pela
+        //     chamada de BeginSceneTransition abaixo e religando Update/Render):
+        // if (!finalEscapeActive) {
+        //     finalEscapeActive = true;
+        //     finalEscapeTimer = 0.0f;
+        //     finalEscapeStrikeCount = 0;
+        //     GameVoice::StopAll();
+        //     GameSfx::TriggerThunderStrike();   // primeiro estampido imediato
+        // }
+        // return;
+        BeginSceneTransition(targetLevelIndex, /*toEnd=*/true);
+        return;
+    }
+    BeginSceneTransition(targetLevelIndex, /*toEnd=*/false);
+}
+
+void StageState::UpdateFinalEscape(float dt) {
+    finalEscapeTimer += dt;
+
+    // Estampidos de trovão em ritmo acelerado: cada vez mais próximos conforme a
+    // luz do farol "chega". Dispara nos tempos abaixo (proporções da duração).
+    GameSfx::UpdateThunder(dt);
+    static constexpr float kStrikeAt[] = {0.55f, 1.05f, 1.5f, 1.9f, 2.25f, 2.55f, 2.8f, 3.0f};
+    const int totalStrikes = static_cast<int>(sizeof(kStrikeAt) / sizeof(kStrikeAt[0]));
+    while (finalEscapeStrikeCount < totalStrikes &&
+           finalEscapeTimer >= kStrikeAt[finalEscapeStrikeCount]) {
+        GameSfx::TriggerThunderStrike();
+        ++finalEscapeStrikeCount;
+    }
+
+    if (finalEscapeTimer >= kFinalEscapeDuration) {
+        GameSfx::StopAllGameplay();
+        GameVoice::StopAll();
+        GameData::playerVictory = true;
+        GameData::deathByMonster = false;
+        finalEscapeActive = false;
+        popRequested = true;
+        Game::GetInstance().Push(new EndState());
+    }
+}
+
+void StageState::RenderFinalEscape(SDL_Renderer* renderer) {
+    if (!renderer || !finalEscapeActive) {
+        return;
+    }
+
+    const int winW = Game::GetInstance().GetWindowsWidth();
+    const int winH = Game::GetInstance().GetWindowsHeight();
+    const SDL_Rect full{0, 0, winW, winH};
+
+    const float t = std::min(1.0f, finalEscapeTimer / kFinalEscapeDuration);
+
+    // Base: um brilho branco que sobe (ease-in) — a luz do farol se aproximando.
+    float base = t * t;
+
+    // Estroboscópio: picos brancos afiados cuja frequência cresce com o tempo.
+    const float freq = 7.0f + 26.0f * t;
+    const float s = std::sin(finalEscapeTimer * freq);
+    const float strobe = std::pow(std::max(0.0f, s), 6.0f) * (0.65f + 0.35f * t);
+
+    float intensity = std::min(1.0f, base + strobe);
+
+    // Meio segundo final: branco total, garantindo um corte limpo para os créditos.
+    if (finalEscapeTimer > kFinalEscapeDuration - 0.5f) {
+        intensity = 1.0f;
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255,
+                           static_cast<Uint8>(std::min(255.0f, 255.0f * intensity)));
+    SDL_RenderFillRect(renderer, &full);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+}
+
+// ── Transição de cena "zoom-blur" estilo RE4 ────────────────────────────────
+void StageState::BeginSceneTransition(int targetLevelIndex, bool toEnd) {
+    if (sceneTransitionActive) {
+        return;
+    }
+    sceneTransitionActive = true;
+    sceneTransitionToEnd = toEnd;
+    sceneTransitionTargetLevel = targetLevelIndex;
+    sceneTransitionTimer = 0.0f;
+    if (sceneTransitionFrame) {
+        SDL_DestroyTexture(sceneTransitionFrame);
+        sceneTransitionFrame = nullptr;   // (re)capturado no próximo Render
+    }
+    GameVoice::StopAll();   // corta falas durante a transição
+    // O mundo congela durante a transição — silencia os passos (jogador e monstro)
+    // e demais loops de gameplay para não ficarem tocando parados.
+    GameSfx::StopAllGameplay();
+    GameSfx::StopMonsterFootsteps();
+
+    // Último andar: um grande trovão (trovao_1 + trovao_2 juntos, volume máximo)
+    // marca a fuga para a luz do farol enquanto a tela clareia.
+    if (toEnd) {
+        GameSfx::PlayBigThunder();
+    }
+}
+
+void StageState::CaptureSceneFrame(SDL_Renderer* renderer) {
+    if (!renderer || !renderTarget) {
+        return;   // sem alvo de cena não há o que congelar
+    }
+    const int winW = Game::GetInstance().GetWindowsWidth();
+    const int winH = Game::GetInstance().GetWindowsHeight();
+
+    if (sceneTransitionFrame) {
+        SDL_DestroyTexture(sceneTransitionFrame);
+        sceneTransitionFrame = nullptr;
+    }
+
+    // Filtragem linear → o zoom do quadro congelado fica suave (aparência borrada).
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
+
+    // Congela copiando o ALVO DA CENA (GPU→GPU). Evita SDL_RenderReadPixels do
+    // backbuffer padrão, que é instável e chega a QUEBRAR em alguns renderers
+    // (Direct3D no Windows) — era a causa do crash ao entrar no 2º andar.
+    sceneTransitionFrame = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
+                                             SDL_TEXTUREACCESS_TARGET, winW, winH);
+    if (!sceneTransitionFrame) {
+        return;
+    }
+    SDL_Texture* prev = SDL_GetRenderTarget(renderer);
+    SDL_SetRenderTarget(renderer, sceneTransitionFrame);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
+    SDL_RenderCopy(renderer, renderTarget, nullptr, nullptr);
+    SDL_SetRenderTarget(renderer, prev);
+    SDL_SetTextureBlendMode(sceneTransitionFrame, SDL_BLENDMODE_BLEND);
+}
+
+void StageState::RenderSceneTransition(SDL_Renderer* renderer) {
+    if (!renderer || !sceneTransitionFrame) {
+        return;
+    }
+    SDL_SetRenderTarget(renderer, nullptr);   // desenha direto na tela
+
+    const int winW = Game::GetInstance().GetWindowsWidth();
+    const int winH = Game::GetInstance().GetWindowsHeight();
+
+    const float t = std::min(1.0f, sceneTransitionTimer / SceneTransitionDuration());
+    const float e = t * t;               // ease-in (acelera o zoom)
+
+    // Zoom-blur radial por acumulação: desenha o quadro congelado várias vezes,
+    // cada cópia um pouco mais ampliada a partir do centro e mais transparente —
+    // a sobreposição vira o "borrão" de zoom.
+    constexpr int   kSamples = 14;
+    constexpr float kMaxZoom = 0.32f;    // até +32% no fim
+    for (int i = 0; i < kSamples; ++i) {
+        const float f = (kSamples > 1) ? static_cast<float>(i) / (kSamples - 1) : 0.0f;
+        const float zoom = 1.0f + kMaxZoom * e * f;
+        const int w = static_cast<int>(winW * zoom);
+        const int h = static_cast<int>(winH * zoom);
+        const SDL_Rect dst{(winW - w) / 2, (winH - h) / 2, w, h};
+        const Uint8 a = (i == 0) ? 255 : static_cast<Uint8>(150.0f * (1.0f - f));
+        SDL_SetTextureAlphaMod(sceneTransitionFrame, a);
+        SDL_RenderCopy(renderer, sceneTransitionFrame, nullptr, &dst);
+    }
+    SDL_SetTextureAlphaMod(sceneTransitionFrame, 255);
+
+    // Escadas normais: escurece até o PRETO total antes do fim (corte limpo).
+    // Último andar: a tela CLAREIA até o BRANCO total — a fuga para a luz do farol.
+    const Uint8 fadeChannel = sceneTransitionToEnd ? 255 : 0;
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, fadeChannel, fadeChannel, fadeChannel,
+                           static_cast<Uint8>(std::min(255.0f, 300.0f * e)));
+    const SDL_Rect full{0, 0, winW, winH};
+    SDL_RenderFillRect(renderer, &full);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+}
+
+void StageState::UpdateSceneTransition(float dt) {
+    sceneTransitionTimer += dt;
+    if (sceneTransitionTimer < SceneTransitionDuration()) {
+        return;
+    }
+
+    // Efeito terminou → executa a transição real e libera o quadro congelado.
+    if (sceneTransitionFrame) {
+        SDL_DestroyTexture(sceneTransitionFrame);
+        sceneTransitionFrame = nullptr;
+    }
+    sceneTransitionActive = false;
+
+    if (sceneTransitionToEnd) {
         GameSfx::StopAllGameplay();
         GameVoice::StopAll();
         GameData::playerVictory = true;
         GameData::deathByMonster = false;
         popRequested = true;
         Game::GetInstance().Push(new EndState());
-        return; 
+    } else {
+        Game::GetInstance().Push(new LevelTransitionLoadingState(this, sceneTransitionTargetLevel));
     }
-    Game::GetInstance().Push(new LevelTransitionLoadingState(this, targetLevelIndex));
 }
 
 void StageState::TransitionToLevel(int targetLevelIndex) {
@@ -321,7 +525,7 @@ void StageState::RenderLevelTitleBanner(SDL_Renderer* renderer) {
     }
 
     SDL_Color color{230, 220, 180, alpha};
-    SDL_Surface* surface = TTF_RenderText_Blended(font.get(), label, color);
+    SDL_Surface* surface = TTF_RenderUTF8_Blended(font.get(), label, color);
     if (!surface) {
         return;
     }

@@ -61,20 +61,24 @@ endif
 
 DIST_DIR := dist
 
-RELEASE_RUNTIME_LINK_FLAGS :=
+# Static-link the MinGW C/C++ runtime for any DISTRIBUTION build (release or
+# debug) so the bundle does not depend on libgcc_s / libstdc++-6 DLLs on the
+# player's machine. Note: this does NOT cover libwinpthread-1.dll (POSIX-threads
+# MinGW imports it dynamically regardless) — deploy.ps1 bundles that separately.
+STATIC_RUNTIME_LINK_FLAGS :=
 ifeq ($(OS),Windows_NT)
-ifneq ($(filter release package ship dist,$(MAKECMDGOALS)),)
-RELEASE_RUNTIME_LINK_FLAGS := -static-libgcc -static-libstdc++
+ifneq ($(filter release package ship dist debug debug-package debug-dist,$(MAKECMDGOALS)),)
+STATIC_RUNTIME_LINK_FLAGS := -static-libgcc -static-libstdc++
 endif
 endif
 
 .PRECIOUS: $(DEP_FILES)
-.PHONY: release debug clean folders help package ship dist all
+.PHONY: release debug clean folders help package debug-package ship dist debug-dist all
 
 all: $(EXEC)
 
 $(EXEC): $(OBJ_FILES) $(RES_OBJ)
-	$(COMPILER) -o $@ $^ $(LINK_PATH) $(LIBS) $(FLAGS) $(RELEASE_RUNTIME_LINK_FLAGS)
+	$(COMPILER) -o $@ $^ $(LINK_PATH) $(LIBS) $(FLAGS) $(STATIC_RUNTIME_LINK_FLAGS)
 ifeq ($(OS),Windows_NT)
 	@copy /Y "SDL2\bin\*.dll" . > nul
 endif
@@ -142,6 +146,32 @@ dist:
 
 ship: dist
 
+## Igual ao package, mas com a build de debug (-ggdb -O0 -DDEBUG, console).
+## Uso: mingw32-make debug-package
+debug-package: debug
+ifeq ($(OS),Windows_NT)
+	@if exist "$(DIST_DIR)" $(RMDIR) "$(DIST_DIR)"
+	@mkdir "$(DIST_DIR)" 2> nul
+	@copy /Y "$(EXEC)" "$(DIST_DIR)\\" > nul
+	@copy /Y "SDL2\bin\*.dll" "$(DIST_DIR)\\" > nul
+	@xcopy /E /I /Q /Y "Recursos" "$(DIST_DIR)\\Recursos\\" > nul
+	@echo.
+	@echo Bundle DEBUG pronto em .\\$(DIST_DIR)\\$(EXEC)  — execute dentro dessa pasta.
+else
+	mkdir -p "$(DIST_DIR)"
+	cp -f "$(EXEC)" "$(DIST_DIR)/"
+	cp -r Recursos "$(DIST_DIR)/"
+ifneq ($(wildcard SDL2/bin/*.dll),)
+	cp -f SDL2/bin/*.dll "$(DIST_DIR)/"
+endif
+	@echo Bundle DEBUG pronto em $(DIST_DIR)/$(EXEC)
+endif
+
+## clean + debug-package (build de debug pronta para empacotar/enviar).
+debug-dist:
+	@$(MAKE) clean
+	@$(MAKE) debug-package
+
 folders:
 ifeq ($(OS),Windows_NT)
 	@if NOT exist $(DEP_PATH) mkdir $(DEP_PATH)
@@ -163,6 +193,8 @@ endif
 	@echo - debug: Builds the debug build
 	@echo - package / ship: release + copies $(EXEC), SDL DLLs, Recursos into $(DIST_DIR)
 	@echo - dist: clean + package (recommended before sharing the game)
+	@echo - debug-package: debug build + copies $(EXEC), SDL DLLs, Recursos into $(DIST_DIR)
+	@echo - debug-dist: clean + debug-package (debug build ready to share)
 	@echo - clean: Cleans generated files
 	@echo - folders: Generates project directories
 	@echo - help: Show help

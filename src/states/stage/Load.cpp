@@ -141,6 +141,10 @@ StageState::~StageState(){
     delete radialGeometry;
     radialGeometry = nullptr;
     lightTweakPanel.reset();
+    if (sceneTransitionFrame) {
+        SDL_DestroyTexture(sceneTransitionFrame);
+        sceneTransitionFrame = nullptr;
+    }
 }
 
 void StageState::LoadAssets() {

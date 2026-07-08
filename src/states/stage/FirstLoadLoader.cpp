@@ -52,7 +52,7 @@ StageFirstLoadData EmbeddedDefaults() {
     d.navWorldW = 4358.0f;
     d.navWorldH = 3276.0f;
     d.navTilePx = 64;
-    d.startingFlashlightDurability = 100;
+    d.startingFlashlightDurability = 20;
 
     ItemDef apple{"Apple", "Recursos/img/items/apple.png", -1, false, 1, {}};
     ItemDef brokenFlashlight{"Broken Flashlight",
@@ -61,7 +61,7 @@ StageFirstLoadData EmbeddedDefaults() {
                              true,
                              2,
                              {{ItemProperty::LIGHT_SOURCE, 1.0f}}};
-    ItemDef fuel{"Fuel", "Recursos/img/items/lighter_fuel.png", 250, false, 3, {{ItemProperty::FUEL, 250.0f}}};
+    ItemDef fuel{"Fuel", "Recursos/img/items/combustivel.png", 100, false, 3, {{ItemProperty::FUEL, 100.0f}}};
     ItemDef lamp{"Lamp",
                  "Recursos/img/items/0106_ASSET_LAMPARINA_PERSPECTIVA_APAGADA_FLV.png.png",
                  250,

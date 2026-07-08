@@ -4,6 +4,7 @@
 #include "engine/SpriteRenderer.h"
 #include "ui/Text.h"
 #include "core/Game.h"
+#include "audio/GameSfx.h"
 
 Candlestick::Candlestick(GameObject& associated, bool startsLit, const std::string& direction)
     : Component(associated), isLit(startsLit), direction(direction), myLightId(-1) {
@@ -41,7 +42,6 @@ void Candlestick::Start() {
 }
 
 void Candlestick::Update(float dt) {
-    (void)dt;
     StageState* stage = Game::TryGetStageState();
     const bool reachable = stage && stage->GetReachableCandle() == this;
     if (reachable != showPrompt) {
@@ -49,6 +49,16 @@ void Candlestick::Update(float dt) {
     }
     if (showPrompt) {
         UpdatePromptText();
+    }
+
+    // Andar dominado (todas as janelas abertas): uma vela reacesa dura só
+    // kLockdownRelightSeconds antes de o vento a apagar de novo.
+    if (lockdown && isLit) {
+        relightSuppressTimer += dt;
+        if (relightSuppressTimer >= kLockdownRelightSeconds) {
+            SetLit(false);
+            GameSfx::PlayCandleBlowOut();   // mesmo som de vela apagando (vento/janelas)
+        }
     }
 }
 
@@ -68,9 +78,21 @@ void Candlestick::Render() {
     // estilizado no rodapé central (StageState::RenderInteractionPrompt).
 }
 
+void Candlestick::SetLockdown(bool on) {
+    lockdown = on;
+    relightSuppressTimer = 0.0f;
+    if (on && isLit) {
+        SetLit(false);   // trancou o andar → apaga imediatamente
+    }
+}
+
 void Candlestick::SetLit(bool lit) {
     const bool stateChanged = isLit != lit;
     isLit = lit;
+
+    if (lit) {
+        relightSuppressTimer = 0.0f;   // reacendeu: reinicia a contagem do trancamento
+    }
 
     if (stateChanged) {
         SpriteRenderer* sprite = associated.GetComponent<SpriteRenderer>();

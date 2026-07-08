@@ -25,6 +25,10 @@ private:
     Vec2 playerEntryPos;
     Vec2 brotherEntryPos;
 
+    // Latch p/ a fala de medo do irmãozinho: dispara UMA vez por aproximação do
+    // monstro (rearma só quando ele se afasta), em vez de repetir a cada ~4s.
+    bool hideVoiceArmed = true;
+
     void EnterCloset();
     void ExitCloset();
 

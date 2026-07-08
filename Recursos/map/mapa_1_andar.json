@@ -252,7 +252,7 @@
                 }, 
                 {
                  "gid":43,
-                 "height":316,
+                 "height":307.875769769223,
                  "id":908,
                  "name":"",
                  "opacity":1,
@@ -277,12 +277,12 @@
                          "type":"bool",
                          "value":true
                         }],
-                 "rotation":0,
+                 "rotation":25.8234201410165,
                  "type":"ItemSpawn",
                  "visible":true,
-                 "width":245,
-                 "x":480.666666666667,
-                 "y":600.666666666667
+                 "width":238.701150612214,
+                 "x":1148.86288793718,
+                 "y":124.821124313282
                 }, 
                 {
                  "gid":8,
@@ -321,7 +321,7 @@
                  "opacity":1,
                  "rotation":0,
                  "type":"Pilar",
-                 "visible":true,
+                 "visible":false,
                  "width":2847,
                  "x":439,
                  "y":1406
@@ -4196,6 +4196,19 @@
                  "width":0,
                  "x":3716,
                  "y":1760
+                }, 
+                {
+                 "capsule":true,
+                 "height":1944,
+                 "id":927,
+                 "name":"stone_floor",
+                 "opacity":1,
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":2608.26254826255,
+                 "x":548,
+                 "y":436
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -4204,7 +4217,7 @@
          "y":0
         }],
  "nextlayerid":29,
- "nextobjectid":927,
+ "nextobjectid":929,
  "orientation":"orthogonal",
  "properties":[
         {
@@ -4213,7 +4226,7 @@
          "value":"level_1"
         }],
  "renderorder":"right-down",
- "tiledversion":"1.12.1",
+ "tiledversion":"1.12.2",
  "tileheight":64,
  "tilesets":[
         {

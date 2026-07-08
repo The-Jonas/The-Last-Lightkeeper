@@ -24,6 +24,7 @@ public:
     int PlayLoopedOnChannel(int ch);                    // Canal fixo específico
     void Stop();                                        // Para a reprodução do som no canal em que ele está tocando
     int GetChannel() const { return channel; }
+    Mix_Chunk* GetChunk() const { return chunk.get(); }  // acesso ao PCM (p/ normalização de volume)
     void Open(const std::string file);                  // Carrega o arquivo de som a partir do caminho fornecido
     bool IsOpen();                                      // Verificar se o arquivo foi aberto
 

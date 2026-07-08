@@ -19,12 +19,12 @@ namespace {
 enum class PickupOutcome { Blocked, PickedUp, PickedUpAndFilled };
 
 const char* kPickupSounds[] = {
-    "Recursos/audio/pickup/zapsplat_foley_luggage_backpack_rucksack_grab_hard_001.mp3",
-    "Recursos/audio/pickup/zapsplat_foley_luggage_backpack_rucksack_grab_hard_002.mp3",
-    "Recursos/audio/pickup/zapsplat_foley_luggage_backpack_rucksack_grab_hard_003.mp3",
-    "Recursos/audio/pickup/zapsplat_foley_luggage_backpack_rucksack_grab_hard_004.mp3",
-    "Recursos/audio/pickup/zapsplat_foley_luggage_backpack_rucksack_grab_hard_005.mp3",
-    "Recursos/audio/pickup/zapsplat_foley_luggage_backpack_rucksack_grab_hard_007.mp3",
+    "Recursos/audio/pickup/pickup_1.mp3",
+    "Recursos/audio/pickup/pickup_2.mp3",
+    "Recursos/audio/pickup/pickup_3.mp3",
+    "Recursos/audio/pickup/pickup_4.mp3",
+    "Recursos/audio/pickup/pickup_5.mp3",
+    "Recursos/audio/pickup/pickup_6.mp3",
 };
 constexpr int kPickupSoundCount = 6;
 

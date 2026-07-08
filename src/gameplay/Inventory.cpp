@@ -4,6 +4,30 @@
 #include <algorithm>
 #include <cmath>
 
+namespace {
+// Mapeia a carga de combustível -> tamanho da luz. Vale igual para o isqueiro e
+// a lamparina. Piso de 40% (nunca encolhe abaixo disso, mesmo quase sem carga)
+// e teto de 120% (max 20% maior que o tamanho base). 0% de carga => 40%;
+// 100% => 120%.
+float FuelToSizeScale(float fuelRatio) {
+    constexpr float kMinLightSizeFrac = 0.40f;
+    constexpr float kMaxLightSizeFrac = 1.20f;
+    fuelRatio = std::max(0.0f, std::min(1.0f, fuelRatio));
+    return kMinLightSizeFrac + (kMaxLightSizeFrac - kMinLightSizeFrac) * fuelRatio;
+}
+
+// Classe canônica de uma fonte de luz ÚNICA. O jogador só pode ter UM isqueiro e
+// UMA lamparina — ambos coexistem, mas nunca há dois do mesmo tipo. "Flashlight"
+// e "Broken Flashlight" são o MESMO isqueiro (aceso/apagado), então mapeiam para
+// a mesma chave. Retorna "" para itens que não são fonte de luz (não são únicos).
+std::string LightSourceKey(const ItemDef& def) {
+    if (!def.HasProperty(ItemProperty::LIGHT_SOURCE)) return "";
+    if (def.name == "Flashlight" || def.name == "Broken Flashlight") return "lighter";
+    if (def.name == "Lamp") return "lamp";
+    return def.name;   // qualquer outra fonte de luz: única pelo próprio nome
+}
+} // namespace
+
 void Inventory::ClearAll() {
     stacks.clear();
     activeIndex = -1;
@@ -16,8 +40,12 @@ void Inventory::ClearAll() {
 }
 
 bool Inventory::AddItem(const ItemDef& def, int durability) {
-    if (IsFull()) {
-        return false;   // bolsa cheia — pegar item bloqueado
+    // Fonte ÚNICA de verdade de "posso pegar?" — ver CanAcceptItem. Garante que a
+    // fala "não consigo" e o contorno VERMELHO de item bloqueado usem exatamente o
+    // mesmo critério (antes divergiam: fala vinha do AddItem, contorno de um
+    // CanAcceptItem que sempre retornava true → nunca ficava vermelho).
+    if (!CanAcceptItem(def)) {
+        return false;   // bloqueado (bolsa cheia, 2 combustíveis, ou luz duplicada)
     }
     const bool wasEmpty = stacks.empty();
     ItemStack stack;
@@ -175,25 +203,33 @@ bool Inventory::TryCombineOil() {
         return false;
     }
 
-    int oilAmount = oil.durabilities.front();
+    const int oilAmount = oil.durabilities.front();
     const int room = (maxDur > 0) ? (maxDur - targetDurability) : oilAmount;
-    const int transfer = std::min(room, oilAmount);
-    targetDurability += transfer;
-    oilAmount -= transfer;
+    // O combustível é usado POR COMPLETO: enche o alvo até onde der e o excedente
+    // se perde. Uma unidade de combustível é sempre gasta inteira, nunca em parte.
+    targetDurability += std::min(room, oilAmount);   // muta o alvo antes de qualquer erase
 
-    if (oilAmount > 0) {
-        oil.durabilities.front() = oilAmount;
-    } else {
-        // Oil unit fully spent: remove it. The oil only leaves the wheel here,
-        // when its durability hits 0.
-        oil.durabilities.erase(oil.durabilities.begin());
-        oil.count--;
-        if (oil.count <= 0) {
-            stacks.erase(stacks.begin() + oilApplySourceIndex);
-        }
+    // Remove a unidade de combustível inteira da bolsa.
+    oil.durabilities.erase(oil.durabilities.begin());
+    oil.count--;
+    bool oilStackRemoved = false;
+    if (oil.count <= 0) {
+        stacks.erase(stacks.begin() + oilApplySourceIndex);
+        oilStackRemoved = true;
     }
+    // A partir daqui NÃO usar mais as referências `oil`/`target`/`targetDurability`
+    // (o erase acima pode tê-las invalidado).
 
-    ExitOilApplyMode();
+    // Mantém selecionado o item RECARREGADO (isqueiro/lamparina), não o combustível.
+    // Ajusta o índice caso a remoção do combustível o tenha deslocado.
+    int finalTargetIdx = targetIdx;
+    if (oilStackRemoved && oilApplySourceIndex < targetIdx) {
+        finalTargetIdx--;
+    }
+    oilApplyMode = false;
+    oilApplySourceIndex = -1;
+    primedOilSpritePath.clear();
+    SetSelectedStackIndex(finalTargetIdx);
     return true;
 }
 
@@ -275,6 +311,20 @@ bool Inventory::IsActiveItemLighter() const {
     return active && (active->def.name == "Flashlight" || active->def.name == "Broken Flashlight");
 }
 
+bool Inventory::IsActiveItemFuel() const {
+    const ItemStack* active = GetActiveStack();
+    return active && active->def.HasProperty(ItemProperty::FUEL);
+}
+
+bool Inventory::HasDepletedLightSource() const {
+    for (const auto& s : stacks) {
+        if (s.def.HasProperty(ItemProperty::LIGHT_SOURCE) && s.def.maxDurability > 0) {
+            if (s.durabilities.empty() || s.durabilities.front() <= 0) return true;
+        }
+    }
+    return false;
+}
+
 float Inventory::GetSelectedLightFuelRatio() const {
     const ItemStack* active = GetActiveStack();
     if (!active || !active->def.HasProperty(ItemProperty::LIGHT_SOURCE)) return 0.0f;
@@ -286,17 +336,19 @@ float Inventory::GetSelectedLightFuelRatio() const {
 
 LightMaskParams Inventory::BuildLighterLightParams(const LightMaskParams& base) const {
     LightMaskParams params = base;
-    const float fuelRatio = GetSelectedLightFuelRatio();
-    params.falloffRadiusPx *= fuelRatio;
-    params.shadowMaxLengthPx *= fuelRatio;
-    params.coneLengthPx *= fuelRatio;
+    const float sizeScale = FuelToSizeScale(GetSelectedLightFuelRatio());
+    params.falloffRadiusPx *= sizeScale;
+    params.shadowMaxLengthPx *= sizeScale;
+    params.coneLengthPx *= sizeScale;
     return params;
 }
 
 LightMaskParams Inventory::BuildLampLightParams(const LightMaskParams& base) const {
     LightMaskParams params = base;
-    constexpr float kLampVsLighterScale = 1.40f;
-    const float sizeScale = GetSelectedLightFuelRatio() * kLampVsLighterScale;
+    // Mesma curva do isqueiro: 100% de carga => 100% do tamanho; 0% => 30%.
+    // (Antes a lamparina era maior — brilho quebrado que deixava o monstro sem
+    // chance. Agora segue o mesmo piso/teto do isqueiro.)
+    const float sizeScale = FuelToSizeScale(GetSelectedLightFuelRatio());
     params.falloffRadiusPx *= sizeScale;
     params.shadowMaxLengthPx *= sizeScale;
     params.coneLengthPx *= sizeScale;
@@ -317,16 +369,13 @@ void Inventory::TickUsingDurability(float dt) {
         active->durabilities.front() -= 1;
         usingDrainAccum -= drainInterval;
         if (active->durabilities.front() <= 0) {
-            active->durabilities.erase(active->durabilities.begin());
-            active->count--;
-            if (active->count <= 0) {
-                stacks.erase(stacks.begin() + sel);
-                if (!stacks.empty()) {
-                    SetSelectedStackIndex(sel);
-                }
-                isLightToggledOn = false;
-                break;
-            }
+            // A fonte de luz (isqueiro/lamparina) é um item único e RECARREGÁVEL:
+            // ao esgotar o combustível ela NÃO some da bolsa — fica com carga 0 e
+            // apenas apaga. Recarregar com combustível volta a acender.
+            active->durabilities.front() = 0;
+            isLightToggledOn = false;
+            usingDrainAccum = 0.0f;
+            break;
         }
     }
 }
@@ -335,7 +384,48 @@ bool Inventory::HasItem(const std::string& name) const {
     return FindStackWithName(name) >= 0;
 }
 
-bool Inventory::CanAcceptItem(const ItemDef&) const {
+bool Inventory::HasDepletedLightAndFuel() const {
+    bool depletedLight = false;
+    bool hasFuel = false;
+    for (const ItemStack& s : stacks) {
+        const int dur = s.durabilities.empty() ? 0 : s.durabilities.front();
+        if (s.def.HasProperty(ItemProperty::LIGHT_SOURCE) && s.def.maxDurability > 0 && dur <= 0) {
+            depletedLight = true;
+        }
+        if (s.def.HasProperty(ItemProperty::FUEL) && dur > 0) {
+            hasFuel = true;
+        }
+    }
+    return depletedLight && hasFuel;
+}
+
+bool Inventory::CanAcceptItem(const ItemDef& def) const {
+    // Critério único de "posso pegar este item?", compartilhado pelo AddItem
+    // (bloqueia a coleta + dispara a fala "não consigo") e pelo IsPickupBlocked
+    // (contorno vermelho + esconde o prompt "Pegar"). Assim os dois SEMPRE batem.
+    if (IsFull()) {
+        return false;   // bolsa cheia
+    }
+    // Combustível é limitado a no máximo kMaxFuelUnits (2) na bolsa.
+    if (def.HasProperty(ItemProperty::FUEL)) {
+        int fuelUnits = 0;
+        for (const ItemStack& s : stacks) {
+            if (s.def.HasProperty(ItemProperty::FUEL)) fuelUnits += s.count;
+        }
+        if (fuelUnits >= kMaxFuelUnits) {
+            return false;   // já tem 2 combustíveis
+        }
+    }
+    // Fonte de luz é ÚNICA por tipo: nunca aceita um segundo isqueiro/lamparina
+    // (a luz é um item único e RECARREGÁVEL, não empilhável).
+    const std::string lightKey = LightSourceKey(def);
+    if (!lightKey.empty()) {
+        for (const ItemStack& s : stacks) {
+            if (LightSourceKey(s.def) == lightKey) {
+                return false;   // já possui essa fonte de luz
+            }
+        }
+    }
     return true;
 }
 
@@ -366,6 +456,30 @@ bool Inventory::TryConsumeItem(const std::string& name) {
     }
 
     return true;
+}
+
+void Inventory::DedupeLightSources() {
+    // Mantém a 1ª ocorrência de cada tipo de fonte de luz, fundindo a maior carga
+    // das cópias nela, e remove as duplicatas. n <= kMaxCapacity, então O(n^2) ok.
+    for (size_t i = 0; i < stacks.size();) {
+        const std::string key = LightSourceKey(stacks[i].def);
+        if (key.empty()) { ++i; continue; }
+        int firstIdx = -1;
+        for (size_t j = 0; j < i; ++j) {
+            if (LightSourceKey(stacks[j].def) == key) { firstIdx = static_cast<int>(j); break; }
+        }
+        if (firstIdx < 0) { ++i; continue; }   // 1ª ocorrência — preserva
+        // Duplicata: fica com a maior carga na 1ª cópia e remove esta.
+        const int curDur = stacks[i].durabilities.empty() ? 0 : stacks[i].durabilities.front();
+        ItemStack& keep = stacks[static_cast<size_t>(firstIdx)];
+        const int keepDur = keep.durabilities.empty() ? 0 : keep.durabilities.front();
+        if (curDur > keepDur) {
+            if (keep.durabilities.empty()) keep.durabilities.push_back(curDur);
+            else keep.durabilities.front() = curDur;
+        }
+        stacks.erase(stacks.begin() + static_cast<long>(i));
+        // não incrementa i — o próximo item deslizou para esta posição
+    }
 }
 
 int Inventory::FindStackWithName(const std::string& name) const {
@@ -463,6 +577,9 @@ void Inventory::ReadFromSave(const SaveGameState& state, const std::vector<ItemD
             stack.durabilities = saved.durabilities;
             stacks.push_back(stack);
         }
+        // Este caminho restaura os stacks direto (sem passar pelo AddItem), então
+        // cura aqui qualquer fonte de luz duplicada gravada por saves antigos.
+        DedupeLightSources();
         if (stacks.empty()) {
             activeIndex = -1;
         } else {

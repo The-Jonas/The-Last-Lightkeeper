@@ -1,0 +1,27 @@
+{
+  "_leia_me": "Ajuste fino do MONSTRO sem recompilar. Editado em tempo de carregamento do nível (LoadTuning). Qualquer chave ausente usa o default do código. Valores em px (velocidades = px/s, raios = px) e segundos.",
+
+  "speed_patrol": 85,
+  "speed_investigate": 120,
+  "speed_chase": 170,
+  "speed_hunt": 185,
+  "speed_flee": 220,
+
+  "sight_radius": 800,
+  "illumination_threshold": 0.20,
+
+  "memory_decay_time": 10,
+
+  "camp_max_time": 18,
+
+  "window_radar_interval": 6,
+  "window_radar_range": 2900,
+
+  "flee_light_avoid_time": 12,
+  "flee_light_avoid_radius": 520,
+  "flee_distance": 500,
+
+  "sanity_damage_dark": 80,
+  "sanity_damage_lit": 50,
+  "damage_cooldown_time": 1.5
+}

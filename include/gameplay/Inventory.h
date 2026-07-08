@@ -21,6 +21,8 @@ public:
     // Capacidade da bolsa: nº máximo de itens (stacks). Pegar o 6º enche a bolsa;
     // tentar pegar o 7º é bloqueado.
     static constexpr int kMaxCapacity = 6;
+    // Combustível é limitado: no máximo 2 unidades podem estar na bolsa.
+    static constexpr int kMaxFuelUnits = 2;
 
     bool AddItem(const ItemDef& def, int durability);
     bool IsFull() const { return GetStackCount() >= kMaxCapacity; }
@@ -73,6 +75,9 @@ public:
     // regardless of whether the light is currently lit. Needed for the
     // turn-ON sound, which must be decided before the light becomes active.
     bool IsActiveItemLighter() const;
+    // True quando o item selecionado (na mão) é combustível — usado para só
+    // mostrar o tutorial do combustível quando o jogador está segurando-o.
+    bool IsActiveItemFuel() const;
     float GetSelectedLightFuelRatio() const;
     LightMaskParams BuildLighterLightParams(const LightMaskParams& base) const;
     LightMaskParams BuildLampLightParams(const LightMaskParams& base) const;
@@ -84,6 +89,12 @@ public:
 
     bool CanAcceptItem(const ItemDef& def) const;
     bool HasItem(const std::string& name) const;
+    // True quando existe uma fonte de luz sem carga (0) E há combustível na bolsa
+    // — condição para sugerir o tutorial de reabastecimento.
+    bool HasDepletedLightAndFuel() const;
+    // True quando existe uma fonte de luz sem carga (0), independente de haver
+    // combustível — dispara o aviso de "luz apagou" na 1ª vez.
+    bool HasDepletedLightSource() const;
     bool TryConsumeItem(const std::string& name);
     int FindStackWithName(const std::string& name) const;
     int FindStackWithProperty(ItemProperty prop) const;
@@ -100,6 +111,10 @@ private:
     float usingDrainAccum = 0.0f;
 
     void ExitOilApplyMode();
+
+    // Colapsa fontes de luz duplicadas (isqueiro/lamparina) para no máximo uma de
+    // cada tipo, mantendo a maior carga. Cura saves que já tenham duplicado.
+    void DedupeLightSources();
 
     int FindBestFlashlight() const;
     int FindBestLamp() const;

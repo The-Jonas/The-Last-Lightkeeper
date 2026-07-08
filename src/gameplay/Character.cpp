@@ -186,13 +186,7 @@ std::string Character::IrmaozaoPickLampStripPath(Direction dir, int frameIndex) 
     const std::string root = "Recursos/img/personagens/irmaozao_pick_lamp/";
 
     if (dir == Direction::LEFT) {
-        char buf[160];
-        std::snprintf(buf,
-                      sizeof(buf),
-                      "%sesquerda/pegando lamparina direita_000%d.bmp",
-                      root.c_str(),
-                      n);
-        return std::string(buf);
+        return root + "esquerda/FRAME_" + std::to_string(n) + ".bmp";
     }
 
     const char* subdir = "frente";
@@ -341,6 +335,12 @@ void Character::Update(float dt) {
         interactTimer -= dt;
         if (interactTimer <= 0.0f) {
             currentState = ActionState::NORMAL;         // Libera o movimento quando o tempo acaba
+        }
+
+        // Escondido no armário: mesmo "congelado", o irmãozinho controlado ainda
+        // pode usar o poder de visão (revelar o monstro) apertando Interact.
+        if (isHidden) {
+            UpdateVisionPower(dt);
         }
         return;                                         // Sai do Update prematuramente para não processar movimento!
     }
@@ -520,8 +520,10 @@ void Character::Update(float dt) {
 
         if (sanity <= 0.0f) {
             sanity = 0.0f;
-            std::cout << "[GAME OVER] O personagem foi engolido pela escuridao!" << std::endl;
-            std::cout << "[GAME OVER] Sanidade atual: "<< sanity << std::endl;
+            if (Game::debugMode) {
+                std::cout << "[GAME OVER] O personagem foi engolido pela escuridao!" << std::endl;
+                std::cout << "[GAME OVER] Sanidade atual: " << sanity << std::endl;
+            }
         }
     }
     else {
@@ -532,49 +534,48 @@ void Character::Update(float dt) {
         }
     }
 
-    // ============================================================
-    // PODER DO IRMÃOZINHO — Visão do Monstro
-    // ============================================================
-    if (!irmaozaoIdleStrips) {  // Só executa para o irmãozinho
+    // Poder de visão do irmãozinho (revela o monstro).
+    UpdateVisionPower(dt);
+}
 
-        if (visionPowerTimer > 0.0f) {
-            visionPowerTimer -= dt;
-            if (visionPowerTimer <= 0.0f) {
-                visionPowerTimer = 0.0f;
-                visionCooldown = kVisionCooldown;  // Começa a recarga ao acabar
-            }
+void Character::UpdateVisionPower(float dt) {
+    if (irmaozaoIdleStrips) {   // só o irmãozinho tem o poder
+        return;
+    }
+
+    if (visionPowerTimer > 0.0f) {
+        visionPowerTimer -= dt;
+        if (visionPowerTimer <= 0.0f) {
+            visionPowerTimer = 0.0f;
+            visionCooldown = kVisionCooldown;  // Começa a recarga ao acabar
         }
+    }
 
-        if (visionCooldown > 0.0f) visionCooldown -= dt;
+    if (visionCooldown > 0.0f) visionCooldown -= dt;
 
-        StageState* stageCtrl = Game::TryGetStageState();
-        bool isBeingControlled = stageCtrl && stageCtrl->GetControlledCharacter() == this;
+    StageState* stageCtrl = Game::TryGetStageState();
+    bool isBeingControlled = stageCtrl && stageCtrl->GetControlledCharacter() == this;
+    const bool inputFrozen = stageCtrl && stageCtrl->IsPlayerInputFrozen();
 
-        // Funciona independente de quem está sendo controlado
-        const bool inputFrozen = stageCtrl && stageCtrl->IsPlayerInputFrozen();
-        if (isBeingControlled && !inputFrozen && InputManager::GetInstance().ActionPress(GameAction::Interact) &&
-            visionPowerTimer <= 0.0f && visionCooldown <= 0.0f &&
-            currentState != ActionState::INTERACTING) {
+    // Pode ativar quando NÃO está travado numa interação — OU quando está
+    // escondido no armário (aí ele está "congelado" como INTERACTING, mas ainda
+    // assim pode usar o poder de visão).
+    const bool actionAllowed = (currentState != ActionState::INTERACTING) || isHidden;
 
-            visionPowerTimer = kVisionDuration;
-            std::cout << "[PODER] Irmãozinho ativou visão!\n";
+    if (isBeingControlled && !inputFrozen && InputManager::GetInstance().ActionPress(GameAction::Interact) &&
+        visionPowerTimer <= 0.0f && visionCooldown <= 0.0f && actionAllowed) {
 
-            StageState* stage = Game::TryGetStageState();
-            if (stage) {
-                bool foundMonster = false;
-                for (auto& go : stage->GetObjectArray()) {
-                    if (Monster* m = go->GetComponent<Monster>()) {
-                        m->ActivateVision(kVisionDuration);
-                        foundMonster = true;
-                        std::cout << "[PODER] Monstro encontrado!\n";
-                    }
+        visionPowerTimer = kVisionDuration;
+        if (Game::debugMode) std::cout << "[PODER] Irmãozinho ativou visão!\n";
+
+        if (stageCtrl) {
+            for (auto& go : stageCtrl->GetObjectArray()) {
+                if (Monster* m = go->GetComponent<Monster>()) {
+                    m->ActivateVision(kVisionDuration);
                 }
-            if (!foundMonster)
-                std::cout << "[PODER] Nenhum monstro!\n";
             }
         }
     }
-    
 }
 
 

@@ -244,7 +244,7 @@ void StageState::RenderJournalViewer(SDL_Renderer* renderer) {
             }
             const std::string hintStr = keyName + " / ESC — fechar";
             SDL_Color hc{230, 225, 200, static_cast<Uint8>(240.0f * alphaMul)};
-            SDL_Surface* surf = TTF_RenderText_Blended(hintFont.get(), hintStr.c_str(), hc);
+            SDL_Surface* surf = TTF_RenderUTF8_Blended(hintFont.get(), hintStr.c_str(), hc);
             if (surf) {
                 SDL_Texture* hintTex = SDL_CreateTextureFromSurface(renderer, surf);
                 const int tw = surf->w;
