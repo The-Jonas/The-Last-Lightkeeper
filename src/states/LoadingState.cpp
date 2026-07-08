@@ -9,6 +9,7 @@
 #include "engine/Camera.h"
 #include "ui/Text.h"
 #include "states/stage/StageState.h"
+#include "states/CutsceneState.h"
 
 #define INCLUDE_SDL_MIXER
 #include "SDL_include.h"
@@ -92,7 +93,16 @@ void LoadingState::Update(float /*dt*/) {
 
     Mix_Volume(-1, masterVol);
 
-    Game::GetInstance().Push(stage);
+    if (loadMode == StageState::LoadMode::NewGame) {
+        // Jogo novo: com o stage já totalmente carregado, toca a cutscene de
+        // abertura em cima. Quando ela termina (ou o jogador a pula), o stage
+        // pré-carregado é empilhado e o jogo começa instantaneamente.
+        const std::string videoPath = "Recursos/video/CUTSCENE_THE_LAST_LIGHTKEEPER.mpg";
+        const std::string audioPath = "Recursos/video/CUTSCENE_THE_LAST_LIGHTKEEPER.mp3";
+        Game::GetInstance().Push(new CutsceneState(videoPath, audioPath, stage));
+    } else {
+        Game::GetInstance().Push(stage);
+    }
     popRequested = true;
     transitionDone = true;
 }

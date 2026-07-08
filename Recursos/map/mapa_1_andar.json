@@ -4196,6 +4196,19 @@
                  "width":0,
                  "x":3716,
                  "y":1760
+                }, 
+                {
+                 "capsule":true,
+                 "height":1944,
+                 "id":927,
+                 "name":"stone_floor",
+                 "opacity":1,
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":2608.26254826255,
+                 "x":548,
+                 "y":436
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -4204,7 +4217,7 @@
          "y":0
         }],
  "nextlayerid":29,
- "nextobjectid":927,
+ "nextobjectid":929,
  "orientation":"orthogonal",
  "properties":[
         {
@@ -4213,7 +4226,7 @@
          "value":"level_1"
         }],
  "renderorder":"right-down",
- "tiledversion":"1.12.1",
+ "tiledversion":"1.12.2",
  "tileheight":64,
  "tilesets":[
         {

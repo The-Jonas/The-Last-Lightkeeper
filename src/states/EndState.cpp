@@ -100,35 +100,56 @@ void EndState::LoadAssets() {
 void EndState::Update(float dt) {
     InputManager& input = InputManager::GetInstance();
 
-    if (input.QuitRequested() || input.KeyPress(ESCAPE_KEY)) {
+    if (input.QuitRequested()) {   // só o X da janela fecha o jogo
         quitRequested = true;
     }
 
     if (creditsMode) {
-        // ESPAÇO: se ainda rolando, pula para o fim; se já terminou, volta ao menu.
-        if (input.KeyPress(SPACE_KEY)) {
-            if (creditsFinished) {
-                popRequested = true;
-            } else {
-                creditsFinished = true;   // pula o resto do rolo
+        // Fase 1 — intro de escape/agradecimento (tela negra). Espaço/Esc a pulam.
+        if (!introDone) {
+            introTimer += dt;
+            if (input.KeyPress(SPACE_KEY) || input.KeyPress(ESCAPE_KEY) || introTimer >= kIntroDuration) {
+                introDone = true;
             }
+            UpdateArray(dt);
+            return;
         }
+
+        // Fase 2 — rolo de créditos/pós-créditos.
         if (!creditsFinished) {
-            constexpr float kScrollSpeed = 60.0f;   // px/s
-            creditsScrollY += kScrollSpeed * dt;
+            // Segurar ESPAÇO/ESC ACELERA o rolo (não pula direto para o fim).
+            const bool fast = input.IsKeyDown(SPACE_KEY) || input.IsKeyDown(ESCAPE_KEY);
+            constexpr float kScrollSpeed = 130.0f;        // px/s (acompanha a fonte grande)
+            constexpr float kFastScrollSpeed = 800.0f;    // rolagem rápida ao segurar
+            creditsScrollY += (fast ? kFastScrollSpeed : kScrollSpeed) * dt;
+        } else if (input.KeyPress(SPACE_KEY) || input.KeyPress(ESCAPE_KEY)) {
+            ReturnToMainMenu();   // rolou tudo: ESPAÇO/ESC voltam ao menu
         }
         UpdateArray(dt);
         return;
     }
 
+    // Tela de fim de jogo (morte): ESPAÇO volta ao menu; ESC fecha o jogo.
+    if (input.KeyPress(ESCAPE_KEY)) {
+        quitRequested = true;
+    }
     if (input.KeyPress(SPACE_KEY)) {
-        popRequested = true;
+        ReturnToMainMenu();
     }
 
     LayoutCenteredText(gameOverTitle, -80.0f);
     LayoutCenteredText(continuePrompt, 60.0f);
 
     UpdateArray(dt);
+}
+
+// Volta ao menu principal em vez de fechar o app: sai deste EndState e empilha
+// um TitleState novo. Um TitleState recém-criado (quitRequested=false) fica no
+// topo, então o loop do jogo nunca encerra — funciona mesmo que não haja um
+// TitleState válido embaixo.
+void EndState::ReturnToMainMenu() {
+    popRequested = true;
+    Game::GetInstance().Push(new TitleState());
 }
 
 void EndState::Render() {
@@ -143,7 +164,11 @@ void EndState::Render() {
     }
 
     if (creditsMode && renderer) {
-        RenderCredits(renderer);
+        if (!introDone) {
+            RenderVictoryIntro(renderer);
+        } else {
+            RenderCredits(renderer);
+        }
         return;
     }
 
@@ -180,25 +205,46 @@ struct CreditSpec {
 // Conteúdo padrão embutido — usado se Recursos/data/credits.json não existir.
 // Preencha os nomes reais e as artes pela pasta/JSON (veja o arquivo criado).
 std::vector<CreditSpec> EmbeddedCredits() {
-    const SDL_Color warm{232, 210, 170, 255};
-    const SDL_Color soft{200, 200, 210, 255};
-    const SDL_Color head{225, 205, 160, 255};
+    // Cores são IGNORADAS (o texto é forçado a branco puro em BuildCredits).
+    // Regra de tamanho: função (rótulo) menor; nomes maiores (80).
+    const SDL_Color w{255, 255, 255, 255};
+    constexpr int kName = 80;   // nomes
+    constexpr int kRole = 48;   // funções/rótulos (menor que os nomes)
     std::vector<CreditSpec> c;
-    c.push_back({false, "A Luz do Farol", "", 60, 0, 16.0f, warm});
-    c.push_back({false, "", "", 26, 0, 26.0f, soft});
-    c.push_back({false, "Universidade de Brasília — UnB", "", 32, 0, 6.0f, soft});
-    c.push_back({false, "Introdução ao Desenvolvimento de Jogos", "", 26, 0, 48.0f, soft});
-    c.push_back({false, "— Equipe —", "", 36, 0, 20.0f, head});
-    c.push_back({false, "Programação", "", 28, 0, 4.0f, head});
-    c.push_back({false, "João Victor Pereira Vieira", "", 24, 0, 26.0f, soft});
-    c.push_back({false, "Arte & Design", "", 28, 0, 4.0f, head});
-    c.push_back({false, "(edite Recursos/data/credits.json)", "", 24, 0, 26.0f, soft});
-    c.push_back({false, "Áudio", "", 28, 0, 4.0f, head});
-    c.push_back({false, "(edite Recursos/data/credits.json)", "", 24, 0, 48.0f, soft});
-    c.push_back({false, "— Arte dos nossos Designers —", "", 30, 0, 24.0f, head});
-    // Ex.: solte PNGs em Recursos/img/creditos/ e liste-os no JSON.
-    c.push_back({true, "", "Recursos/img/creditos/designers.png", 26, 360, 40.0f, soft});
-    c.push_back({false, "Obrigado por jogar", "", 46, 0, 20.0f, warm});
+    c.push_back({false, "The Last Lightkeeper", "", 100, 0, 60.0f, w});
+    c.push_back({true, "", "Recursos/img/creditos/logo_unb.png", 26, 260, 30.0f, w});
+    c.push_back({false, "Universidade de Brasília — UnB", "", 64, 0, 10.0f, w});
+    c.push_back({false, "Introdução ao Desenvolvimento de Jogos", "", kRole, 0, 90.0f, w});
+
+    c.push_back({false, "Professores", "", kRole, 0, 16.0f, w});
+    c.push_back({false, "Alberto José Miranda Vaz", "", kName, 0, 8.0f, w});
+    c.push_back({false, "Carla Denise Castanho", "", kName, 0, 8.0f, w});
+    c.push_back({false, "Gabriel Lyra", "", kName, 0, 8.0f, w});
+    c.push_back({false, "Mariana “Blue” Lima", "", kName, 0, 8.0f, w});
+    c.push_back({false, "Fernanda dos Santos", "", kName, 0, 8.0f, w});
+    c.push_back({false, "Miguel Eduardo Gutierrez “Meduag”", "", kName, 0, 100.0f, w});
+
+    c.push_back({false, "— Equipe —", "", 72, 0, 60.0f, w});
+    c.push_back({false, "Game Designers", "", kRole, 0, 16.0f, w});
+    c.push_back({false, "Luana Duque", "", kName, 0, 8.0f, w});
+    c.push_back({false, "Haru Braga Vasconcelos", "", kName, 0, 8.0f, w});
+    c.push_back({false, "Flávio", "", kName, 0, 8.0f, w});
+    c.push_back({false, "Bryan", "", kName, 0, 80.0f, w});
+    c.push_back({false, "Roteiro e Design de Narrativa", "", kRole, 0, 16.0f, w});
+    c.push_back({false, "Luana Duque", "", kName, 0, 80.0f, w});
+    c.push_back({false, "Diretor de Arte", "", kRole, 0, 16.0f, w});
+    c.push_back({false, "Haru Braga Vasconcelos", "", kName, 0, 80.0f, w});
+    c.push_back({false, "Animadores", "", kRole, 0, 16.0f, w});
+    c.push_back({false, "Bryan Gomes Silva", "", kName, 0, 8.0f, w});
+    c.push_back({false, "Haru Braga Vasconcelos", "", kName, 0, 8.0f, w});
+    c.push_back({false, "Luana Duque", "", kName, 0, 80.0f, w});
+    c.push_back({false, "Design de Som e Direção de Dublagem", "", kRole, 0, 16.0f, w});
+    c.push_back({false, "Luana Duque", "", kName, 0, 80.0f, w});
+    c.push_back({false, "Elenco de Dublagem", "", kRole, 0, 16.0f, w});
+    c.push_back({false, "Henrique do Nascimento Vieira", "", kName, 0, 8.0f, w});
+    c.push_back({false, "Haru Braga Vasconcelos", "", kName, 0, 80.0f, w});
+
+    c.push_back({false, "Obrigado por jogar", "", 88, 0, 60.0f, w});
     return c;
 }
 
@@ -251,48 +297,122 @@ std::vector<CreditSpec> LoadCreditSpecs() {
 
 } // namespace
 
+void EndState::RenderVictoryIntro(SDL_Renderer* renderer) {
+    const int winW = Game::GetInstance().GetWindowsWidth();
+    const int winH = Game::GetInstance().GetWindowsHeight();
+
+    // Envelope de alpha: aparece, segura, e some antes de dar lugar aos créditos.
+    const float t = std::min(1.0f, introTimer / kIntroDuration);
+    float alpha = 1.0f;
+    if (t < 0.18f) {
+        alpha = t / 0.18f;                    // fade-in
+    } else if (t > 0.85f) {
+        alpha = std::max(0.0f, (1.0f - t) / 0.15f);   // fade-out
+    }
+    const Uint8 a = static_cast<Uint8>(std::min(1.0f, alpha) * 255.0f);
+
+    struct Line {
+        const char* text;
+        int size;
+        SDL_Color color;
+        float yOffset;
+    };
+    const SDL_Color warm{232, 210, 170, a};
+    const SDL_Color soft{200, 200, 210, a};
+    const Line lines[] = {
+        {"Vocês escaparam.", 60, warm, -90.0f},
+        {"A luz do farol vos guiou para fora da escuridão.", 28, soft, 0.0f},
+        {"Obrigado por jogar.", 40, warm, 90.0f},
+    };
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    for (const Line& ln : lines) {
+        auto font = Resources::GetFont("Recursos/font/times.ttf", ln.size);
+        if (!font) {
+            continue;
+        }
+        SDL_Color col = ln.color;
+        SDL_Surface* sf = TTF_RenderUTF8_Blended(font.get(), ln.text, col);
+        if (!sf) {
+            continue;
+        }
+        SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, sf);
+        const int tw = sf->w, th = sf->h;
+        SDL_FreeSurface(sf);
+        if (!tex) {
+            continue;
+        }
+        SDL_SetTextureAlphaMod(tex, a);
+        SDL_Rect dst{(winW - tw) / 2,
+                     static_cast<int>((winH - th) * 0.5f + ln.yOffset),
+                     tw, th};
+        SDL_RenderCopy(renderer, tex, nullptr, &dst);
+        SDL_DestroyTexture(tex);
+    }
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+}
+
 void EndState::BuildCredits(SDL_Renderer* renderer) {
     const int winW = Game::GetInstance().GetWindowsWidth();
-    const Uint32 wrap = static_cast<Uint32>(winW * 0.75f);
+    const Uint32 wrap = static_cast<Uint32>(winW * 0.85f);
+    const SDL_Color kWhite{255, 255, 255, 255};
 
     creditsItems.clear();
     creditsContentHeight = 0.0f;
+
+    // Rasteriza um texto para a textura de um item (usado por nomes e pelos avisos
+    // de imagem ausente). Retorna false se a fonte/superfície falhar.
+    auto rasterizeText = [&](CreditsItem& item, const std::string& text, int size,
+                             SDL_Color color) -> bool {
+        auto font = Resources::GetFont("Recursos/font/times.ttf", size);
+        if (!font) {
+            return false;
+        }
+        SDL_Surface* sf = TTF_RenderUTF8_Blended_Wrapped(font.get(), text.c_str(), color, wrap);
+        if (!sf) {
+            return false;
+        }
+        item.w = sf->w;
+        item.h = sf->h;
+        SDL_Texture* raw = SDL_CreateTextureFromSurface(renderer, sf);
+        SDL_FreeSurface(sf);
+        if (!raw) {
+            return false;
+        }
+        item.tex = std::shared_ptr<SDL_Texture>(raw, SDL_DestroyTexture);
+        return true;
+    };
 
     for (const CreditSpec& s : LoadCreditSpecs()) {
         CreditsItem item;
         item.gapAfter = s.gap;
 
         if (s.isImage) {
+            item.centered = true;   // artes ficam centralizadas
             auto tex = Resources::GetImage(s.imagePath);
-            if (!tex) {
-                continue;   // arte ausente → pula silenciosamente
+            if (tex) {
+                int tw = 0, th = 0;
+                SDL_QueryTexture(tex.get(), nullptr, nullptr, &tw, &th);
+                const float aspect = (th > 0) ? static_cast<float>(tw) / static_cast<float>(th) : 1.0f;
+                item.h = std::max(1, s.height);
+                item.w = static_cast<int>(item.h * aspect);
+                item.tex = tex;
+            } else {
+                // Arte ausente: não some — vira um aviso visível (centralizado).
+                const std::string base = s.imagePath.substr(s.imagePath.find_last_of("/\\") + 1);
+                if (!rasterizeText(item, "[imagem ausente: " + base + "]", 40, kWhite)) {
+                    continue;
+                }
             }
-            int tw = 0, th = 0;
-            SDL_QueryTexture(tex.get(), nullptr, nullptr, &tw, &th);
-            const float aspect = (th > 0) ? static_cast<float>(tw) / static_cast<float>(th) : 1.0f;
-            item.h = std::max(1, s.height);
-            item.w = static_cast<int>(item.h * aspect);
-            item.tex = tex;
         } else if (s.text.empty()) {
             item.h = s.size / 2;   // linha em branco = espaço
             item.w = 0;
         } else {
-            auto font = Resources::GetFont("Recursos/font/times.ttf", s.size);
-            if (!font) {
+            item.centered = true;   // tudo centralizado
+            // Cor dos textos: SEMPRE branco puro (ignora a cor do JSON).
+            if (!rasterizeText(item, s.text, s.size, kWhite)) {
                 continue;
             }
-            SDL_Surface* sf = TTF_RenderUTF8_Blended_Wrapped(font.get(), s.text.c_str(), s.color, wrap);
-            if (!sf) {
-                continue;
-            }
-            item.w = sf->w;
-            item.h = sf->h;
-            SDL_Texture* raw = SDL_CreateTextureFromSurface(renderer, sf);
-            SDL_FreeSurface(sf);
-            if (!raw) {
-                continue;
-            }
-            item.tex = std::shared_ptr<SDL_Texture>(raw, SDL_DestroyTexture);
         }
 
         creditsContentHeight += static_cast<float>(item.h) + item.gapAfter;
@@ -320,11 +440,13 @@ void EndState::RenderCredits(SDL_Renderer* renderer) {
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
+    // Tudo centralizado (texto e imagens).
     float cum = 0.0f;
     for (const CreditsItem& item : creditsItems) {
         const float top = static_cast<float>(winH) + cum - creditsScrollY;
         if (item.tex && item.w > 0 && item.h > 0 && top + item.h > 0.0f && top < winH) {
-            SDL_Rect dst{(winW - item.w) / 2, static_cast<int>(top), item.w, item.h};
+            const int x = (winW - item.w) / 2;
+            SDL_Rect dst{x, static_cast<int>(top), item.w, item.h};
             SDL_RenderCopy(renderer, item.tex.get(), nullptr, &dst);
         }
         cum += static_cast<float>(item.h) + item.gapAfter;
@@ -336,7 +458,7 @@ void EndState::RenderCredits(SDL_Renderer* renderer) {
         if (font) {
             const float pulse = 0.6f + 0.4f * std::sin(static_cast<float>(SDL_GetTicks()) * 0.004f);
             SDL_Color col{200, 200, 200, 255};
-            SDL_Surface* sf = TTF_RenderUTF8_Blended(font.get(), "Pressione Espaço para voltar", col);
+            SDL_Surface* sf = TTF_RenderUTF8_Blended(font.get(), "Pressione Espaço ou Esc para voltar", col);
             if (sf) {
                 SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, sf);
                 const int tw = sf->w, th = sf->h;

@@ -183,6 +183,22 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
                                 if (zone.w > 0.0f && zone.h > 0.0f) {
                                     levelTransitionZones.push_back(zone);
                                 }
+                            } else if (objName == "stone_floor") {
+                                // Piso de PEDRA (só no 1º andar): zona CAMINHÁVEL,
+                                // usada apenas para escolher o som de passos. NÃO
+                                // entra em rectColliders (senão viraria parede).
+                                const int rw = (int)obj.value("width", 0.0f);
+                                const int rh = (int)obj.value("height", 0.0f);
+                                if (rw > 0 && rh > 0) {
+                                    const int rx = (int)finalX;
+                                    const int ry = (int)finalY;
+                                    Polygon poly;
+                                    poly.vertices.push_back({ rx,      ry });
+                                    poly.vertices.push_back({ rx + rw, ry });
+                                    poly.vertices.push_back({ rx + rw, ry + rh });
+                                    poly.vertices.push_back({ rx,      ry + rh });
+                                    floorStoneZones.push_back(poly);
+                                }
                             } else {
                                 SDL_Rect r;
                                 r.x = (int)finalX;
@@ -632,23 +648,18 @@ bool LevelManager::PointInPolygon(const Polygon& poly, int x, int y) {
 }
 
 FootstepSurface LevelManager::QueryFootstepSurface(int x, int y, bool isElevated) const {
+    // Escada tem prioridade.
     if (isElevated) {
         return FootstepSurface::Stairs;
     }
-    for (const Polygon& poly : floorWoodZones) {
-        if (PointInPolygon(poly, x, y)) {
-            return FootstepSurface::Wood;
-        }
-    }
+    // Sobre a PEDRA (zona "stone_floor" — só existe no 1º andar) → som de pedra.
     for (const Polygon& poly : floorStoneZones) {
         if (PointInPolygon(poly, x, y)) {
             return FootstepSurface::Stone;
         }
     }
-    if (floorWoodZones.empty() && floorStoneZones.empty() && y >= footstepWoodFallbackMinY) {
-        return FootstepSurface::Wood;
-    }
-    return FootstepSurface::Stone;
+    // Fora da pedra e fora da escada → MADEIRA (padrão em todos os andares).
+    return FootstepSurface::Wood;
 }
 
 void LevelManager::RenderCollisionOverlay(SDL_Renderer* renderer) const {

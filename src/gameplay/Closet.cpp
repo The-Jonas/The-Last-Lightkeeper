@@ -66,6 +66,11 @@ void Closet::Update(float dt) {
     // Congela a interação enquanto um overlay (menu/modal) está ativo.
     const bool inputFrozen = stage && stage->IsPlayerInputFrozen();
 
+    // Só o IRMÃOZÃO (personagem controlado = grande) pode entrar/sair do armário.
+    // O irmãozinho apenas segue junto — nunca se esconde sozinho.
+    const bool controllingBig =
+        stage->GetControlledCharacter() == stage->GetBigCharacterComponent();
+
     if (isOccupied) {
         // Atualiza a fresta: apaga se o isqueiro acabar, acende se tiver combustível
         if (stage && frestaLightId != -1) {
@@ -83,7 +88,9 @@ void Closet::Update(float dt) {
         PinChar(Character::littleBrother);
 
         // Escondidos e o monstro se aproxima → irmãozinho sussurra apavorado.
-        // (cooldown próprio da fala evita repetir a cada frame)
+        // Latch por evento: fala UMA vez quando o monstro chega perto e só volta a
+        // poder falar depois que ele se afasta de novo — antes o poll por frame
+        // refazia a fala a cada ~4s enquanto o monstro rondava o armário.
         if (stage) {
             const Vec2 closetCenter = associated.box.Center();
             for (const auto& goPtr : stage->GetObjectArray()) {
@@ -92,15 +99,20 @@ void Closet::Update(float dt) {
                     continue;
                 }
                 if (go->GetComponent<Monster>()) {
-                    if (closetCenter.Distance(go->box.Center()) < 480.0f) {
+                    const float d = closetCenter.Distance(go->box.Center());
+                    if (hideVoiceArmed && d < 480.0f) {
                         GameVoice::OnHidingMonsterClose();
+                        hideVoiceArmed = false;         // já avisou nesta aproximação
+                    } else if (d > 640.0f) {
+                        hideVoiceArmed = true;          // monstro se afastou → rearmar
                     }
                     break;
                 }
             }
         }
 
-        if (!inputFrozen && InputManager::GetInstance().ActionPress(GameAction::Interact)) {
+        if (!inputFrozen && controllingBig &&
+            InputManager::GetInstance().ActionPress(GameAction::Interact)) {
             ExitCloset();
         }
 
@@ -108,8 +120,9 @@ void Closet::Update(float dt) {
         SDL_Rect reachBox = Character::player->GetInteractionRect(1);
         SDL_Rect interactZone = GetInteractionRect();
 
-        // Só exibe a opção de esconder se encostar na FRENTE da porta correta
-        if (SDL_HasIntersection(&reachBox, &interactZone)) {
+        // Só exibe/aceita a opção de esconder controlando o irmãozão e encostando
+        // na FRENTE da porta correta.
+        if (controllingBig && SDL_HasIntersection(&reachBox, &interactZone)) {
             if (stage) {
                 stage->SetReachableCloset(this);   // alimenta o prompt central do rodapé
             }
@@ -150,6 +163,7 @@ SDL_Rect Closet::GetInteractionRect() const {
 void Closet::EnterCloset() {
     GameSfx::PlayClosetOpen();
     isOccupied = true;
+    hideVoiceArmed = true;   // cada esconderijo começa podendo avisar do monstro uma vez
     
     // --- SALVA A POSIÇÃO DE ENTRADA EXATA DE CADA UM ---
     if (Character::player) {
@@ -163,6 +177,7 @@ void Closet::EnterCloset() {
         if (!c) return;
         c->ClearMovement();
         c->currentState = Character::ActionState::INTERACTING;
+        c->isHidden = true;                                                                 // Fonte de verdade de "escondido" p/ o monstro (visão/perseguição/dano)
         c->hidePersonalLight = true;                                                        // Serve pra apagar o circulo de luz dos personagens
         SpriteRenderer* sprite = c->GetAssociated().GetComponent<SpriteRenderer>();
         if (sprite) sprite->SetTint(255, 255, 255, 0); // Fica invisível
@@ -198,6 +213,7 @@ void Closet::ExitCloset() {
         if (!c) return;
         c->interactTimer = 0.0f;
         c->currentState = Character::ActionState::NORMAL;
+        c->isHidden = false;
         c->hidePersonalLight = false;
         
         // --- RESTAURA AS POSIÇÕES SALVAS ---
@@ -218,6 +234,20 @@ void Closet::ExitCloset() {
 
     ShowChar(Character::player, false);
     ShowChar(Character::littleBrother, true);
+
+    // Às vezes a posição de saída fica DENTRO de uma colisão (parede atrás do
+    // armário) e o personagem trava — pior ainda segurando uma tecla de andar ao
+    // entrar/sair. Descarta os comandos de movimento acumulados durante o esconde
+    // e empurra para fora testando AS DUAS colisões do movimento.
+    auto EnsureFree = [&](Character* c) {
+        if (!c || !stage) {
+            return;
+        }
+        c->ClearMovement();
+        stage->UnstickCharacter(c);
+    };
+    EnsureFree(Character::player);
+    EnsureFree(Character::littleBrother);
 }
 
 

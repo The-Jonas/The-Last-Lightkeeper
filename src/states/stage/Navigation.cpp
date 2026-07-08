@@ -507,6 +507,61 @@ void StageState::RefreshDynamicColliderCache() const {
     dynamicColliderCacheDirty = false;
 }
 
+void StageState::UnstickCharacter(Character* c) {
+    if (!c) {
+        return;
+    }
+    GameObject& obj = c->GetAssociated();
+    Collider* col = obj.GetComponent<Collider>();
+    const bool elevated = c->isElevated;
+
+    // "Livre" = passa NAS DUAS colisões que o movimento usa: geometria estática
+    // (círculo dos pés) E o layer de tiles (box). Se falhar em qualquer uma, o
+    // personagem trava (uma reverte para a outra).
+    auto freeHere = [&]() -> bool {
+        if (!IsBoxWalkableOnMapLayer(obj.box)) {
+            return false;
+        }
+        Circle fc;
+        fc.radius = c->GetFootCircleRadius() - 3.0f;
+        const Vec2 fcc = c->GetFootCircleCenter();
+        fc.center.x = fcc.x;
+        fc.center.y = fcc.y;
+        return !level.CheckCollision(fc, elevated);
+    };
+
+    if (freeHere()) {
+        return;   // já está livre
+    }
+
+    const float ox = obj.box.x;
+    const float oy = obj.box.y;
+    const int dirs[8][2] = {{0, 1}, {0, -1}, {1, 0}, {-1, 0},
+                            {1, 1}, {-1, 1}, {1, -1}, {-1, -1}};
+    for (float d = 8.0f; d <= 340.0f; d += 8.0f) {
+        for (const auto& dir : dirs) {
+            float mx = static_cast<float>(dir[0]);
+            float my = static_cast<float>(dir[1]);
+            const float len = std::sqrt(mx * mx + my * my);
+            if (len > 1e-3f) {
+                mx /= len;
+                my /= len;
+            }
+            obj.box.x = ox + mx * d;
+            obj.box.y = oy + my * d;
+            if (col) col->Update(0);
+            if (freeHere()) {
+                if (col) col->Update(0);
+                return;
+            }
+        }
+    }
+
+    obj.box.x = ox;   // não achou saída: não piora
+    obj.box.y = oy;
+    if (col) col->Update(0);
+}
+
 void StageState::ApplyMapBoundsAndWalkability(GameObject* characterObject, const Vec2& previousPos) {
     if (!characterObject || !tileMapComp || !tileSet) {
         return;

@@ -24,6 +24,7 @@ public:
     static int voiceVolumePercent;
     static int brightnessPercent;   // 50..150, 100 = normal (overlay de brilho)
     static bool fullscreen;         // janela em tela cheia (borderless desktop)
+    static bool reduceFlashing;     // acessibilidade: atenua clarões/flashes de tela
     static void LoadEnvVolume();
     static void SetMasterVolume(int percent);
     static void SetAmbientVolume(int percent);

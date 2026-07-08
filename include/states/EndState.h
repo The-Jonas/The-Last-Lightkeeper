@@ -39,6 +39,7 @@ private:
         int w = 0;
         int h = 0;
         float gapAfter = 24.0f;
+        bool centered = false;   // imagens (e avisos de imagem ausente) centralizam; nomes vão à esquerda
     };
     bool creditsMode = false;
     bool creditsBuilt = false;
@@ -47,8 +48,19 @@ private:
     float creditsContentHeight = 0.0f;
     std::vector<CreditsItem> creditsItems;
 
+    // ── Intro de vitória ("Vocês escaparam" + agradecimento) ──────────────────
+    // Antes do rolo, uma tela negra com o texto de escape aparece e some; só
+    // então os créditos começam a subir. Espaço pula a intro.
+    bool introDone = false;
+    float introTimer = 0.0f;
+    static constexpr float kIntroDuration = 6.0f;
+    void RenderVictoryIntro(SDL_Renderer* renderer);
+
     void BuildCredits(SDL_Renderer* renderer);
     void RenderCredits(SDL_Renderer* renderer);
+
+    // Sai do EndState e volta ao menu principal (empilha um TitleState novo).
+    void ReturnToMainMenu();
 };
 
 #endif

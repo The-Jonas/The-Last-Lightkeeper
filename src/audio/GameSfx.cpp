@@ -21,6 +21,8 @@ constexpr int kChannelRadio    = 5;
 constexpr int kChannelMonsterScream  = 6;  // grito
 constexpr int kChannelMonsterSpot    = 7;  // som de ver o player
 constexpr int kChannelMonsterSteps   = 8;  // passos do monstro
+constexpr int kChannelMonsterCreak   = 9;  // rangidos de madeira (esporádicos)
+constexpr int kChannelHeartbeat      = 10; // batimento cardíaco (sanidade baixa)
 //9+ → one-shots livres (Mix_PlayChannel(-1, ...) usa a partir daqui)
 
 constexpr const char* kBoxStartPath = "Recursos/audio/SFX/CAIXAS/CAIXA_Madeira.mp3";
@@ -35,10 +37,10 @@ constexpr const char* kFootstepWoodPath = "Recursos/audio/SFX/PASSOS/PASSOS_Made
 constexpr const char* kFootstepStairsPath = "Recursos/audio/SFX/PASSOS/PASSOS_ESCADA.mp3";
 
 constexpr const char* kThunderPaths[] = {
-    "Recursos/audio/SFX/TROVÃO/ES_Weather, Thunder, Thunder Clap, Heavy Impact, Dark, Gritty 01 - Epidemic Sound.mp3",
-    "Recursos/audio/SFX/TROVÃO/ES_Weather, Thunder, Thunder Clap, Heavy Impact, Dark, Gritty 17 - Epidemic Sound.mp3",
-    "Recursos/audio/SFX/TROVÃO/ES_Weather, Thunder, Thunder Clap, Heavy Impact, Explosive 04 - Epidemic Sound.mp3",
-    "Recursos/audio/SFX/TROVÃO/ES_Weather, Thunder, Thunder Clap, Heavy Impact, Explosive, Bright 03 - Epidemic Sound.mp3",
+    "Recursos/audio/SFX/TROVAO/trovao_1.mp3",
+    "Recursos/audio/SFX/TROVAO/trovao_2.mp3",
+    "Recursos/audio/SFX/TROVAO/trovao_3.mp3",
+    "Recursos/audio/SFX/TROVAO/trovao_4.mp3",
 };
 
 constexpr const char* kCandleLoopPath = "Recursos/audio/SFX/VELA/FOGO_VELA.mp3";
@@ -58,6 +60,15 @@ constexpr const char* kClosetClosePath = "Recursos/audio/SFX/ARMARIO/armario_fec
 constexpr const char* kMonsterScreamPath = "Recursos/audio/SFX/MONSTRO/monstro_grito.wav";
 constexpr const char* kMonsterSpotPath   = "Recursos/audio/SFX/MONSTRO/monstro_ve_player.mp3";
 constexpr const char* kMonsterStepsPath  = "Recursos/audio/SFX/MONSTRO/monstro_passos.mp3";
+constexpr const char* kMonsterStepsFastPath = "Recursos/audio/SFX/MONSTRO/monstro_passos_fast.mp3";  // fugindo da luz
+// Rangidos de madeira: tocam ESPORÁDICAMENTE junto dos passos do monstro.
+constexpr const char* kHeartbeatPath = "Recursos/audio/SFX/heartbeat.mp3";
+constexpr const char* kWoodCreakPaths[] = {
+    "Recursos/audio/SFX/MONSTRO/wood_creak_1.ogg",
+    "Recursos/audio/SFX/MONSTRO/wood_creak_2.ogg",
+    "Recursos/audio/SFX/MONSTRO/wood_creak_3.ogg",
+};
+constexpr int kWoodCreakCount = 3;
 
 constexpr int kThunderCount = 4;
 constexpr float kMinFootstepSpeed = 35.0f;
@@ -89,6 +100,12 @@ Sound gClosetCloseSound;
 Sound gMonsterScreamSound;
 Sound gMonsterSpotSound;
 Sound gMonsterStepsSound;
+Sound gMonsterStepsFastSound;    // passos acelerados (fugindo da luz)
+bool  gMonsterStepsFastActive = false;  // qual variante do loop está tocando
+Sound gWoodCreakSounds[kWoodCreakCount];
+float gWoodCreakTimer = 0.0f;   // conta até o próximo rangido
+Sound gHeartbeatSound;
+bool  gHeartbeatActive = false;
 
 bool gMonsterStepsActive = false;
 bool gWindLoopActive = false;
@@ -140,6 +157,11 @@ void EnsureLoaded() {
     if (FileExists(kMonsterScreamPath)) gMonsterScreamSound.Open(kMonsterScreamPath);
     if (FileExists(kMonsterSpotPath))   gMonsterSpotSound.Open(kMonsterSpotPath);
     if (FileExists(kMonsterStepsPath))  gMonsterStepsSound.Open(kMonsterStepsPath);
+    if (FileExists(kMonsterStepsFastPath)) gMonsterStepsFastSound.Open(kMonsterStepsFastPath);
+    for (int i = 0; i < kWoodCreakCount; ++i) {
+        if (FileExists(kWoodCreakPaths[i])) gWoodCreakSounds[i].Open(kWoodCreakPaths[i]);
+    }
+    if (FileExists(kHeartbeatPath)) gHeartbeatSound.Open(kHeartbeatPath);
     for (int i = 0; i < kThunderCount; ++i) {
         gThunderSounds[i].Open(kThunderPaths[i]);
     }
@@ -251,6 +273,10 @@ void StopAllGameplayAudio() {
     StopCandleLoop();
     StopBoxMovingLoop();
     gBoxIsMoving = false;
+    if (gHeartbeatActive) {
+        Mix_HaltChannel(kChannelHeartbeat);
+        gHeartbeatActive = false;
+    }
 }
 
 void ApplyFootstepLoopVolume(Sound& sound) {
@@ -311,12 +337,12 @@ void TriggerThunderStrikeInternal() {
 namespace GameSfx {
 
 // ── Spatial audio ─────────────────────────────────────────────────────────
-void SetChannelSpatial(int channel, float srcX, float srcY, float listX, float listY) {
+void SetChannelSpatial(int channel, float srcX, float srcY, float listX, float listY, float maxDist) {
     float dx   = srcX - listX;
     float dy   = srcY - listY;
     float dist = std::sqrt(dx * dx + dy * dy);
 
-    constexpr float kMaxAudibleDist = 800.0f;
+    const float kMaxAudibleDist = (maxDist > 1.0f) ? maxDist : 800.0f;
 
     // Volume baseado na distância
     float volumeRatio = 1.0f - std::min(1.0f, dist / kMaxAudibleDist);
@@ -430,6 +456,23 @@ void TriggerThunderStrike() {
     ResetThunderSchedule(kThunderMinDelay);
 }
 
+void PlayBigThunder() {
+    EnsureLoaded();
+    // trovao_1 (idx 0) e trovao_2 (idx 1) tocam AO MESMO TEMPO, no volume máximo.
+    // Ignora o mute de gameplay: é um efeito de clímax, não um loop ambiental.
+    for (int i = 0; i < 2 && i < kThunderCount; ++i) {
+        if (gThunderSounds[i].IsOpen()) {
+            gThunderSounds[i].Play();
+            const int ch = gThunderSounds[i].GetChannel();
+            if (ch >= 0) {
+                Mix_Volume(ch, MIX_MAX_VOLUME);
+            }
+        }
+    }
+    // NÃO mexe em gThunderFlashTimer: o clarão visual do clímax é a própria tela
+    // clareando (RenderSceneTransition), e evitamos um flash azul solto depois.
+}
+
 void UpdateCandleProximity(bool playerNearCandle) {
     if (gGameplayMuted) {
         StopCandleLoop();
@@ -490,28 +533,56 @@ void StopAllGameplay() {
 void PlayMonsterScream() {
     if (gGameplayMuted) return;
     EnsureLoaded();
-    if (!Mix_Playing(kChannelMonsterScream) && gMonsterScreamSound.IsOpen())
-        gMonsterScreamSound.Play();  
+    if (!Mix_Playing(kChannelMonsterScream) && gMonsterScreamSound.IsOpen()) {
+        gMonsterScreamSound.Play();
+        ApplySfxVolume(gMonsterScreamSound);   // toca no volume cheio do barramento de VFX
+    }
 }
 
 void PlayMonsterSpot() {
     if (gGameplayMuted) return;
     EnsureLoaded();
-    if (!Mix_Playing(kChannelMonsterSpot) && gMonsterSpotSound.IsOpen())
-        gMonsterSpotSound.Play();   
+    if (!Mix_Playing(kChannelMonsterSpot) && gMonsterSpotSound.IsOpen()) {
+        gMonsterSpotSound.Play();
+        ApplySfxVolume(gMonsterSpotSound);     // toca no volume cheio do barramento de VFX
+    }
 }
  
-void UpdateMonsterFootsteps(float dt, float moveSpeed, float monsterX, float monsterY, float playerX, float playerY) {
-    (void)dt;
+void UpdateMonsterFootsteps(float dt, float moveSpeed, float monsterX, float monsterY, float playerX, float playerY, bool fleeing) {
     if (gGameplayMuted) return;
     EnsureLoaded();
 
     if (moveSpeed > 10.0f) {
-        if (!gMonsterStepsActive) {
-            gMonsterStepsSound.PlayLoopedOnChannel(kChannelMonsterSteps);
+        // (Re)inicia o loop, ou TROCA para a variante certa (normal ↔ acelerada)
+        // quando o estado de fuga muda.
+        const bool wantFast = fleeing && gMonsterStepsFastSound.IsOpen();
+        if (!gMonsterStepsActive || gMonsterStepsFastActive != wantFast) {
+            Mix_HaltChannel(kChannelMonsterSteps);
+            (wantFast ? gMonsterStepsFastSound : gMonsterStepsSound).PlayLoopedOnChannel(kChannelMonsterSteps);
             gMonsterStepsActive = true;
+            gMonsterStepsFastActive = wantFast;
+            gWoodCreakTimer = 1.5f + static_cast<float>(rand() % 250) / 100.0f;  // 1º rangido não imediato
         }
-        SetChannelSpatial(kChannelMonsterSteps, monsterX, monsterY, playerX, playerY);
+        // Passos do monstro BEM mais altos: fixa o volume-base do canal no topo do
+        // barramento de VFX (respeita master×sfx, mas nunca abaixo) e AMPLIA ainda
+        // mais o alcance audível — como a atenuação é (1 - dist/maxDist), um maxDist
+        // maior deixa os passos mais fortes a qualquer distância (perto = alto, longe
+        // = baixo). Mais rápido (perseguição/caçada) => ainda mais alto e mais longe.
+        Mix_Volume(kChannelMonsterSteps, SfxChannelVolume());
+        const float stepsMaxDist = 1900.0f + moveSpeed * 4.0f;   // ~2640px em HUNT (185)
+        SetChannelSpatial(kChannelMonsterSteps, monsterX, monsterY, playerX, playerY, stepsMaxDist);
+
+        // Rangidos de madeira ESPORÁDICOS junto dos passos, no MESMO volume espacial.
+        gWoodCreakTimer -= dt;
+        if (gWoodCreakTimer <= 0.0f) {
+            gWoodCreakTimer = 2.0f + static_cast<float>(rand() % 350) / 100.0f;   // 2.0–5.5s
+            const int ci = rand() % kWoodCreakCount;
+            if (gWoodCreakSounds[ci].IsOpen()) {
+                Mix_PlayChannel(kChannelMonsterCreak, gWoodCreakSounds[ci].GetChunk(), 0);
+                Mix_Volume(kChannelMonsterCreak, SfxChannelVolume());
+                SetChannelSpatial(kChannelMonsterCreak, monsterX, monsterY, playerX, playerY, stepsMaxDist);
+            }
+        }
     } else {
         if (gMonsterStepsActive) {
             Mix_HaltChannel(kChannelMonsterSteps);  // <- para imediatamente
@@ -522,10 +593,29 @@ void UpdateMonsterFootsteps(float dt, float moveSpeed, float monsterX, float mon
  
 void StopMonsterFootsteps() {
     if (gMonsterStepsActive) {
-        gMonsterStepsSound.Stop();
+        Mix_HaltChannel(kChannelMonsterSteps);   // para qualquer variante (normal/acelerada)
         ClearChannelSpatial(kChannelMonsterSteps);
         gMonsterStepsActive = false;
+        gMonsterStepsFastActive = false;
     }
+}
+
+void UpdateHeartbeat(float intensity01) {
+    // intensity01: 0 = calmo (silêncio) → 1 = pânico (volume máximo). Loop cujo
+    // volume acompanha a sanidade baixa (feedback de perigo).
+    if (gGameplayMuted || intensity01 <= 0.02f || !gHeartbeatSound.IsOpen()) {
+        if (gHeartbeatActive) {
+            Mix_HaltChannel(kChannelHeartbeat);
+            gHeartbeatActive = false;
+        }
+        return;
+    }
+    if (!gHeartbeatActive) {
+        gHeartbeatSound.PlayLoopedOnChannel(kChannelHeartbeat);
+        gHeartbeatActive = true;
+    }
+    const float v = std::min(1.0f, intensity01);
+    Mix_Volume(kChannelHeartbeat, static_cast<int>(SfxChannelVolume() * v));
 }
 
 void PlayCandleLightUp() { PlaySound(gCandleLightUpSound); }

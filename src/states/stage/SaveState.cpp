@@ -685,7 +685,8 @@ void StageState::RenderSaveToast(SDL_Renderer* renderer) {
 
 namespace {
 const char* kSettingsLabels[] = {"Volume Master", "Volume Fundo", "Volume Efeitos",
-                                 "Volume Dublagem", "Brilho", "Tela cheia", "Controles", "Voltar"};
+                                 "Volume Dublagem", "Brilho", "Tela cheia",
+                                 "Reduzir flashes", "Controles", "Voltar"};
 void SettingsRowRange(int row, int& lo, int& hi) {
     lo = (row == 4) ? 50 : 0;     // brilho 50..150; volumes 0..100
     hi = (row == 4) ? 150 : 100;
@@ -756,6 +757,11 @@ void StageState::HandleSettingsPanelInput() {
             input.KeyPress(SDLK_a) || input.KeyPress(SDLK_d)) {
             Game::SetFullscreen(!Game::fullscreen);
         }
+    } else if (settingsSelection == 6) {
+        if (input.KeyPress(SDLK_LEFT) || input.KeyPress(SDLK_RIGHT) ||
+            input.KeyPress(SDLK_a) || input.KeyPress(SDLK_d)) {
+            Game::reduceFlashing = !Game::reduceFlashing;
+        }
     }
 
     // Mouse: hover seleciona; clique/arrasto nos sliders; clique no toggle/voltar.
@@ -779,9 +785,11 @@ void StageState::HandleSettingsPanelInput() {
             if (SDL_PointInRect(&mp, &settingsRowRects[5])) {
                 Game::SetFullscreen(!Game::fullscreen);
             } else if (SDL_PointInRect(&mp, &settingsRowRects[6])) {
+                Game::reduceFlashing = !Game::reduceFlashing;
+            } else if (SDL_PointInRect(&mp, &settingsRowRects[7])) {
                 openControls();
                 return;
-            } else if (SDL_PointInRect(&mp, &settingsRowRects[7])) {
+            } else if (SDL_PointInRect(&mp, &settingsRowRects[8])) {
                 closePanel();
                 return;
             }
@@ -801,14 +809,16 @@ void StageState::HandleSettingsPanelInput() {
         }
     }
 
-    // Enter/Espaco/F: alterna tela cheia, abre Controles ou ativa Voltar.
+    // Enter/Espaco/F: alterna tela cheia / reduzir flashes, abre Controles ou Voltar.
     if (input.KeyPress(SDLK_RETURN) || input.KeyPress(SDLK_SPACE) || input.KeyPress(SDLK_f)) {
         if (settingsSelection == 5) {
             Game::SetFullscreen(!Game::fullscreen);
         } else if (settingsSelection == 6) {
+            Game::reduceFlashing = !Game::reduceFlashing;
+        } else if (settingsSelection == 7) {
             openControls();
             return;
-        } else if (settingsSelection == 7) {
+        } else if (settingsSelection == 8) {
             closePanel();
             return;
         }
@@ -903,6 +913,9 @@ void StageState::RenderSettingsPanel(SDL_Renderer* renderer) {
             drawText(valBuf, barX + barW + 18, rowY + (rowH - 24) / 2, labelColor, labelFont.get(), false, 0);
         } else if (i == 5) {
             drawText(Game::fullscreen ? "Ligado" : "Desligado", px + 280, rowY + (rowH - 24) / 2,
+                     labelColor, labelFont.get(), false, 0);
+        } else if (i == 6) {
+            drawText(Game::reduceFlashing ? "Ligado" : "Desligado", px + 280, rowY + (rowH - 24) / 2,
                      labelColor, labelFont.get(), false, 0);
         }
     }
@@ -1178,7 +1191,12 @@ void StageState::UpdateTutorials(float dt) {
                                            : smallIlluminationLevel;
         const bool dyingInShadow = controlledIllum < 0.1f;
 
-        const bool cond = controlledCharacter == bigCharacter &&
+        // Não dispara durante o showcase inicial: como a luz é acesa
+        // automaticamente logo no começo, ensinar "aperte F para ligar" nesse
+        // momento confunde. O tutorial fica adiado até o showcase terminar (e,
+        // naturalmente, só reaparece quando a luz apaga de novo).
+        const bool cond = !autoLightShowcasePending &&
+                          controlledCharacter == bigCharacter &&
                           inventory.IsActiveItemLighter() &&
                           !inventory.IsUsableLightActive() &&
                           dyingInShadow;

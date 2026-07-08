@@ -1,6 +1,8 @@
 #ifndef GAME_VOICE_H
 #define GAME_VOICE_H
 
+#include <string>
+
 // Falas dos irmãos (dublagem). Toca em UM único canal de voz por vez (nunca
 // sobrepõe falas) com um cooldown global para não tagarelar. Cada gatilho
 // abaixo é chamado pelos sistemas de gameplay nos momentos certos.
@@ -9,6 +11,12 @@ namespace GameVoice {
 void NotifyLoadingBegin();   // silencia/para as falas durante carregamento
 void NotifyLoadingEnd();
 void StopAll();              // corta a fala atual (morte/troca de cena)
+
+// Legenda (subtitle) da fala em reprodução. Como só existe UMA fala por vez e
+// cada gatilho conhece seu texto, dá para legendar exatamente: retorna true e
+// preenche `out` enquanto o canal de voz estiver tocando; false quando em
+// silêncio. A UI (StageState) consulta isso a cada frame.
+bool GetActiveSubtitle(std::string& out);
 
 // Irmãozão (big brother)
 void OnCallToFollow();       // "Aqui" — chama o irmãozinho para segui-lo

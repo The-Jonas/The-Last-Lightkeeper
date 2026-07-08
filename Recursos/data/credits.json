@@ -1,27 +1,73 @@
 {
-  "_leia_me": "Créditos finais (rolam na vitória). Edite 'entries' à vontade. Cada item é TEXTO (campo 'text') ou IMAGEM (campo 'image'). Campos: text/size/color[r,g,b] para texto; image/height para arte; gap = espaço abaixo. Coloque as artes dos Designers em Recursos/img/creditos/ e referencie aqui. Imagem ausente é ignorada.",
+  "_leia_me": "Créditos/pós-créditos (rolam após a sequência final da vitória). Tudo CENTRALIZADO e em BRANCO puro (a cor é forçada no código; qualquer 'color' aqui é ignorado). Regra de tamanho: o rótulo da FUNÇÃO é menor que os NOMES. Nomes = 80, funções = 48. Cada item é TEXTO (campo 'text') ou IMAGEM (campo 'image'). Campos úteis: text/size para texto; image/height para arte; gap = espaço abaixo. Logo da UnB em Recursos/img/creditos/logo_unb.png (ausente = aviso na tela).",
   "entries": [
-    { "text": "A Luz do Farol", "size": 60, "gap": 16, "color": [232, 210, 170] },
-    { "text": "", "gap": 26 },
-    { "text": "Universidade de Brasília — UnB", "size": 32, "gap": 6, "color": [200, 200, 210] },
-    { "text": "Introdução ao Desenvolvimento de Jogos", "size": 26, "gap": 48, "color": [200, 200, 210] },
+    { "text": "The Last Lightkeeper", "size": 100, "gap": 60 },
 
-    { "text": "— Equipe —", "size": 36, "gap": 20, "color": [225, 205, 160] },
+    { "image": "Recursos/img/creditos/logo_unb.png", "height": 260, "gap": 30 },
+    { "text": "Universidade de Brasília — UnB", "size": 64, "gap": 10 },
+    { "text": "Introdução ao Desenvolvimento de Jogos", "size": 48, "gap": 90 },
 
-    { "text": "Programação", "size": 28, "gap": 4, "color": [225, 205, 160] },
-    { "text": "João Victor Pereira Vieira", "size": 24, "gap": 26 },
+    { "text": "Professores", "size": 48, "gap": 16 },
+    { "text": "Alberto José Miranda Vaz", "size": 80, "gap": 8 },
+    { "text": "Carla Denise Castanho", "size": 80, "gap": 8 },
+    { "text": "Gabriel Lyra", "size": 80, "gap": 8 },
+    { "text": "Mariana “Blue” Lima", "size": 80, "gap": 8 },
+    { "text": "Fernanda dos Santos", "size": 80, "gap": 8 },
+    { "text": "Miguel Eduardo Gutierrez “Meduag”", "size": 80, "gap": 100 },
 
-    { "text": "Arte & Design", "size": 28, "gap": 4, "color": [225, 205, 160] },
-    { "text": "(coloque os nomes aqui)", "size": 24, "gap": 26 },
+    { "text": "— Equipe —", "size": 72, "gap": 60 },
 
-    { "text": "Áudio", "size": 28, "gap": 4, "color": [225, 205, 160] },
-    { "text": "(coloque os nomes aqui)", "size": 24, "gap": 48 },
+    { "text": "Game Designers", "size": 48, "gap": 16 },
+    { "text": "Luana Duque", "size": 80, "gap": 8 },
+    { "text": "Haru Braga Vasconcelos", "size": 80, "gap": 8 },
+    { "text": "Flávio", "size": 80, "gap": 8 },
+    { "text": "Bryan", "size": 80, "gap": 80 },
 
-    { "text": "— Arte dos nossos Designers —", "size": 30, "gap": 24, "color": [225, 205, 160] },
-    { "image": "Recursos/img/creditos/designers_1.png", "height": 360, "gap": 40 },
-    { "image": "Recursos/img/creditos/designers_2.png", "height": 360, "gap": 40 },
+    { "text": "Roteiro e Design de Narrativa", "size": 48, "gap": 16 },
+    { "text": "Luana Duque", "size": 80, "gap": 80 },
 
-    { "text": "Feito com C++ e SDL2", "size": 22, "gap": 40, "color": [160, 160, 170] },
-    { "text": "Obrigado por jogar", "size": 46, "gap": 20, "color": [232, 210, 170] }
+    { "text": "Level Design", "size": 48, "gap": 16 },
+    { "text": "Luana Duque", "size": 80, "gap": 80 },
+
+    { "text": "UI / UX", "size": 48, "gap": 16 },
+    { "text": "Flávio", "size": 80, "gap": 80 },
+
+    { "text": "Produção e Marketing", "size": 48, "gap": 16 },
+    { "text": "Luana Duque", "size": 80, "gap": 80 },
+
+    { "text": "Programadores", "size": 48, "gap": 16 },
+    { "text": "Fulano de Tal (placeholder)", "size": 80, "gap": 8 },
+    { "text": "Ciclano de Souza (placeholder)", "size": 80, "gap": 80 },
+
+    { "text": "Engine", "size": 48, "gap": 16 },
+    { "text": "C++ · SDL2", "size": 80, "gap": 80 },
+
+    { "text": "Diretor de Arte", "size": 48, "gap": 16 },
+    { "text": "Haru Braga Vasconcelos", "size": 80, "gap": 80 },
+
+    { "text": "Artistas Conceituais", "size": 48, "gap": 16 },
+    { "text": "Haru Braga Vasconcelos", "size": 80, "gap": 8 },
+    { "text": "Bryan Gomes Silva", "size": 80, "gap": 80 },
+
+    { "text": "Animadores", "size": 48, "gap": 16 },
+    { "text": "Bryan Gomes Silva", "size": 80, "gap": 8 },
+    { "text": "Haru Braga Vasconcelos", "size": 80, "gap": 8 },
+    { "text": "Luana Duque", "size": 80, "gap": 80 },
+
+    { "text": "Design de Som e Direção de Dublagem", "size": 48, "gap": 16 },
+    { "text": "Luana Duque", "size": 80, "gap": 80 },
+
+    { "text": "Elenco de Dublagem", "size": 48, "gap": 16 },
+    { "text": "Henrique do Nascimento Vieira", "size": 80, "gap": 8 },
+    { "text": "Haru Braga Vasconcelos", "size": 80, "gap": 80 },
+
+    { "text": "Controle de Qualidade", "size": 48, "gap": 16 },
+    { "text": "Beltrano Lima (placeholder)", "size": 80, "gap": 80 },
+
+    { "text": "Agradecimentos", "size": 48, "gap": 16 },
+    { "text": "Família e amigos (placeholder)", "size": 80, "gap": 8 },
+    { "text": "A todos que jogaram (placeholder)", "size": 80, "gap": 120 },
+
+    { "text": "Obrigado por jogar", "size": 88, "gap": 60 }
   ]
 }

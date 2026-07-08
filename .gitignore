@@ -15,3 +15,7 @@ config/settings.json
 
 # deploy staging folder (created/removed by scripts/deploy.ps1)
 A-Luz-do-Farol_*/
+
+# cutscene VIDEO sources: só o .mpg convertido (usado pelo jogo) vai versionado;
+# o .mp4 fonte (~90MB) fica de fora para não inchar o repo.
+Recursos/video/*.mp4

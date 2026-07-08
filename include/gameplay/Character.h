@@ -49,6 +49,7 @@ public:
     SDL_Rect GetInteractionRect(int targetHeightLevel = 0) const;       // Retorna a caixa de iteração projetada na frente do personagem
     bool isElevated = false;                                            // Flag pra saber se o personagem está acima de algo Exemplo: Andando sob a escada.
     bool hidePersonalLight = false;                                     // Esconder a luz mesmo ela estando ativada
+    bool isHidden = false;                                              // Escondido no armário: o monstro não enxerga, persegue nem acerta
     float stairAnchorY = 0.0f;                                          // GUARDA A PROFUNDIDADE DA ESCADA DO ANDAR ATUAL
 
     void PreloadAnimationFrames();                                      // Carrega todos os frames no Start() para evitar stutter
@@ -85,6 +86,10 @@ public:
     static constexpr float kVisionCooldown  = 12.0f;  // Recarga
 
 private:
+    // Poder de visão do irmãozinho (revela o monstro). Extraído para poder rodar
+    // mesmo quando ele está congelado/escondido no armário.
+    void UpdateVisionPower(float dt);
+
     std::queue<Command> taskQueue;                                      // Fila de comando a serem executados
 
     Vec2 speed;                                                         // Velocidade do personagem

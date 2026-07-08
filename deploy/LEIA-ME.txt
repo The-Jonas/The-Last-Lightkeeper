@@ -6,6 +6,12 @@
 COMO EXECUTAR
 ----------------------------------------------------------------------
 1. Descompacte o arquivo .zip em qualquer pasta do seu computador.
+
+   DICA: extraia para uma pasta de caminho curto (ex: C:\Jogos ou a
+   sua Area de Trabalho). NAO tente abrir/extrair de dentro da pasta
+   temporaria do WhatsApp/e-mail: o caminho fica muito longo e o
+   Windows pode recusar com "Caminho muito longo". Primeiro SALVE o
+   .zip em C:\ ou Downloads, e so entao extraia.
 2. Entre na pasta que foi extraida (ex: "A-Luz-do-Farol_2026-06-30").
 3. Execute o arquivo "JOGO.exe" (clique duas vezes).
 

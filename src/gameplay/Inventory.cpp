@@ -15,6 +15,17 @@ float FuelToSizeScale(float fuelRatio) {
     fuelRatio = std::max(0.0f, std::min(1.0f, fuelRatio));
     return kMinLightSizeFrac + (kMaxLightSizeFrac - kMinLightSizeFrac) * fuelRatio;
 }
+
+// Classe canônica de uma fonte de luz ÚNICA. O jogador só pode ter UM isqueiro e
+// UMA lamparina — ambos coexistem, mas nunca há dois do mesmo tipo. "Flashlight"
+// e "Broken Flashlight" são o MESMO isqueiro (aceso/apagado), então mapeiam para
+// a mesma chave. Retorna "" para itens que não são fonte de luz (não são únicos).
+std::string LightSourceKey(const ItemDef& def) {
+    if (!def.HasProperty(ItemProperty::LIGHT_SOURCE)) return "";
+    if (def.name == "Flashlight" || def.name == "Broken Flashlight") return "lighter";
+    if (def.name == "Lamp") return "lamp";
+    return def.name;   // qualquer outra fonte de luz: única pelo próprio nome
+}
 } // namespace
 
 void Inventory::ClearAll() {
@@ -29,18 +40,12 @@ void Inventory::ClearAll() {
 }
 
 bool Inventory::AddItem(const ItemDef& def, int durability) {
-    if (IsFull()) {
-        return false;   // bolsa cheia — pegar item bloqueado
-    }
-    // Combustível é limitado a no máximo kMaxFuelUnits (2) na bolsa.
-    if (def.HasProperty(ItemProperty::FUEL)) {
-        int fuelUnits = 0;
-        for (const ItemStack& s : stacks) {
-            if (s.def.HasProperty(ItemProperty::FUEL)) fuelUnits += s.count;
-        }
-        if (fuelUnits >= kMaxFuelUnits) {
-            return false;   // já tem 2 combustíveis — bloqueado
-        }
+    // Fonte ÚNICA de verdade de "posso pegar?" — ver CanAcceptItem. Garante que a
+    // fala "não consigo" e o contorno VERMELHO de item bloqueado usem exatamente o
+    // mesmo critério (antes divergiam: fala vinha do AddItem, contorno de um
+    // CanAcceptItem que sempre retornava true → nunca ficava vermelho).
+    if (!CanAcceptItem(def)) {
+        return false;   // bloqueado (bolsa cheia, 2 combustíveis, ou luz duplicada)
     }
     const bool wasEmpty = stacks.empty();
     ItemStack stack;
@@ -394,7 +399,33 @@ bool Inventory::HasDepletedLightAndFuel() const {
     return depletedLight && hasFuel;
 }
 
-bool Inventory::CanAcceptItem(const ItemDef&) const {
+bool Inventory::CanAcceptItem(const ItemDef& def) const {
+    // Critério único de "posso pegar este item?", compartilhado pelo AddItem
+    // (bloqueia a coleta + dispara a fala "não consigo") e pelo IsPickupBlocked
+    // (contorno vermelho + esconde o prompt "Pegar"). Assim os dois SEMPRE batem.
+    if (IsFull()) {
+        return false;   // bolsa cheia
+    }
+    // Combustível é limitado a no máximo kMaxFuelUnits (2) na bolsa.
+    if (def.HasProperty(ItemProperty::FUEL)) {
+        int fuelUnits = 0;
+        for (const ItemStack& s : stacks) {
+            if (s.def.HasProperty(ItemProperty::FUEL)) fuelUnits += s.count;
+        }
+        if (fuelUnits >= kMaxFuelUnits) {
+            return false;   // já tem 2 combustíveis
+        }
+    }
+    // Fonte de luz é ÚNICA por tipo: nunca aceita um segundo isqueiro/lamparina
+    // (a luz é um item único e RECARREGÁVEL, não empilhável).
+    const std::string lightKey = LightSourceKey(def);
+    if (!lightKey.empty()) {
+        for (const ItemStack& s : stacks) {
+            if (LightSourceKey(s.def) == lightKey) {
+                return false;   // já possui essa fonte de luz
+            }
+        }
+    }
     return true;
 }
 
@@ -425,6 +456,30 @@ bool Inventory::TryConsumeItem(const std::string& name) {
     }
 
     return true;
+}
+
+void Inventory::DedupeLightSources() {
+    // Mantém a 1ª ocorrência de cada tipo de fonte de luz, fundindo a maior carga
+    // das cópias nela, e remove as duplicatas. n <= kMaxCapacity, então O(n^2) ok.
+    for (size_t i = 0; i < stacks.size();) {
+        const std::string key = LightSourceKey(stacks[i].def);
+        if (key.empty()) { ++i; continue; }
+        int firstIdx = -1;
+        for (size_t j = 0; j < i; ++j) {
+            if (LightSourceKey(stacks[j].def) == key) { firstIdx = static_cast<int>(j); break; }
+        }
+        if (firstIdx < 0) { ++i; continue; }   // 1ª ocorrência — preserva
+        // Duplicata: fica com a maior carga na 1ª cópia e remove esta.
+        const int curDur = stacks[i].durabilities.empty() ? 0 : stacks[i].durabilities.front();
+        ItemStack& keep = stacks[static_cast<size_t>(firstIdx)];
+        const int keepDur = keep.durabilities.empty() ? 0 : keep.durabilities.front();
+        if (curDur > keepDur) {
+            if (keep.durabilities.empty()) keep.durabilities.push_back(curDur);
+            else keep.durabilities.front() = curDur;
+        }
+        stacks.erase(stacks.begin() + static_cast<long>(i));
+        // não incrementa i — o próximo item deslizou para esta posição
+    }
 }
 
 int Inventory::FindStackWithName(const std::string& name) const {
@@ -522,6 +577,9 @@ void Inventory::ReadFromSave(const SaveGameState& state, const std::vector<ItemD
             stack.durabilities = saved.durabilities;
             stacks.push_back(stack);
         }
+        // Este caminho restaura os stacks direto (sem passar pelo AddItem), então
+        // cura aqui qualquer fonte de luz duplicada gravada por saves antigos.
+        DedupeLightSources();
         if (stacks.empty()) {
             activeIndex = -1;
         } else {

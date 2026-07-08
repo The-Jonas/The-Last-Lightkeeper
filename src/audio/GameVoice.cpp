@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <string>
 
 namespace {
 
@@ -29,6 +30,23 @@ constexpr const char* kLilStayA   = "Recursos/audio/Dublagem/IRMÃOZINHO/E_se_o_
 constexpr const char* kLilStayB   = "Recursos/audio/Dublagem/IRMÃOZINHO/eu_nao_quero.wav";
 constexpr const char* kLilHide    = "Recursos/audio/Dublagem/IRMÃOZINHO/nao_sai_o_monstro.wav";
 
+// ── Legendas (subtitles) ────────────────────────────────────────────────────
+// Texto exibido enquanto cada fala toca. Inferido dos nomes dos arquivos —
+// AJUSTE aqui para bater exatamente com o que foi dublado.
+constexpr const char* kTxtBigCall    = "Aqui!";
+constexpr const char* kTxtBigPickupA = "Isso vai servir.";
+constexpr const char* kTxtBigPickupB = "É o que temos...";
+constexpr const char* kTxtBigDrag    = "Ah, isso pesa...";
+constexpr const char* kTxtBigBagFull = "Minha bolsa tá pesada.";
+constexpr const char* kTxtBigCant    = "Não consigo.";
+constexpr const char* kTxtBigScoldA  = "Para de ser medroso.";
+constexpr const char* kTxtBigScoldB  = "Quer que o monstro te coma?";
+constexpr const char* kTxtLilScaredA = "Eu tô com medo.";
+constexpr const char* kTxtLilScaredB = "Eu quero ir pra casa.";
+constexpr const char* kTxtLilStayA   = "E se o monstro estiver lá fora?";
+constexpr const char* kTxtLilStayB   = "Eu não quero.";
+constexpr const char* kTxtLilHide    = "Não sai! O monstro...";
+
 Sound gCall, gPickupA, gPickupB, gDrag, gBagFull, gCant;
 Sound gScoldA, gScoldB;
 Sound gScaredA, gScaredB, gStayA, gStayB, gHide;
@@ -37,6 +55,8 @@ bool gLoaded = false;
 bool gMuted = false;
 int gChannel = -1;            // canal de voz dedicado (somente uma fala por vez)
 Uint32 gNextAllowedMs = 0;    // cooldown global entre falas
+std::string gCurrentSubtitle; // legenda da fala tocando agora (vazia = nenhuma)
+Uint32 gSubtitleEndMs = 0;    // instante em que a legenda deve sumir (fim do clipe)
 
 constexpr Uint32 kGlobalCooldownMs = 1200;
 
@@ -126,7 +146,7 @@ void ApplyVoiceChannelVolume() {
 // Toca a fala se: não estiver mudo, o cooldown global já passou e nenhuma outra
 // fala estiver tocando. extraCooldownMs estende a pausa para falas que poderiam
 // repetir muito (arrastar, esconder).
-bool Play(Sound& sound, Uint32 extraCooldownMs = 0) {
+bool Play(Sound& sound, const char* subtitle, Uint32 extraCooldownMs = 0) {
     if (gMuted) {
         return false;
     }
@@ -139,6 +159,23 @@ bool Play(Sound& sound, Uint32 extraCooldownMs = 0) {
     gChannel = sound.GetChannel();
     ApplyVoiceChannelVolume();
     gNextAllowedMs = now + kGlobalCooldownMs + extraCooldownMs;
+    gCurrentSubtitle = subtitle ? subtitle : "";
+
+    // Duração real do clipe → a legenda some exatamente no fim (não dependemos do
+    // estado do canal, que pode ser reaproveitado por um SFX depois).
+    Uint32 durMs = 1500;   // fallback
+    if (Mix_Chunk* c = sound.GetChunk()) {
+        int freq = 44100, channels = 2;
+        Uint16 fmt = AUDIO_S16SYS;
+        if (Mix_QuerySpec(&freq, &fmt, &channels)) {
+            const int bytesPerSample = SDL_AUDIO_BITSIZE(fmt) / 8;
+            const double bytesPerSec = static_cast<double>(freq) * channels * bytesPerSample;
+            if (bytesPerSec > 0.0 && c->alen > 0) {
+                durMs = static_cast<Uint32>(c->alen * 1000.0 / bytesPerSec);
+            }
+        }
+    }
+    gSubtitleEndMs = now + durMs;
     return true;
 }
 
@@ -146,8 +183,9 @@ bool Chance(int percent) {
     return (rand() % 100) < percent;
 }
 
-Sound& PickOf2(Sound& a, Sound& b) {
-    return (rand() & 1) ? a : b;
+// Escolhe aleatoriamente uma das duas falas — e legenda com o texto da escolhida.
+bool PlayOneOf2(Sound& a, const char* ta, Sound& b, const char* tb, Uint32 extraCooldownMs = 0) {
+    return (rand() & 1) ? Play(a, ta, extraCooldownMs) : Play(b, tb, extraCooldownMs);
 }
 
 } // namespace
@@ -168,18 +206,28 @@ void StopAll() {
         Mix_HaltChannel(gChannel);
     }
     gChannel = -1;
+    gCurrentSubtitle.clear();
+    gSubtitleEndMs = 0;
 }
 
-void OnCallToFollow()       { Play(gCall); }
-void OnItemPickup()         { if (Chance(40)) Play(PickOf2(gPickupA, gPickupB)); }
-void OnBagFull()            { Play(gBagFull); }
-void OnDragObject()         { if (Chance(35)) Play(gDrag, 6000); }
-void OnActionBlocked()      { Play(gCant, 800); }
-void OnScoldFear()          { Play(PickOf2(gScoldA, gScoldB)); }  // irmãozão repreende o medroso
+bool GetActiveSubtitle(std::string& out) {
+    if (gMuted || gCurrentSubtitle.empty() || SDL_GetTicks() >= gSubtitleEndMs) {
+        return false;
+    }
+    out = gCurrentSubtitle;
+    return true;
+}
 
-void OnAskToStay()          { Play(PickOf2(gStayA, gStayB)); }
-void OnBrothersTooFar()     { Play(PickOf2(gScaredA, gScaredB)); }
-void OnHidingMonsterClose() { Play(gHide, 3000); }
+void OnCallToFollow()       { Play(gCall, kTxtBigCall); }
+void OnItemPickup()         { if (Chance(40)) PlayOneOf2(gPickupA, kTxtBigPickupA, gPickupB, kTxtBigPickupB); }
+void OnBagFull()            { Play(gBagFull, kTxtBigBagFull); }
+void OnDragObject()         { if (Chance(35)) Play(gDrag, kTxtBigDrag, 6000); }
+void OnActionBlocked()      { Play(gCant, kTxtBigCant, 800); }
+void OnScoldFear()          { PlayOneOf2(gScoldA, kTxtBigScoldA, gScoldB, kTxtBigScoldB); }  // irmãozão repreende o medroso
+
+void OnAskToStay()          { PlayOneOf2(gStayA, kTxtLilStayA, gStayB, kTxtLilStayB); }
+void OnBrothersTooFar()     { PlayOneOf2(gScaredA, kTxtLilScaredA, gScaredB, kTxtLilScaredB); }
+void OnHidingMonsterClose() { Play(gHide, kTxtLilHide, 3000); }
 
 void DebugPlayRandomForControlled(bool bigBrother) {
     EnsureLoaded();
@@ -198,6 +246,8 @@ void DebugPlayRandomForControlled(bool bigBrother) {
     gChannel = line->GetChannel();
     ApplyVoiceChannelVolume();
     gNextAllowedMs = SDL_GetTicks() + kGlobalCooldownMs;
+    gCurrentSubtitle.clear();   // debug: sem legenda associada
+    gSubtitleEndMs = 0;
 }
 
 } // namespace GameVoice

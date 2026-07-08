@@ -99,6 +99,8 @@ public:
 
     void RenderQuitConfirmModal(SDL_Renderer* renderer);
     void RenderLevelTitleBanner(SDL_Renderer* renderer);
+    // Legenda da fala (dublagem) que estiver tocando — barra inferior central.
+    void RenderVoiceSubtitle(SDL_Renderer* renderer);
     void RenderJournalViewer(SDL_Renderer* renderer);
     // Prompt contextual "[E] ..." quando há um objeto interagível ao alcance
     // (apenas controlando o irmão maior). Substitui a antiga legenda fixa (3.5).
@@ -130,6 +132,15 @@ public:
         outFalloffRadiusPx = lightMaskParams.falloffRadiusPx * fuelRatio;
         return true;
     }
+
+    // True quando existe ≥1 janela no andar e TODAS estão abertas — o monstro
+    // dominou o andar. Consultado pelo Monster (fim da campanha estratégica).
+    bool AreAllWindowsOpen() const;
+
+    // Empurra o personagem para fora de qualquer colisão em que tenha ficado
+    // preso (ex.: ao sair do armário). Testa AS DUAS colisões do movimento:
+    // level.CheckCollision (geometria estática) E IsBoxWalkableOnMapLayer (tiles).
+    void UnstickCharacter(Character* c);
 
     Window* GetReachableWindow() const { return reachableWindow; }
     Window* FindClosestReachableWindow() const;
@@ -182,6 +193,13 @@ public:
     float lastMonsterHitTimer = 0.0f;
     static constexpr float kMonsterHitDeathWindow = 2.0f;
 
+    // Showcase inicial: em jogo novo o jogador começa com a luz APAGADA e, alguns
+    // segundos após o 1º nível carregar, ela é acesa automaticamente — mostrando
+    // ao jogador o contraste e a mecânica da luz.
+    bool  autoLightShowcasePending = false;
+    float autoLightShowcaseTimer = 0.0f;
+    static constexpr float kAutoLightShowcaseDelay = 2.0f;
+
     // Indicador "quem estou controlando": aparece no início e a cada troca,
     // quica + pisca branco por alguns segundos e some (eased-out).
     float controlIndicatorTimer = 0.0f;
@@ -225,11 +243,45 @@ public:
     // Chamado pelo Monster ao tocar um irmão.
     void TriggerMonsterHitFeedback();
 
+    // Sequência final: ao alcançar a escada no último andar, uma sucessão rápida
+    // de clarões (a luz do farol se aproximando) satura a tela até o branco total,
+    // e então os créditos/pós-créditos entram (EndState).
+    bool  finalEscapeActive = false;
+    float finalEscapeTimer = 0.0f;
+    int   finalEscapeStrikeCount = 0;   // clarões de trovão já disparados
+    static constexpr float kFinalEscapeDuration = 3.4f;
+    void UpdateFinalEscape(float dt);
+    void RenderFinalEscape(SDL_Renderer* renderer);
+
+    // Transição de cena estilo RE4: congela o quadro atual e faz um zoom central
+    // borrado escurecendo, antes de carregar o próximo andar (ou o EndState no
+    // último). Usada em TODAS as escadas.
+    bool  sceneTransitionActive = false;
+    bool  sceneTransitionToEnd  = false;   // último andar → EndState (vitória)
+    int   sceneTransitionTargetLevel = 0;
+    float sceneTransitionTimer  = 0.0f;
+    SDL_Texture* sceneTransitionFrame = nullptr;   // quadro congelado
+    static constexpr float kSceneTransitionDuration    = 1.5f;   // escadas normais
+    static constexpr float kSceneTransitionEndDuration = 2.2f;   // último andar (com clarão + trovão)
+    float SceneTransitionDuration() const {
+        return sceneTransitionToEnd ? kSceneTransitionEndDuration : kSceneTransitionDuration;
+    }
+    void BeginSceneTransition(int targetLevelIndex, bool toEnd);
+    void UpdateSceneTransition(float dt);
+    void CaptureSceneFrame(SDL_Renderer* renderer);
+    void RenderSceneTransition(SDL_Renderer* renderer);
+
     RadioAsset* GetReachableRadio() const { return reachableRadio; }
     void SetReachableRepairable(Repairable* r) { reachableRepairable = r; }
 
     Character* GetBigCharacterComponent()   const { return bigCharacter; }
     Character* GetSmallCharacterComponent() const { return smallCharacter; }
+
+    // Debug (só em Game::debugMode): jogador invisível para o monstro (observar
+    // comportamento) e câmera livre seguindo o mouse.
+    bool debugMonsterBlind = false;
+    bool debugFreeCam = false;
+    bool IsMonsterBlindDebug() const { return debugMonsterBlind; }
 
 private:
 
@@ -283,6 +335,10 @@ private:
     void ClearGameplayWorld();
     void BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInventory);
     void ShowLevelTitleBanner();
+    // Trancamento do andar: quando todas as janelas abrem, apaga todas as velas
+    // e mantém as reacesas apagando (2s) até uma janela fechar de novo.
+    bool windowLockdownActive = false;
+    void UpdateWindowLockdown(float dt);
     void RenderGameplayCollisionDebug(SDL_Renderer* renderer) const;     // Com showMapPhysicsDebug: colliders + foot circles
     void RenderCompanionFollowPathDebug(SDL_Renderer* renderer) const;   // Com showMapPhysicsDebug: polylinha do seguidor (modo junto)
     void UpdateBoxInteraction();
@@ -416,7 +472,7 @@ private:
     bool settingsPanelOpen = false;
     int settingsSelection = 0;
     bool settingsDragging = false;                       // arrastando um slider com o mouse
-    static constexpr int kSettingsRowCount = 8;          // Master/Ambiente/Trovao/Dublagem/Brilho/TelaCheia/Controles/Voltar
+    static constexpr int kSettingsRowCount = 9;          // Master/Ambiente/Efeitos/Dublagem/Brilho/TelaCheia/ReduzirFlashes/Controles/Voltar
     static constexpr int kSettingsSliderCount = 5;       // as 5 primeiras linhas são sliders
     SDL_Rect settingsRowRects[kSettingsRowCount]{};
     SDL_Rect settingsSliderRects[kSettingsSliderCount]{};
@@ -440,6 +496,7 @@ private:
     static constexpr float kCompanionPathRefreshInterval = 0.35f;
     std::vector<Vec2> cachedCompanionPath;
     int companionPathIndex = 0;                                          // waypoint atual no caminho em cache (1.1)
+    bool companionHolding = false;                                       // histerese de chegada: seguidor parado no ponto atrás do líder
     mutable std::vector<GameObject*> dynamicColliderCache;
     mutable bool dynamicColliderCacheDirty = true;
     mutable GameObject* monsterNavObstacle = nullptr;   // monstro como obstáculo de nav p/ os irmãos (1.3)

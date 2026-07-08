@@ -112,6 +112,10 @@ private:
 
     void ExitOilApplyMode();
 
+    // Colapsa fontes de luz duplicadas (isqueiro/lamparina) para no máximo uma de
+    // cada tipo, mantendo a maior carga. Cura saves que já tenham duplicado.
+    void DedupeLightSources();
+
     int FindBestFlashlight() const;
     int FindBestLamp() const;
 };
