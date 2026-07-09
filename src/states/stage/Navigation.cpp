@@ -185,7 +185,7 @@ bool StageState::IsTileNavigableFor(const GameObject* agent, int tx, int ty, flo
     for (GameObject* go : dynamicColliderCache) {
         if (go == agent) continue;
         Collider* col = go->GetComponent<Collider>();
-        if (!col) continue;
+        if (!col || !col->IsEnabled()) continue;   // main: colliders desabilitáveis (cortina)
         const float angleRad = static_cast<float>(go->angleDeg) * (static_cast<float>(M_PI) / 180.0f);
         bool hit;
         if (footRadius > 0.0f) {

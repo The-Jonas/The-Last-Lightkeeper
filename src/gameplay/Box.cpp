@@ -8,6 +8,7 @@
 #include "states/stage/StageState.h"
 #include <algorithm>
 #include <vector>
+#include <iostream>
 
 // LISTA GLOBAL PARA AS CAIXAS SE ENXERGAREM NA FÍSICA PREDITIVA
 static std::vector<Box*> globalBoxList;
@@ -23,6 +24,7 @@ bool Box::IsActivePushTarget(const Box* box) {
 
 Box::Box(GameObject& associated, bool isStatic, std::string spritePath, float weightMulti) 
     : Component(associated), isStatic(isStatic), weightMultiplier(weightMulti) {
+    std::cout << "[BOX CTOR] weightMultiplier=" << weightMultiplier << "\n";
     
     // Agora ele carrega a arte dinamicamente baseada no que foi passado
     SpriteRenderer* sprite = new SpriteRenderer(associated, spritePath, 1, 1);
@@ -41,7 +43,7 @@ Box::~Box() {
 
 void Box::Start() {
     // Escala da base de madeira (ex: 85% da largura da imagem, 15% da altura)
-    Vec2 scale(0.85f, 0.40f);
+    Vec2 scale(0.60f, 0.25f);
 
     // Cálculo automático para colar a hitbox no chão da caixa
     float offsetY = (associated.box.h / 2.0f) * (1.0f - scale.y);
@@ -93,6 +95,8 @@ bool Box::IsPositionBlocked() const {
 }
 
 bool Box::TryMoveBy(float dx, float dy) {
+    // Peso zero = imóvel, mas deixa o personagem fazer o gesto de empurrar
+    if (weightMultiplier <= 0.0f) return false;
     const float oldX = associated.box.x;
     const float oldY = associated.box.y;
 

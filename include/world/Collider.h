@@ -17,10 +17,14 @@ public:
 
     Rect box;                                                                       // A caixa de colisão calculada final (pública para ser acessada pelo sistema de colisão)
 
+    void SetEnabled(bool e) { enabled = e; }
+    bool IsEnabled() const  { return enabled; }
+
 private:
 
     Vec2 scale;                                                                     // Fator de escala da colisão em relação ao sprite original
     Vec2 offset;                                                                    // Distância do centro da colisão em relação ao centro do objeto
+    bool enabled = true;
 
 };
 

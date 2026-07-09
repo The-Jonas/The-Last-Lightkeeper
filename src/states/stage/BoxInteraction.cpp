@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <iostream>
 
 namespace {
 
@@ -488,17 +489,24 @@ void StageState::UpdateBoxInteraction() {
                 pushBoxOffset.x = boxObj.box.x - bigCharacterObject->box.x;
                 pushBoxOffset.y = boxObj.box.y - bigCharacterObject->box.y;
             }
+
             if (bigCharacter) {
                 bigCharacter->currentState = Character::ActionState::PUSHING_BOX;
+                // O personagem pega a lerdeza da caixa pra ele (em outras palavras ele fica mais lento)
+                bigCharacter->SetSpeedMultiplier(activePushBox->GetWeightMultiplier());
             }
-            // O personagem pega a lerdeza da caixa pra ele (em outras palavras ele fica mais lento)
-            bigCharacter->SetSpeedMultiplier(activePushBox->GetWeightMultiplier());
         }
     } else if (activePushBox) {
         GameSfx::NotifyBoxPushEnd();
         activePushBox = nullptr;
         if (bigCharacter && bigCharacter->currentState == Character::ActionState::PUSHING_BOX) {
             bigCharacter->currentState = Character::ActionState::NORMAL;
+
+            if (activePushBox && !activePushBox->GetAssociated().IsDead()) {
+                bigCharacter->SetSpeedMultiplier(activePushBox->GetWeightMultiplier());
+            } else {
+                activePushBox = nullptr;
+        }
 
             // --- DEVOLVE A VELOCIDADE NORMAL AO SOLTAR ---
             bigCharacter->SetSpeedMultiplier(1.0f);

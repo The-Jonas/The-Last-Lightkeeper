@@ -240,6 +240,9 @@ void StageState::Update(float dt){
         if (input.KeyPress(SHADOWS_TOGGLE_KEY)) {
             shadowsEnabled = !shadowsEnabled;
         }
+        if (input.KeyPress(SDLK_F5)) {
+            BeginLevelTransition(currentLevelIndex + 1);
+        }
         if (input.KeyPress(MUSIC_MUTE_TOGGLE_KEY)) {
             musicMuted = !musicMuted;
             Mix_VolumeMusic(musicMuted ? 0 : Game::MusicVolume());
@@ -481,7 +484,7 @@ void StageState::Update(float dt){
             Collider* colliderA = goA->GetComponent<Collider>();
             Collider* colliderB = goB->GetComponent<Collider>();
 
-            if (colliderA && colliderB) { //..Se ambos existirem
+            if (colliderA && colliderB && colliderA->IsEnabled() && colliderB->IsEnabled()) { //..Se ambos existirem
                 // "Use a box dos Colliders mas a rotação do GameObject"
                 // Lembrando que isColliding espera radianos e meu angleDeg é em graus
                 float angleDegA = goA->angleDeg * (M_PI / 180.0);

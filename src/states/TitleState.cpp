@@ -87,7 +87,6 @@ void TitleState::LoadConfig() {
             getf(a,"width",kArmW); getf(a,"height",kArmH);
             getf(a,"lanternAlong",kLanternAlong); getf(a,"lanternPerp",kLanternPerp); }
         if (j.contains("darkness")) kDarknessAlpha=static_cast<Uint8>(j["darkness"].get<int>());
-        printf("[TitleState] Config carregada\n");
     } catch(...) { printf("[TitleState] Erro ao parsear menu_config.json\n"); }
 }
 

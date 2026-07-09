@@ -121,11 +121,13 @@ Jornal* StageState::FindClosestReachableJornal() const {
 void StageState::OpenJournalViewer(Jornal* jornal) {
     if (!jornal) return;
 
+    if (bigCharacter)   bigCharacter->ForceStop();
+    if (smallCharacter) smallCharacter->ForceStop();
+
     // ── Som opcional ao abrir ─────────────────────────────────────────────
     if (!jornal->GetSoundPath().empty()) {
-        static Sound jornalSound;
-        jornalSound.Open(jornal->GetSoundPath());
-        jornalSound.Play();
+        jornalInteractSound.Open(jornal->GetSoundPath());
+        jornalInteractSound.Play();
     }
 
     const GameObject& obj = jornal->GetAssociated();
@@ -186,6 +188,9 @@ void StageState::TryOpenJournalOnKeyPress() {
 void StageState::UpdateJournalViewer(float dt) {
     InputManager& input = InputManager::GetInstance();
 
+    if (bigCharacter)   bigCharacter->ReleaseInteract();
+    if (smallCharacter) smallCharacter->ReleaseInteract();
+
     if (journalViewerClosing) {
         journalCloseTimer += dt;
         if (journalCloseTimer >= kJournalCloseDuration) {
@@ -201,6 +206,7 @@ void StageState::UpdateJournalViewer(float dt) {
     if (input.ActionPress(GameAction::Interact) || input.KeyPress(SDLK_ESCAPE)) {
         journalViewerClosing = true;
         journalCloseTimer = 0.0f;
+        jornalInteractSound.Stop();                 // Se tá tocando som no objeto, ele para imediatamente ao parar de interagir
     }
 }
 

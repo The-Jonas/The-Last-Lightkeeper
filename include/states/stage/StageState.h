@@ -512,6 +512,9 @@ private:
     RadioAsset* reachableRadio = nullptr;
     RadioAsset* FindClosestReachableRadio() const;
     void        TryInteractRadioOnKeyPress();
+    
+    //Som que toca quando se interage com objetos narrativos
+    Sound jornalInteractSound;
 };
 
 #endif

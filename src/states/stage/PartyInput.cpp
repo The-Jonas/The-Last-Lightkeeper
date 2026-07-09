@@ -92,11 +92,11 @@ void StageState::IssueMovementFromInput(Character* character, GameObject* object
         return;
     }
 
-    // The companion follow logic scales the follower's speed (catch-up up to
-    // 1.55x, arrival easing down to 0.45x). When control swaps onto a character
-    // that was just following, that leftover multiplier would make it move too
-    // fast/slow. The player-controlled character always moves at base speed.
-    character->SetSpeedMultiplier(1.0f);
+    // Nao reseta o speed multiplier se estiver empurrando uma caixa
+    // (o peso da caixa deve ser mantido enquanto empurra)
+    if (character->currentState != Character::ActionState::PUSHING_BOX) {
+        character->SetSpeedMultiplier(1.0f);
+    }
 
     InputManager& input = InputManager::GetInstance();
     Vec2 direction(0.0f, 0.0f);
@@ -120,6 +120,7 @@ void StageState::IssueMovementFromInput(Character* character, GameObject* object
         character->Issue(moveCommand);
     }
 }
+
 
 void StageState::IssueFollowCommand(Character* follower, GameObject* followerObject, GameObject* leaderObject, bool allowCatchup) {
     companionFollowPathWorld.clear();

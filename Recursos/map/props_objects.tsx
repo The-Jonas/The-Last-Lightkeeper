@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<tileset version="1.10" tiledversion="1.12.1" name="props_objects" tilewidth="2847" tileheight="1553" tilecount="45" columns="0">
+<tileset version="1.10" tiledversion="1.12.1" name="props_objects" tilewidth="2847" tileheight="1977" tilecount="85" columns="0">
  <grid orientation="orthogonal" width="1" height="1"/>
  <tile id="0" type="Caixa">
   <properties>
@@ -297,5 +297,302 @@
    <property name="depthOffset" type="float" value="0"/>
   </properties>
   <image source="../img/objetos/Armario.png" width="442" height="638"/>
+ </tile>
+ <tile id="47" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-50"/>
+   <property name="empty" type="float" value="0"/>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="type" type="int" value="15"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_15.png" width="235" height="343"/>
+ </tile>
+ <tile id="48" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-50"/>
+   <property name="empty" type="float" value="0"/>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="type" type="int" value="45"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_45.png" width="235" height="343"/>
+ </tile>
+ <tile id="49" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-50"/>
+   <property name="empty" type="float" value="0"/>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="type" type="int" value="46"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_46.png" width="235" height="343"/>
+ </tile>
+ <tile id="50" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-50"/>
+   <property name="empty" type="float" value="0"/>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="type" type="int" value="58"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_58.png" width="235" height="343"/>
+ </tile>
+ <tile id="51" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-50"/>
+   <property name="empty" type="float" value="0"/>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="type" type="int" value="59"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_59.png" width="235" height="343"/>
+ </tile>
+ <tile id="52" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-140"/>
+   <property name="type" type="int" value="31"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_31.png" width="608" height="630"/>
+ </tile>
+ <tile id="53" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-140"/>
+   <property name="type" type="int" value="16"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_16.png" width="608" height="630"/>
+ </tile>
+ <tile id="54" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-140"/>
+   <property name="type" type="int" value="5"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_5.png" width="608" height="630"/>
+ </tile>
+ <tile id="55" type="Barril">
+  <properties>
+   <property name="type" type="int" value="4"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_4.png" width="472" height="642"/>
+ </tile>
+ <tile id="56" type="Barril">
+  <properties>
+   <property name="type" type="int" value="42"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_42.png" width="472" height="642"/>
+ </tile>
+ <tile id="57" type="Barril">
+  <properties>
+   <property name="type" type="int" value="6"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_6.png" width="472" height="642"/>
+ </tile>
+ <tile id="58" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-210"/>
+   <property name="type" type="int" value="7"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_7.png" width="536" height="548"/>
+ </tile>
+ <tile id="59" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-210"/>
+   <property name="type" type="int" value="8"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_8.png" width="536" height="548"/>
+ </tile>
+ <tile id="60" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-210"/>
+   <property name="type" type="int" value="9"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_9.png" width="536" height="548"/>
+ </tile>
+ <tile id="61" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-50"/>
+   <property name="empty" type="float" value="0"/>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="type" type="int" value="10"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_10.png" width="235" height="343"/>
+ </tile>
+ <tile id="62" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-50"/>
+   <property name="empty" type="float" value="0"/>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="type" type="int" value="21"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_21.png" width="235" height="343"/>
+ </tile>
+ <tile id="63" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-50"/>
+   <property name="empty" type="float" value="0"/>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="type" type="int" value="25"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_25.png" width="235" height="343"/>
+ </tile>
+ <tile id="64" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-50"/>
+   <property name="empty" type="float" value="0"/>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="type" type="int" value="30"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_30.png" width="235" height="343"/>
+ </tile>
+ <tile id="65" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-50"/>
+   <property name="empty" type="float" value="0"/>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="type" type="int" value="32"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_32.png" width="235" height="343"/>
+ </tile>
+ <tile id="66" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-50"/>
+   <property name="empty" type="float" value="0"/>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="type" type="int" value="34"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_34.png" width="235" height="343"/>
+ </tile>
+ <tile id="67" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-50"/>
+   <property name="empty" type="float" value="0"/>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="type" type="int" value="36"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_36.png" width="235" height="343"/>
+ </tile>
+ <tile id="68" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-50"/>
+   <property name="empty" type="float" value="0"/>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="type" type="int" value="47"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_47.png" width="235" height="343"/>
+ </tile>
+ <tile id="69" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-50"/>
+   <property name="empty" type="float" value="0"/>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="type" type="int" value="50"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_50.png" width="235" height="343"/>
+ </tile>
+ <tile id="70" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-50"/>
+   <property name="empty" type="float" value="0"/>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="type" type="int" value="55"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_55.png" width="235" height="343"/>
+ </tile>
+ <tile id="71" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-50"/>
+   <property name="empty" type="float" value="0"/>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="type" type="int" value="60"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_60.png" width="235" height="343"/>
+ </tile>
+ <tile id="72" type="Recipiente_Decoracao">
+  <properties>
+   <property name="nameObj" value="Marinheiro_morto"/>
+  </properties>
+  <image source="../img/objetos/mobiliario/Marinheiro_morto.png" width="481" height="419"/>
+ </tile>
+ <tile id="73" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-50"/>
+   <property name="empty" type="float" value="0"/>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="type" type="int" value="57"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_57.png" width="235" height="343"/>
+ </tile>
+ <tile id="74" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-50"/>
+   <property name="empty" type="float" value="0"/>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="type" type="int" value="10"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_10.png" width="235" height="343"/>
+ </tile>
+ <tile id="75" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-50"/>
+   <property name="empty" type="float" value="0"/>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="type" type="int" value="11"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_11.png" width="235" height="343"/>
+ </tile>
+ <tile id="76" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-50"/>
+   <property name="empty" type="float" value="0"/>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="type" type="int" value="12"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_12.png" width="235" height="343"/>
+ </tile>
+ <tile id="77" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-50"/>
+   <property name="empty" type="float" value="0"/>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="type" type="int" value="13"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_13.png" width="235" height="343"/>
+ </tile>
+ <tile id="78" type="Barril">
+  <properties>
+   <property name="depthOffset" type="float" value="-50"/>
+   <property name="empty" type="float" value="0"/>
+   <property name="interactive" type="bool" value="true"/>
+   <property name="type" type="int" value="14"/>
+  </properties>
+  <image source="../img/objetos/barril/barril_14.png" width="235" height="343"/>
+ </tile>
+ <tile id="79" type="Cortina">
+  <properties>
+   <property name="animDuration" type="float" value="2"/>
+   <property name="curtainId" type="int" value="0"/>
+   <property name="spriteName" value="Lona"/>
+   <property name="startsOpen" type="bool" value="false"/>
+  </properties>
+  <image source="../img/cenario/Lona.png" width="587" height="1369"/>
+ </tile>
+ <tile id="80" type="Pilar">
+  <image source="../img/cenario/pilarfrente_3andar.png" width="281" height="1977"/>
+ </tile>
+ <tile id="81" type="Pilar">
+  <image source="../img/cenario/pilastras_3andar.png" width="279" height="1070"/>
+ </tile>
+ <tile id="82" type="Pilar">
+  <image source="../img/cenario/pilares_metade.png" width="1610" height="1347"/>
+ </tile>
+ <tile id="83">
+  <image source="../img/items/jornais/Telefonin.png" width="123" height="120"/>
+ </tile>
+ <tile id="84">
+  <image source="../img/items/jornais/Caixa.png" width="211" height="167"/>
+ </tile>
+ <tile id="85">
+  <image source="../img/items/jornais/Caderno.png" width="120" height="118"/>
+ </tile>
+ <tile id="86" type="Recipiente_Decoracao">
+  <properties>
+   <property name="nameObj" value="Sangue"/>
+  </properties>
+  <image source="../img/objetos/mobiliario/Sangue.png" width="481" height="419"/>
  </tile>
 </tileset>

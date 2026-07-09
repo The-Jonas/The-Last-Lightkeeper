@@ -109,40 +109,6 @@
                  "y":2153
                 }, 
                 {
-                 "gid":43,
-                 "height":307.875769769223,
-                 "id":908,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":0
-                        }, 
-                        {
-                         "name":"heightLevel",
-                         "type":"int",
-                         "value":0
-                        }, 
-                        {
-                         "name":"itemName",
-                         "type":"string",
-                         "value":"Tabua de Madeira"
-                        }, 
-                        {
-                         "name":"unique",
-                         "type":"bool",
-                         "value":true
-                        }],
-                 "rotation":25.8234201410165,
-                 "type":"ItemSpawn",
-                 "visible":true,
-                 "width":238.701150612214,
-                 "x":1111.52955460385,
-                 "y":164.821124313282
-                }, 
-                {
                  "gid":17,
                  "height":746,
                  "id":686,
@@ -269,7 +235,7 @@
                  "gid":38,
                  "height":555,
                  "id":763,
-                 "name":"Estante_quebrada",
+                 "name":"",
                  "opacity":1,
                  "properties":[
                         {
@@ -283,6 +249,40 @@
                  "width":686,
                  "x":1517.60606060606,
                  "y":605.272727272727
+                }, 
+                {
+                 "gid":43,
+                 "height":307.875769769223,
+                 "id":908,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":0
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":0
+                        }, 
+                        {
+                         "name":"itemName",
+                         "type":"string",
+                         "value":"Tabua de Madeira"
+                        }, 
+                        {
+                         "name":"unique",
+                         "type":"bool",
+                         "value":true
+                        }],
+                 "rotation":25.8234201410165,
+                 "type":"ItemSpawn",
+                 "visible":true,
+                 "width":238.701150612214,
+                 "x":3364.01440308869,
+                 "y":1218.76051825268
                 }, 
                 {
                  "gid":8,
@@ -314,11 +314,56 @@
                  "y":161.33333333334
                 }, 
                 {
+                 "gid":44,
+                 "height":118,
+                 "id":931,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":200
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":1
+                        }, 
+                        {
+                         "name":"imageName",
+                         "type":"string",
+                         "value":"REGISTROMILITAR4"
+                        }, 
+                        {
+                         "name":"spriteName",
+                         "type":"string",
+                         "value":"Bloco_de_papel"
+                        }, 
+                        {
+                         "name":"unique",
+                         "type":"bool",
+                         "value":true
+                        }],
+                 "rotation":0,
+                 "type":"JornalSpawn",
+                 "visible":true,
+                 "width":120,
+                 "x":1623.51515151515,
+                 "y":431
+                }, 
+                {
                  "gid":2,
                  "height":1347,
                  "id":173,
                  "name":"",
                  "opacity":1,
+                 "properties":[
+                        {
+                         "name":"pillarName",
+                         "type":"string",
+                         "value":"pilares"
+                        }],
                  "rotation":0,
                  "type":"Pilar",
                  "visible":true,
@@ -469,35 +514,6 @@
                  "width":252,
                  "x":1018,
                  "y":1411
-                }, 
-                {
-                 "gid":8,
-                 "height":86,
-                 "id":682,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":50
-                        }, 
-                        {
-                         "name":"heightLevel",
-                         "type":"int",
-                         "value":1
-                        }, 
-                        {
-                         "name":"itemName",
-                         "type":"string",
-                         "value":"Fuel"
-                        }],
-                 "rotation":0,
-                 "type":"ItemSpawn",
-                 "visible":true,
-                 "width":40,
-                 "x":1054,
-                 "y":1275.33333333334
                 }, 
                 {
                  "gid":31,
@@ -774,7 +790,7 @@
                         {
                          "name":"imageName",
                          "type":"string",
-                         "value":"old_letter"
+                         "value":"1ANDAR_AUMENTO_DE_INTERNACOES"
                         }, 
                         {
                          "name":"spriteName",
@@ -785,6 +801,11 @@
                          "name":"unique",
                          "type":"bool",
                          "value":true
+                        }, 
+                        {
+                         "name":"zoomFactor",
+                         "type":"float",
+                         "value":1.2
                         }],
                  "rotation":0,
                  "type":"JornalSpawn",
@@ -879,14 +900,14 @@
                         {
                          "name":"startsLit",
                          "type":"bool",
-                         "value":false
+                         "value":true
                         }],
                  "rotation":0,
                  "type":"Castical",
                  "visible":true,
                  "width":96,
-                 "x":1400,
-                 "y":-93
+                 "x":1354.66666666667,
+                 "y":35
                 }, 
                 {
                  "gid":46,
@@ -940,6 +961,299 @@
                  "width":110,
                  "x":73,
                  "y":858
+                }, 
+                {
+                 "gid":86,
+                 "height":118,
+                 "id":930,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":0
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":1
+                        }, 
+                        {
+                         "name":"imageName",
+                         "type":"string",
+                         "value":"Registros_militares"
+                        }, 
+                        {
+                         "name":"spriteName",
+                         "type":"string",
+                         "value":"Caderno"
+                        }, 
+                        {
+                         "name":"unique",
+                         "type":"bool",
+                         "value":true
+                        }, 
+                        {
+                         "name":"zoomFactor",
+                         "type":"float",
+                         "value":1
+                        }],
+                 "rotation":0,
+                 "type":"JornalSpawn",
+                 "visible":true,
+                 "width":120,
+                 "x":1059.33333333333,
+                 "y":1277.78787878788
+                }, 
+                {
+                 "gid":86,
+                 "height":118,
+                 "id":932,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":200
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":2
+                        }, 
+                        {
+                         "name":"imageName",
+                         "type":"string",
+                         "value":"Inventario_primeiro_andar"
+                        }, 
+                        {
+                         "name":"spriteName",
+                         "type":"string",
+                         "value":"Caderno"
+                        }, 
+                        {
+                         "name":"unique",
+                         "type":"bool",
+                         "value":true
+                        }, 
+                        {
+                         "name":"zoomFactor",
+                         "type":"float",
+                         "value":1
+                        }],
+                 "rotation":0,
+                 "type":"JornalSpawn",
+                 "visible":true,
+                 "width":120,
+                 "x":2725.69696969697,
+                 "y":900.515151515152
+                }, 
+                {
+                 "gid":2147483734,
+                 "height":118,
+                 "id":933,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":250
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":1
+                        }, 
+                        {
+                         "name":"imageName",
+                         "type":"string",
+                         "value":"LISTA DE PRESENCA"
+                        }, 
+                        {
+                         "name":"spriteName",
+                         "type":"string",
+                         "value":"Caderno"
+                        }, 
+                        {
+                         "name":"unique",
+                         "type":"bool",
+                         "value":true
+                        }, 
+                        {
+                         "name":"zoomFactor",
+                         "type":"float",
+                         "value":1
+                        }],
+                 "rotation":0,
+                 "type":"JornalSpawn",
+                 "visible":true,
+                 "width":120,
+                 "x":2202.90909090909,
+                 "y":2272.09090909091
+                }, 
+                {
+                 "gid":8,
+                 "height":82,
+                 "id":934,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":50
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":1
+                        }, 
+                        {
+                         "name":"itemName",
+                         "type":"string",
+                         "value":"Fuel"
+                        }],
+                 "rotation":0,
+                 "type":"ItemSpawn",
+                 "visible":true,
+                 "width":38,
+                 "x":2211,
+                 "y":1609
+                }, 
+                {
+                 "gid":84,
+                 "height":120,
+                 "id":935,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":200
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":1
+                        }, 
+                        {
+                         "name":"imageName",
+                         "type":"string",
+                         "value":"Telefone"
+                        }, 
+                        {
+                         "name":"soundName",
+                         "type":"string",
+                         "value":"telefone"
+                        }, 
+                        {
+                         "name":"spriteName",
+                         "type":"string",
+                         "value":"Telefonin"
+                        }, 
+                        {
+                         "name":"unique",
+                         "type":"bool",
+                         "value":true
+                        }],
+                 "rotation":0,
+                 "type":"JornalSpawn",
+                 "visible":true,
+                 "width":123,
+                 "x":2508.69696969697,
+                 "y":2338.78787878788
+                }, 
+                {
+                 "gid":85,
+                 "height":167,
+                 "id":936,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":0
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":0
+                        }, 
+                        {
+                         "name":"imageName",
+                         "type":"string",
+                         "value":"Caixa_suprimentos"
+                        }, 
+                        {
+                         "name":"soundName",
+                         "type":"string",
+                         "value":"horror"
+                        }, 
+                        {
+                         "name":"spriteName",
+                         "type":"string",
+                         "value":"Caixa"
+                        }, 
+                        {
+                         "name":"unique",
+                         "type":"bool",
+                         "value":true
+                        }],
+                 "rotation":0,
+                 "type":"JornalSpawn",
+                 "visible":true,
+                 "width":211,
+                 "x":2919.24242424242,
+                 "y":1847.63636363636
+                }, 
+                {
+                 "gid":45,
+                 "height":118,
+                 "id":937,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":200
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":1
+                        }, 
+                        {
+                         "name":"imageName",
+                         "type":"string",
+                         "value":"Fotografia_Equipe"
+                        }, 
+                        {
+                         "name":"spriteName",
+                         "type":"string",
+                         "value":"Folha_de_papel"
+                        }, 
+                        {
+                         "name":"unique",
+                         "type":"bool",
+                         "value":true
+                        }, 
+                        {
+                         "name":"zoomFactor",
+                         "type":"float",
+                         "value":1
+                        }],
+                 "rotation":0,
+                 "type":"JornalSpawn",
+                 "visible":true,
+                 "width":120,
+                 "x":718,
+                 "y":2171
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -1381,12 +1695,12 @@
                  "opacity":1,
                  "polygon":[
                         {
-                         "x":12,
-                         "y":-4
+                         "x":22,
+                         "y":-16
                         }, 
                         {
-                         "x":-236,
-                         "y":-230
+                         "x":-234,
+                         "y":-232
                         }, 
                         {
                          "x":-402,
@@ -1700,6 +2014,35 @@
                  "width":0,
                  "x":1517.33333333333,
                  "y":1381.33333333333
+                }, 
+                {
+                 "height":0,
+                 "id":938,
+                 "name":"",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":0,
+                         "y":0
+                        }, 
+                        {
+                         "x":45.333333333333,
+                         "y":54.6666666666665
+                        }, 
+                        {
+                         "x":178.666666666667,
+                         "y":38.6666666666665
+                        }, 
+                        {
+                         "x":121.333333333333,
+                         "y":-26.6666666666667
+                        }],
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":2928,
+                 "y":1776
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -3919,7 +4262,7 @@
                         }],
                  "rotation":0,
                  "type":"Escada",
-                 "visible":true,
+                 "visible":false,
                  "width":0,
                  "x":2122,
                  "y":-88
@@ -4205,7 +4548,7 @@
                  "opacity":1,
                  "rotation":0,
                  "type":"",
-                 "visible":true,
+                 "visible":false,
                  "width":2608.26254826255,
                  "x":548,
                  "y":436
@@ -4217,7 +4560,7 @@
          "y":0
         }],
  "nextlayerid":29,
- "nextobjectid":929,
+ "nextobjectid":945,
  "orientation":"orthogonal",
  "properties":[
         {
@@ -4226,7 +4569,7 @@
          "value":"level_1"
         }],
  "renderorder":"right-down",
- "tiledversion":"1.12.2",
+ "tiledversion":"1.12.1",
  "tileheight":64,
  "tilesets":[
         {

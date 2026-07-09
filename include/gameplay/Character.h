@@ -43,6 +43,16 @@ public:
     ActionState currentState = ActionState::NORMAL;
     float interactTimer = 0.0f;
 
+    void ForceStop() {
+        speed       = Vec2(0.0f, 0.0f);
+        targetSpeed = Vec2(0.0f, 0.0f);
+        currentState = ActionState::INTERACTING;
+    }
+
+    void ReleaseInteract() {
+        currentState = ActionState::NORMAL;
+    }
+
     void SetSpeedMultiplier(float multiplier);                          // Ajusta multiplicador de velocidade do personagem
     void SetBaseSpeed(float speed);                                     // Ajusta velocidade base de movimento
     void PositionForCoop(Character* leader);                            // Pra pegar a posição de onde os irmãos estão olhando
