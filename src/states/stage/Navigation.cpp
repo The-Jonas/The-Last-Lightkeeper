@@ -170,7 +170,7 @@ bool StageState::IsTileNavigableFor(const GameObject* agent, int tx, int ty, flo
     for (GameObject* go : dynamicColliderCache) {
         if (go == agent) continue;
         Collider* col = go->GetComponent<Collider>();
-        if (!col) continue;
+        if (!col || !col->IsEnabled()) continue;
         Rect a = footRect;
         Rect b = col->box;
         const float angleRad = static_cast<float>(go->angleDeg) * (static_cast<float>(M_PI) / 180.0f);

@@ -44,7 +44,7 @@ void EndState::LoadAssets() {
     if (GameData::playerVictory) {
         musicFile = "Recursos/audio/soundtracks/dark_harmonics_Dark_Rumble_Atmos_02_191.mp3";
     } else {
-        musicFile = "Recursos/audio/soundtracks/Akane's Regret.mp3";
+        musicFile = "Recursos/audio/soundtracks/Akane's_Regret.mp3";
     }
 
     backgroundMusic.Open(musicFile);

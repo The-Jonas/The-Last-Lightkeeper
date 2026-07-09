@@ -192,7 +192,7 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
         hudLine2 = new GameObject();
         hudLine2->z = 100;
         hudLine2->AddComponent(new Text(*hudLine2, "Recursos/font/times.ttf", 18, Text::BLENDED,
-                                         "E interagir/pegar/acender/consertar | F usar item/luz/oleo | Esc sair",
+                                         "E interagir/pegar/acender/consertar | F5 pular level | F usar item/luz/oleo | Esc sair",
                                         hudColor));
         AddObject(hudLine2);
 

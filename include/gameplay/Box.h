@@ -4,7 +4,7 @@
 #include "engine/Component.h"
 #include <string>
 
-class Box : public Component {
+class   Box : public Component {
 public:
     // O construtor recebe se a imagem é estática (true = parede) ou dinâmica (false = empurrável)
     Box(GameObject& associated, bool isStatic, std::string spritePath = "Recursos/img/objetos/Caixa.png", float weightMulti = 1.0f);
@@ -25,7 +25,9 @@ public:
     static bool IsActivePushTarget(const Box* box);
     bool TryMoveBy(float dx, float dy);
 
-    float GetWeightMultiplier() const { return weightMultiplier; }
+    float GetWeightMultiplier() const { 
+        return weightMultiplier; 
+    }
 
 private:
     bool IsPositionBlocked() const;

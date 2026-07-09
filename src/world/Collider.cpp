@@ -17,6 +17,7 @@ Collider::Collider(GameObject& associated, Vec2 scale, Vec2 offset)
 }
 
 void Collider::Update(float dt){
+    if (!enabled) return;
     box = associated.box;                       // Seta a box como uma cópia da box de associated
 
     // Multiplica a altura e a largura pela escala

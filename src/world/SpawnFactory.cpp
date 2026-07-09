@@ -16,6 +16,8 @@
 #include "gameplay/Closet.h"
 #include "gameplay/Window.h"
 #include "gameplay/RadioAsset.h"
+#include "gameplay/Curtain.h"
+#include "gameplay/CurtainTrigger.h"
 #include "gameplay/Monster.h"
 #include "ui/MonsterSilhouette.h"
 #include <iostream>
@@ -106,16 +108,20 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         stage.RegisterTestShadowObject(boxObj);
     }
     else if (spawn.type == "Pilar") {
+        std::string pillarName = "pilares";
+        if (spawn.properties.count("pillarName"))
+            pillarName = spawn.properties.at("pillarName").get<std::string>();
+
         GameObject* pilarObj = new GameObject();
         pilarObj->tiledId = spawn.tiledId;
         pilarObj->z = spawn.z;
 
-        SpriteRenderer* sprite = new SpriteRenderer(*pilarObj, "Recursos/img/cenario/pilares.png");
+        std::string path = "Recursos/img/cenario/" + pillarName + ".png";
+        SpriteRenderer* sprite = new SpriteRenderer(*pilarObj, path);
         pilarObj->AddComponent(sprite);
         pilarObj->AddComponent(new FadeEffect(*pilarObj));
 
         ApplyTiledBox(pilarObj, spawn);
-
         ApplyTiledFlip(pilarObj, spawn);
 
         stage.AddObject(pilarObj);
@@ -278,7 +284,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         std::string imageName = "old_letter";
         if (spawn.properties.count("imageName"))
             imageName = spawn.properties.at("imageName").get<std::string>();
-        std::string imagePath = "Recursos/img/documentos/" + imageName + ".jpg";
+        std::string imagePath = "Recursos/img/documentos/" + imageName + ".png";
 
         // ── SOM OPCIONAL ao interagir ──────────────────────────────────────────
         std::string soundPath = "";
@@ -374,7 +380,9 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         ApplyTiledFlip(caixasObj, spawn);
  
         stage.AddObject(caixasObj);
-        stage.RegisterTestShadowObject(caixasObj);
+        if (name != "Sangue"){ 
+            stage.RegisterTestShadowObject(caixasObj);
+        }
     }
     else if (spawn.type == "Mesa") {
         float depthOff = 0.0f;
@@ -535,5 +543,61 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
 
         stage.AddObject(fishingObj);
         stage.RegisterTestShadowObject(fishingObj);
+    }
+    else if (spawn.type == "Cortina") {
+        int   curtainId   = 0;
+        bool  startsOpen  = false;
+        float animDuration = 2.0f;
+        std::string spriteName = "Lona";
+    
+        if (spawn.properties.count("curtainId"))    curtainId    = spawn.properties.at("curtainId").get<int>();
+        if (spawn.properties.count("startsOpen"))   startsOpen   = spawn.properties.at("startsOpen").get<bool>();
+        if (spawn.properties.count("animDuration")) animDuration = spawn.properties.at("animDuration").get<float>();
+        if (spawn.properties.count("spriteName"))   spriteName   = spawn.properties.at("spriteName").get<std::string>();
+    
+        std::string path = "Recursos/img/cenario/" + spriteName + ".png";
+    
+        GameObject* obj = new GameObject();
+        obj->tiledId    = spawn.tiledId;
+        obj->z          = spawn.z;
+        obj->AddComponent(new SpriteRenderer(*obj, path));
+        obj->AddComponent(new Curtain(*obj, curtainId, startsOpen, animDuration));
+        ApplyTiledBox(obj, spawn);
+        ApplyTiledFlip(obj, spawn);
+        stage.AddObject(obj);
+    }
+    
+    else if (spawn.type == "CortinaTriggerAbrir") {
+        // Qualquer irmão entra -> abre a cortina
+        int curtainId = 0;
+        if (spawn.properties.count("curtainId"))
+            curtainId = spawn.properties.at("curtainId").get<int>();
+    
+        GameObject* obj = new GameObject();
+        obj->tiledId = spawn.tiledId;
+        obj->z       = spawn.z;
+        obj->box.x   = spawn.x;      
+        obj->box.y   = spawn.y;
+        obj->box.w   = spawn.w;
+        obj->box.h   = spawn.h;
+        obj->AddComponent(new CurtainTrigger(*obj, curtainId, CurtainTriggerAction::OPEN));
+        stage.AddObject(obj);
+    }
+ 
+    else if (spawn.type == "CortinaTriggerFechar") {
+        // AMBOS os irmãos entram -> fecha a cortina
+        int curtainId = 0;
+        if (spawn.properties.count("curtainId"))
+            curtainId = spawn.properties.at("curtainId").get<int>();
+    
+        GameObject* obj = new GameObject();
+        obj->tiledId = spawn.tiledId;
+        obj->z       = spawn.z;
+        obj->box.x   = spawn.x;      
+        obj->box.y   = spawn.y;
+        obj->box.w   = spawn.w;
+        obj->box.h   = spawn.h;
+        obj->AddComponent(new CurtainTrigger(*obj, curtainId, CurtainTriggerAction::CLOSE));
+        stage.AddObject(obj);
     }
 }
