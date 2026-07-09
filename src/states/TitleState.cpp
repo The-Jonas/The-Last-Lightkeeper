@@ -9,6 +9,7 @@
 #include "engine/GameObject.h"
 #include "engine/SpriteRenderer.h"
 #include "core/InputManager.h"
+#include "ui/VideoSettings.h"
 #include "engine/Camera.h"
 #include "ui/Text.h"
 #include "core/Resources.h"
@@ -209,9 +210,10 @@ void TitleState::LoadAssets() {
     }
     
     hasContinueSave = SaveManager::HasSave();
-    
-    // Configura a seleção inicial corretamente
-    menuSelection = hasContinueSave ? 1 : 0; 
+
+    // Seleção inicial SEMPRE em "Novo Jogo" (índice 0). "Continuar" (índice 1) só
+    // fica disponível/selecionável quando existe um save de verdade (ver isDisabled).
+    menuSelection = 0;
     
     charFrameIndex=0; charAnimTimer=0.0f;
     fadeTimer=Timer(); fadeAlpha=0.0f; pulseTimer=0.0f;
@@ -321,6 +323,9 @@ void TitleState::OpenConfig() {
 void TitleState::UpdateConfig(InputManager& input) {
     if(!configOpen) return;
 
+    // O overlay de vídeo (dropdown + Aplicar) fica por cima e captura o input.
+    if(VideoSettings::IsOpen()) { VideoSettings::HandleInput(input); return; }
+
     int mx=input.GetMouseX(), my=input.GetMouseY();
     SDL_Point mp{mx,my};
 
@@ -332,10 +337,11 @@ void TitleState::UpdateConfig(InputManager& input) {
         configOpen=false; Game::SaveSettings(); return;
     }
 
-    // Abas
+    // Abas (a aba "Video" é um atalho que abre o overlay de vídeo).
     if(input.MousePress(SDL_BUTTON_LEFT)) {
         if(SDL_PointInRect(&mp,&configTabVolume))    { configTab=0; awaitingRebind=false; }
-        if(SDL_PointInRect(&mp,&configTabControles)) { configTab=1; awaitingRebind=false; }
+        if(SDL_PointInRect(&mp,&configTabVideo))     { VideoSettings::Open(); awaitingRebind=false; return; }
+        if(SDL_PointInRect(&mp,&configTabControles)) { configTab=2; awaitingRebind=false; }
     }
 
     if(configTab==0) {
@@ -385,6 +391,39 @@ void TitleState::RenderConfigVolume(SDL_Renderer* r, int px, int py, int pw, int
     auto font=Resources::GetFont("Recursos/font/Broadsheet_0.ttf",14);
     if(font) DrawText(r,font.get(),"Ajuste os volumes com o mouse",
         px+pw/2,py+ph-40,{150,150,150,200},1,0);
+}
+
+void TitleState::RenderConfigVideo(SDL_Renderer* r, int px, int py, int pw, int ph) {
+    auto labelFont=Resources::GetFont("Recursos/font/Broadsheet_0.ttf",18);
+    auto hintFont =Resources::GetFont("Recursos/font/Broadsheet_0.ttf",14);
+    if(!labelFont) return;
+    const int rowH=42, gap=10, contentTop=16;
+    const char* labels[kVideoRowCount]={"Modo de tela","Resolucao","Voltar"};
+    for(int i=0;i<kVideoRowCount;i++) {
+        const int rowY=py+contentTop+i*(rowH+gap);
+        SDL_Rect rr{px+20,rowY,pw-40,rowH};
+        videoRowRects[i]=rr;
+        bool sel=(i==videoSelection);
+        if(sel) {
+            SDL_SetRenderDrawBlendMode(r,SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(r,60,55,40,220);
+            SDL_RenderFillRect(r,&rr);
+            SDL_SetRenderDrawBlendMode(r,SDL_BLENDMODE_NONE);
+        }
+        SDL_Color lc=sel?SDL_Color{245,225,180,255}:SDL_Color{180,180,180,255};
+        int ty=rowY+(rowH-20)/2;
+        DrawText(r,labelFont.get(),labels[i],rr.x+12,ty,lc);
+        if(i==0) {
+            const std::string v=std::string("< ")+Game::CurrentDisplayModeLabel()+" >";
+            DrawText(r,labelFont.get(),v.c_str(),rr.x+rr.w-12,ty,lc,2,0);
+        } else if(i==1) {
+            const std::string v=std::string("< ")+Game::CurrentResolutionLabel()+" >";
+            DrawText(r,labelFont.get(),v.c_str(),rr.x+rr.w-12,ty,lc,2,0);
+        }
+    }
+    if(hintFont)
+        DrawText(r,hintFont.get(),"Aplicam ao reiniciar o jogo",
+            px+pw/2,py+ph-40,{150,150,150,200},1,0);
 }
 
 void TitleState::RenderConfigControles(SDL_Renderer* r, int px, int py, int pw, int ph) {
@@ -466,9 +505,10 @@ void TitleState::RenderConfig(SDL_Renderer* r) {
         configCloseBtn.y+4,{255,200,200,255},1,configCloseBtn.w);
 
     // Abas
-    const int tabY=py+56, tabH=30, tabW=pw/2;
-    configTabVolume   ={px,        tabY,tabW,tabH};
-    configTabControles={px+tabW,   tabY,tabW,tabH};
+    const int tabY=py+56, tabH=30, tabW=pw/3;
+    configTabVolume   ={px,          tabY,tabW,tabH};
+    configTabVideo    ={px+tabW,     tabY,tabW,tabH};
+    configTabControles={px+2*tabW,   tabY,pw-2*tabW,tabH};
 
     auto drawTab=[&](SDL_Rect tab, const char* label, bool active){
         SDL_SetRenderDrawBlendMode(r,SDL_BLENDMODE_BLEND);
@@ -482,16 +522,20 @@ void TitleState::RenderConfig(SDL_Renderer* r) {
         if(tabFont) DrawText(r,tabFont.get(),label,tab.x,tab.y+6,tc,1,tab.w);
     };
     drawTab(configTabVolume,   "Volume",    configTab==0);
-    drawTab(configTabControles,"Controles", configTab==1);
+    drawTab(configTabVideo,    "Video",     configTab==1);
+    drawTab(configTabControles,"Controles", configTab==2);
 
     // Linha separadora das abas
     SDL_SetRenderDrawColor(r,160,140,90,180);
     SDL_RenderDrawLine(r,px,tabY+tabH,px+pw,tabY+tabH);
 
-    // Conteudo da aba
+    // Conteudo da aba (a aba "Video" abre um overlay próprio, não tem conteúdo inline)
     const int contentPY=tabY+tabH+10;
     if(configTab==0) RenderConfigVolume(r,px,contentPY,pw,ph-(contentPY-py));
     else             RenderConfigControles(r,px,contentPY,pw,ph-(contentPY-py));
+
+    // Overlay de vídeo por cima do painel de config.
+    VideoSettings::Render(r);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -93,7 +93,7 @@ private:
 
     // ── Painel de configuracoes ───────────────────────────────────────────────
     bool configOpen         = false;
-    int  configTab          = 0;   // 0=Volume  1=Controles
+    int  configTab          = 0;   // 0=Volume  1=Video  2=Controles
     bool awaitingRebind     = false;
     GameAction rebindAction = GameAction::MoveUp;
     int  controlsSelection  = 0;
@@ -101,12 +101,19 @@ private:
     SDL_Rect controlsRowRects[InputManager::ActionCount + 2]{};
     SDL_Rect configCloseBtn{};
     SDL_Rect configTabVolume{};
+    SDL_Rect configTabVideo{};
     SDL_Rect configTabControles{};
+
+    // Aba "Video": 0=Modo de tela  1=Resolucao  2=Voltar (aplicam ao reiniciar).
+    int  videoSelection = 0;
+    static constexpr int kVideoRowCount = 3;
+    SDL_Rect videoRowRects[kVideoRowCount]{};
 
     void OpenConfig();
     void UpdateConfig(InputManager& input);
     void RenderConfig(SDL_Renderer* r);
     void RenderConfigVolume(SDL_Renderer* r, int px, int py, int pw, int ph);
+    void RenderConfigVideo(SDL_Renderer* r, int px, int py, int pw, int ph);
     void RenderConfigControles(SDL_Renderer* r, int px, int py, int pw, int ph);
 
     // ── Helpers de layout ────────────────────────────────────────────────────

@@ -197,6 +197,11 @@ void EndState::Start() {
     GameSfx::HardStopAll();
     GameVoice::StopAll();
     LoadAssets();
+    // Morte pelo monstro: solta o grito dele na tela de "Fim de Jogo" (depois do
+    // HardStopAll, para o grito não ser cortado junto com o resto do áudio).
+    if (!creditsOnly && !GameData::playerVictory && GameData::deathByMonster) {
+        GameSfx::PlayMonsterScream();
+    }
     StartArray();
     started = true;
 }
@@ -340,9 +345,9 @@ void EndState::RenderVictoryIntro(SDL_Renderer* renderer) {
     const SDL_Color warm{232, 210, 170, a};
     const SDL_Color soft{200, 200, 210, a};
     const Line lines[] = {
-        {"Vocês escaparam.", 60, warm, -90.0f},
-        {"A luz do farol vos guiou para fora da escuridão.", 28, soft, 0.0f},
+        {"Vocês escaparam... ou não?", 60, warm, -90.0f},
         {"Obrigado por jogar.", 40, warm, 90.0f},
+        {"Esse é apenas o início do horror que te atormenta...", 28, soft, 0.0f},
     };
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);

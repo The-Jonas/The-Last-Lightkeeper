@@ -254,57 +254,138 @@ void InventoryWheel::DrawSlot(SDL_Renderer* renderer, int stackIndex, float x, f
     }
 }
 
-void InventoryWheel::DrawPrimedOil(SDL_Renderer* renderer, float activeX, float activeY) {
+namespace {
+// Rótulo amigável (PT) para as fontes de luz no modal de reabastecimento.
+std::string RefuelDisplayName(const std::string& internalName) {
+    if (internalName == "Flashlight" || internalName == "Broken Flashlight") return "Isqueiro";
+    if (internalName == "Lamp") return "Lamparina";
+    return internalName;
+}
+
+// Desenha um texto centrado horizontalmente em cx, com o topo em topY. Devolve
+// a altura desenhada (0 se falhar).
+float DrawCenteredText(SDL_Renderer* r, TTF_Font* font, const std::string& text,
+                       float cx, float topY, SDL_Color color) {
+    if (!font) return 0.0f;
+    SDL_Surface* sf = TTF_RenderUTF8_Blended(font, text.c_str(), color);
+    if (!sf) return 0.0f;
+    SDL_Texture* t = SDL_CreateTextureFromSurface(r, sf);
+    const float w = static_cast<float>(sf->w);
+    const float h = static_cast<float>(sf->h);
+    SDL_FreeSurface(sf);
+    if (!t) return 0.0f;
+    const SDL_FRect dst{cx - w * 0.5f, topY, w, h};
+    SDL_RenderCopyF(r, t, nullptr, &dst);
+    SDL_DestroyTexture(t);
+    return h;
+}
+}  // namespace
+
+// Modal central: "Escolha qual item quer abastecer". Lista as fontes de luz que
+// ainda cabem óleo; a selecionada fica destacada. Navega com A/D ou setas e
+// confirma com [F].
+void InventoryWheel::DrawRefuelSelector(SDL_Renderer* renderer) {
     if (!inventory.IsOilPrimed()) return;
+    const std::vector<int> targets = inventory.GetRefuelTargetIndices();
+    if (targets.empty()) return;
 
-    // When the centered slot can't take the oil (empty slot or a non-light /
-    // already-full item), keep the floating icon faded so the player sees it.
-    // Quando PODE recarregar, o ícone fica bem claro/quente para mostrar que
-    // está prestes a interagir com o combustível (antes ficava escuro demais
-    // contra a escuridão do cenário).
-    const bool canUse = inventory.CanCombineOilWithActive();
-    const Uint8 iconAlpha = canUse ? 255 : 120;
+    int winW = 0, winH = 0;
+    SDL_GetRendererOutputSize(renderer, &winW, &winH);
+    const float cx = winW * 0.5f;
+    const float cy = winH * 0.5f;
 
-    float bobOffset = std::sin(bobTimer * 3.0f) * 7.0f;
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
-    // Roda vertical: o óleo flutuante fica à DIREITA do slot ativo (lado aberto),
-    // centrado verticalmente, com um leve balanço.
-    const float iconSize = kIconSize * 0.6f;
-    const float iconCX = activeX + kSlotSize * 0.5f + 16.0f + iconSize * 0.5f;
-    const float iconX  = iconCX - iconSize * 0.5f;
-    const float iconY  = activeY - iconSize * 0.5f + bobOffset;
+    // Fundo escurecido em tela cheia.
+    const SDL_FRect full{0.0f, 0.0f, static_cast<float>(winW), static_cast<float>(winH)};
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 175);
+    SDL_RenderFillRectF(renderer, &full);
 
-    auto tex = Resources::GetImage(inventory.GetPrimedOilSpritePath());
-    if (tex) {
-        const SDL_FRect dst = FitIconRect(tex.get(), iconX, iconY, iconSize, iconSize);
-        SDL_SetTextureAlphaMod(tex.get(), iconAlpha);
-        if (canUse) {
-            SDL_SetTextureColorMod(tex.get(), 255, 250, 235);
+    // Título.
+    auto titleFont = Resources::GetFont("Recursos/font/times.ttf", 30);
+    DrawCenteredText(renderer, titleFont ? titleFont.get() : nullptr,
+                     "Escolha qual item quer abastecer",
+                     cx, cy - 150.0f, SDL_Color{240, 228, 195, 255});
+
+    // Linha de candidatos.
+    const int n = static_cast<int>(targets.size());
+    const int sel = inventory.GetRefuelSelection();
+    const float slot = 118.0f;
+    const float gap  = 46.0f;
+    const float totalW = n * slot + (n - 1) * gap;
+    const float startCX = cx - totalW * 0.5f + slot * 0.5f;
+    const float pulse = 1.0f + std::sin(bobTimer * 4.0f) * 0.04f;
+
+    auto nameFont = Resources::GetFont("Recursos/font/times.ttf", 18);
+
+    for (int i = 0; i < n; ++i) {
+        const bool selected = (i == sel);
+        const float scx = startCX + i * (slot + gap);
+        const float radius = (slot * 0.5f) * (selected ? pulse : 0.9f);
+
+        // Halo suave na seleção.
+        if (selected) {
+            FillCircle(renderer, scx, cy, radius * 1.28f, 235, 200, 110, 45);
+            FillCircle(renderer, scx, cy, radius * 1.14f, 235, 200, 110, 60);
+        }
+        FillCircle(renderer, scx, cy, radius, 26, 26, 33, selected ? 235 : 170);
+        if (selected) {
+            StrokeCircle(renderer, scx, cy, radius, 230, 195, 60, 255);
+            StrokeCircle(renderer, scx, cy, radius - 2.0f, 230, 195, 60, 150);
         } else {
-            SDL_SetTextureColorMod(tex.get(), 175, 175, 185);
+            StrokeCircle(renderer, scx, cy, radius, 70, 70, 85, 220);
         }
-        SDL_RenderCopyExF(renderer, tex.get(), nullptr, &dst, 0.0, nullptr, SDL_FLIP_NONE);
+
+        const Inventory::ItemStack* stack = inventory.GetRefuelTargetStack(i);
+        if (!stack) continue;
+
+        // Ícone.
+        auto tex = Resources::GetImage(stack->def.spritePath);
+        if (tex) {
+            const float iconSz = radius * 1.25f;
+            const SDL_FRect dst = FitIconRect(tex.get(), scx - iconSz * 0.5f,
+                                              cy - iconSz * 0.5f, iconSz, iconSz);
+            SDL_SetTextureAlphaMod(tex.get(), selected ? 255 : 150);
+            SDL_SetTextureColorMod(tex.get(), 255, 255, 255);
+            SDL_RenderCopyExF(renderer, tex.get(), nullptr, &dst, 0.0, nullptr, SDL_FLIP_NONE);
+        }
+
+        // Anel de durabilidade atual.
+        if (stack->def.maxDurability > 0 && !stack->durabilities.empty()) {
+            float ratio = static_cast<float>(stack->durabilities.front()) /
+                          static_cast<float>(stack->def.maxDurability);
+            ratio = std::max(0.0f, std::min(1.0f, ratio));
+            Uint8 gR, gG, gB;
+            if (ratio > 0.6f)       { gR = 70;  gG = 180; gB = 80; }
+            else if (ratio > 0.25f) { gR = 210; gG = 170; gB = 50; }
+            else                    { gR = 200; gG = 55;  gB = 55; }
+            DrawDurabilityRing(renderer, scx, cy, radius + 9.0f, 6.0f, ratio,
+                               gR, gG, gB, selected ? 255 : 160);
+        }
+
+        // Nome do item abaixo do slot.
+        DrawCenteredText(renderer, nameFont ? nameFont.get() : nullptr,
+                         RefuelDisplayName(stack->def.name), scx, cy + radius + 16.0f,
+                         selected ? SDL_Color{245, 232, 200, 255}
+                                  : SDL_Color{160, 160, 170, 220});
     }
 
-    auto font = Resources::GetFont("Recursos/font/times.ttf", 10);
-    if (font) {
-        char buf[16];
-        std::snprintf(buf, sizeof(buf), "%d", inventory.GetPrimedOilDurability());
-        SDL_Color textColor = canUse ? SDL_Color{255, 215, 40, 230}
-                                     : SDL_Color{170, 170, 170, 90};
-        SDL_Surface* surface = TTF_RenderUTF8_Blended(font.get(), buf, textColor);
-        if (surface) {
-            SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
-            const float textW = static_cast<float>(surface->w);
-            const float textH = static_cast<float>(surface->h);
-            SDL_FreeSurface(surface);
-            if (texture) {
-                const SDL_FRect textDst{iconCX - textW * 0.5f, iconY + iconSize + 2.0f, textW, textH};
-                SDL_RenderCopyF(renderer, texture, nullptr, &textDst);
-                SDL_DestroyTexture(texture);
-            }
-        }
-    }
+    // Dicas de navegação/confirmação.
+    InputManager& im = InputManager::GetInstance();
+    auto keyName = [](int code, const char* fb) {
+        const char* k = SDL_GetKeyName(code);
+        return (k && k[0] != '\0') ? std::string(k) : std::string(fb);
+    };
+    const std::string lf = keyName(im.GetBinding(GameAction::MoveLeft), "A");
+    const std::string rt = keyName(im.GetBinding(GameAction::MoveRight), "D");
+    const std::string useK = keyName(im.GetBinding(GameAction::UseItem), "F");
+
+    auto hintFont = Resources::GetFont("Recursos/font/times.ttf", 17);
+    DrawCenteredText(renderer, hintFont ? hintFont.get() : nullptr,
+                     "[" + lf + "] / [" + rt + "] escolher     [" + useK + "] confirmar     [ESC] cancelar",
+                     cx, cy + 140.0f, SDL_Color{205, 200, 185, 235});
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }
 
 void InventoryWheel::DrawCycleKeyHints(SDL_Renderer* renderer) {
@@ -328,45 +409,48 @@ void InventoryWheel::DrawCycleKeyHints(SDL_Renderer* renderer) {
         const char* k = SDL_GetKeyName(code);
         return (k && k[0] != '\0') ? std::string(k) : std::string(fallback);
     };
-    const std::string upKey   = keyName(im.GetBinding(GameAction::CyclePrev), "Left");
-    const std::string downKey = keyName(im.GetBinding(GameAction::CycleNext), "Right");
+    const std::string prevLabel = keyName(im.GetBinding(GameAction::CyclePrev), "Left");
+    const std::string nextLabel = keyName(im.GetBinding(GameAction::CycleNext), "Right");
 
-    auto font = Resources::GetFont("Recursos/font/times.ttf", 16);
-    if (!font) return;
+    // Imagem da tecla-seta (mesma p/ os dois; a da ESQUERDA é espelhada) + rótulo
+    // pequeno logo ABAIXO da imagem.
+    auto keyTex = Resources::GetImage("Recursos/img/hud/key_arrow.png");
+    auto font   = Resources::GetFont("Recursos/font/times.ttf", 13);   // texto pequeno
 
-    // dir = -1 (acima) / +1 (abaixo): posiciona a caixa colada ao slot da ponta.
-    auto drawBadge = [&](float slotCX, float slotCY, float dir, const std::string& text) {
-        SDL_Color col{245, 232, 200, 255};
-        SDL_Surface* sf = TTF_RenderUTF8_Blended(font.get(), text.c_str(), col);
-        if (!sf) return;
-        SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, sf);
-        const int tw = sf->w;
-        const int th = sf->h;
-        SDL_FreeSurface(sf);
-        if (!t) return;
+    // dir = -1 (acima do slot de cima) / +1 (abaixo do de baixo).
+    // leftArrow=true → espelha a imagem (seta apontando p/ a esquerda).
+    auto drawKeyHint = [&](float slotCX, float slotCY, float dir, bool leftArrow, const std::string& label) {
+        const float imgSize = 30.0f;   // imagem pequena
+        const float textGap = 1.0f;
 
-        const float padX = 7.0f;
-        const float padY = 4.0f;
-        const float bw = std::max(static_cast<float>(tw), 13.0f) + padX * 2.0f;
-        const float bh = static_cast<float>(th) + padY * 2.0f;
+        SDL_Texture* txt = nullptr; int tw = 0, th = 0;
+        if (font) {
+            SDL_Color col{235, 225, 195, 255};
+            if (SDL_Surface* sf = TTF_RenderUTF8_Blended(font.get(), label.c_str(), col)) {
+                txt = SDL_CreateTextureFromSurface(renderer, sf);
+                tw = sf->w; th = sf->h;
+                SDL_FreeSurface(sf);
+            }
+        }
+        const float totalH = imgSize + (txt ? textGap + th : 0.0f);
         const float edge = slotCY + dir * edgeSlotHalf;
-        const float cy = edge + dir * (slotGap + bh * 0.5f);
-        const SDL_FRect bg{slotCX - bw * 0.5f, cy - bh * 0.5f, bw, bh};
+        const float top  = (dir < 0.0f) ? (edge - slotGap - totalH) : (edge + slotGap);
 
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(renderer, 18, 18, 24, 210);
-        SDL_RenderFillRectF(renderer, &bg);
-        SDL_SetRenderDrawColor(renderer, 200, 180, 110, 230);
-        SDL_RenderDrawRectF(renderer, &bg);
-
-        const SDL_FRect dst{slotCX - tw * 0.5f, cy - th * 0.5f, static_cast<float>(tw), static_cast<float>(th)};
-        SDL_RenderCopyF(renderer, t, nullptr, &dst);
-        SDL_DestroyTexture(t);
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+        if (keyTex) {
+            const SDL_FRect imgDst{ slotCX - imgSize * 0.5f, top, imgSize, imgSize };
+            SDL_RenderCopyExF(renderer, keyTex.get(), nullptr, &imgDst, 0.0, nullptr,
+                              leftArrow ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
+        }
+        if (txt) {
+            const SDL_FRect td{ slotCX - tw * 0.5f, top + imgSize + textGap,
+                                static_cast<float>(tw), static_cast<float>(th) };
+            SDL_RenderCopyF(renderer, txt, nullptr, &td);
+            SDL_DestroyTexture(txt);
+        }
     };
 
-    drawBadge(tx, ty, -1.0f, upKey);    // ↑ acima do slot de cima
-    drawBadge(bx, by, +1.0f, downKey);  // ↓ abaixo do slot de baixo
+    drawKeyHint(tx, ty, -1.0f, true,  prevLabel);   // topo (item anterior) = seta ESQUERDA
+    drawKeyHint(bx, by, +1.0f, false, nextLabel);   // baixo (próximo item) = seta DIREITA
 }
 
 void InventoryWheel::Render() {
@@ -426,8 +510,56 @@ void InventoryWheel::Render() {
     }
 
     if (inventory.IsOilPrimed()) {
-        DrawPrimedOil(renderer, activeSlotX, activeSlotY);
+        // Modal central "Escolha qual item quer abastecer" — substitui as dicas
+        // da roda enquanto o reabastecimento está ativo.
+        DrawRefuelSelector(renderer);
+    } else {
+        DrawUseHint(renderer, activeSlotX, activeSlotY);
+        DrawCycleKeyHints(renderer);
+    }
+}
+
+// "[F] Usar" logo ao lado do slot ativo quando o item tem uso
+// (isqueiro/lâmpada = LIGHT_SOURCE, ou óleo = FUEL).
+void InventoryWheel::DrawUseHint(SDL_Renderer* renderer, float activeX, float activeY) {
+    const Inventory::ItemStack* active = inventory.GetActiveStack();
+    if (!active) return;
+    const bool usable = active->def.HasProperty(ItemProperty::LIGHT_SOURCE) ||
+                        active->def.HasProperty(ItemProperty::FUEL);
+    if (!usable) return;
+
+    // Mesmo tamanho/estilo das dicas de seta (DrawCycleKeyHints): ícone da tecla
+    // (~30px) + rótulo pequeno logo abaixo. Aqui o ícone é a tecla [F] e o texto
+    // é "Usar".
+    auto keyTex = Resources::GetImage("Recursos/img/hud/key_f.png");
+    auto font = Resources::GetFont("Recursos/font/times.ttf", 13);
+    const float imgSize = 30.0f;
+    const float textGap = 1.0f;
+
+    SDL_Texture* txt = nullptr; int tw = 0, th = 0;
+    if (font) {
+        SDL_Color col{235, 225, 195, 255};
+        if (SDL_Surface* s = TTF_RenderUTF8_Blended(font.get(), "Usar", col)) {
+            txt = SDL_CreateTextureFromSurface(renderer, s);
+            tw = s->w; th = s->h;
+            SDL_FreeSurface(s);
+        }
     }
 
-    DrawCycleKeyHints(renderer);
+    const float totalH = imgSize + (txt ? textGap + th : 0.0f);
+    // À direita do slot ativo (lado aberto da roda), bloco centralizado na vertical.
+    const float gap = 40.0f;
+    const float cx = activeX + kSlotSize * 0.5f + gap + imgSize * 0.5f;
+    const float top = activeY - totalH * 0.5f;
+
+    if (keyTex) {
+        const SDL_FRect imgDst{ cx - imgSize * 0.5f, top, imgSize, imgSize };
+        SDL_RenderCopyExF(renderer, keyTex.get(), nullptr, &imgDst, 0.0, nullptr, SDL_FLIP_NONE);
+    }
+    if (txt) {
+        const SDL_FRect td{ cx - tw * 0.5f, top + imgSize + textGap,
+                            static_cast<float>(tw), static_cast<float>(th) };
+        SDL_RenderCopyF(renderer, txt, nullptr, &td);
+        SDL_DestroyTexture(txt);
+    }
 }

@@ -34,7 +34,7 @@ void LevelTransitionLoadingState::LoadAssets() {
     GameObject* textGO = new GameObject();
     textGO->z = 10;
     SDL_Color white = {220, 220, 220, 255};
-    Text* t = new Text(*textGO, "Recursos/font/times.ttf", 40, Text::BLENDED, "Loading...", white);
+    Text* t = new Text(*textGO, "Recursos/font/times.ttf", 40, Text::BLENDED, "Carregando...", white);
     textGO->AddComponent(t);
     AddObject(textGO);
     loadingLabel = textGO;

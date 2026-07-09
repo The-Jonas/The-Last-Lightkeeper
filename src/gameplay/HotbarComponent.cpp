@@ -154,6 +154,18 @@ ItemPickup* HotbarComponent::FindClosestReachablePickup() const {
 void HotbarComponent::TryCycleWheel() {
     InputManager& input = InputManager::GetInstance();
 
+    // Modo de reabastecimento: as setas / A / D navegam entre as fontes de luz
+    // do modal central (e NÃO giram a roda). Confirmar é com [F] (TryUse...).
+    if (inventory.IsOilPrimed()) {
+        if (input.ActionPress(GameAction::CyclePrev) || input.ActionPress(GameAction::MoveLeft)) {
+            inventory.RefuelSelectionPrev();
+        }
+        if (input.ActionPress(GameAction::CycleNext) || input.ActionPress(GameAction::MoveRight)) {
+            inventory.RefuelSelectionNext();
+        }
+        return;
+    }
+
     bool cycled = false;
     if (input.ActionPress(GameAction::CyclePrev)) {
         inventory.CycleLeft();

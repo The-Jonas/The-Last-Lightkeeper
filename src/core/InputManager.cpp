@@ -1,4 +1,5 @@
 #include "core/InputManager.h"
+#include "core/Game.h"
 #include <iostream>
 
 InputManager::InputManager(){
@@ -43,7 +44,16 @@ InputManager& InputManager::GetInstance(){              // Ao invés de dar new 
 
 void InputManager::Update(){
     updateCounter ++;                                   // Incrementa o contador de frame
-    SDL_GetMouseState(&mouseX, &mouseY);                // Obtém as coordenadas do mouse
+    SDL_GetMouseState(&mouseX, &mouseY);                // Coordenadas do mouse (pixels da tela)
+    // Converte para o ESPAÇO LÓGICO de render (a resolução escolhida), pois o
+    // jogo usa SDL_RenderSetLogicalSize — assim mira da lanterna, HUD e cliques
+    // batem com o que é desenhado, mesmo com escala/letterbox do fullscreen.
+    if (SDL_Renderer* r = Game::GetInstance().GetRenderer()) {
+        float lx = 0.0f, ly = 0.0f;
+        SDL_RenderWindowToLogical(r, mouseX, mouseY, &lx, &ly);
+        mouseX = static_cast<int>(lx);
+        mouseY = static_cast<int>(ly);
+    }
     mouseWheel = 0;
     quitRequested = false;                              // Reinicia a flag de quit
 

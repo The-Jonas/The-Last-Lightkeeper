@@ -5,6 +5,7 @@
 #include "core/Game.h"
 #include "core/Resources.h"
 #include "core/InputManager.h"
+#include "ui/VideoSettings.h"
 #include "engine/GameObject.h"
 #include "gameplay/Character.h"
 #include "gameplay/Box.h"
@@ -814,8 +815,10 @@ void StageState::RenderSaveToast(SDL_Renderer* renderer) {
 
 namespace {
 const char* kSettingsLabels[] = {"Volume Master", "Volume Fundo", "Volume Efeitos",
-                                 "Volume Dublagem", "Brilho", "Tela cheia",
+                                 "Volume Dublagem", "Brilho", "Video",
                                  "Reduzir flashes", "Controles", "Voltar"};
+// Índices das linhas não-slider (após os 5 sliders 0..4).
+enum { kRowVideo = 5, kRowReduceFlash = 6, kRowControls = 7, kRowBack = 8 };
 void SettingsRowRange(int row, int& lo, int& hi) {
     lo = (row == 4) ? 50 : 0;     // brilho 50..150; volumes 0..100
     hi = (row == 4) ? 150 : 100;
@@ -834,6 +837,12 @@ int SettingsRowValue(int row) {
 
 void StageState::HandleSettingsPanelInput() {
     InputManager& input = InputManager::GetInstance();
+
+    // O overlay de vídeo (dropdown + Aplicar) fica por cima e captura o input.
+    if (VideoSettings::IsOpen()) {
+        VideoSettings::HandleInput(input);
+        return;
+    }
 
     auto applyValue = [this](int row, int v) {
         switch (row) {
@@ -881,12 +890,7 @@ void StageState::HandleSettingsPanelInput() {
             if (v > hi) v = hi;
             applyValue(settingsSelection, v);
         }
-    } else if (settingsSelection == 5) {
-        if (input.KeyPress(SDLK_LEFT) || input.KeyPress(SDLK_RIGHT) ||
-            input.KeyPress(SDLK_a) || input.KeyPress(SDLK_d)) {
-            Game::SetFullscreen(!Game::fullscreen);
-        }
-    } else if (settingsSelection == 6) {
+    } else if (settingsSelection == kRowReduceFlash) {
         if (input.KeyPress(SDLK_LEFT) || input.KeyPress(SDLK_RIGHT) ||
             input.KeyPress(SDLK_a) || input.KeyPress(SDLK_d)) {
             Game::reduceFlashing = !Game::reduceFlashing;
@@ -911,14 +915,14 @@ void StageState::HandleSettingsPanelInput() {
             }
         }
         if (!onSlider) {
-            if (SDL_PointInRect(&mp, &settingsRowRects[5])) {
-                Game::SetFullscreen(!Game::fullscreen);
-            } else if (SDL_PointInRect(&mp, &settingsRowRects[6])) {
+            if (SDL_PointInRect(&mp, &settingsRowRects[kRowVideo])) {
+                VideoSettings::Open();            // abre o overlay de vídeo
+            } else if (SDL_PointInRect(&mp, &settingsRowRects[kRowReduceFlash])) {
                 Game::reduceFlashing = !Game::reduceFlashing;
-            } else if (SDL_PointInRect(&mp, &settingsRowRects[7])) {
+            } else if (SDL_PointInRect(&mp, &settingsRowRects[kRowControls])) {
                 openControls();
                 return;
-            } else if (SDL_PointInRect(&mp, &settingsRowRects[8])) {
+            } else if (SDL_PointInRect(&mp, &settingsRowRects[kRowBack])) {
                 closePanel();
                 return;
             }
@@ -940,14 +944,14 @@ void StageState::HandleSettingsPanelInput() {
 
     // Enter/Espaco/F: alterna tela cheia / reduzir flashes, abre Controles ou Voltar.
     if (input.KeyPress(SDLK_RETURN) || input.KeyPress(SDLK_SPACE) || input.KeyPress(SDLK_f)) {
-        if (settingsSelection == 5) {
-            Game::SetFullscreen(!Game::fullscreen);
-        } else if (settingsSelection == 6) {
+        if (settingsSelection == kRowVideo) {
+            VideoSettings::Open();
+        } else if (settingsSelection == kRowReduceFlash) {
             Game::reduceFlashing = !Game::reduceFlashing;
-        } else if (settingsSelection == 7) {
+        } else if (settingsSelection == kRowControls) {
             openControls();
             return;
-        } else if (settingsSelection == 8) {
+        } else if (settingsSelection == kRowBack) {
             closePanel();
             return;
         }
@@ -1040,16 +1044,18 @@ void StageState::RenderSettingsPanel(SDL_Renderer* renderer) {
             char valBuf[16];
             std::snprintf(valBuf, sizeof(valBuf), "%d", val);
             drawText(valBuf, barX + barW + 18, rowY + (rowH - 24) / 2, labelColor, labelFont.get(), false, 0);
-        } else if (i == 5) {
-            drawText(Game::fullscreen ? "Ligado" : "Desligado", px + 280, rowY + (rowH - 24) / 2,
-                     labelColor, labelFont.get(), false, 0);
-        } else if (i == 6) {
+        } else if (i == kRowVideo) {
+            drawText("Abrir  >", px + 280, rowY + (rowH - 24) / 2, labelColor, labelFont.get(), false, 0);
+        } else if (i == kRowReduceFlash) {
             drawText(Game::reduceFlashing ? "Ligado" : "Desligado", px + 280, rowY + (rowH - 24) / 2,
                      labelColor, labelFont.get(), false, 0);
         }
     }
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+
+    // Overlay de vídeo por cima do painel de configurações.
+    VideoSettings::Render(renderer);
 }
 
 void StageState::HandleControlsPanelInput() {
@@ -1212,17 +1218,41 @@ int sLighterEmptyTutShown = 0; // aviso "luz apagou" (1x por sessão)
 bool sFarVoiceArmed = true;   // fala de medo do irmãozinho (sem limite de 3x)
 }
 
+// Pede a exibição de um tutorial. UM por vez: se já houver outro na tela, força o
+// atual a fazer fade-out e enfileira o novo (pendingTutText). Dedup: ignora se o
+// mesmo texto já está ativo/na fila.
+void StageState::RequestTutorial(const std::string& text) {
+    if (text.empty()) return;
+    if (activeTutText == text || pendingTutText == text) return;
+    if (activeTutTimer > 0.0f) {
+        pendingTutText = text;
+        if (activeTutTimer > kTutorialFadeOut) activeTutTimer = kTutorialFadeOut;
+    } else {
+        activeTutText  = text;
+        activeTutTimer = kTutorialDisplayDuration;
+    }
+}
+
 void StageState::UpdateTutorials(float dt) {
-    if (lighterTutTimer > 0.0f) lighterTutTimer -= dt;
-    if (swapTutTimer > 0.0f) swapTutTimer -= dt;
-    if (abilityTutTimer > 0.0f) abilityTutTimer -= dt;
-    if (moveTutTimer > 0.0f) moveTutTimer -= dt;
-    if (pickupTutTimer > 0.0f) pickupTutTimer -= dt;
-    if (refuelTutTimer > 0.0f) refuelTutTimer -= dt;
-    if (cycleTutTimer > 0.0f) cycleTutTimer -= dt;
-    if (lighterEmptyTutTimer > 0.0f) lighterEmptyTutTimer -= dt;
+    // Um tutorial por vez: conta o tempo do ATIVO; ao zerar, promove o pendente.
+    if (activeTutTimer > 0.0f) {
+        activeTutTimer -= dt;
+        if (activeTutTimer <= 0.0f) {
+            activeTutTimer = 0.0f;
+            activeTutText.clear();
+            if (!pendingTutText.empty()) {
+                activeTutText  = pendingTutText;
+                pendingTutText.clear();
+                activeTutTimer = kTutorialDisplayDuration;
+            }
+        }
+    }
 
     InputManager& imTut = InputManager::GetInstance();
+    auto tutKey = [](int code, const char* fallback) {
+        const char* k = SDL_GetKeyName(code);
+        return (k && k[0] != '\0') ? std::string(k) : std::string(fallback);
+    };
 
     // Tutorial de MOVIMENTO (WASD): só no começo. Some para sempre assim que o
     // jogador anda pela primeira vez; se ficar parado por uns segundos sem nunca
@@ -1233,13 +1263,17 @@ void StageState::UpdateTutorials(float dt) {
                                  imTut.ActionDown(GameAction::MoveLeft) ||
                                  imTut.ActionDown(GameAction::MoveRight);
         if (movingInput) {
-            moveTutDone = true;
-            moveTutTimer = 0.0f;
+            moveTutDone = true;   // não dispara de novo — mas NÃO some o banner já mostrado
         } else if (IsPartyReady() && !IsPlayerInputFrozen()) {
             noMoveAccum += dt;
-            if (noMoveAccum > 3.0f && sMoveTutShown < 1 && moveTutTimer <= 0.0f) {
-                moveTutTimer = kTutorialDisplayDuration;
+            if (noMoveAccum > 3.0f && sMoveTutShown < 1) {
                 sMoveTutShown++;
+                moveTutDone = true;
+                const std::string up = tutKey(imTut.GetBinding(GameAction::MoveUp),    "W");
+                const std::string lf = tutKey(imTut.GetBinding(GameAction::MoveLeft),  "A");
+                const std::string dn = tutKey(imTut.GetBinding(GameAction::MoveDown),  "S");
+                const std::string rt = tutKey(imTut.GetBinding(GameAction::MoveRight), "D");
+                RequestTutorial("Use [" + up + "] [" + lf + "] [" + dn + "] [" + rt + "] para se mover");
             }
         }
     }
@@ -1252,10 +1286,10 @@ void StageState::UpdateTutorials(float dt) {
         if (nearPickup) {
             pickupNearAccum += dt;
             if (pickupNearAccum > 1.2f && pickupTutArmed &&
-                sPickupTutShown < kMaxTutorialShows && pickupTutTimer <= 0.0f) {
-                pickupTutTimer = kTutorialDisplayDuration;
+                sPickupTutShown < kMaxTutorialShows) {
                 sPickupTutShown++;
                 pickupTutArmed = false;
+                RequestTutorial("Pressione [" + tutKey(imTut.GetBinding(GameAction::Interact), "E") + "] para pegar o item");
             }
         } else {
             pickupNearAccum = 0.0f;
@@ -1272,9 +1306,11 @@ void StageState::UpdateTutorials(float dt) {
             prevStackCount = stackCount;            // baseline: ignora o isqueiro inicial
         } else if (stackCount > prevStackCount) {
             if (sCycleTutShown < 1 && stackCount >= 2 &&
-                controlledCharacter == bigCharacter && cycleTutTimer <= 0.0f) {
-                cycleTutTimer = kTutorialDisplayDuration;
+                controlledCharacter == bigCharacter) {
                 sCycleTutShown++;
+                const std::string prev = tutKey(imTut.GetBinding(GameAction::CyclePrev), "Left");
+                const std::string next = tutKey(imTut.GetBinding(GameAction::CycleNext), "Right");
+                RequestTutorial("Use [" + prev + "] e [" + next + "] para trocar de item na mochila");
             }
             prevStackCount = stackCount;
         } else if (stackCount < prevStackCount) {
@@ -1286,9 +1322,9 @@ void StageState::UpdateTutorials(float dt) {
     // que é preciso combustível para reabastecer. Só uma vez por sessão.
     {
         if (sLighterEmptyTutShown < 1 && controlledCharacter == bigCharacter &&
-            inventory.HasDepletedLightSource() && lighterEmptyTutTimer <= 0.0f) {
-            lighterEmptyTutTimer = kTutorialDisplayDuration;
+            inventory.HasDepletedLighter()) {
             sLighterEmptyTutShown++;
+            RequestTutorial("Sua luz apagou! Use combustivel para reabastece-la");
         }
     }
 
@@ -1298,10 +1334,13 @@ void StageState::UpdateTutorials(float dt) {
         const bool holdingOil = controlledCharacter == bigCharacter &&
                                 inventory.IsActiveItemFuel();
         if (holdingOil && refuelTutArmed &&
-            sRefuelTutShown < kMaxTutorialShows && refuelTutTimer <= 0.0f) {
-            refuelTutTimer = kTutorialDisplayDuration;
+            sRefuelTutShown < kMaxTutorialShows) {
             sRefuelTutShown++;
             refuelTutArmed = false;
+            RequestTutorial("Combustivel: aperte [" + tutKey(imTut.GetBinding(GameAction::UseItem), "F") +
+                            "], escolha o item com [" + tutKey(imTut.GetBinding(GameAction::MoveLeft), "A") +
+                            "]/[" + tutKey(imTut.GetBinding(GameAction::MoveRight), "D") +
+                            "] e [" + tutKey(imTut.GetBinding(GameAction::UseItem), "F") + "] para confirmar");
         }
         if (!holdingOil) {
             refuelTutArmed = true;
@@ -1336,10 +1375,10 @@ void StageState::UpdateTutorials(float dt) {
                           lighterHasFuel &&
                           !inventory.IsUsableLightActive() &&
                           dyingInShadow;
-        if (cond && lighterTutArmed && sLighterTutShown < kMaxTutorialShows && lighterTutTimer <= 0.0f) {
-            lighterTutTimer = kTutorialDisplayDuration;
+        if (cond && lighterTutArmed && sLighterTutShown < kMaxTutorialShows) {
             sLighterTutShown++;
             lighterTutArmed = false;
+            RequestTutorial("Pressione [" + tutKey(imTut.GetBinding(GameAction::UseItem), "F") + "] para ligar seu isqueiro");
         }
         if (!cond) {
             lighterTutArmed = true;   // re-arma quando a condição passa
@@ -1350,10 +1389,10 @@ void StageState::UpdateTutorials(float dt) {
     if (IsPartyReady() && bigCharacterObject && smallCharacterObject) {
         const float dist = bigCharacterObject->box.Center().Distance(smallCharacterObject->box.Center());
         const bool cond = dist > kSwapTutFarDist;
-        if (cond && swapTutArmed && sSwapTutShown < kMaxTutorialShows && swapTutTimer <= 0.0f) {
-            swapTutTimer = kTutorialDisplayDuration;
+        if (cond && swapTutArmed && sSwapTutShown < kMaxTutorialShows) {
             sSwapTutShown++;
             swapTutArmed = false;
+            RequestTutorial("Pressione [" + tutKey(imTut.GetBinding(GameAction::SwapBrother), "Ctrl") + "] para trocar de personagem");
         }
         if (dist < kSwapTutNearDist) {
             swapTutArmed = true;
@@ -1381,10 +1420,10 @@ void StageState::UpdateTutorials(float dt) {
     // Tutorial da habilidade do irmãozinho: aparece ao assumir o controle dele
     // (ex.: ao começar o 2º andar controlando o irmãozinho).
     if (IsPartyReady() && smallCharacter && controlledCharacter == smallCharacter) {
-        if (abilityTutArmed && sAbilityTutShown < kMaxTutorialShows && abilityTutTimer <= 0.0f) {
-            abilityTutTimer = kTutorialDisplayDuration;
+        if (abilityTutArmed && sAbilityTutShown < kMaxTutorialShows) {
             sAbilityTutShown++;
             abilityTutArmed = false;
+            RequestTutorial("Pressione [" + tutKey(imTut.GetBinding(GameAction::Interact), "E") + "] para usar a habilidade do irmaozinho");
         }
     } else {
         abilityTutArmed = true;   // re-arma ao voltar a controlar o irmãozão
@@ -1392,106 +1431,44 @@ void StageState::UpdateTutorials(float dt) {
 }
 
 void StageState::RenderTutorials(SDL_Renderer* renderer) {
-    if (!renderer || IsPlayerInputFrozen()) {
+    // Um ÚNICO banner de tutorial por vez (ver RequestTutorial/UpdateTutorials).
+    if (!renderer || IsPlayerInputFrozen() || activeTutText.empty() || activeTutTimer <= 0.0f) {
         return;
     }
 
-    auto drawBanner = [&](float timer, const std::string& text, int y) {
-        if (timer <= 0.0f) return;
-        const float elapsed = kTutorialDisplayDuration - timer;
-        float a01 = 1.0f;
-        if (timer < 0.8f) a01 = timer / 0.8f;             // fade out
-        else if (elapsed < 0.4f) a01 = elapsed / 0.4f;    // fade in
-        a01 = a01 * a01 * (3.0f - 2.0f * a01);            // smoothstep (eased)
+    const float timer   = activeTutTimer;
+    const float elapsed = kTutorialDisplayDuration - timer;
+    float a01 = 1.0f;
+    if (timer < kTutorialFadeOut) a01 = timer / kTutorialFadeOut;   // fade out
+    else if (elapsed < 0.4f)      a01 = elapsed / 0.4f;             // fade in
+    a01 = a01 * a01 * (3.0f - 2.0f * a01);                          // smoothstep
 
-        auto font = Resources::GetFont("Recursos/font/times.ttf", 24);
-        if (!font) return;
-        SDL_Color col{245, 232, 200, 255};
-        SDL_Surface* sf = TTF_RenderUTF8_Blended(font.get(), text.c_str(), col);
-        if (!sf) return;
-        SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, sf);
-        const int tw = sf->w;
-        const int th = sf->h;
-        SDL_FreeSurface(sf);
-        if (!t) return;
-        SDL_SetTextureAlphaMod(t, static_cast<Uint8>(255.0f * a01));
+    auto font = Resources::GetFont("Recursos/font/times.ttf", 24);
+    if (!font) return;
+    SDL_Color col{245, 232, 200, 255};
+    SDL_Surface* sf = TTF_RenderUTF8_Blended(font.get(), activeTutText.c_str(), col);
+    if (!sf) return;
+    SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, sf);
+    const int tw = sf->w;
+    const int th = sf->h;
+    SDL_FreeSurface(sf);
+    if (!t) return;
+    SDL_SetTextureAlphaMod(t, static_cast<Uint8>(255.0f * a01));
 
-        const int winW = Game::GetInstance().GetWindowsWidth();
-        const int padX = 22;
-        const int padY = 12;
-        const int x = (winW - tw) / 2;
-        const SDL_Rect bg{x - padX, y - padY, tw + padX * 2, th + padY * 2};
+    const int winW = Game::GetInstance().GetWindowsWidth();
+    const int padX = 22;
+    const int padY = 12;
+    const int y = 70;
+    const int x = (winW - tw) / 2;
+    const SDL_Rect bg{x - padX, y - padY, tw + padX * 2, th + padY * 2};
 
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(renderer, 18, 18, 24, static_cast<Uint8>(200.0f * a01));
-        SDL_RenderFillRect(renderer, &bg);
-        SDL_SetRenderDrawColor(renderer, 200, 180, 110, static_cast<Uint8>(220.0f * a01));
-        SDL_RenderDrawRect(renderer, &bg);
-        const SDL_Rect d{x, y, tw, th};
-        SDL_RenderCopy(renderer, t, nullptr, &d);
-        SDL_DestroyTexture(t);
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-    };
-
-    InputManager& im = InputManager::GetInstance();
-
-    // Cada tooltip só aparece para o irmão a que se aplica.
-    const bool controllingBig = controlledCharacter == bigCharacter;
-    const bool controllingSmall = controlledCharacter == smallCharacter;
-
-    // Resolve a tecla vinculada a uma ação (com rótulo de reserva).
-    auto keyName = [](int code, const char* fallback) {
-        const char* k = SDL_GetKeyName(code);
-        return (k && k[0] != '\0') ? std::string(k) : std::string(fallback);
-    };
-
-    // Empilha os banners visíveis de cima para baixo, sem sobreposição.
-    int y = 70;
-
-    if (moveTutTimer > 0.0f) {
-        const std::string up = keyName(im.GetBinding(GameAction::MoveUp), "W");
-        const std::string lf = keyName(im.GetBinding(GameAction::MoveLeft), "A");
-        const std::string dn = keyName(im.GetBinding(GameAction::MoveDown), "S");
-        const std::string rt = keyName(im.GetBinding(GameAction::MoveRight), "D");
-        drawBanner(moveTutTimer, "Use [" + up + "] [" + lf + "] [" + dn + "] [" + rt + "] para se mover", y);
-        y += 56;
-    }
-    if (lighterTutTimer > 0.0f && controllingBig) {
-        drawBanner(lighterTutTimer,
-                   "Pressione [" + keyName(im.GetBinding(GameAction::UseItem), "F") + "] para ligar seu isqueiro", y);
-        y += 56;
-    }
-    if (pickupTutTimer > 0.0f && controllingBig) {
-        drawBanner(pickupTutTimer,
-                   "Pressione [" + keyName(im.GetBinding(GameAction::Interact), "E") + "] para pegar o item", y);
-        y += 56;
-    }
-    if (cycleTutTimer > 0.0f && controllingBig) {
-        const std::string prev = keyName(im.GetBinding(GameAction::CyclePrev), "Left");
-        const std::string next = keyName(im.GetBinding(GameAction::CycleNext), "Right");
-        drawBanner(cycleTutTimer,
-                   "Use [" + prev + "] e [" + next + "] para trocar de item na mochila", y);
-        y += 56;
-    }
-    if (lighterEmptyTutTimer > 0.0f && controllingBig) {
-        drawBanner(lighterEmptyTutTimer,
-                   "Sua luz apagou! Use combustivel para reabastece-la", y);
-        y += 56;
-    }
-    if (refuelTutTimer > 0.0f && controllingBig) {
-        drawBanner(refuelTutTimer,
-                   "Combustivel: aperte [" + keyName(im.GetBinding(GameAction::UseItem), "F") +
-                       "] nele e depois no isqueiro para reabastecer", y);
-        y += 56;
-    }
-    if (swapTutTimer > 0.0f) {
-        drawBanner(swapTutTimer,
-                   "Pressione [" + keyName(im.GetBinding(GameAction::SwapBrother), "Ctrl") + "] para trocar de personagem", y);
-        y += 56;
-    }
-    if (abilityTutTimer > 0.0f && controllingSmall) {
-        drawBanner(abilityTutTimer,
-                   "Pressione [" + keyName(im.GetBinding(GameAction::Interact), "E") + "] para usar a habilidade do irmaozinho", y);
-        y += 56;
-    }
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 18, 18, 24, static_cast<Uint8>(200.0f * a01));
+    SDL_RenderFillRect(renderer, &bg);
+    SDL_SetRenderDrawColor(renderer, 200, 180, 110, static_cast<Uint8>(220.0f * a01));
+    SDL_RenderDrawRect(renderer, &bg);
+    const SDL_Rect d{x, y, tw, th};
+    SDL_RenderCopy(renderer, t, nullptr, &d);
+    SDL_DestroyTexture(t);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }

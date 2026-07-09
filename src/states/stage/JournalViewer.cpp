@@ -10,13 +10,39 @@
 #include "ui/Text.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <cstdlib>
+#include <string>
 
 namespace {
 
 float SmoothStep(float t) {
     t = std::max(0.0f, std::min(1.0f, t));
     return t * t * (3.0f - 2.0f * t);
+}
+
+// Documento é "de papel" (ganha o farfalhar de folha) exceto os itens de olhar
+// que claramente NÃO são papel: fotos, telefones, caixas, rádio. Classificamos
+// pelo nome do arquivo da imagem aberta.
+bool IsPaperDocumentImage(const std::string& imagePath) {
+    std::string p = imagePath;
+    for (char& c : p) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    static const char* kNonPaper[] = {"foto", "fotograf", "telefon", "caixa", "radio"};
+    for (const char* k : kNonPaper) {
+        if (p.find(k) != std::string::npos) return false;
+    }
+    return true;
+}
+
+// Variações do farfalhar de folha tocadas ao abrir um documento de papel.
+const char* PickPaperRustleSfx() {
+    static const char* kPaperSfx[] = {
+        "Recursos/audio/SFX/INTERACTABLES/folha_1.mp3",
+        "Recursos/audio/SFX/INTERACTABLES/folha_2.mp3",
+        "Recursos/audio/SFX/INTERACTABLES/folha_3.mp3",
+    };
+    return kPaperSfx[std::rand() % 3];
 }
 
 SDL_FRect FitTextureInWindow(int winW, int winH, int texW, int texH, float marginFrac = 0.88f) {
@@ -124,9 +150,15 @@ void StageState::OpenJournalViewer(Jornal* jornal) {
     if (bigCharacter)   bigCharacter->ForceStop();
     if (smallCharacter) smallCharacter->ForceStop();
 
-    // ── Som opcional ao abrir ─────────────────────────────────────────────
-    if (!jornal->GetSoundPath().empty()) {
-        jornalInteractSound.Open(jornal->GetSoundPath());
+    // ── Som ao abrir ──────────────────────────────────────────────────────
+    // Prioridade ao som explícito do mapa; senão, se for um documento de PAPEL,
+    // toca um farfalhar de folha (não vale para fotos/telefones/caixas).
+    std::string openSound = jornal->GetSoundPath();
+    if (openSound.empty() && IsPaperDocumentImage(jornal->GetImagePath())) {
+        openSound = PickPaperRustleSfx();
+    }
+    if (!openSound.empty()) {
+        jornalInteractSound.Open(openSound);
         jornalInteractSound.Play();
     }
 

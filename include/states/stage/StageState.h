@@ -232,8 +232,18 @@ public:
     int prevStackCount = -1;
     // Aviso "luz apagou": quando a fonte de luz chega a zero pela 1ª vez.
     float lighterEmptyTutTimer = 0.0f;
-    static constexpr float kTutorialDisplayDuration = 4.5f;
+    static constexpr float kTutorialDisplayDuration = 8.0f;   // mínimo 8 s na tela
     static constexpr int   kMaxTutorialShows = 3;
+
+    // ── Canal ÚNICO de tutorial (um por vez) ──────────────────────────────────
+    // Só um banner aparece de cada vez. Ao pedir um novo enquanto há outro na tela,
+    // o atual faz FADE-OUT e o novo entra na fila (pendingTutText). Não some por
+    // "aprender" — fica os 8 s independentemente do que o jogador fizer.
+    std::string activeTutText;
+    float       activeTutTimer = 0.0f;
+    std::string pendingTutText;
+    static constexpr float kTutorialFadeOut = 0.8f;   // janela de fade-out (= drawBanner)
+    void RequestTutorial(const std::string& text);
     static constexpr float kSwapTutFarDist = 660.0f;     // dispara o tutorial de troca
     static constexpr float kSwapTutNearDist = 340.0f;    // re-arma quando se aproximam
     void UpdateTutorials(float dt);
@@ -479,7 +489,7 @@ private:
     bool settingsPanelOpen = false;
     int settingsSelection = 0;
     bool settingsDragging = false;                       // arrastando um slider com o mouse
-    static constexpr int kSettingsRowCount = 9;          // Master/Ambiente/Efeitos/Dublagem/Brilho/TelaCheia/ReduzirFlashes/Controles/Voltar
+    static constexpr int kSettingsRowCount = 9;          // Master/Ambiente/Efeitos/Dublagem/Brilho/Video/ReduzirFlashes/Controles/Voltar
     static constexpr int kSettingsSliderCount = 5;       // as 5 primeiras linhas são sliders
     SDL_Rect settingsRowRects[kSettingsRowCount]{};
     SDL_Rect settingsSliderRects[kSettingsSliderCount]{};

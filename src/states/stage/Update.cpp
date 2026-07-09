@@ -276,7 +276,9 @@ void StageState::Update(float dt){
         }
     }
 
-    if (!pauseMenuOpen && IsPartyReady()) {
+    // Enquanto o modal de reabastecimento está aberto, congela o movimento do
+    // personagem — A/D e setas passam a escolher o item a abastecer.
+    if (!pauseMenuOpen && !inventory.IsOilPrimed() && IsPartyReady()) {
         HandlePartyInput();
         IssueMovementFromInput(controlledCharacter, controlledCharacterObject);
         if (companionStartDelay > 0) {
@@ -306,7 +308,10 @@ void StageState::Update(float dt){
 
     reachablePickup = FindClosestReachableItem();
 
-    if (inventory.IsUsableLightActive() && (!lightTweakPanel || lightTweakPanel->durabilityEnabled)) {
+    // Ao ler um documento/foto (journal viewer aberto), a luz ativa NÃO consome
+    // combustível — o jogador pode ler com calma sem gastar óleo/carga.
+    if (inventory.IsUsableLightActive() && !journalViewerOpen &&
+        (!lightTweakPanel || lightTweakPanel->durabilityEnabled)) {
         inventory.TickUsingDurability(dt);
     }
     

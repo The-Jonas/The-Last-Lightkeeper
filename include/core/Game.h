@@ -25,6 +25,31 @@ public:
     static int brightnessPercent;   // 50..150, 100 = normal (overlay de brilho)
     static bool fullscreen;         // janela em tela cheia (borderless desktop)
     static bool reduceFlashing;     // acessibilidade: atenua clarões/flashes de tela
+
+    // ── Modo de exibição / resolução (aplicam no PRÓXIMO boot) ────────────────
+    // displayMode: 0 = Sem bordas (borderless desktop), 1 = Tela cheia (exclusiva
+    // na resolução escolhida), 2 = Janela (na resolução escolhida).
+    static int displayMode;
+    static int resolutionIndex;     // índice na lista de resoluções disponíveis (pendente)
+    static int committedDisplayMode;      // valor efetivamente salvo (aplicado)
+    static int committedResolutionIndex;
+    static int DisplayModeCount();
+    static const char* DisplayModeLabel(int mode);
+    static const char* CurrentDisplayModeLabel();
+    static int ResolutionCount();
+    static int RecommendedResolutionIndex();   // resolução nativa da área de trabalho
+    static void ResolutionAt(int idx, int& w, int& h);
+    static std::string ResolutionLabelAt(int idx);   // "W x H" (+ " (Recomendado)")
+    static std::string CurrentResolutionLabel();
+    static void SetResolutionIndex(int idx);
+    static void CycleDisplayMode(int delta);   // muda o modo (pendente)
+    static void CycleResolution(int delta);    // muda a resolução (pendente)
+    // Fluxo "Aplicar": vídeo (modo+resolução) só vale após reiniciar.
+    static bool VideoSettingsDirty();          // há mudança de vídeo não aplicada?
+    static void ApplyVideoSettings();          // comita + salva
+    static void RevertVideoSettings();         // descarta pendências não aplicadas
+    static void RestartApplication();          // relança o executável e encerra
+
     static void LoadEnvVolume();
     static void SetMasterVolume(int percent);
     static void SetAmbientVolume(int percent);

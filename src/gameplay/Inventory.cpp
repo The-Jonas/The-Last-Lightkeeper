@@ -10,7 +10,7 @@ namespace {
 // e teto de 120% (max 20% maior que o tamanho base). 0% de carga => 40%;
 // 100% => 120%.
 float FuelToSizeScale(float fuelRatio) {
-    constexpr float kMinLightSizeFrac = 0.40f;
+    constexpr float kMinLightSizeFrac = 0.48f;   // +20% no mínimo (era 0.40) ao esgotar
     constexpr float kMaxLightSizeFrac = 1.20f;
     fuelRatio = std::max(0.0f, std::min(1.0f, fuelRatio));
     return kMinLightSizeFrac + (kMaxLightSizeFrac - kMinLightSizeFrac) * fuelRatio;
@@ -34,6 +34,7 @@ void Inventory::ClearAll() {
     oilApplyMode = false;
     oilApplySourceIndex = -1;
     oilApplyReturnActiveIndex = 0;
+    oilTargetSelection = 0;
     primedOilSpritePath.clear();
     usingDrainAccum = 0.0f;
     isLightToggledOn = false;
@@ -157,9 +158,47 @@ bool Inventory::CanCombineOilWithActive() const {
 void Inventory::ExitOilApplyMode() {
     oilApplyMode = false;
     oilApplySourceIndex = -1;
+    oilTargetSelection = 0;
     primedOilSpritePath.clear();
     // Return the wheel to the slot the oil was in when the player started.
     activeIndex = oilApplyReturnActiveIndex;
+}
+
+// Fontes de luz (isqueiro/lamparina) que AINDA cabem óleo — os únicos alvos
+// válidos para o combustível. O próprio combustível (FUEL) fica de fora.
+std::vector<int> Inventory::GetRefuelTargetIndices() const {
+    std::vector<int> out;
+    for (int i = 0; i < static_cast<int>(stacks.size()); ++i) {
+        const ItemStack& s = stacks[static_cast<size_t>(i)];
+        if (!s.def.HasProperty(ItemProperty::LIGHT_SOURCE)) continue;
+        if (s.durabilities.empty()) continue;
+        const int maxDur = s.def.maxDurability;
+        if (maxDur > 0 && s.durabilities.front() >= maxDur) continue;   // já cheio
+        out.push_back(i);
+    }
+    return out;
+}
+
+int Inventory::GetRefuelTargetCount() const {
+    return static_cast<int>(GetRefuelTargetIndices().size());
+}
+
+const Inventory::ItemStack* Inventory::GetRefuelTargetStack(int selectionIdx) const {
+    const std::vector<int> targets = GetRefuelTargetIndices();
+    if (selectionIdx < 0 || selectionIdx >= static_cast<int>(targets.size())) return nullptr;
+    return &stacks[static_cast<size_t>(targets[static_cast<size_t>(selectionIdx)])];
+}
+
+void Inventory::RefuelSelectionPrev() {
+    const int n = GetRefuelTargetCount();
+    if (n <= 0) return;
+    oilTargetSelection = (oilTargetSelection - 1 + n) % n;
+}
+
+void Inventory::RefuelSelectionNext() {
+    const int n = GetRefuelTargetCount();
+    if (n <= 0) return;
+    oilTargetSelection = (oilTargetSelection + 1) % n;
 }
 
 bool Inventory::TryPrimeOil() {
@@ -169,12 +208,15 @@ bool Inventory::TryPrimeOil() {
     const ItemStack& active = stacks[static_cast<size_t>(sel)];
     if (!active.def.HasProperty(ItemProperty::FUEL)) return false;
     if (active.durabilities.empty() || active.durabilities.front() <= 0) return false;
+    // Sem nenhuma fonte de luz que caiba óleo, não há o que abastecer.
+    if (GetRefuelTargetIndices().empty()) return false;
 
     // Enter apply mode. The oil stays where it is; remember its slot so we can
     // return there (showing it, or an empty slot if it gets used up).
     oilApplyMode = true;
     oilApplySourceIndex = sel;
     oilApplyReturnActiveIndex = activeIndex;
+    oilTargetSelection = 0;
     primedOilSpritePath = active.def.spritePath;
     return true;
 }
@@ -186,8 +228,14 @@ bool Inventory::TryCombineOil() {
         return false;
     }
 
-    const int targetIdx = GetSelectedStackIndex();
-    if (targetIdx < 0 || targetIdx == oilApplySourceIndex) return false;  // empty slot or the oil itself
+    // Alvo = item escolhido no modal central (lista de fontes de luz com espaço).
+    std::vector<int> targets = GetRefuelTargetIndices();
+    if (targets.empty()) { ExitOilApplyMode(); return false; }
+    if (oilTargetSelection < 0 || oilTargetSelection >= static_cast<int>(targets.size())) {
+        oilTargetSelection = 0;
+    }
+    const int targetIdx = targets[static_cast<size_t>(oilTargetSelection)];
+    if (targetIdx == oilApplySourceIndex) return false;  // segurança (nunca o próprio óleo)
 
     ItemStack& target = stacks[static_cast<size_t>(targetIdx)];
     if (!target.def.HasProperty(ItemProperty::LIGHT_SOURCE)) return false;
@@ -321,6 +369,18 @@ bool Inventory::IsActiveItemFuel() const {
 bool Inventory::HasDepletedLightSource() const {
     for (const auto& s : stacks) {
         if (s.def.HasProperty(ItemProperty::LIGHT_SOURCE) && s.def.maxDurability > 0) {
+            if (s.durabilities.empty() || s.durabilities.front() <= 0) return true;
+        }
+    }
+    return false;
+}
+
+// Só o ISQUEIRO ("Flashlight"/"Broken Flashlight") esgotado — a lamparina não
+// dispara o aviso de "sua luz apagou".
+bool Inventory::HasDepletedLighter() const {
+    for (const auto& s : stacks) {
+        const bool isLighter = (s.def.name == "Flashlight" || s.def.name == "Broken Flashlight");
+        if (isLighter && s.def.maxDurability > 0) {
             if (s.durabilities.empty() || s.durabilities.front() <= 0) return true;
         }
     }

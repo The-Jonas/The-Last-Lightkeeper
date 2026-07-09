@@ -61,8 +61,6 @@ constexpr const char* kClosetClosePath = "Recursos/audio/SFX/ARMARIO/armario_fec
 
 constexpr const char* kMonsterScreamPath = "Recursos/audio/SFX/MONSTRO/monstro_grito.wav";
 constexpr const char* kMonsterSpotPath   = "Recursos/audio/SFX/MONSTRO/monstro_ve_player.mp3";
-constexpr const char* kMonsterStepsPath  = "Recursos/audio/SFX/MONSTRO/monstro_passos.mp3";
-constexpr const char* kMonsterStepsFastPath = "Recursos/audio/SFX/MONSTRO/monstro_passos_fast.mp3";  // (legado, loop antigo)
 // Passos por-frame: um som por frame da animação (acompanha a cadência, fica
 // frenético quando o monstro acelera). Um arquivo por frame (kAnimFrameCount=5).
 constexpr const char* kMonsterStepPaths[] = {
@@ -111,9 +109,6 @@ Sound gClosetOpenSound;
 Sound gClosetCloseSound;
 Sound gMonsterScreamSound;
 Sound gMonsterSpotSound;
-Sound gMonsterStepsSound;
-Sound gMonsterStepsFastSound;    // passos acelerados (fugindo da luz)
-bool  gMonsterStepsFastActive = false;  // qual variante do loop está tocando
 Sound gMonsterStepSounds[kMonsterStepCount];   // passos por-frame
 int   gMonsterStepRot = 0;                      // rotação no pool de canais
 Sound gWoodCreakSounds[kWoodCreakCount];
@@ -170,8 +165,6 @@ void EnsureLoaded() {
     if (FileExists(kClosetClosePath)) gClosetCloseSound.Open(kClosetClosePath);
     if (FileExists(kMonsterScreamPath)) gMonsterScreamSound.Open(kMonsterScreamPath);
     if (FileExists(kMonsterSpotPath))   gMonsterSpotSound.Open(kMonsterSpotPath);
-    if (FileExists(kMonsterStepsPath))  gMonsterStepsSound.Open(kMonsterStepsPath);
-    if (FileExists(kMonsterStepsFastPath)) gMonsterStepsFastSound.Open(kMonsterStepsFastPath);
     for (int i = 0; i < kMonsterStepCount; ++i) {
         if (FileExists(kMonsterStepPaths[i])) gMonsterStepSounds[i].Open(kMonsterStepPaths[i]);
     }
@@ -627,7 +620,6 @@ void StopMonsterFootsteps() {
     Mix_HaltChannel(kChannelMonsterSteps);              // loop legado (se estiver ativo)
     ClearChannelSpatial(kChannelMonsterSteps);
     gMonsterStepsActive = false;
-    gMonsterStepsFastActive = false;
 }
 
 // Parada TOTAL de áudio de efeitos: usada nas transições (nível↔menu). Silencia

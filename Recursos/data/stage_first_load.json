@@ -25,7 +25,7 @@
   "startingFlashlight": {
     "name": "Flashlight",
     "spritePath": "Recursos/img/items/Isqueiro.png",
-    "maxDurability": 60,
+    "maxDurability": 80,
     "durabilityDecreases": true,
     "sortOrder": 0,
     "properties": [{ "prop": "LIGHT_SOURCE", "value": 1.0 }]
@@ -42,7 +42,7 @@
     {
       "name": "Broken Flashlight",
       "spritePath": "Recursos/img/items/Isqueiro.png",
-      "maxDurability": 60,
+      "maxDurability": 80,
       "durabilityDecreases": true,
       "sortOrder": 2,
       "properties": [{ "prop": "LIGHT_SOURCE", "value": 1.0 }]

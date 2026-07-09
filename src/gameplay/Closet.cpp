@@ -223,13 +223,26 @@ void Closet::ExitCloset() {
         c->hidePersonalLight = false;
         
         // --- RESTAURA AS POSIÇÕES SALVAS ---
+        GameObject& go = c->GetAssociated();
         if (isLittleBrother) {
-            c->GetAssociated().box.x = brotherEntryPos.x;
-            c->GetAssociated().box.y = brotherEntryPos.y;
+            go.box.x = brotherEntryPos.x;
+            go.box.y = brotherEntryPos.y;
         } else {
-            c->GetAssociated().box.x = playerEntryPos.x;
-            c->GetAssociated().box.y = playerEntryPos.y;
+            go.box.x = playerEntryPos.x;
+            go.box.y = playerEntryPos.y;
         }
+
+        // Afasta o personagem do armário ao sair, para não ficar "grudado"/preso
+        // nele. Empurra na direção de saída (centro do armário → personagem); se
+        // ficou praticamente em cima, empurra para a frente (para baixo).
+        const Vec2 closetCenter = associated.box.Center();
+        const Vec2 charCenter(go.box.x + go.box.w * 0.5f, go.box.y + go.box.h * 0.5f);
+        Vec2 away = charCenter - closetCenter;
+        if (away.Magnitude() < 1.0f) away = Vec2(0.0f, 1.0f);
+        away = away.Normalized();
+        const float kExitPush = 90.0f;   // distância extra do armário
+        go.box.x += away.x * kExitPush;
+        go.box.y += away.y * kExitPush;
 
         SpriteRenderer* sprite = c->GetAssociated().GetComponent<SpriteRenderer>();
         if (sprite) sprite->SetTint(255, 255, 255, 255);

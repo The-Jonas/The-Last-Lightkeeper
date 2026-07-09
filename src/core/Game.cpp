@@ -6,9 +6,17 @@
 #include <ctime>
 #include <fstream>
 #include <string>
+#include <vector>
 #include <algorithm>
 #include <cctype>
 #include <exception>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 #define INCLUDE_SDL_TTF
 #define INCLUDE_SDL_IMAGE
@@ -28,8 +36,58 @@ int Game::brightnessPercent = 100;
 bool Game::fullscreen = false;
 bool Game::reduceFlashing = false;
 bool Game::debugMode = false;
+int Game::displayMode = 0;        // 0 = sem bordas (padrão seguro)
+int Game::resolutionIndex = 0;    // definido ao montar a lista (nativo = recomendado)
+int Game::committedDisplayMode = 0;
+int Game::committedResolutionIndex = 0;
 
 namespace {
+
+struct ResEntry { int w; int h; };
+
+// Lista curada de resoluções (a nativa da área de trabalho é inserida se faltar
+// e marcada como "Recomendado"). Montada uma vez em EnsureResolutionList().
+std::vector<ResEntry> gResolutions;
+int gRecommendedIndex = 0;
+
+void EnsureResolutionList() {
+    if (!gResolutions.empty()) return;
+    gResolutions = {
+        // Altas / ultrawide
+        {5120, 1440}, {3840, 2160}, {3840, 1080}, {3440, 1440}, {2560, 1600},
+        {2560, 1440}, {2560, 1080}, {1920, 1200},
+        // Comuns
+        {1920, 1080}, {1680, 1050}, {1600, 1024}, {1440, 1080}, {1440, 900},
+        {1400, 1050}, {1366, 768},  {1360, 768},  {1280, 1024}, {1280, 960},
+        {1280, 800},  {1280, 768},  {1280, 720},
+    };
+    // Resolução nativa da área de trabalho → garante presença + marca recomendada.
+    int nativeW = 1920, nativeH = 1080;
+    SDL_DisplayMode dm;
+    if (SDL_GetDesktopDisplayMode(0, &dm) == 0 && dm.w > 0 && dm.h > 0) {
+        nativeW = dm.w; nativeH = dm.h;
+    }
+    bool found = false;
+    for (const auto& e : gResolutions) {
+        if (e.w == nativeW && e.h == nativeH) { found = true; break; }
+    }
+    if (!found) gResolutions.push_back({nativeW, nativeH});
+    // Ordena por área decrescente (maiores no topo, como no dropdown do exemplo).
+    std::sort(gResolutions.begin(), gResolutions.end(),
+              [](const ResEntry& a, const ResEntry& b) {
+                  return (a.w * a.h) > (b.w * b.h);
+              });
+    gRecommendedIndex = 0;
+    for (int i = 0; i < static_cast<int>(gResolutions.size()); ++i) {
+        if (gResolutions[i].w == nativeW && gResolutions[i].h == nativeH) {
+            gRecommendedIndex = i; break;
+        }
+    }
+}
+
+const char* kDisplayModeLabels[] = {"Sem bordas", "Tela cheia", "Janela"};
+constexpr int kDisplayModeCount = 3;
+
 
 std::string TrimWhitespace(std::string s) {
     const auto notspace = [](unsigned char c) { return !std::isspace(c); };
@@ -178,6 +236,99 @@ void Game::SetFullscreen(bool on) {
     }
 }
 
+int Game::DisplayModeCount() { return kDisplayModeCount; }
+
+const char* Game::DisplayModeLabel(int mode) {
+    if (mode < 0 || mode >= kDisplayModeCount) mode = 0;
+    return kDisplayModeLabels[mode];
+}
+
+const char* Game::CurrentDisplayModeLabel() { return DisplayModeLabel(displayMode); }
+
+int Game::ResolutionCount() {
+    EnsureResolutionList();
+    return static_cast<int>(gResolutions.size());
+}
+
+int Game::RecommendedResolutionIndex() {
+    EnsureResolutionList();
+    return gRecommendedIndex;
+}
+
+void Game::ResolutionAt(int idx, int& w, int& h) {
+    EnsureResolutionList();
+    if (idx < 0 || idx >= static_cast<int>(gResolutions.size())) idx = gRecommendedIndex;
+    w = gResolutions[static_cast<size_t>(idx)].w;
+    h = gResolutions[static_cast<size_t>(idx)].h;
+}
+
+std::string Game::ResolutionLabelAt(int idx) {
+    int w = 0, h = 0;
+    ResolutionAt(idx, w, h);
+    std::string s = std::to_string(w) + " x " + std::to_string(h);
+    if (idx == RecommendedResolutionIndex()) s += " (Recomendado)";
+    return s;
+}
+
+std::string Game::CurrentResolutionLabel() { return ResolutionLabelAt(resolutionIndex); }
+
+void Game::SetResolutionIndex(int idx) {
+    const int n = ResolutionCount();
+    if (n <= 0) return;
+    if (idx < 0) idx = 0;
+    if (idx >= n) idx = n - 1;
+    resolutionIndex = idx;
+}
+
+void Game::CycleDisplayMode(int delta) {
+    displayMode = ((displayMode + delta) % kDisplayModeCount + kDisplayModeCount) % kDisplayModeCount;
+    // Mantém o bool legado coerente (Sem bordas/Tela cheia = "fullscreen").
+    fullscreen = (displayMode != 2);
+}
+
+void Game::CycleResolution(int delta) {
+    const int n = ResolutionCount();
+    if (n <= 0) return;
+    resolutionIndex = ((resolutionIndex + delta) % n + n) % n;
+}
+
+// ── Aplicar/reverter vídeo (modo de tela + resolução aplicam no próximo boot) ──
+bool Game::VideoSettingsDirty() {
+    return displayMode != committedDisplayMode || resolutionIndex != committedResolutionIndex;
+}
+
+void Game::ApplyVideoSettings() {
+    committedDisplayMode = displayMode;
+    committedResolutionIndex = resolutionIndex;
+    fullscreen = (displayMode != 2);
+    SaveSettings();   // grava os valores já comprometidos
+}
+
+void Game::RevertVideoSettings() {
+    displayMode = committedDisplayMode;
+    resolutionIndex = committedResolutionIndex;
+    fullscreen = (displayMode != 2);
+}
+
+void Game::RestartApplication() {
+#ifdef _WIN32
+    wchar_t path[MAX_PATH];
+    const DWORD n = GetModuleFileNameW(nullptr, path, MAX_PATH);
+    if (n > 0 && n < MAX_PATH) {
+        STARTUPINFOW si;
+        PROCESS_INFORMATION pi;
+        ZeroMemory(&si, sizeof(si));
+        si.cb = sizeof(si);
+        ZeroMemory(&pi, sizeof(pi));
+        if (CreateProcessW(path, nullptr, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+            CloseHandle(pi.hProcess);
+            CloseHandle(pi.hThread);
+        }
+    }
+#endif
+    std::exit(0);   // encerra esta instância (a nova já foi lançada acima)
+}
+
 void Game::LoadSettings() {
     std::ifstream f("config/settings.json");
     if (!f.is_open()) {
@@ -203,6 +354,24 @@ void Game::LoadSettings() {
         if (j.contains("fullscreen") && j["fullscreen"].is_boolean()) {
             fullscreen = j["fullscreen"].get<bool>();
         }
+        // O jogo é SEMPRE tela cheia sem bordas — não há mais opção de modo de
+        // janela. A "resolução" é a resolução lógica de render (ver Game ctor).
+        displayMode = 0;
+        resolutionIndex = RecommendedResolutionIndex();   // padrão = nativa
+        if (j.contains("window_width") && j.contains("window_height") &&
+            j["window_width"].is_number_integer() && j["window_height"].is_number_integer()) {
+            const int w = j["window_width"].get<int>();
+            const int h = j["window_height"].get<int>();
+            for (int i = 0; i < ResolutionCount(); ++i) {
+                int rw = 0, rh = 0;
+                ResolutionAt(i, rw, rh);
+                if (rw == w && rh == h) { resolutionIndex = i; break; }
+            }
+        }
+        fullscreen = (displayMode != 2);
+        // Baseline "comprometido" = o que foi carregado (usado pelo fluxo Aplicar).
+        committedDisplayMode = displayMode;
+        committedResolutionIndex = resolutionIndex;
         if (j.contains("reduce_flashing") && j["reduce_flashing"].is_boolean()) {
             reduceFlashing = j["reduce_flashing"].get<bool>();
         }
@@ -249,8 +418,17 @@ void Game::SaveSettings() {
     j["sfx_volume"] = sfxVolumePercent;
     j["voice_volume"] = voiceVolumePercent;
     j["brightness"] = brightnessPercent;
-    j["fullscreen"] = fullscreen;
+    // Vídeo: grava os valores COMPROMETIDOS (só mudam via "Aplicar"), não os
+    // pendentes que o usuário está pré-visualizando na UI.
+    j["fullscreen"] = (committedDisplayMode != 2);
     j["reduce_flashing"] = reduceFlashing;
+    j["display_mode"] = (committedDisplayMode == 0) ? "borderless" : (committedDisplayMode == 1) ? "fullscreen" : "windowed";
+    {
+        int rw = 0, rh = 0;
+        ResolutionAt(committedResolutionIndex, rw, rh);
+        j["window_width"] = rw;
+        j["window_height"] = rh;
+    }
 
     {
         InputManager& im = InputManager::GetInstance();
@@ -277,16 +455,19 @@ Game::Game(std::string title) {
     instance = this;                  // Define a instância atual
 
     LoadEnvVolume();                  // Carrega volume (e flag DEBUG) do .env (legado)
-    LoadSettings();                   // config/settings.json sobrescreve (fonte unificada)
-    if (IsDebugBuild()) {
-        debugMode = true;             // builds de debug sempre habilitam ferramentas de dev
-    }
     srand(time(NULL));                // Inicializando o gerador de números aleátorios
 
     // Inicializa SDL
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER) != 0) {
         std::cerr << "SDL_Init falhou: " << SDL_GetError() << std::endl;
         exit(1);
+    }
+
+    // Só APÓS SDL_Init(VIDEO) a resolução nativa pode ser consultada
+    // (EnsureResolutionList usa SDL_GetDesktopDisplayMode).
+    LoadSettings();                   // config/settings.json (fonte unificada)
+    if (IsDebugBuild()) {
+        debugMode = true;             // builds de debug sempre habilitam ferramentas de dev
     }
 
     // Inicializa SDL_Image
@@ -336,14 +517,25 @@ Game::Game(std::string title) {
     int winH = WINDOW_HEIGHT;
     ApplyOptionalWindowSettingsFromFile(winW, winH);
 
-    //Cria a janela
+    // O jogo roda SEMPRE em tela cheia SEM BORDAS (borderless desktop). A
+    // "resolução" escolhida nas Configurações é a resolução LÓGICA de render:
+    // o jogo desenha nessa resolução e o SDL escala para preencher a tela
+    // (SDL_RenderSetLogicalSize). Assim a resolução tem efeito sem trocar o modo
+    // de vídeo do monitor nem sair do fullscreen sem bordas.
+    (void)winW; (void)winH;
+    int resW = 1920, resH = 1080;
+    ResolutionAt(committedResolutionIndex, resW, resH);
+    displayMode = 0;
+    fullscreen = true;
+
+    //Cria a janela em fullscreen borderless
     window = SDL_CreateWindow(
-        title.c_str(),                  // Coloquei o título como sendo argumento do construtor de Game também 
+        title.c_str(),                  // Coloquei o título como sendo argumento do construtor de Game também
         SDL_WINDOWPOS_CENTERED,
         SDL_WINDOWPOS_CENTERED,
-        winW,
-        winH,
-        0                              // Não utilizaremos fullscreen
+        resW,
+        resH,
+        SDL_WINDOW_FULLSCREEN_DESKTOP
     );
 
     if (!window) {
@@ -360,17 +552,19 @@ Game::Game(std::string title) {
 
     SDL_ShowCursor(SDL_DISABLE);   // esconde o cursor do mouse (o mouse ainda mira a lanterna)
 
+    // Resolução LÓGICA de render = resolução escolhida. O SDL escala esse alvo
+    // para preencher a tela cheia sem bordas (com letterbox se o aspecto diferir).
+    SDL_RenderSetLogicalSize(renderer, resW, resH);
+
     storedState = nullptr;                         // Inicializa o ponteiro de troca de estado
 
-    //Inicia membros
-    windowsWidth = winW;
-    windowsHeight = winH;
+    //Inicia membros — o "tamanho da janela" para o jogo é o ESPAÇO LÓGICO
+    // (a resolução escolhida), não o tamanho físico da tela. Assim câmera, HUD e
+    // alvos de render trabalham todos na resolução escolhida.
+    windowsWidth = resW;
+    windowsHeight = resH;
     frameStart = 0;
     dt = 0.0f;
-
-    if (fullscreen) {
-        SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
-    }
 }
 
 // Destrutor
@@ -427,17 +621,13 @@ float Game::GetDeltaTime() {                        // GetDeltaTime retorna dt p
     return dt;
 }
 
-int Game::GetWindowsWidth() {                       // Retorna a largura da janela do jogo
-    if (window) {
-        SDL_GetWindowSize(window, &windowsWidth, &windowsHeight);
-    }
+// Devolve o ESPAÇO LÓGICO (resolução escolhida), não o tamanho físico da tela —
+// todo o jogo (câmera, HUD, alvos de render, mouse) trabalha nesse espaço.
+int Game::GetWindowsWidth() {
     return windowsWidth;
 }
 
-int Game::GetWindowsHeight() {                      // Retorna a altura da janela do jogo
-    if (window) {
-        SDL_GetWindowSize(window, &windowsWidth, &windowsHeight);
-    }
+int Game::GetWindowsHeight() {
     return windowsHeight;
 }
 

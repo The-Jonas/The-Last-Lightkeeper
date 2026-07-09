@@ -308,6 +308,11 @@ void Monster::Update(float dt) {
             }
         }
 
+        // Rangidos de madeira esporádicos sob o peso do monstro em movimento
+        // (temporizador interno; só soa quando ele realmente anda).
+        GameSfx::UpdateMonsterFootsteps(dt, realSpeed, myPos.x, myPos.y,
+                                        plPos.x, plPos.y, fleeing);
+
         // Espelhamento por direção: vira ao andar para a ESQUERDA (arte base olha
         // para a direita); sem espelho ao andar para a direita. Mantém a última
         // direção quando praticamente parado. Aplicado por último para não ser

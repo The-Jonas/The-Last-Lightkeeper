@@ -62,6 +62,16 @@ public:
     bool TryCombineOil();
     void CancelOil();
 
+    // Seleção de alvo do reabastecimento (modal central). Ao apertar [F] no
+    // combustível, listamos as fontes de luz que ainda cabem óleo; o jogador
+    // navega com A/D (ou setas) e confirma com [F].
+    std::vector<int> GetRefuelTargetIndices() const;
+    int GetRefuelTargetCount() const;
+    int GetRefuelSelection() const { return oilTargetSelection; }
+    const ItemStack* GetRefuelTargetStack(int selectionIdx) const;
+    void RefuelSelectionPrev();
+    void RefuelSelectionNext();
+
     bool TryTurnLightOn();
     // Ensures a usable light is active, preferring the lighter over the lamp.
     // No-op (returns true) if one is already lit. Returns false when neither a
@@ -95,6 +105,9 @@ public:
     // True quando existe uma fonte de luz sem carga (0), independente de haver
     // combustível — dispara o aviso de "luz apagou" na 1ª vez.
     bool HasDepletedLightSource() const;
+    // Como HasDepletedLightSource, mas SÓ para o isqueiro (a lamparina não conta)
+    // — usado no aviso "sua luz apagou".
+    bool HasDepletedLighter() const;
     bool TryConsumeItem(const std::string& name);
     int FindStackWithName(const std::string& name) const;
     int FindStackWithProperty(ItemProperty prop) const;
@@ -107,6 +120,7 @@ private:
     bool oilApplyMode = false;
     int oilApplySourceIndex = -1;        // stack index of the oil being applied
     int oilApplyReturnActiveIndex = 0;   // wheel position to restore on exit
+    int oilTargetSelection = 0;          // índice na lista de alvos de reabastecimento
     std::string primedOilSpritePath;
     float usingDrainAccum = 0.0f;
 

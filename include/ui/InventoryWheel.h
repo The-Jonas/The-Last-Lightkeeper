@@ -26,8 +26,8 @@ private:
     static constexpr float kSlotSize = 88.0f;
     static constexpr float kIconSize = 62.0f;
     static constexpr float kArcRadius = 150.0f;   // raio do arco vertical
-    static constexpr float kAnchorXFraction = 0.115f;  // X do slot ATIVO (borda esquerda)
-    static constexpr float kAnchorYFraction = 0.68f;   // Y do slot ATIVO (mais para baixo do canto)
+    static constexpr float kAnchorXFraction = 0.085f;  // X do slot ATIVO (borda esquerda)
+    static constexpr float kAnchorYFraction = 0.76f;   // Y do slot ATIVO (mais para baixo do canto)
     static constexpr float kSlideSpeed = 10.0f;
     static constexpr float kRingThickness = 7.0f;   // espessura do anel de durabilidade
 
@@ -39,7 +39,8 @@ private:
     float GetSlotScale(int distanceFromCenter, int visibleCount) const;
     void DrawSlot(SDL_Renderer* renderer, int stackIndex, float x, float y,
                   float alpha, float scale, bool isActive) const;
-    void DrawPrimedOil(SDL_Renderer* renderer, float activeX, float activeY);
+    void DrawRefuelSelector(SDL_Renderer* renderer);
+    void DrawUseHint(SDL_Renderer* renderer, float activeX, float activeY);
     // Desenha as teclas de trocar item (1/3) nos lados corretos da roda:
     // "anterior" à esquerda, "próximo" à direita.
     void DrawCycleKeyHints(SDL_Renderer* renderer);
