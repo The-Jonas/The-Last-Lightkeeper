@@ -97,7 +97,7 @@ public:
     // Poder do irmãozinho — visão do monstro
     float visionPowerTimer    = 0.0f;   // Quanto tempo ainda ativa
     float visionCooldown      = 0.0f;   // Tempo até poder usar de novo
-    static constexpr float kVisionDuration  = 3.0f;   // Duração ativa
+    static constexpr float kVisionDuration  = 4.5f;   // Duração ativa (+50%, era 3.0)
     static constexpr float kVisionCooldown  = 12.0f;  // Recarga
 
 private:

@@ -1,5 +1,7 @@
 #include "states/EndState.h"
 #include "core/GameData.h"
+#include "audio/GameSfx.h"
+#include "audio/GameVoice.h"
 #include "core/Game.h"
 #include "core/InputManager.h"
 #include "core/Resources.h"
@@ -139,11 +141,9 @@ void EndState::Update(float dt) {
         return;
     }
 
-    // Tela de fim de jogo (morte): ESPAÇO volta ao menu; ESC fecha o jogo.
-    if (input.KeyPress(ESCAPE_KEY)) {
-        quitRequested = true;
-    }
-    if (input.KeyPress(SPACE_KEY)) {
+    // Tela de fim de jogo (morte): ESPAÇO e ESC voltam ao MENU (não fecham o jogo;
+    // só o X da janela fecha, tratado acima).
+    if (input.KeyPress(SPACE_KEY) || input.KeyPress(ESCAPE_KEY)) {
         ReturnToMainMenu();
     }
 
@@ -191,6 +191,11 @@ void EndState::Render() {
 }
 
 void EndState::Start() {
+    // Transição nível→fim/menu: silencia TODO o áudio de gameplay (rádio, ondas,
+    // vento, monstro...) para nada sobreviver à morte/vitória. A música do EndState
+    // (Mix_Music) é iniciada por LoadAssets e não é afetada.
+    GameSfx::HardStopAll();
+    GameVoice::StopAll();
     LoadAssets();
     StartArray();
     started = true;

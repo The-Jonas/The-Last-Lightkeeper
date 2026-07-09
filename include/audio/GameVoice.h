@@ -21,6 +21,7 @@ bool GetActiveSubtitle(std::string& out);
 // Irmãozão (big brother)
 void OnCallToFollow();       // "Aqui" — chama o irmãozinho para segui-lo
 void OnItemPickup();         // ocasionalmente comenta ao pegar um item
+void OnPickupWoodPlank();    // "Isso vai servir." — SEMPRE ao pegar a Tabua de Madeira
 void OnBagFull();            // "minha bolsa tá pesada" — bolsa encheu
 void OnDragObject();         // às vezes, ao começar a arrastar um objeto
 void OnActionBlocked();      // "não consigo" — apertou interagir e não pôde agir

@@ -427,7 +427,10 @@ void StageState::RenderInteractionPrompt(SDL_Renderer* renderer) {
 
     // Escolhe a AÇÃO do interagível de maior prioridade ao alcance.
     const char* action = nullptr;
-    if (!activePushBox) {
+    if (bigCharacter && bigCharacter->isHidden) {
+        // Escondido no armário: mantém SEMPRE o aviso de como sair.
+        action = "Sair do esconderijo";
+    } else if (!activePushBox) {
         if (reachablePushBox) {
             action = "Empurrar";
         } else if (reachableCloset) {
@@ -573,19 +576,7 @@ void StageState::HandlePauseMenuInput() {
     }
 }
 
-// #19 Desenha um losango (diamante) preenchido centrado em (cx,cy) — divisor
-// decorativo sob o título "PAUSA", como na referência.
-static void DrawDiamond(SDL_Renderer* renderer, float cx, float cy, float halfW, float halfH,
-                        Uint8 r, Uint8 g, Uint8 b, Uint8 a) {
-    SDL_SetRenderDrawColor(renderer, r, g, b, a);
-    const int steps = static_cast<int>(halfH);
-    for (int i = 0; i <= steps; ++i) {
-        const float f = (steps > 0) ? static_cast<float>(i) / steps : 0.0f;
-        const float w = halfW * (1.0f - f);   // afina em direção às pontas de cima/baixo
-        SDL_RenderDrawLineF(renderer, cx - w, cy - i, cx + w, cy - i);
-        SDL_RenderDrawLineF(renderer, cx - w, cy + i, cx + w, cy + i);
-    }
-}
+// (O losango decorativo foi substituído pela imagem "linha_divisoria.png".)
 
 // #19 Gera o desfoque do cenário (GPU): reduz o alvo da cena (renderTarget) para
 // um alvo pequeno; ao ampliar depois com filtragem linear surge o borrão barato
@@ -652,65 +643,117 @@ void StageState::RenderPauseMenu(SDL_Renderer* renderer) {
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
-    // #19 Prepara o desfoque UMA vez; ele é aplicado só atrás de cada box adiante
-    // (não na tela inteira). Um véu leve global mantém o menu legível sem esconder
-    // o cenário — bem mais sutil que o escurecimento anterior.
-    BuildPauseBlurTexture(renderer, winW, winH);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 60);
+    // Escurece a cena para dar foco ao menu (sem borrão de tela cheia).
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 125);
     const SDL_Rect fullDim{0, 0, winW, winH};
     SDL_RenderFillRect(renderer, &fullDim);
 
-    const int itemW = 380;
-    const int itemH = 56;
-    const int gap = 14;
-    const int totalH = kPauseMenuItemCount * itemH + (kPauseMenuItemCount - 1) * gap;
-    const int startY = (winH - totalH) / 2;
-    const int x = (winW - itemW) / 2;
+    // Ícone de cada opção — MESMA ordem de kPauseMenuLabels
+    // {Continuar, Salvar, Configuracoes, Reiniciar nivel, Sair}.
+    static const char* kPauseMenuIcons[] = {
+        "Recursos/img/menu/pause/icon_continuar.png",
+        "Recursos/img/menu/pause/icon_salvar.png",
+        "Recursos/img/menu/pause/icon_config.png",
+        "Recursos/img/menu/pause/icon_reiniciar.png",
+        "Recursos/img/menu/pause/icon_voltar.png",
+    };
 
-    // Título "PAUSA" + divisor em losango logo abaixo.
-    if (auto titleFont = Resources::GetFont("Recursos/font/times.ttf", 46)) {
-        SDL_Color tc{225, 205, 145, 255};
-        SDL_Surface* s = TTF_RenderUTF8_Blended(titleFont.get(), "PAUSA", tc);
-        if (s) {
-            SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, s);
-            const SDL_Rect d{(winW - s->w) / 2, startY - 96, s->w, s->h};
-            const int dividerY = d.y + s->h + 16;
-            SDL_FreeSurface(s);
-            if (t) {
-                SDL_RenderCopy(renderer, t, nullptr, &d);
-                SDL_DestroyTexture(t);
-            }
-            DrawDiamond(renderer, winW * 0.5f, static_cast<float>(dividerY), 9.0f, 7.0f,
-                        200, 180, 110, 230);
+    const int n = kPauseMenuItemCount;
+    const int gap = 10;
+
+    // Caixa de seleção (proporção do PNG) — dimensiona pela ALTURA p/ caber tudo.
+    auto boxTex = Resources::GetImage("Recursos/img/menu/pause/caixa_selecao.png");
+    float boxAspect = 1281.0f / 394.0f;
+    if (boxTex) { int tw, th; if (SDL_QueryTexture(boxTex.get(), nullptr, nullptr, &tw, &th) == 0 && th > 0) boxAspect = static_cast<float>(tw) / th; }
+
+    int boxH = std::min(112, (winH - 210 - (n - 1) * gap) / n);
+    boxH = std::max(72, boxH);
+    int boxW = static_cast<int>(boxH * boxAspect);
+    if (boxW > winW * 0.55f) { boxW = static_cast<int>(winW * 0.55f); boxH = static_cast<int>(boxW / boxAspect); }
+    const int optionsH = n * boxH + (n - 1) * gap;
+
+    // Divisória proporcional (largura ~ da caixa).
+    auto divTex = Resources::GetImage("Recursos/img/menu/pause/linha_divisoria.png");
+    float divAspect = 1034.0f / 230.0f;
+    if (divTex) { int tw, th; if (SDL_QueryTexture(divTex.get(), nullptr, nullptr, &tw, &th) == 0 && th > 0) divAspect = static_cast<float>(tw) / th; }
+    const int divW = static_cast<int>(boxW * 0.92f);
+    const int divH = static_cast<int>(divW / divAspect);
+
+    // Título "PAUSA" (texto).
+    auto titleFont = Resources::GetFont("Recursos/font/times.ttf", 48);
+    SDL_Texture* titleTex = nullptr;
+    int titleW = 0, titleH = 48;
+    if (titleFont) {
+        SDL_Color tc{228, 208, 148, 255};
+        if (SDL_Surface* s = TTF_RenderUTF8_Blended(titleFont.get(), "PAUSA", tc)) {
+            titleTex = SDL_CreateTextureFromSurface(renderer, s);
+            titleW = s->w; titleH = s->h; SDL_FreeSurface(s);
         }
     }
 
-    auto font = Resources::GetFont("Recursos/font/times.ttf", 28);
-    for (int i = 0; i < kPauseMenuItemCount; ++i) {
-        const SDL_Rect r{x, startY + i * (itemH + gap), itemW, itemH};
+    // Bloco vertical centralizado: título · divisória · lista de opções.
+    const int gTitleDiv = 8, gDivOpts = 14;
+    const int totalH = titleH + gTitleDiv + divH + gDivOpts + optionsH;
+    int y = std::max(8, (winH - totalH) / 2);
+
+    if (titleTex) {
+        SDL_Rect d{(winW - titleW) / 2, y, titleW, titleH};
+        SDL_RenderCopy(renderer, titleTex, nullptr, &d);
+        SDL_DestroyTexture(titleTex);
+    }
+    y += titleH + gTitleDiv;
+
+    // Divisória DECORATIVA entre o título e as opções.
+    if (divTex) {
+        SDL_Rect d{(winW - divW) / 2, y, divW, divH};
+        SDL_RenderCopy(renderer, divTex.get(), nullptr, &d);
+    }
+    y += divH + gDivOpts;
+
+    // Opções: cada uma é a caixa de seleção com ícone à esquerda + texto dentro.
+    const int boxX = (winW - boxW) / 2;
+    auto font = Resources::GetFont("Recursos/font/times.ttf", 26);
+    for (int i = 0; i < n; ++i) {
+        const SDL_Rect r{boxX, y + i * (boxH + gap), boxW, boxH};
         pauseMenuItemRects[i] = r;
         const bool sel = (i == pauseMenuSelection);
 
-        // #19 Desfoque SÓ atrás deste box (efeito "vidro fosco"); o resto da tela
-        // fica nítido. Depois um leve tom por cima (âmbar no selecionado) + borda.
-        DrawBlurBehindRect(renderer, r, winW, winH);
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-        if (sel) {
-            SDL_SetRenderDrawColor(renderer, 120, 96, 50, 90);
-            SDL_RenderFillRect(renderer, &r);
+        // Caixa: selecionado = um pouco maior + brilho total; normal = apagado.
+        SDL_Rect dr = r;
+        if (sel) { const int gx = static_cast<int>(boxW * 0.03f), gy = static_cast<int>(boxH * 0.03f); dr = {r.x - gx, r.y - gy, r.w + 2 * gx, r.h + 2 * gy}; }
+        if (boxTex) {
+            SDL_SetTextureColorMod(boxTex.get(), sel ? 255 : 160, sel ? 255 : 160, sel ? 255 : 165);
+            SDL_SetTextureAlphaMod(boxTex.get(), sel ? 255 : 225);
+            SDL_RenderCopy(renderer, boxTex.get(), nullptr, &dr);
         }
-        SDL_SetRenderDrawColor(renderer, sel ? 230 : 120, sel ? 200 : 120, sel ? 125 : 130,
-                               sel ? 255 : 165);
-        SDL_RenderDrawRect(renderer, &r);
 
+        // Ícone à esquerda, preservando proporção, centrado verticalmente.
+        const int iconSlot = static_cast<int>(boxH * 0.30f);   // ícones -50% (era 0.60)
+        const int iconPad  = static_cast<int>(boxH * 0.24f);
+        const int textLeft = r.x + iconPad + iconSlot + iconPad;
+        if (auto icon = Resources::GetImage(kPauseMenuIcons[i])) {
+            int tw = 0, th = 0; SDL_QueryTexture(icon.get(), nullptr, nullptr, &tw, &th);
+            const float ia = (th > 0) ? static_cast<float>(tw) / th : 1.0f;
+            int iw = iconSlot, ih = iconSlot;
+            if (ia >= 1.0f) ih = static_cast<int>(iconSlot / ia); else iw = static_cast<int>(iconSlot * ia);
+            SDL_Rect id{ r.x + iconPad + (iconSlot - iw) / 2, r.y + (boxH - ih) / 2, iw, ih };
+            SDL_SetTextureColorMod(icon.get(), sel ? 255 : 195, sel ? 255 : 195, sel ? 255 : 195);
+            SDL_SetTextureAlphaMod(icon.get(), sel ? 255 : 220);
+            SDL_RenderCopy(renderer, icon.get(), nullptr, &id);
+            SDL_SetTextureColorMod(icon.get(), 255, 255, 255);
+            SDL_SetTextureAlphaMod(icon.get(), 255);
+        }
+
+        // Texto do item, centralizado no espaço à direita do ícone.
         if (font) {
-            SDL_Color c = sel ? SDL_Color{248, 238, 208, 255} : SDL_Color{195, 195, 200, 235};
-            SDL_Surface* s = TTF_RenderUTF8_Blended(font.get(), kPauseMenuLabels[i], c);
-            if (s) {
+            SDL_Color c = sel ? SDL_Color{250, 240, 212, 255} : SDL_Color{200, 196, 190, 235};
+            if (SDL_Surface* s = TTF_RenderUTF8_Blended(font.get(), kPauseMenuLabels[i], c)) {
                 SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, s);
-                const SDL_Rect d{r.x + (r.w - s->w) / 2, r.y + (r.h - s->h) / 2, s->w, s->h};
-                SDL_FreeSurface(s);
+                const int tw = s->w, th = s->h; SDL_FreeSurface(s);
                 if (t) {
+                    const int areaL = textLeft, areaR = r.x + boxW - iconPad;
+                    const int tx = areaL + ((areaR - areaL) - tw) / 2;
+                    SDL_Rect d{ tx, r.y + (boxH - th) / 2, tw, th };
                     SDL_RenderCopy(renderer, t, nullptr, &d);
                     SDL_DestroyTexture(t);
                 }
@@ -718,6 +761,7 @@ void StageState::RenderPauseMenu(SDL_Renderer* renderer) {
         }
     }
 
+    if (boxTex) { SDL_SetTextureColorMod(boxTex.get(), 255, 255, 255); SDL_SetTextureAlphaMod(boxTex.get(), 255); }
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }
 
@@ -1280,9 +1324,16 @@ void StageState::UpdateTutorials(float dt) {
         // automaticamente logo no começo, ensinar "aperte F para ligar" nesse
         // momento confunde. O tutorial fica adiado até o showcase terminar (e,
         // naturalmente, só reaparece quando a luz apaga de novo).
+        // Só ensina "aperte F para acender" se o isqueiro AINDA TEM COMBUSTÍVEL.
+        // Se a durabilidade acabou, apertar F não liga a luz — então não mostra.
+        const Inventory::ItemStack* activeStack = inventory.GetActiveStack();
+        const bool lighterHasFuel = activeStack && !activeStack->durabilities.empty() &&
+                                    activeStack->durabilities.front() > 0;
+
         const bool cond = !autoLightShowcasePending &&
                           controlledCharacter == bigCharacter &&
                           inventory.IsActiveItemLighter() &&
+                          lighterHasFuel &&
                           !inventory.IsUsableLightActive() &&
                           dyingInShadow;
         if (cond && lighterTutArmed && sLighterTutShown < kMaxTutorialShows && lighterTutTimer <= 0.0f) {

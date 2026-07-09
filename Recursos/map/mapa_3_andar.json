@@ -163,7 +163,7 @@
                         {
                          "name":"direction",
                          "type":"string",
-                         "value":"esquerda"
+                         "value":"direita"
                         }, 
                         {
                          "name":"startsLit",
@@ -807,7 +807,7 @@
                          "value":true
                         }],
                  "rotation":0,
-                 "type":"itemSpawn",
+                 "type":"ItemSpawn",
                  "visible":true,
                  "width":245,
                  "x":471.939393939394,
@@ -4489,7 +4489,7 @@
          "value":"level_2"
         }],
  "renderorder":"right-down",
- "tiledversion":"1.12.1",
+ "tiledversion":"1.12.2",
  "tileheight":64,
  "tilesets":[
         {

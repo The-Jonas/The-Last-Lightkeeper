@@ -188,21 +188,10 @@ void CutsceneState::Update(float dt) {
         playbackSec += dt;
     }
 
-    // Detecção de atividade: qualquer input reexibe o tooltip; a ociosidade o some.
-    bool activity = false;
-    if (input.IsKeyDown(SPACE_KEY) || input.PollAnyKeyPressed() != 0) {
-        activity = true;
-    }
-    if (input.IsMouseDown(LEFT_MOUSE_BUTTON)) {
-        activity = true;
-    }
-    const int mx = input.GetMouseX();
-    const int my = input.GetMouseY();
-    if (mx != lastMouseX || my != lastMouseY) {
-        activity = true;
-        lastMouseX = mx;
-        lastMouseY = my;
-    }
+    // Detecção de atividade: SÓ o teclado reexibe o tooltip. O MOUSE é IGNORADO na
+    // cutscene (nem clique nem movimento contam como "input"), para não reagir a
+    // mexidas do mouse enquanto a cena roda.
+    bool activity = (input.IsKeyDown(SPACE_KEY) || input.PollAnyKeyPressed() != 0);
 
     idleTimer = activity ? 0.0f : (idleTimer + dt);
     const float target = (idleTimer < kTooltipHideDelay) ? 1.0f : 0.0f;

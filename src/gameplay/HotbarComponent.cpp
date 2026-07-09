@@ -71,11 +71,22 @@ PickupOutcome PerformPickup(Inventory& inventory, ItemPickup* closest, std::vect
 // Dispara a fala adequada ao resultado de pegar item: bolsa cheia → "bolsa
 // pesada" (sem a fala normal de pegar); bloqueado → "não consigo"; senão,
 // ocasionalmente comenta.
-void VoiceForPickup(PickupOutcome outcome) {
+void VoiceForPickup(PickupOutcome outcome, const std::string& itemName) {
+    const bool woodPlank = (itemName == "Tabua de Madeira");
     switch (outcome) {
-    case PickupOutcome::Blocked:           GameVoice::OnActionBlocked(); break;
-    case PickupOutcome::PickedUpAndFilled: GameVoice::OnBagFull();       break;
-    case PickupOutcome::PickedUp:          GameVoice::OnItemPickup();    break;
+    case PickupOutcome::Blocked:
+        GameVoice::OnActionBlocked();
+        break;
+    case PickupOutcome::PickedUpAndFilled:
+        // Pegou (e encheu a bolsa): a tábua sempre solta "Isso vai servir.".
+        if (woodPlank) GameVoice::OnPickupWoodPlank();
+        else           GameVoice::OnBagFull();
+        break;
+    case PickupOutcome::PickedUp:
+        // Tábua de madeira → SEMPRE "Isso vai servir."; demais itens → comentário ocasional.
+        if (woodPlank) GameVoice::OnPickupWoodPlank();
+        else           GameVoice::OnItemPickup();
+        break;
     }
 }
 
@@ -237,8 +248,9 @@ void HotbarComponent::TryPickupOnKeyPress() {
 
     const int hLevel = closest->GetHeightLevel();
     if (hLevel == 0 || hLevel == 1) {
+        const std::string pickedName = closest->GetDef() ? closest->GetDef()->name : std::string();
         const PickupOutcome outcome = PerformPickup(inventory, closest, itemPickups, bigCharacter);
-        VoiceForPickup(outcome);
+        VoiceForPickup(outcome, pickedName);
         if (outcome == PickupOutcome::Blocked) {
             return;   // bolsa cheia: nada foi pego
         }
@@ -253,8 +265,9 @@ void HotbarComponent::TryPickupOnKeyPress() {
     }
 
     if (hLevel == 2) {
+        const std::string pickedName = closest->GetDef() ? closest->GetDef()->name : std::string();
         const PickupOutcome outcome = PerformPickup(inventory, closest, itemPickups, bigCharacter);
-        VoiceForPickup(outcome);
+        VoiceForPickup(outcome, pickedName);
         if (outcome == PickupOutcome::Blocked) {
             return;
         }

@@ -220,6 +220,7 @@ bool GetActiveSubtitle(std::string& out) {
 
 void OnCallToFollow()       { Play(gCall, kTxtBigCall); }
 void OnItemPickup()         { if (Chance(40)) PlayOneOf2(gPickupA, kTxtBigPickupA, gPickupB, kTxtBigPickupB); }
+void OnPickupWoodPlank()    { Play(gPickupA, kTxtBigPickupA); }   // "Isso vai servir." SEMPRE (tábua de madeira)
 void OnBagFull()            { Play(gBagFull, kTxtBigBagFull); }
 void OnDragObject()         { if (Chance(35)) Play(gDrag, kTxtBigDrag, 6000); }
 void OnActionBlocked()      { Play(gCant, kTxtBigCant, 800); }

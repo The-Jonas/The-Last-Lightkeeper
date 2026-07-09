@@ -16,6 +16,10 @@ void PlayCandleBlow();      // som de soprar/apagar pelo jogador
 /// depois que o StageState para de atualizar.
 void StopAllGameplay();
 
+/// Parada TOTAL de efeitos (todos os canais do mixer, inclusive rádio/ondas/vento/
+/// monstro). Usada nas transições nível↔menu para nenhum som sobreviver.
+void HardStopAll();
+
 // Funções para fazer o áudio ficar direcional
 void SetChannelSpatial(int channel, float srcX, float srcY, float listX, float listY, float maxDist = 800.0f);
 void ClearChannelSpatial(int channel);

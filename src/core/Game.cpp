@@ -313,7 +313,7 @@ Game::Game(std::string title) {
         std::cerr << "Mix_OpenAudio falhou: " << Mix_GetError() << std::endl;
         exit(1);
     }
-    Mix_AllocateChannels(32);
+    Mix_AllocateChannels(48);   // 0-13 fixos, 14-31 voz/one-shots, 32-47 pool de passos do monstro
     // Reserva 0..13 para os canais FIXOS de SFX (waves..heartbeat=10, pool de passos
     // do monstro=11..13). Antes reservava só 9, então Mix_PlayChannel(-1) — usado pela
     // VOZ e pelos one-shots — caía nos canais 9..13 e um passo do monstro (canal fixo
@@ -356,8 +356,10 @@ Game::Game(std::string title) {
     if (!renderer) {
         std::cerr << "SDL_CreateRenderer falhou: " << SDL_GetError() << std::endl;
         exit(1);
-    }   
-    
+    }
+
+    SDL_ShowCursor(SDL_DISABLE);   // esconde o cursor do mouse (o mouse ainda mira a lanterna)
+
     storedState = nullptr;                         // Inicializa o ponteiro de troca de estado
 
     //Inicia membros

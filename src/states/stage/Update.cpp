@@ -74,6 +74,10 @@ void StageState::Update(float dt){
     lastFrameDt = dt;
     dynamicColliderCacheDirty = true;
 
+    // Cursor visível em TODO o menu de pausa (menu + configurações + confirmar sair),
+    // que são navegáveis com o mouse; no resto do jogo o cursor fica escondido.
+    SDL_ShowCursor((pauseMenuOpen || settingsPanelOpen || quitConfirmOpen) ? SDL_ENABLE : SDL_DISABLE);
+
     // Chamadas a Mix_PlayMusic em todo frame fazem SDL_mixer reorganizar música e pode matar/samples atrasarem ondas.
     if (!musicMuted && music.IsOpen() && Mix_PlayingMusic() == 0) {
         gStageOstSilenceRecover += dt;

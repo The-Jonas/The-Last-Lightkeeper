@@ -171,8 +171,9 @@ SDL_Rect Closet::GetInteractionRect() const {
 }
 
 void Closet::ArmWhisperTimer() {
-    // Intervalo aleatório entre sussurros: 8–16 s. Assim não vira metrônomo.
-    whisperTimer = 8.0f + static_cast<float>(rand() % 800) / 100.0f;
+    // Cooldown GRANDE entre os sussurros "E se o monstro estiver lá fora?": 45–90 s,
+    // para a fala ficar rara (antes 8–16 s tornava repetitiva).
+    whisperTimer = 45.0f + static_cast<float>(rand() % 4500) / 100.0f;
 }
 
 void Closet::EnterCloset() {

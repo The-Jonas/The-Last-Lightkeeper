@@ -23,6 +23,7 @@ public:
     int PlayLooped();                                   // Reproduz em loop infinito; retorna o canal ou -1
     int PlayLoopedOnChannel(int ch);                    // Canal fixo específico
     void Stop();                                        // Para a reprodução do som no canal em que ele está tocando
+    void FadeOut(int ms);                               // Desliga suavemente (fade) ao longo de `ms` milissegundos
     int GetChannel() const { return channel; }
     Mix_Chunk* GetChunk() const { return chunk.get(); }  // acesso ao PCM (p/ normalização de volume)
     void Open(const std::string file);                  // Carrega o arquivo de som a partir do caminho fornecido

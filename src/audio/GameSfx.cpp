@@ -23,8 +23,8 @@ constexpr int kChannelMonsterSpot    = 7;  // som de ver o player
 constexpr int kChannelMonsterSteps   = 8;  // passos do monstro
 constexpr int kChannelMonsterCreak   = 9;  // rangidos de madeira (esporádicos)
 constexpr int kChannelHeartbeat      = 10; // batimento cardíaco (sanidade baixa)
-constexpr int kChannelMonsterStep0   = 11; // passos por-frame: pool rotativo (11..13)
-constexpr int kMonsterStepPoolCount  = 3;  // canais no pool p/ os passos se sobreporem
+constexpr int kChannelMonsterStep0   = 32; // passos por-frame: pool rotativo GRANDE (32..47),
+constexpr int kMonsterStepPoolCount  = 16; // separado da voz/one-shots p/ os passos se SOBREPOREM sem se cortar
 //9+ → one-shots livres (Mix_PlayChannel(-1, ...) usa a partir daqui)
 
 constexpr const char* kBoxStartPath = "Recursos/audio/SFX/CAIXAS/CAIXA_Madeira.mp3";
@@ -577,8 +577,26 @@ void PlayMonsterStep(int frameIndex, float monsterX, float monsterY, float playe
 
     const int ch = kChannelMonsterStep0 + (gMonsterStepRot++ % kMonsterStepPoolCount);
     Mix_PlayChannel(ch, gMonsterStepSounds[idx].GetChunk(), 0);
-    Mix_Volume(ch, SfxChannelVolume());
-    SetChannelSpatial(ch, monsterX, monsterY, playerX, playerY, maxDist);
+
+    // VOLUME por DISTÂNCIA (perto = ALTO, longe = baixo), com curva acentuada para
+    // o gradiente ser bem perceptível. A distância vai no volume do canal; a
+    // panorâmica (esquerda/direita) fica só com a DIREÇÃO, sem re-atenuar.
+    const float dx = monsterX - playerX;
+    const float dy = monsterY - playerY;
+    const float dist = std::sqrt(dx * dx + dy * dy);
+    const float maxAud = (maxDist > 1.0f) ? maxDist : 800.0f;
+    float t = 1.0f - std::min(1.0f, dist / maxAud);   // 1 = colado, 0 = no limite
+    t = t * t;                                         // curva: perto MUITO mais alto que longe
+    const int vol = static_cast<int>(SfxChannelVolume() * (0.05f + 0.95f * t));
+    Mix_Volume(ch, vol);
+
+    // Panorâmica só pela direção horizontal (não re-atenua por distância — isso já
+    // está no Mix_Volume acima). Assim perto=alto/longe=baixo fica bem marcado.
+    float pan = 0.0f;
+    if (dist > 1.0f) pan = std::max(-1.0f, std::min(1.0f, dx / maxAud));
+    const Uint8 l = static_cast<Uint8>(255.0f * (1.0f - std::max(0.0f, pan)));
+    const Uint8 r = static_cast<Uint8>(255.0f * (1.0f + std::min(0.0f, pan)));
+    Mix_SetPanning(ch, l, r);
 }
 
 // Agora só cuida dos RANGIDOS de madeira esporádicos (os passos viraram por-frame,
@@ -610,6 +628,19 @@ void StopMonsterFootsteps() {
     ClearChannelSpatial(kChannelMonsterSteps);
     gMonsterStepsActive = false;
     gMonsterStepsFastActive = false;
+}
+
+// Parada TOTAL de áudio de efeitos: usada nas transições (nível↔menu). Silencia
+// TODOS os canais do mixer — inclusive os que StopAllGameplay não pega (rádio no
+// canal 5, ondas, vento, grito/spot do monstro e quaisquer one-shots) — e zera os
+// flags de loop. NÃO mexe na música (Mix_Music), que cada estado gerencia.
+void HardStopAll() {
+    StopAllGameplay();        // passos/vela/caixa/vento + reseta flags
+    StopMonsterFootsteps();   // pool de passos do monstro + rangidos
+    Mix_HaltChannel(-1);      // varre TODO o resto: rádio(5), ondas(0), vento(1), grito, spot...
+    for (int ch = 0; ch < 48; ++ch) ClearChannelSpatial(ch);
+    gHeartbeatActive = false;
+    gBoxIsMoving = false;
 }
 
 void UpdateHeartbeat(float intensity01) {

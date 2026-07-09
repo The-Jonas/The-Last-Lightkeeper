@@ -1,6 +1,8 @@
 #include "states/TitleState.h"
 #include "states/LoadingState.h"
 #include "states/EndState.h"
+#include "audio/GameSfx.h"
+#include "audio/GameVoice.h"
 #include "core/SaveManager.h"
 #include "states/stage/StageState.h"
 #include "core/Game.h"
@@ -500,6 +502,9 @@ void TitleState::Update(float dt) {
     hasContinueSave=SaveManager::HasSave();
     if(!hasContinueSave&&menuSelection==1) menuSelection=0;
 
+    // Cursor visível SÓ no painel de configurações (sliders com mouse).
+    SDL_ShowCursor(configOpen ? SDL_ENABLE : SDL_DISABLE);
+
     // Config intercepta input primeiro
     if(configOpen) {
         UpdateConfig(input);
@@ -756,6 +761,10 @@ void TitleState::RenderBlurredCharacter(SDL_Renderer* r) {
 //  Start / Pause / Resume
 // ─────────────────────────────────────────────────────────────────────────────
 void TitleState::Start() {
+    // Chegando ao menu (boot ou nível→menu): mata qualquer efeito de gameplay que
+    // tenha sobrado (rádio etc.). A música do menu é iniciada logo abaixo.
+    GameSfx::HardStopAll();
+    GameVoice::StopAll();
     LoadAssets(); StartArray();
     music.Open("Recursos/audio/soundtracks/ES_Make up Your Mind - Hanna Lindgren.mp3");
     music.Play();
