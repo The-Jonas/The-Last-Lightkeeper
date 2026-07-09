@@ -105,8 +105,8 @@
                  "type":"PlayerSpawn_Big",
                  "visible":true,
                  "width":127,
-                 "x":1861,
-                 "y":2153
+                 "x":1753,
+                 "y":2549
                 }, 
                 {
                  "gid":17,
@@ -824,8 +824,8 @@
                  "type":"PlayerSpawn_Small",
                  "visible":true,
                  "width":126,
-                 "x":1658.21212121212,
-                 "y":2200.63636363636
+                 "x":1586.21212121212,
+                 "y":2684.63636363636
                 }, 
                 {
                  "gid":12,
@@ -1512,35 +1512,6 @@
                 }, 
                 {
                  "height":0,
-                 "id":744,
-                 "name":"",
-                 "opacity":1,
-                 "polygon":[
-                        {
-                         "x":-14,
-                         "y":-8
-                        }, 
-                        {
-                         "x":118,
-                         "y":46
-                        }, 
-                        {
-                         "x":194,
-                         "y":-76
-                        }, 
-                        {
-                         "x":42,
-                         "y":-128
-                        }],
-                 "rotation":0,
-                 "type":"",
-                 "visible":true,
-                 "width":0,
-                 "x":224,
-                 "y":916
-                }, 
-                {
-                 "height":0,
                  "id":747,
                  "name":"",
                  "opacity":1,
@@ -2043,6 +2014,19 @@
                  "width":0,
                  "x":2928,
                  "y":1776
+                }, 
+                {
+                 "ellipse":true,
+                 "height":187,
+                 "id":948,
+                 "name":"",
+                 "opacity":1,
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":184,
+                 "x":206,
+                 "y":744
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -3613,8 +3597,8 @@
                  "type":"",
                  "visible":true,
                  "width":158,
-                 "x":449,
-                 "y":1222
+                 "x":442.333333333333,
+                 "y":1218
                 }, 
                 {
                  "height":128.060606060606,
@@ -4548,7 +4532,7 @@
                  "opacity":1,
                  "rotation":0,
                  "type":"",
-                 "visible":false,
+                 "visible":true,
                  "width":2608.26254826255,
                  "x":548,
                  "y":436
@@ -4560,7 +4544,7 @@
          "y":0
         }],
  "nextlayerid":29,
- "nextobjectid":945,
+ "nextobjectid":951,
  "orientation":"orthogonal",
  "properties":[
         {
@@ -4569,7 +4553,7 @@
          "value":"level_1"
         }],
  "renderorder":"right-down",
- "tiledversion":"1.12.1",
+ "tiledversion":"1.12.2",
  "tileheight":64,
  "tilesets":[
         {

@@ -3,6 +3,7 @@
 #include "engine/GameObject.h"
 #include "gameplay/Box.h"
 #include "gameplay/Character.h"
+#include "gameplay/Monster.h"
 #include "gameplay/ItemPickup.h"
 #include "gameplay/Jornal.h"
 #include "gameplay/Candlestick.h"
@@ -85,7 +86,15 @@ ItemPickup* StageState::FindClosestReachableItem() const {
         }
 
         const int itemHeight = pickup->GetHeightLevel();
-        const SDL_Rect reachBox = Character::player->GetInteractionRect(itemHeight);
+        // Alcance OMNIDIRECIONAL: pega o item por PROXIMIDADE, sem precisar estar
+        // "olhando" para ele. Caixa quadrada centrada no pé do jogador, elevada
+        // pela altura do item (mesmo zOffset da GetInteractionRect).
+        const Rect& pbox = Character::player->GetAssociated().box;
+        const int reachCX = static_cast<int>(pbox.x + pbox.w * 0.5f);
+        const int zOff = (itemHeight == 1) ? 140 : (itemHeight == 2 ? 260 : 0);
+        const int reachCY = static_cast<int>(pbox.y + pbox.h) - zOff;
+        constexpr int reachHalf = 90;   // ~alcance em todas as direções
+        const SDL_Rect reachBox = { reachCX - reachHalf, reachCY - reachHalf, 2 * reachHalf, 2 * reachHalf };
         const GameObject& itemObj = pickup->GetAssociated();
         const SDL_Rect itemRect = {
             static_cast<int>(itemObj.box.x),
@@ -546,6 +555,15 @@ void StageState::ApplyCoupledPushMovement(const Vec2& prevPlayerPos) {
 
     if (activePushBox->TryMoveBy(dx, dy)) {
         GameSfx::NotifyBoxSlide();
+        // #2 O barulho de arrastar a caixa/barril chama o monstro para investigar.
+        // NotifyNoise é auto-throttled (noiseCooldownTimer), então chamar por frame é seguro.
+        const Vec2 noisePos = boxObj.box.Center();
+        for (auto& go : GetObjectArray()) {
+            if (Monster* m = go->GetComponent<Monster>()) {
+                m->NotifyNoise(noisePos);
+                break;
+            }
+        }
     } else {
         bigCharacterObject->box.x = prevPlayerPos.x;
         bigCharacterObject->box.y = prevPlayerPos.y;

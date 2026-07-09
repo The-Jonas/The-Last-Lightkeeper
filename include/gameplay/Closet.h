@@ -29,6 +29,11 @@ private:
     // monstro (rearma só quando ele se afasta), em vez de repetir a cada ~4s.
     bool hideVoiceArmed = true;
 
+    // #4 Sussurro aleatório "E se o monstro estiver lá fora?" enquanto escondido.
+    // Conta regressiva reiniciada com um intervalo aleatório a cada disparo.
+    float whisperTimer = 0.0f;
+    void ArmWhisperTimer();   // sorteia o próximo intervalo do sussurro
+
     void EnterCloset();
     void ExitCloset();
 

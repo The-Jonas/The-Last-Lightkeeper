@@ -206,7 +206,7 @@ void StageState::UpdateJournalViewer(float dt) {
     if (input.ActionPress(GameAction::Interact) || input.KeyPress(SDLK_ESCAPE)) {
         journalViewerClosing = true;
         journalCloseTimer = 0.0f;
-        jornalInteractSound.Stop();                 // Se tá tocando som no objeto, ele para imediatamente ao parar de interagir
+        jornalInteractSound.FadeOut(600);           // fade suave (não corta seco) ao fechar o documento
     }
 }
 

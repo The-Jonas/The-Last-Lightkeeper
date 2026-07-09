@@ -126,7 +126,7 @@ StageState::StageState(LoadMode mode) : loadMode(mode) {
 }
 
 StageState::~StageState(){
-    GameSfx::StopAllGameplay();   // garante que nenhum loop (passos/vela/caixa/vento) sobreviva ao stage
+    GameSfx::HardStopAll();       // TODO som de gameplay morre com o stage (rádio, ondas, monstro...)
     GameVoice::StopAll();         // e nenhuma fala em andamento
     GameSfx::UpdateCandleProximity(false);
     if (oceanMixerChannel >= 0) {
@@ -144,6 +144,10 @@ StageState::~StageState(){
     if (sceneTransitionFrame) {
         SDL_DestroyTexture(sceneTransitionFrame);
         sceneTransitionFrame = nullptr;
+    }
+    if (pauseBlurTex) {
+        SDL_DestroyTexture(pauseBlurTex);
+        pauseBlurTex = nullptr;
     }
 }
 

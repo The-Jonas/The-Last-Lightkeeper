@@ -37,6 +37,77 @@ SDL_FRect FitIconRect(SDL_Texture* tex, float boxX, float boxY, float boxW, floa
     }
     return dst;
 }
+
+// #7 SDL não tem círculo nativo. Preenche um disco por varredura de linhas
+// horizontais (uma por linha de pixel), respeitando o alpha.
+void FillCircle(SDL_Renderer* r, float cx, float cy, float radius,
+                Uint8 cr, Uint8 cg, Uint8 cb, Uint8 ca) {
+    if (radius <= 0.0f) return;
+    SDL_SetRenderDrawColor(r, cr, cg, cb, ca);
+    const int rad = static_cast<int>(radius);
+    for (int dy = -rad; dy <= rad; ++dy) {
+        const float dxf = std::sqrt(std::max(0.0f, radius * radius - static_cast<float>(dy) * dy));
+        const SDL_FRect line{cx - dxf, cy + static_cast<float>(dy), dxf * 2.0f, 1.0f};
+        SDL_RenderFillRectF(r, &line);
+    }
+}
+
+// Contorno de círculo (borda do slot).
+void StrokeCircle(SDL_Renderer* r, float cx, float cy, float radius,
+                  Uint8 cr, Uint8 cg, Uint8 cb, Uint8 ca) {
+    if (radius <= 0.0f) return;
+    SDL_SetRenderDrawColor(r, cr, cg, cb, ca);
+    const int segments = std::max(28, static_cast<int>(radius * 3.0f));
+    float px = cx + radius, py = cy;
+    for (int i = 1; i <= segments; ++i) {
+        const float t = 2.0f * static_cast<float>(M_PI) * static_cast<float>(i) / segments;
+        const float nx = cx + radius * std::cos(t);
+        const float ny = cy + radius * std::sin(t);
+        SDL_RenderDrawLineF(r, px, py, nx, ny);
+        px = nx; py = ny;
+    }
+}
+
+// Anel de durabilidade "bonito e consistente": um TRACK escuro completo (sempre
+// círculo inteiro) + um arco colorido proporcional, começando no topo e drenando
+// no sentido horário, com PONTAS ARREDONDADAS. Linhas radiais densas p/ suavidade.
+void DrawDurabilityRing(SDL_Renderer* ren, float cx, float cy, float rOuter, float thickness,
+                        float ratio, Uint8 fr, Uint8 fg, Uint8 fb, Uint8 alpha) {
+    ratio = std::max(0.0f, std::min(1.0f, ratio));
+    const float rInner = std::max(0.0f, rOuter - thickness);
+    const float rMid   = (rOuter + rInner) * 0.5f;
+    const float twoPi  = 2.0f * static_cast<float>(M_PI);
+    const int   segments = std::max(200, static_cast<int>(rOuter * 9.0f));
+    const float start  = -static_cast<float>(M_PI) * 0.5f;   // topo (12h)
+    const int   filled = static_cast<int>(std::ceil(segments * ratio));
+    const Uint8 trackA = static_cast<Uint8>(std::min(255.0f, alpha * 0.45f));
+
+    // 1) Track completo (fundo) — desenhado inteiro para consistência visual.
+    SDL_SetRenderDrawColor(ren, 52, 52, 60, trackA);
+    for (int i = 0; i < segments; ++i) {
+        const float t = start + twoPi * (static_cast<float>(i) + 0.5f) / segments;
+        const float cs = std::cos(t), sn = std::sin(t);
+        SDL_RenderDrawLineF(ren, cx + rInner * cs, cy + rInner * sn, cx + rOuter * cs, cy + rOuter * sn);
+    }
+
+    // 2) Arco preenchido (colorido) por cima.
+    SDL_SetRenderDrawColor(ren, fr, fg, fb, alpha);
+    for (int i = 0; i < filled; ++i) {
+        const float t = start + twoPi * (static_cast<float>(i) + 0.5f) / segments;
+        const float cs = std::cos(t), sn = std::sin(t);
+        SDL_RenderDrawLineF(ren, cx + rInner * cs, cy + rInner * sn, cx + rOuter * cs, cy + rOuter * sn);
+    }
+
+    // 3) Pontas ARREDONDADAS do arco (início no topo + fim proporcional). Quando
+    // CHEIO (ratio≈1) o anel já é um círculo completo — não desenha as pontas,
+    // senão o cap do início e o do fim se sobrepõem num "calombo" no topo.
+    if (filled > 0 && ratio < 0.999f) {
+        const float capR = thickness * 0.5f;
+        FillCircle(ren, cx + rMid * std::cos(start), cy + rMid * std::sin(start), capR, fr, fg, fb, alpha);
+        const float endT = start + twoPi * ratio;
+        FillCircle(ren, cx + rMid * std::cos(endT), cy + rMid * std::sin(endT), capR, fr, fg, fb, alpha);
+    }
+}
 } // namespace
 
 InventoryWheel::InventoryWheel(GameObject& associated, Inventory& inventory)
@@ -70,7 +141,7 @@ float InventoryWheel::GetAnchorX() const {
 }
 
 float InventoryWheel::GetAnchorY() const {
-    return static_cast<float>(Game::GetInstance().GetWindowsHeight()) + kAnchorYOffset;
+    return static_cast<float>(Game::GetInstance().GetWindowsHeight()) * kAnchorYFraction;
 }
 
 void InventoryWheel::GetSlotScreenPos(int visibleOffset, int visibleCount, float scrollOffset,
@@ -79,15 +150,20 @@ void InventoryWheel::GetSlotScreenPos(int visibleOffset, int visibleCount, float
     float baseOffset = static_cast<float>(visibleOffset - half);
     float shiftedOffset = baseOffset + scrollOffset;
 
-    float angleStep = (visibleCount <= 3) ? 50.0f : 37.0f;
-    float angleDeg = 90.0f + shiftedOffset * angleStep;
+    float angleStep = (visibleCount <= 3) ? 46.0f : 34.0f;
+    // Roda VERTICAL: 0° = slot ATIVO no vértice DIREITO do arco; offsets negativos
+    // sobem, positivos descem. O arco abre para a ESQUERDA (centro à esquerda do
+    // ativo), então os vizinhos ficam acima-esquerda e abaixo-esquerda.
+    float angleDeg = shiftedOffset * angleStep;
     float angleRad = angleDeg * static_cast<float>(M_PI) / 180.0f;
 
-    float cx = GetAnchorX();
-    float cy = GetAnchorY() - kArcRadius;
+    const float activeX = GetAnchorX();
+    const float activeY = GetAnchorY();
+    const float ccx = activeX - kArcRadius;   // centro do arco à esquerda do ativo
+    const float ccy = activeY;
 
-    outX = cx + kArcRadius * std::cos(angleRad);
-    outY = cy + kArcRadius * std::sin(angleRad);
+    outX = ccx + kArcRadius * std::cos(angleRad);
+    outY = ccy + kArcRadius * std::sin(angleRad);
 }
 
 float InventoryWheel::GetSlotAlpha(int distanceFromCenter, int) const {
@@ -111,10 +187,18 @@ void InventoryWheel::DrawSlot(SDL_Renderer* renderer, int stackIndex, float x, f
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
-    Uint8 bgR = 28, bgG = 28, bgB = 35, bgA = static_cast<Uint8>(std::min(255.0f, alpha * 0.85f));
-    SDL_SetRenderDrawColor(renderer, bgR, bgG, bgB, bgA);
-    const SDL_FRect bgRect{slotX, slotY, scaledSize, scaledSize};
-    SDL_RenderFillRectF(renderer, &bgRect);
+    const float slotRadius = halfSize;
+
+    // Brilho suave atrás do slot ATIVO (halo quente) — dá destaque sem poluir.
+    if (isActive) {
+        const Uint8 glowA = static_cast<Uint8>(std::min(255.0f, alpha * 0.16f));
+        FillCircle(renderer, x, y, slotRadius * 1.35f, 235, 200, 110, glowA);
+        FillCircle(renderer, x, y, slotRadius * 1.18f, 235, 200, 110, glowA);
+    }
+
+    // Fundo do slot: disco circular escuro.
+    FillCircle(renderer, x, y, slotRadius, 26, 26, 33,
+               static_cast<Uint8>(std::min(255.0f, alpha * 0.88f)));
 
     Uint8 borderR, borderG, borderB;
     if (isActive && inventory.IsOilPrimed()) {
@@ -125,8 +209,7 @@ void InventoryWheel::DrawSlot(SDL_Renderer* renderer, int stackIndex, float x, f
         borderR = 60; borderG = 60; borderB = 75;
     }
     Uint8 borderA = static_cast<Uint8>(std::min(255.0f, alpha));
-    SDL_SetRenderDrawColor(renderer, borderR, borderG, borderB, borderA);
-    SDL_RenderDrawRectF(renderer, &bgRect);
+    StrokeCircle(renderer, x, y, slotRadius, borderR, borderG, borderB, borderA);
 
     if (stackIndex < 0) return;
 
@@ -158,22 +241,16 @@ void InventoryWheel::DrawSlot(SDL_Renderer* renderer, int stackIndex, float x, f
         }
         ratio = std::max(0.0f, std::min(1.0f, ratio));
 
-        const float gaugeY = slotY + scaledSize - kGaugeHeight * scale - 2.0f * scale;
-        const float gaugeInsetX = 2.0f * scale;
-        const float gaugeW = (scaledSize - gaugeInsetX * 2.0f) * ratio;
-
+        // #7 Durabilidade agora é um ANEL radial ao redor do slot (verde/âmbar/
+        // vermelho), drenando no sentido horário a partir do topo.
         Uint8 gR, gG, gB;
         if (ratio > 0.6f) { gR = 70; gG = 180; gB = 80; }
         else if (ratio > 0.25f) { gR = 210; gG = 170; gB = 50; }
         else { gR = 200; gG = 55; gB = 55; }
 
-        SDL_SetRenderDrawColor(renderer, gR, gG, gB, static_cast<Uint8>(std::min(255.0f, alpha * 0.9f)));
-        const SDL_FRect gaugeRect{slotX + gaugeInsetX, gaugeY, gaugeW, kGaugeHeight * scale};
-        SDL_RenderFillRectF(renderer, &gaugeRect);
-
-        SDL_SetRenderDrawColor(renderer, 40, 40, 45, static_cast<Uint8>(std::min(255.0f, alpha * 0.5f)));
-        const SDL_FRect gaugeBg{slotX + gaugeInsetX, gaugeY, scaledSize - gaugeInsetX * 2.0f, kGaugeHeight * scale};
-        SDL_RenderDrawRectF(renderer, &gaugeBg);
+        const float ringOuter = slotRadius + kRingThickness * scale + 2.0f * scale;
+        DrawDurabilityRing(renderer, x, y, ringOuter, kRingThickness * scale, ratio,
+                           gR, gG, gB, static_cast<Uint8>(std::min(255.0f, alpha * 0.95f)));
     }
 }
 
@@ -190,9 +267,12 @@ void InventoryWheel::DrawPrimedOil(SDL_Renderer* renderer, float activeX, float 
 
     float bobOffset = std::sin(bobTimer * 3.0f) * 7.0f;
 
-    const float iconSize = kIconSize * 0.85f;
-    const float iconX = activeX - iconSize * 0.5f;
-    const float iconY = activeY - kSlotSize * 0.5f - iconSize - 18.0f + bobOffset;
+    // Roda vertical: o óleo flutuante fica à DIREITA do slot ativo (lado aberto),
+    // centrado verticalmente, com um leve balanço.
+    const float iconSize = kIconSize * 0.6f;
+    const float iconCX = activeX + kSlotSize * 0.5f + 16.0f + iconSize * 0.5f;
+    const float iconX  = iconCX - iconSize * 0.5f;
+    const float iconY  = activeY - iconSize * 0.5f + bobOffset;
 
     auto tex = Resources::GetImage(inventory.GetPrimedOilSpritePath());
     if (tex) {
@@ -219,7 +299,7 @@ void InventoryWheel::DrawPrimedOil(SDL_Renderer* renderer, float activeX, float 
             const float textH = static_cast<float>(surface->h);
             SDL_FreeSurface(surface);
             if (texture) {
-                const SDL_FRect textDst{activeX - textW * 0.5f, iconY + iconSize + 2.0f, textW, textH};
+                const SDL_FRect textDst{iconCX - textW * 0.5f, iconY + iconSize + 2.0f, textW, textH};
                 SDL_RenderCopyF(renderer, texture, nullptr, &textDst);
                 SDL_DestroyTexture(texture);
             }
@@ -232,33 +312,30 @@ void InventoryWheel::DrawCycleKeyHints(SDL_Renderer* renderer) {
     const int count = inventory.GetStackCount();
     const int visibleCount = (count >= 4) ? 5 : 3;
 
-    // i=0 é o slot mais à DIREITA da roda; i=visibleCount-1 é o mais à ESQUERDA
-    // (ver GetSlotScreenPos). CyclePrev (tecla 1 = CycleLeft) traz o item da
-    // esquerda; CycleNext (tecla 3 = CycleRight) traz o da direita.
-    float rx, ry, lx, ly;
-    GetSlotScreenPos(0, visibleCount, 0.0f, rx, ry);
-    GetSlotScreenPos(visibleCount - 1, visibleCount, 0.0f, lx, ly);
+    // Roda VERTICAL: i=0 é o slot de CIMA; i=visibleCount-1 é o de BAIXO
+    // (ver GetSlotScreenPos). CyclePrev (↑) traz o item de cima; CycleNext (↓) o de baixo.
+    float tx, ty, bx, by;
+    GetSlotScreenPos(0, visibleCount, 0.0f, tx, ty);                 // slot do topo
+    GetSlotScreenPos(visibleCount - 1, visibleCount, 0.0f, bx, by);  // slot de baixo
 
-    // Meia-largura do slot das pontas (para posicionar as caixas junto a ele,
-    // com um pequeno espaçamento).
+    // Meia-altura do slot das pontas (para colar as caixas acima/abaixo dele).
     const int half = visibleCount / 2;
     const float edgeSlotHalf = kSlotSize * GetSlotScale(half, visibleCount) * 0.5f;
-    const float slotGap = 10.0f;   // espaçamento entre a caixa da tecla e o slot
+    const float slotGap = 10.0f;
 
     InputManager& im = InputManager::GetInstance();
     auto keyName = [](int code, const char* fallback) {
         const char* k = SDL_GetKeyName(code);
         return (k && k[0] != '\0') ? std::string(k) : std::string(fallback);
     };
-    const std::string leftKey  = keyName(im.GetBinding(GameAction::CyclePrev), "1");
-    const std::string rightKey = keyName(im.GetBinding(GameAction::CycleNext), "3");
+    const std::string upKey   = keyName(im.GetBinding(GameAction::CyclePrev), "Left");
+    const std::string downKey = keyName(im.GetBinding(GameAction::CycleNext), "Right");
 
-    auto font = Resources::GetFont("Recursos/font/times.ttf", 16);   // fonte ~20% menor
+    auto font = Resources::GetFont("Recursos/font/times.ttf", 16);
     if (!font) return;
 
-    // side = -1 (esquerda) / +1 (direita): posiciona a caixa colada ao slot da
-    // ponta, deixando `slotGap` de folga entre a borda do slot e a caixa.
-    auto drawBadge = [&](float slotCX, float slotCY, float side, const std::string& text) {
+    // dir = -1 (acima) / +1 (abaixo): posiciona a caixa colada ao slot da ponta.
+    auto drawBadge = [&](float slotCX, float slotCY, float dir, const std::string& text) {
         SDL_Color col{245, 232, 200, 255};
         SDL_Surface* sf = TTF_RenderUTF8_Blended(font.get(), text.c_str(), col);
         if (!sf) return;
@@ -268,13 +345,13 @@ void InventoryWheel::DrawCycleKeyHints(SDL_Renderer* renderer) {
         SDL_FreeSurface(sf);
         if (!t) return;
 
-        const float padX = 7.0f;   // caixa ~20% menor
+        const float padX = 7.0f;
         const float padY = 4.0f;
         const float bw = std::max(static_cast<float>(tw), 13.0f) + padX * 2.0f;
         const float bh = static_cast<float>(th) + padY * 2.0f;
-        const float edge = slotCX + side * edgeSlotHalf;
-        const float cx = edge + side * (slotGap + bw * 0.5f);
-        const SDL_FRect bg{cx - bw * 0.5f, slotCY - bh * 0.5f, bw, bh};
+        const float edge = slotCY + dir * edgeSlotHalf;
+        const float cy = edge + dir * (slotGap + bh * 0.5f);
+        const SDL_FRect bg{slotCX - bw * 0.5f, cy - bh * 0.5f, bw, bh};
 
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(renderer, 18, 18, 24, 210);
@@ -282,14 +359,14 @@ void InventoryWheel::DrawCycleKeyHints(SDL_Renderer* renderer) {
         SDL_SetRenderDrawColor(renderer, 200, 180, 110, 230);
         SDL_RenderDrawRectF(renderer, &bg);
 
-        const SDL_FRect dst{cx - tw * 0.5f, slotCY - th * 0.5f, static_cast<float>(tw), static_cast<float>(th)};
+        const SDL_FRect dst{slotCX - tw * 0.5f, cy - th * 0.5f, static_cast<float>(tw), static_cast<float>(th)};
         SDL_RenderCopyF(renderer, t, nullptr, &dst);
         SDL_DestroyTexture(t);
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     };
 
-    drawBadge(lx, ly, -1.0f, leftKey);
-    drawBadge(rx, ry, +1.0f, rightKey);
+    drawBadge(tx, ty, -1.0f, upKey);    // ↑ acima do slot de cima
+    drawBadge(bx, by, +1.0f, downKey);  // ↓ abaixo do slot de baixo
 }
 
 void InventoryWheel::Render() {

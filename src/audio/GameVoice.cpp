@@ -220,14 +220,19 @@ bool GetActiveSubtitle(std::string& out) {
 
 void OnCallToFollow()       { Play(gCall, kTxtBigCall); }
 void OnItemPickup()         { if (Chance(40)) PlayOneOf2(gPickupA, kTxtBigPickupA, gPickupB, kTxtBigPickupB); }
+void OnPickupWoodPlank()    { Play(gPickupA, kTxtBigPickupA); }   // "Isso vai servir." SEMPRE (tábua de madeira)
 void OnBagFull()            { Play(gBagFull, kTxtBigBagFull); }
 void OnDragObject()         { if (Chance(35)) Play(gDrag, kTxtBigDrag, 6000); }
 void OnActionBlocked()      { Play(gCant, kTxtBigCant, 800); }
 void OnScoldFear()          { PlayOneOf2(gScoldA, kTxtBigScoldA, gScoldB, kTxtBigScoldB); }  // irmãozão repreende o medroso
 
-void OnAskToStay()          { PlayOneOf2(gStayA, kTxtLilStayA, gStayB, kTxtLilStayB); }
+// #4 "E se o monstro estiver lá fora?" (gStayA) foi movida para um gatilho
+// aleatório enquanto escondido no armário (ver Closet). O protesto de "ficar
+// parado" agora usa só "Eu não quero." (gStayB), que é o que faz sentido ali.
+void OnAskToStay()          { Play(gStayB, kTxtLilStayB); }
 void OnBrothersTooFar()     { PlayOneOf2(gScaredA, kTxtLilScaredA, gScaredB, kTxtLilScaredB); }
 void OnHidingMonsterClose() { Play(gHide, kTxtLilHide, 3000); }
+void OnHidingWhatIfMonster(){ Play(gStayA, kTxtLilStayA, 3000); }  // #4 sussurro medroso no armário
 
 void DebugPlayRandomForControlled(bool bigBrother) {
     EnsureLoaded();

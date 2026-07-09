@@ -58,6 +58,15 @@ void Sound::Stop() {
     }
 }
 
+void Sound::FadeOut(int ms) {
+    // Desliga suavemente (fade) em vez de cortar seco. O canal se libera sozinho
+    // ao fim do fade; soltamos a referência aqui.
+    if (channel != -1 && chunk && Mix_Playing(channel)) {
+        Mix_FadeOutChannel(channel, ms);
+        channel = -1;
+    }
+}
+
 void Sound::Open(const std::string file) {
 
     chunk = Resources::GetSound(file);                                  // Usa Resources para carregar o som.

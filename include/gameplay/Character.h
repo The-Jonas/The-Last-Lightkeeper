@@ -73,6 +73,11 @@ public:
     Vec2 GetFootCircleCenter() const;
     float GetFootCircleRadius() const;
 
+    // Círculo de HITBOX (dano do monstro): centrado no corpo, um pouco maior que o
+    // círculo dos pés — assim o "acerto" no jogador também é redondo, não retangular.
+    Vec2 GetHitCircleCenter() const;
+    float GetHitCircleRadius() const;
+
     GameObject& GetAssociated() { return associated; }
     Vec2 GetSpeed() const { return speed; }
     Vec2 GetCenter();                                                   // Para pegar o centro do personagem
@@ -92,7 +97,7 @@ public:
     // Poder do irmãozinho — visão do monstro
     float visionPowerTimer    = 0.0f;   // Quanto tempo ainda ativa
     float visionCooldown      = 0.0f;   // Tempo até poder usar de novo
-    static constexpr float kVisionDuration  = 3.0f;   // Duração ativa
+    static constexpr float kVisionDuration  = 4.5f;   // Duração ativa (+50%, era 3.0)
     static constexpr float kVisionCooldown  = 12.0f;  // Recarga
 
 private:

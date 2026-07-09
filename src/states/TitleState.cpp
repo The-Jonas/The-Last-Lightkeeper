@@ -1,5 +1,8 @@
 #include "states/TitleState.h"
 #include "states/LoadingState.h"
+#include "states/EndState.h"
+#include "audio/GameSfx.h"
+#include "audio/GameVoice.h"
 #include "core/SaveManager.h"
 #include "states/stage/StageState.h"
 #include "core/Game.h"
@@ -55,6 +58,10 @@ TitleState::TitleState() : State() {
 TitleState::~TitleState() {
     delete armGO; armGO = nullptr;
     for (int i = 0; i < 5; i++) { delete menuTexts[i]; menuTexts[i] = nullptr; }
+    if (charBlurFull)  { SDL_DestroyTexture(charBlurFull);  charBlurFull  = nullptr; }
+    for (int i = 0; i < kBlurLevels; ++i) {
+        if (charBlurChain[i]) { SDL_DestroyTexture(charBlurChain[i]); charBlurChain[i] = nullptr; }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -165,12 +172,7 @@ void TitleState::RenderSliders(SDL_Renderer* r, int panelX, int panelY) {
 // ─────────────────────────────────────────────────────────────────────────────
 void TitleState::LoadAssets() {
     LoadConfig();
-    for(int i=1;i<=kCharFrames;i++) {
-        char path[128];
-        std::snprintf(path,sizeof(path),
-            "Recursos/img/menu/irmao_costas/Costas_irmaozao_%04d.png",i);
-        Resources::GetImage(path);
-    }
+    PreloadMenuVersion(menuVersion);   // V2 (Luana)
     
     // Fundo
     { auto* go=new GameObject(); go->z=0;
@@ -184,15 +186,16 @@ void TitleState::LoadAssets() {
       go->AddComponent(sr); sr->SetCameraFollower(true);
       go->box={kLogoX,kLogoY,kLogoW,kLogoH}; AddObject(go); logoGO=go; }
       
-    // Personagem
+    // Personagem (usa a versão atual: V1 padrão / V2 Luana)
     { auto* go=new GameObject(); go->z=10;
-      auto* sr=new SpriteRenderer(*go,"Recursos/img/menu/irmao_costas/Costas_irmaozao_0001.png");
+      char bodyPath[192]; BodyFramePath(1, bodyPath, sizeof(bodyPath));
+      auto* sr=new SpriteRenderer(*go, bodyPath);
       go->AddComponent(sr); sr->SetCameraFollower(true);
       go->box={0,0,kCharW,kCharH}; AddObject(go); charBodyGO=go; }
-      
+
     // Braço — fora do objectArray
     { auto* go=new GameObject();
-      auto* sr=new SpriteRenderer(*go,"Recursos/img/menu/braco_irmaozao.png");
+      auto* sr=new SpriteRenderer(*go, ArmPath());
       go->AddComponent(sr); sr->SetCameraFollower(true);
       go->box={0,0,kArmW,kArmH}; armGO=go; }
       
@@ -252,6 +255,28 @@ void TitleState::LayoutAll() {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Animacao
 // ─────────────────────────────────────────────────────────────────────────────
+// Caminhos da arte por versão (V1 padrão / V2 Luana). Ambas as versões têm a MESMA
+// proporção, então o layout (kCharW/H, kArmW/H) serve para as duas.
+const char* TitleState::ArmPath() const {
+    return (menuVersion == 1) ? "Recursos/img/menu/luana/braco_irmaozao.png"
+                              : "Recursos/img/menu/braco_irmaozao.png";
+}
+void TitleState::BodyFramePath(int frame1based, char* out, size_t n) const {
+    const char* fmt = (menuVersion == 1)
+        ? "Recursos/img/menu/luana/irmao_costas/Costas_irmaozao_%04d.png"
+        : "Recursos/img/menu/irmao_costas/Costas_irmaozao_%04d.png";
+    std::snprintf(out, n, fmt, frame1based);
+}
+void TitleState::PreloadMenuVersion(int version) {
+    const int saved = menuVersion;
+    menuVersion = version;
+    Resources::GetImage(ArmPath());
+    for (int i = 1; i <= kCharFrames; ++i) {
+        char p[192]; BodyFramePath(i, p, sizeof(p));
+        Resources::GetImage(p);
+    }
+    menuVersion = saved;
+}
 void TitleState::UpdateCharAnim(float dt) {
     charAnimTimer+=dt;
     if(charAnimTimer<kCharFrameSeconds) return;
@@ -260,9 +285,8 @@ void TitleState::UpdateCharAnim(float dt) {
     if(!charBodyGO) return;
     auto* sr=charBodyGO->GetComponent<SpriteRenderer>();
     if(!sr) return;
-    char path[128];
-    std::snprintf(path,sizeof(path),
-        "Recursos/img/menu/irmao_costas/Costas_irmaozao_%04d.png",charFrameIndex+1);
+    char path[192];
+    BodyFramePath(charFrameIndex+1, path, sizeof(path));   // respeita a versão (V1/V2)
     Rect saved=charBodyGO->box;
     sr->Open(path);
     charBodyGO->box=saved;
@@ -478,6 +502,9 @@ void TitleState::Update(float dt) {
     hasContinueSave=SaveManager::HasSave();
     if(!hasContinueSave&&menuSelection==1) menuSelection=0;
 
+    // Cursor visível SÓ no painel de configurações (sliders com mouse).
+    SDL_ShowCursor(configOpen ? SDL_ENABLE : SDL_DISABLE);
+
     // Config intercepta input primeiro
     if(configOpen) {
         UpdateConfig(input);
@@ -544,7 +571,7 @@ void TitleState::ActivateMenuSelection() {
     case 0: StartNewGame(); break;
     case 1: if(hasContinueSave) StartContinue(); break;
     case 2: OpenConfig(); break;
-    case 3: /* creditos */ break;
+    case 3: Game::GetInstance().Push(new EndState(/*creditsOnly=*/true)); break;
     case 4: quitRequested=true; break;
     }
 }
@@ -650,20 +677,94 @@ void TitleState::Render() {
     // 4. Textos do Menu (Brilhando no fim da luz)
     RenderMenuTexts(r);
     
-    // 5. O BRAÇO (Desenhado por CIMA da luz, tampando a ponta reta!)
-    RenderArm(r);
-    
-    // 6. O CORPO (Desenhado por CIMA do braço, tampando o ombro!)
-    if(charBodyGO) charBodyGO->Render();
-    
+    // 5+6. BRAÇO + CORPO do irmãozão, sempre com o DESFOQUE suave (braço incluso) —
+    // foco nas opções do menu, não na animação de fundo.
+    RenderBlurredCharacter(r);
+
     // 7. Configurações (Sempre por cima de tudo para não quebrar a UI)
     RenderConfig(r);
+}
+
+// Rende braço + corpo em um alvo e aplica um desfoque de verdade via PIRÂMIDE de
+// redução: cada nível é metade do anterior (÷2), e reduzir de metade em metade com
+// filtragem LINEAR faz uma média 2×2 correta a cada passo — o acúmulo vira um
+// borrão liso, sem o aspecto "pixelado" de um único downscale grande. No fim, o
+// nível mais baixo é ampliado de volta para a tela (upscale linear = suave).
+void TitleState::RenderBlurredCharacter(SDL_Renderer* r) {
+    const int winW = Game::GetInstance().GetWindowsWidth();
+    const int winH = Game::GetInstance().GetWindowsHeight();
+
+    if (!charBlurFull) {
+        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");   // linear (default dos alvos)
+        charBlurFull = SDL_CreateTexture(r, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, winW, winH);
+        if (charBlurFull) SDL_SetTextureBlendMode(charBlurFull, SDL_BLENDMODE_BLEND);
+        for (int i = 0; i < kBlurLevels; ++i) {
+            const int div = 1 << (i + 1);   // ÷2, ÷4, ÷8
+            const int w = std::max(1, winW / div);
+            const int h = std::max(1, winH / div);
+            charBlurChain[i] = SDL_CreateTexture(r, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, w, h);
+            if (charBlurChain[i]) SDL_SetTextureBlendMode(charBlurChain[i], SDL_BLENDMODE_BLEND);
+        }
+    }
+
+    bool ready = (charBlurFull != nullptr);
+    for (int i = 0; i < kBlurLevels; ++i) ready = ready && (charBlurChain[i] != nullptr);
+    if (!ready) {
+        // Sem alvos disponíveis → desenha sem desfoque (nunca deixa a tela vazia).
+        RenderArm(r);
+        if (charBodyGO) charBodyGO->Render();
+        return;
+    }
+
+    SDL_SetTextureScaleMode(charBlurFull, SDL_ScaleModeLinear);
+    for (int i = 0; i < kBlurLevels; ++i) SDL_SetTextureScaleMode(charBlurChain[i], SDL_ScaleModeLinear);
+
+    SDL_Texture* prev = SDL_GetRenderTarget(r);
+
+    // 1) Rende braço + corpo em um alvo transparente do tamanho da tela.
+    SDL_SetRenderTarget(r, charBlurFull);
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+    SDL_SetRenderDrawColor(r, 0, 0, 0, 0);
+    SDL_RenderClear(r);
+    RenderArm(r);
+    if (charBodyGO) charBodyGO->Render();
+
+    // 2) DESCE a pirâmide: cada passo ÷2 com filtragem linear = média 2×2 correta.
+    SDL_Texture* src = charBlurFull;
+    for (int i = 0; i < kBlurLevels; ++i) {
+        SDL_SetRenderTarget(r, charBlurChain[i]);
+        SDL_SetRenderDrawColor(r, 0, 0, 0, 0);
+        SDL_RenderClear(r);
+        SDL_RenderCopy(r, src, nullptr, nullptr);
+        src = charBlurChain[i];
+    }
+
+    // 3) SOBE a pirâmide em passos ×2 (progressivo). Amplia de 1 em 1 nível — cada
+    // reamostragem linear suaviza a interpolação, evitando o "leque" pixelado de um
+    // único upscale ×16. Reescreve os alvos de cima com o conteúdo reconstruído.
+    for (int i = kBlurLevels - 2; i >= 0; --i) {
+        SDL_SetRenderTarget(r, charBlurChain[i]);
+        SDL_SetRenderDrawColor(r, 0, 0, 0, 0);
+        SDL_RenderClear(r);
+        SDL_RenderCopy(r, charBlurChain[i + 1], nullptr, nullptr);   // menor → maior (×2)
+    }
+
+    SDL_SetRenderTarget(r, prev);
+
+    // 4) Último ×2: do nível ÷2 de volta para a tela cheia (upscale linear = liso).
+    const SDL_Rect full{0, 0, winW, winH};
+    SDL_SetTextureAlphaMod(charBlurChain[0], 255);
+    SDL_RenderCopy(r, charBlurChain[0], nullptr, &full);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Start / Pause / Resume
 // ─────────────────────────────────────────────────────────────────────────────
 void TitleState::Start() {
+    // Chegando ao menu (boot ou nível→menu): mata qualquer efeito de gameplay que
+    // tenha sobrado (rádio etc.). A música do menu é iniciada logo abaixo.
+    GameSfx::HardStopAll();
+    GameVoice::StopAll();
     LoadAssets(); StartArray();
     music.Open("Recursos/audio/soundtracks/ES_Make up Your Mind - Hanna Lindgren.mp3");
     music.Play();

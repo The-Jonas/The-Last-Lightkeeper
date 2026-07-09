@@ -74,6 +74,10 @@ void StageState::Update(float dt){
     lastFrameDt = dt;
     dynamicColliderCacheDirty = true;
 
+    // Cursor visível em TODO o menu de pausa (menu + configurações + confirmar sair),
+    // que são navegáveis com o mouse; no resto do jogo o cursor fica escondido.
+    SDL_ShowCursor((pauseMenuOpen || settingsPanelOpen || quitConfirmOpen) ? SDL_ENABLE : SDL_DISABLE);
+
     // Chamadas a Mix_PlayMusic em todo frame fazem SDL_mixer reorganizar música e pode matar/samples atrasarem ondas.
     if (!musicMuted && music.IsOpen() && Mix_PlayingMusic() == 0) {
         gStageOstSilenceRecover += dt;
@@ -516,7 +520,7 @@ void StageState::Update(float dt){
             ? sanityOverlayObj->GetComponent<SpriteRenderer>() : nullptr;
  
         if (overlaySprite) {
-            constexpr float kSanityOverlayThreshold = 80.0f;
+            constexpr float kSanityOverlayThreshold = 95.0f;   // efeito "spider-verse" aparece cedo (sanidade < 95)
             // Piso visível: ao cruzar o threshold (80%), o efeito já aparece num
             // nível perceptível (não em alpha/frame 0) e cresce a partir daí. Sem
             // isso, "disparar em 80%" só ficava visível lá pelos ~65% porque tanto

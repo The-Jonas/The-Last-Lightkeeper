@@ -453,23 +453,27 @@ void Character::Update(float dt) {
     if (currentState != ActionState::PUSHING_BOX) {
         Direction newDirection = currentDirection;
 
-        if (std::abs(speed.x) > 0.1f) {
-            newDirection = (speed.x > 0.1f) ? Direction::RIGHT : Direction::LEFT;
+        // Direção de OLHAR vem da INTENÇÃO de movimento (targetSpeed = teclas
+        // pressionadas), não da velocidade real. Assim pressionar W vira o
+        // personagem p/ CIMA mesmo quando bloqueado (sem mudar de posição).
+        if (std::abs(targetSpeed.x) > 0.1f) {
+            newDirection = (targetSpeed.x > 0.0f) ? Direction::RIGHT : Direction::LEFT;
         }
-        else if (std::abs(speed.y) > 0.1f) {
-            newDirection = (speed.y > 0.1f) ? Direction::DOWN : Direction::UP;
+        else if (std::abs(targetSpeed.y) > 0.1f) {
+            newDirection = (targetSpeed.y > 0.0f) ? Direction::DOWN : Direction::UP;
         }
 
         // REMOVIDO O IF Agora ambos rodam o loop de animação:
         const bool moving = speed.Magnitude() > kIrmaozaoMovingSpeedThreshold;
-        
+
         if (moving != stripWasMoving && !playingPickLampAnim) {
             stripWasMoving = moving;
             stripFrameIndex = 0;
             stripAnimTimer = 0.0f;
             RefreshAnimSprite();
         }
-        if (newDirection != currentDirection && moving) {
+        // Sem o requisito `&& moving`: vira mesmo parado/bloqueado.
+        if (newDirection != currentDirection) {
             currentDirection = newDirection;
             if (!playingPickLampAnim) {
                 stripFrameIndex = 0;
@@ -748,6 +752,18 @@ float Character::GetFootCircleRadius() const {
 Vec2 Character::GetFootCircleCenter() const {
     const float r = GetFootCircleRadius();
     return Vec2(associated.box.x + associated.box.w * 0.5f, associated.box.y + associated.box.h - r);
+}
+
+float Character::GetHitCircleRadius() const {
+    // Um pouco maior que o círculo dos pés p/ cobrir o tronco (dano justo).
+    float baseW = (baselineBoxW > 0.0f) ? baselineBoxW : associated.box.w;
+    return baseW * 0.42f;
+}
+
+Vec2 Character::GetHitCircleCenter() const {
+    // Centrado horizontalmente e um pouco abaixo do meio vertical (massa do corpo).
+    return Vec2(associated.box.x + associated.box.w * 0.5f,
+                associated.box.y + associated.box.h * 0.55f);
 }
 
 void Character::Issue(Command task) {                       // Adiciona comando na fila

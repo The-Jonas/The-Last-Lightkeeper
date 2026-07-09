@@ -68,6 +68,10 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
         entitySpawns.clear();
         levelTransitionZones.clear();
         levelLabel.clear();
+        gidToImagePath.clear();
+
+        // Resolve gid→imagem (o que o Tiled mostra) a partir dos tilesets do mapa.
+        LoadTilesets(j, path);
 
         // Se o JSON estiver vazio, aborta com seguranca
         if (!j.contains("layers")) return;
@@ -306,6 +310,8 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
                         const long long rawGid = obj.value("gid", 0LL);
                         spawn.flipH = (rawGid & 0x80000000LL) != 0;
                         spawn.flipV = (rawGid & 0x40000000LL) != 0;
+                        // gid absoluto sem os 3 bits altos de flip (H/V/diagonal).
+                        spawn.gid = static_cast<int>(rawGid & 0x1FFFFFFFLL);
 
                         // Lendo agora as propriedades customizadas
                         if (obj.contains("properties")) {
@@ -336,8 +342,106 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
     }
 }
 
+// ── Resolução gid→imagem do tileset (arte que o Tiled MOSTRA) ────────────────
+namespace {
+std::string DirNameOf(const std::string& p) {
+    const auto s = p.find_last_of("/\\");
+    return (s == std::string::npos) ? std::string(".") : p.substr(0, s);
+}
+
+// Junta base + rel e colapsa "." e ".." (resolve os "../img/..." dos .tsx).
+std::string NormalizePath(const std::string& raw) {
+    std::string p = raw;
+    for (char& c : p) if (c == '\\') c = '/';
+    std::vector<std::string> parts;
+    size_t start = 0;
+    const bool absolute = (!p.empty() && p[0] == '/');
+    while (start <= p.size()) {
+        size_t slash = p.find('/', start);
+        if (slash == std::string::npos) slash = p.size();
+        const std::string seg = p.substr(start, slash - start);
+        if (seg == "..") {
+            if (!parts.empty() && parts.back() != "..") parts.pop_back();
+            else if (!absolute) parts.push_back(seg);
+        } else if (!seg.empty() && seg != ".") {
+            parts.push_back(seg);
+        }
+        start = slash + 1;
+    }
+    std::string out = absolute ? "/" : "";
+    for (size_t i = 0; i < parts.size(); ++i) {
+        out += parts[i];
+        if (i + 1 < parts.size()) out += "/";
+    }
+    return out;
+}
+
+// Extrai o valor de attr="..." de uma linha; "" se ausente.
+std::string ExtractAttr(const std::string& line, const std::string& attr) {
+    const std::string key = attr + "=\"";
+    const auto pos = line.find(key);
+    if (pos == std::string::npos) return "";
+    const auto begin = pos + key.size();
+    const auto end = line.find('"', begin);
+    if (end == std::string::npos) return "";
+    return line.substr(begin, end - begin);
+}
+} // namespace
+
+void LevelManager::ParseTsx(const std::string& tsxPath, int firstgid) {
+    std::ifstream f(tsxPath);
+    if (!f.is_open()) {
+        std::cout << "aviso: tileset .tsx nao encontrado -> " << tsxPath << std::endl;
+        return;
+    }
+    const std::string tsxDir = DirNameOf(tsxPath);
+    std::string line;
+    int curId = -1;
+    while (std::getline(f, line)) {
+        if (line.find("<tile ") != std::string::npos) {
+            const std::string idStr = ExtractAttr(line, "id");
+            if (!idStr.empty()) {
+                try { curId = std::stoi(idStr); } catch (...) { curId = -1; }
+            }
+        }
+        if (line.find("<image ") != std::string::npos && curId >= 0) {
+            const std::string src = ExtractAttr(line, "source");
+            if (!src.empty()) {
+                gidToImagePath[firstgid + curId] = NormalizePath(tsxDir + "/" + src);
+            }
+        }
+    }
+}
+
+void LevelManager::LoadTilesets(const json& j, const std::string& mapPath) {
+    if (!j.contains("tilesets") || !j["tilesets"].is_array()) return;
+    const std::string mapDir = DirNameOf(mapPath);
+    for (const auto& ts : j["tilesets"]) {
+        const int firstgid = ts.value("firstgid", 1);
+        if (ts.contains("source")) {
+            // Tileset externo (.tsx): resolve relativo ao diretório do mapa.
+            const std::string tsxPath = NormalizePath(mapDir + "/" + ts["source"].get<std::string>());
+            ParseTsx(tsxPath, firstgid);
+        } else if (ts.contains("tiles") && ts["tiles"].is_array()) {
+            // Tileset embutido (coleção de imagens): cada tile tem sua própria imagem.
+            for (const auto& tile : ts["tiles"]) {
+                if (tile.contains("image")) {
+                    const int id = tile.value("id", 0);
+                    gidToImagePath[firstgid + id] =
+                        NormalizePath(mapDir + "/" + tile["image"].get<std::string>());
+                }
+            }
+        }
+    }
+}
+
+const std::string* LevelManager::GetTileImagePath(int gid) const {
+    const auto it = gidToImagePath.find(gid);
+    return (it == gidToImagePath.end()) ? nullptr : &it->second;
+}
+
 bool LevelManager::CheckCollision(const SDL_Rect& entityBox, bool isElevated) {
-    
+
     // Se ele ESTÁ NO CHÃO, ele bate nas coisas normais do chão (Retângulos e Círculos)
     if (!isElevated) {
         // Checagem contra retângulos (Mais fácil porque é nativa da SDL)

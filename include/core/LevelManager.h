@@ -4,7 +4,8 @@
 #define INCLUDE_SDL
 #include <vector>
 #include <string>
-#include "SDL_include.h" 
+#include <unordered_map>
+#include "SDL_include.h"
 #include "nlohmann/json.hpp"
 #include "audio/GameSfx.h"
 
@@ -41,6 +42,7 @@ struct EntitySpawn {
     bool flipH = false;   // flags de espelhamento decodificadas do gid do Tiled
     bool flipV = false;
     float rotation = 0.0f; // rotação do objeto no Tiled (graus, horário)
+    int  gid = 0;          // gid absoluto (sem os bits de flip) — resolve a imagem do tileset
 
     std::unordered_map<std::string, json> properties;
 };
@@ -78,7 +80,16 @@ public:
 
     FootstepSurface QueryFootstepSurface(int x, int y, bool isElevated) const;
 
+    // Caminho da imagem do tileset (o que o Tiled MOSTRA) para um gid; nullptr se
+    // desconhecido. Usado p/ renderizar exatamente a arte do Tiled (ex.: ItemSpawn).
+    const std::string* GetTileImagePath(int gid) const;
+
 private:
+    // Constrói o mapa gid→imagem lendo os tilesets do mapa (inclui .tsx externos).
+    void LoadTilesets(const json& j, const std::string& mapPath);
+    void ParseTsx(const std::string& tsxPath, int firstgid);
+    std::unordered_map<int, std::string> gidToImagePath;
+
     // Vetor pra guardar todas as imagens na ordem certa
     std::vector<ImageLayer> imageLayers;              
 

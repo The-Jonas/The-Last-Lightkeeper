@@ -21,6 +21,7 @@ bool GetActiveSubtitle(std::string& out);
 // Irmãozão (big brother)
 void OnCallToFollow();       // "Aqui" — chama o irmãozinho para segui-lo
 void OnItemPickup();         // ocasionalmente comenta ao pegar um item
+void OnPickupWoodPlank();    // "Isso vai servir." — SEMPRE ao pegar a Tabua de Madeira
 void OnBagFull();            // "minha bolsa tá pesada" — bolsa encheu
 void OnDragObject();         // às vezes, ao começar a arrastar um objeto
 void OnActionBlocked();      // "não consigo" — apertou interagir e não pôde agir
@@ -30,6 +31,7 @@ void OnScoldFear();          // repreende o irmãozinho medroso ("para de ser me
 void OnAskToStay();          // protesta quando mandado ficar parado
 void OnBrothersTooFar();     // com medo quando os irmãos se afastam demais
 void OnHidingMonsterClose(); // escondido no armário e o monstro se aproxima
+void OnHidingWhatIfMonster(); // #4 "E se o monstro estiver lá fora?" — sussurro aleatório no armário
 
 // DEBUG: toca uma fala ALEATÓRIA do irmão indicado (true = irmãozão, false =
 // irmãozinho), ignorando cooldown/mute e cortando a fala atual. Usado só pelo

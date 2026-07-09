@@ -697,8 +697,8 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":38,
-                 "x":763.545454545455,
-                 "y":393.787878787878
+                 "x":767.545454545455,
+                 "y":419.787878787878
                 }, 
                 {
                  "gid":48,
@@ -1580,7 +1580,7 @@
                  "type":"JornalSpawn",
                  "visible":true,
                  "width":120,
-                 "x":808.090909090909,
+                 "x":822.090909090909,
                  "y":360.69696969697
                 }, 
                 {
@@ -1641,7 +1641,7 @@
                         }],
                  "rotation":0,
                  "type":"Pilar",
-                 "visible":false,
+                 "visible":true,
                  "width":1610,
                  "x":446.515151515152,
                  "y":1410.36363636364
@@ -2626,7 +2626,7 @@
                 }],
          "opacity":1,
          "type":"objectgroup",
-         "visible":false,
+         "visible":true,
          "x":0,
          "y":0
         }, 
@@ -5124,7 +5124,7 @@
          "value":"level_2"
         }],
  "renderorder":"right-down",
- "tiledversion":"1.12.1",
+ "tiledversion":"1.12.2",
  "tileheight":64,
  "tilesets":[
         {

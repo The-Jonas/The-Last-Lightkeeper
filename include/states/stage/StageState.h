@@ -261,6 +261,10 @@ public:
     int   sceneTransitionTargetLevel = 0;
     float sceneTransitionTimer  = 0.0f;
     SDL_Texture* sceneTransitionFrame = nullptr;   // quadro congelado
+
+    // #19 Backdrop borrado do menu de pausa: alvo pequeno onde a cena é reduzida
+    // (downscale) e depois ampliada com filtragem linear = desfoque barato na GPU.
+    SDL_Texture* pauseBlurTex = nullptr;
     static constexpr float kSceneTransitionDuration    = 1.5f;   // escadas normais
     static constexpr float kSceneTransitionEndDuration = 2.2f;   // último andar (com clarão + trovão)
     float SceneTransitionDuration() const {
@@ -282,6 +286,7 @@ public:
     bool debugMonsterBlind = false;
     bool debugFreeCam = false;
     bool IsMonsterBlindDebug() const { return debugMonsterBlind; }
+    bool IsPhysicsDebugOn() const { return showMapPhysicsDebug; }   // tecla [B]: overlays de colisão (inclui boxes do monstro)
 
 private:
 
@@ -325,6 +330,8 @@ private:
     // jogador é congelado enquanto o menu está aberto (decisão 1.1).
     void HandlePauseMenuInput();
     void RenderPauseMenu(SDL_Renderer* renderer);
+    bool BuildPauseBlurTexture(SDL_Renderer* renderer, int winW, int winH);       // #19 gera o desfoque do cenário (GPU)
+    void DrawBlurBehindRect(SDL_Renderer* renderer, const SDL_Rect& rect, int winW, int winH);  // desfoque só atrás de um box
     void RenderSaveToast(SDL_Renderer* renderer);
     void HandleSettingsPanelInput();
     void RenderSettingsPanel(SDL_Renderer* renderer);

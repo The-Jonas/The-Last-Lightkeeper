@@ -23,6 +23,8 @@ constexpr int kChannelMonsterSpot    = 7;  // som de ver o player
 constexpr int kChannelMonsterSteps   = 8;  // passos do monstro
 constexpr int kChannelMonsterCreak   = 9;  // rangidos de madeira (esporádicos)
 constexpr int kChannelHeartbeat      = 10; // batimento cardíaco (sanidade baixa)
+constexpr int kChannelMonsterStep0   = 32; // passos por-frame: pool rotativo GRANDE (32..47),
+constexpr int kMonsterStepPoolCount  = 16; // separado da voz/one-shots p/ os passos se SOBREPOREM sem se cortar
 //9+ → one-shots livres (Mix_PlayChannel(-1, ...) usa a partir daqui)
 
 constexpr const char* kBoxStartPath = "Recursos/audio/SFX/CAIXAS/CAIXA_Madeira.mp3";
@@ -60,7 +62,17 @@ constexpr const char* kClosetClosePath = "Recursos/audio/SFX/ARMARIO/armario_fec
 constexpr const char* kMonsterScreamPath = "Recursos/audio/SFX/MONSTRO/monstro_grito.wav";
 constexpr const char* kMonsterSpotPath   = "Recursos/audio/SFX/MONSTRO/monstro_ve_player.mp3";
 constexpr const char* kMonsterStepsPath  = "Recursos/audio/SFX/MONSTRO/monstro_passos.mp3";
-constexpr const char* kMonsterStepsFastPath = "Recursos/audio/SFX/MONSTRO/monstro_passos_fast.mp3";  // fugindo da luz
+constexpr const char* kMonsterStepsFastPath = "Recursos/audio/SFX/MONSTRO/monstro_passos_fast.mp3";  // (legado, loop antigo)
+// Passos por-frame: um som por frame da animação (acompanha a cadência, fica
+// frenético quando o monstro acelera). Um arquivo por frame (kAnimFrameCount=5).
+constexpr const char* kMonsterStepPaths[] = {
+    "Recursos/audio/SFX/MONSTRO/mns_step_1.mp3",
+    "Recursos/audio/SFX/MONSTRO/mns_step_2.mp3",
+    "Recursos/audio/SFX/MONSTRO/mns_step_3.mp3",
+    "Recursos/audio/SFX/MONSTRO/mns_step_4.mp3",
+    "Recursos/audio/SFX/MONSTRO/mns_step_5.mp3",
+};
+constexpr int kMonsterStepCount = 5;
 // Rangidos de madeira: tocam ESPORÁDICAMENTE junto dos passos do monstro.
 constexpr const char* kHeartbeatPath = "Recursos/audio/SFX/heartbeat.mp3";
 constexpr const char* kWoodCreakPaths[] = {
@@ -102,6 +114,8 @@ Sound gMonsterSpotSound;
 Sound gMonsterStepsSound;
 Sound gMonsterStepsFastSound;    // passos acelerados (fugindo da luz)
 bool  gMonsterStepsFastActive = false;  // qual variante do loop está tocando
+Sound gMonsterStepSounds[kMonsterStepCount];   // passos por-frame
+int   gMonsterStepRot = 0;                      // rotação no pool de canais
 Sound gWoodCreakSounds[kWoodCreakCount];
 float gWoodCreakTimer = 0.0f;   // conta até o próximo rangido
 Sound gHeartbeatSound;
@@ -158,6 +172,9 @@ void EnsureLoaded() {
     if (FileExists(kMonsterSpotPath))   gMonsterSpotSound.Open(kMonsterSpotPath);
     if (FileExists(kMonsterStepsPath))  gMonsterStepsSound.Open(kMonsterStepsPath);
     if (FileExists(kMonsterStepsFastPath)) gMonsterStepsFastSound.Open(kMonsterStepsFastPath);
+    for (int i = 0; i < kMonsterStepCount; ++i) {
+        if (FileExists(kMonsterStepPaths[i])) gMonsterStepSounds[i].Open(kMonsterStepPaths[i]);
+    }
     for (int i = 0; i < kWoodCreakCount; ++i) {
         if (FileExists(kWoodCreakPaths[i])) gWoodCreakSounds[i].Open(kWoodCreakPaths[i]);
     }
@@ -548,56 +565,82 @@ void PlayMonsterSpot() {
     }
 }
  
-void UpdateMonsterFootsteps(float dt, float moveSpeed, float monsterX, float monsterY, float playerX, float playerY, bool fleeing) {
+// Um passo por FRAME de animação: acompanha a cadência das pernas (fica frenético
+// ao acelerar/fugir). Toca num pool rotativo de canais para passos rápidos se
+// sobreporem em vez de se cortarem; volume/panorâmica espaciais como o resto.
+void PlayMonsterStep(int frameIndex, float monsterX, float monsterY, float playerX, float playerY, float maxDist) {
     if (gGameplayMuted) return;
     EnsureLoaded();
+    if (frameIndex < 0) frameIndex = 0;
+    const int idx = frameIndex % kMonsterStepCount;
+    if (!gMonsterStepSounds[idx].IsOpen()) return;
 
-    if (moveSpeed > 10.0f) {
-        // (Re)inicia o loop, ou TROCA para a variante certa (normal ↔ acelerada)
-        // quando o estado de fuga muda.
-        const bool wantFast = fleeing && gMonsterStepsFastSound.IsOpen();
-        if (!gMonsterStepsActive || gMonsterStepsFastActive != wantFast) {
-            Mix_HaltChannel(kChannelMonsterSteps);
-            (wantFast ? gMonsterStepsFastSound : gMonsterStepsSound).PlayLoopedOnChannel(kChannelMonsterSteps);
-            gMonsterStepsActive = true;
-            gMonsterStepsFastActive = wantFast;
-            gWoodCreakTimer = 1.5f + static_cast<float>(rand() % 250) / 100.0f;  // 1º rangido não imediato
-        }
-        // Passos do monstro BEM mais altos: fixa o volume-base do canal no topo do
-        // barramento de VFX (respeita master×sfx, mas nunca abaixo) e AMPLIA ainda
-        // mais o alcance audível — como a atenuação é (1 - dist/maxDist), um maxDist
-        // maior deixa os passos mais fortes a qualquer distância (perto = alto, longe
-        // = baixo). Mais rápido (perseguição/caçada) => ainda mais alto e mais longe.
-        Mix_Volume(kChannelMonsterSteps, SfxChannelVolume());
-        const float stepsMaxDist = 1900.0f + moveSpeed * 4.0f;   // ~2640px em HUNT (185)
-        SetChannelSpatial(kChannelMonsterSteps, monsterX, monsterY, playerX, playerY, stepsMaxDist);
+    const int ch = kChannelMonsterStep0 + (gMonsterStepRot++ % kMonsterStepPoolCount);
+    Mix_PlayChannel(ch, gMonsterStepSounds[idx].GetChunk(), 0);
 
-        // Rangidos de madeira ESPORÁDICOS junto dos passos, no MESMO volume espacial.
-        gWoodCreakTimer -= dt;
-        if (gWoodCreakTimer <= 0.0f) {
-            gWoodCreakTimer = 2.0f + static_cast<float>(rand() % 350) / 100.0f;   // 2.0–5.5s
-            const int ci = rand() % kWoodCreakCount;
-            if (gWoodCreakSounds[ci].IsOpen()) {
-                Mix_PlayChannel(kChannelMonsterCreak, gWoodCreakSounds[ci].GetChunk(), 0);
-                Mix_Volume(kChannelMonsterCreak, SfxChannelVolume());
-                SetChannelSpatial(kChannelMonsterCreak, monsterX, monsterY, playerX, playerY, stepsMaxDist);
-            }
-        }
-    } else {
-        if (gMonsterStepsActive) {
-            Mix_HaltChannel(kChannelMonsterSteps);  // <- para imediatamente
-            gMonsterStepsActive = false;
+    // VOLUME por DISTÂNCIA (perto = ALTO, longe = baixo), com curva acentuada para
+    // o gradiente ser bem perceptível. A distância vai no volume do canal; a
+    // panorâmica (esquerda/direita) fica só com a DIREÇÃO, sem re-atenuar.
+    const float dx = monsterX - playerX;
+    const float dy = monsterY - playerY;
+    const float dist = std::sqrt(dx * dx + dy * dy);
+    const float maxAud = (maxDist > 1.0f) ? maxDist : 800.0f;
+    float t = 1.0f - std::min(1.0f, dist / maxAud);   // 1 = colado, 0 = no limite
+    t = t * t;                                         // curva: perto MUITO mais alto que longe
+    const int vol = static_cast<int>(SfxChannelVolume() * (0.05f + 0.95f * t));
+    Mix_Volume(ch, vol);
+
+    // Panorâmica só pela direção horizontal (não re-atenua por distância — isso já
+    // está no Mix_Volume acima). Assim perto=alto/longe=baixo fica bem marcado.
+    float pan = 0.0f;
+    if (dist > 1.0f) pan = std::max(-1.0f, std::min(1.0f, dx / maxAud));
+    const Uint8 l = static_cast<Uint8>(255.0f * (1.0f - std::max(0.0f, pan)));
+    const Uint8 r = static_cast<Uint8>(255.0f * (1.0f + std::min(0.0f, pan)));
+    Mix_SetPanning(ch, l, r);
+}
+
+// Agora só cuida dos RANGIDOS de madeira esporádicos (os passos viraram por-frame,
+// via PlayMonsterStep). maxDist grande => perto alto, longe baixo.
+void UpdateMonsterFootsteps(float dt, float moveSpeed, float monsterX, float monsterY, float playerX, float playerY, bool fleeing) {
+    (void)fleeing;
+    if (gGameplayMuted || moveSpeed <= 10.0f) return;
+    EnsureLoaded();
+
+    const float stepsMaxDist = 1900.0f + moveSpeed * 4.0f;
+    gWoodCreakTimer -= dt;
+    if (gWoodCreakTimer <= 0.0f) {
+        gWoodCreakTimer = 2.0f + static_cast<float>(rand() % 350) / 100.0f;   // 2.0–5.5s
+        const int ci = rand() % kWoodCreakCount;
+        if (gWoodCreakSounds[ci].IsOpen()) {
+            Mix_PlayChannel(kChannelMonsterCreak, gWoodCreakSounds[ci].GetChunk(), 0);
+            Mix_Volume(kChannelMonsterCreak, SfxChannelVolume());
+            SetChannelSpatial(kChannelMonsterCreak, monsterX, monsterY, playerX, playerY, stepsMaxDist);
         }
     }
 }
  
 void StopMonsterFootsteps() {
-    if (gMonsterStepsActive) {
-        Mix_HaltChannel(kChannelMonsterSteps);   // para qualquer variante (normal/acelerada)
-        ClearChannelSpatial(kChannelMonsterSteps);
-        gMonsterStepsActive = false;
-        gMonsterStepsFastActive = false;
+    for (int i = 0; i < kMonsterStepPoolCount; ++i) {
+        Mix_HaltChannel(kChannelMonsterStep0 + i);      // passos por-frame
+        ClearChannelSpatial(kChannelMonsterStep0 + i);
     }
+    Mix_HaltChannel(kChannelMonsterSteps);              // loop legado (se estiver ativo)
+    ClearChannelSpatial(kChannelMonsterSteps);
+    gMonsterStepsActive = false;
+    gMonsterStepsFastActive = false;
+}
+
+// Parada TOTAL de áudio de efeitos: usada nas transições (nível↔menu). Silencia
+// TODOS os canais do mixer — inclusive os que StopAllGameplay não pega (rádio no
+// canal 5, ondas, vento, grito/spot do monstro e quaisquer one-shots) — e zera os
+// flags de loop. NÃO mexe na música (Mix_Music), que cada estado gerencia.
+void HardStopAll() {
+    StopAllGameplay();        // passos/vela/caixa/vento + reseta flags
+    StopMonsterFootsteps();   // pool de passos do monstro + rangidos
+    Mix_HaltChannel(-1);      // varre TODO o resto: rádio(5), ondas(0), vento(1), grito, spot...
+    for (int ch = 0; ch < 48; ++ch) ClearChannelSpatial(ch);
+    gHeartbeatActive = false;
+    gBoxIsMoving = false;
 }
 
 void UpdateHeartbeat(float intensity01) {

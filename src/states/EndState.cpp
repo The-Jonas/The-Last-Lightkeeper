@@ -1,5 +1,7 @@
 #include "states/EndState.h"
 #include "core/GameData.h"
+#include "audio/GameSfx.h"
+#include "audio/GameVoice.h"
 #include "core/Game.h"
 #include "core/InputManager.h"
 #include "core/Resources.h"
@@ -33,19 +35,20 @@ void LayoutCenteredText(GameObject* label, float yOffset = 0.0f) {
 
 } // namespace
 
-EndState::EndState() = default;
+EndState::EndState(bool creditsOnly) : creditsOnly(creditsOnly) {}
 
 EndState::~EndState() = default;
 
 void EndState::LoadAssets() {
     Mix_HaltMusic();
 
-    std::string musicFile;
-    if (GameData::playerVictory) {
-        musicFile = "Recursos/audio/soundtracks/dark_harmonics_Dark_Rumble_Atmos_02_191.mp3";
-    } else {
-        musicFile = "Recursos/audio/soundtracks/Akane's_Regret.mp3";
-    }
+    // Créditos = vitória OU "Créditos" no menu principal. Nos créditos toca a
+    // música dedicada; na derrota, a música de fim de jogo.
+    const bool credits = GameData::playerVictory || creditsOnly;
+
+    std::string musicFile = credits
+        ? "Recursos/audio/soundtracks/ES_Zone of Deception - DEX 1200.mp3"
+        : "Recursos/audio/soundtracks/Akane's_Regret.mp3";
 
     backgroundMusic.Open(musicFile);
     if (backgroundMusic.IsOpen()) {
@@ -53,9 +56,12 @@ void EndState::LoadAssets() {
         backgroundMusic.Play(-1);
     }
 
-    if (GameData::playerVictory) {
-        // Vitória / fim da fatia jogável → rola os créditos finais.
+    if (credits) {
+        // Rola os créditos finais. Abertos pelo menu: pula a intro de "vitória".
         creditsMode = true;
+        if (creditsOnly) {
+            introDone = true;
+        }
     } else {
         GameObject* titleGO = new GameObject();
         titleGO->z = 10;
@@ -115,10 +121,16 @@ void EndState::Update(float dt) {
             return;
         }
 
+        // Aberto pelo menu: ESC volta ao menu a qualquer momento (botão "voltar").
+        if (creditsOnly && input.KeyPress(ESCAPE_KEY)) {
+            ReturnToMainMenu();
+            return;
+        }
+
         // Fase 2 — rolo de créditos/pós-créditos.
         if (!creditsFinished) {
-            // Segurar ESPAÇO/ESC ACELERA o rolo (não pula direto para o fim).
-            const bool fast = input.IsKeyDown(SPACE_KEY) || input.IsKeyDown(ESCAPE_KEY);
+            // Segurar ESPAÇO (e ESC na vitória) ACELERA o rolo (não pula ao fim).
+            const bool fast = input.IsKeyDown(SPACE_KEY) || (!creditsOnly && input.IsKeyDown(ESCAPE_KEY));
             constexpr float kScrollSpeed = 130.0f;        // px/s (acompanha a fonte grande)
             constexpr float kFastScrollSpeed = 800.0f;    // rolagem rápida ao segurar
             creditsScrollY += (fast ? kFastScrollSpeed : kScrollSpeed) * dt;
@@ -129,11 +141,9 @@ void EndState::Update(float dt) {
         return;
     }
 
-    // Tela de fim de jogo (morte): ESPAÇO volta ao menu; ESC fecha o jogo.
-    if (input.KeyPress(ESCAPE_KEY)) {
-        quitRequested = true;
-    }
-    if (input.KeyPress(SPACE_KEY)) {
+    // Tela de fim de jogo (morte): ESPAÇO e ESC voltam ao MENU (não fecham o jogo;
+    // só o X da janela fecha, tratado acima).
+    if (input.KeyPress(SPACE_KEY) || input.KeyPress(ESCAPE_KEY)) {
         ReturnToMainMenu();
     }
 
@@ -149,7 +159,12 @@ void EndState::Update(float dt) {
 // TitleState válido embaixo.
 void EndState::ReturnToMainMenu() {
     popRequested = true;
-    Game::GetInstance().Push(new TitleState());
+    // Aberto pelo menu: o TitleState já está embaixo — só volta a ele (sem
+    // duplicar). Vitória/derrota: empilha um TitleState novo (a pilha pode estar
+    // vazia embaixo, senão o jogo fecharia).
+    if (!creditsOnly) {
+        Game::GetInstance().Push(new TitleState());
+    }
 }
 
 void EndState::Render() {
@@ -176,6 +191,11 @@ void EndState::Render() {
 }
 
 void EndState::Start() {
+    // Transição nível→fim/menu: silencia TODO o áudio de gameplay (rádio, ondas,
+    // vento, monstro...) para nada sobreviver à morte/vitória. A música do EndState
+    // (Mix_Music) é iniciada por LoadAssets e não é afetada.
+    GameSfx::HardStopAll();
+    GameVoice::StopAll();
     LoadAssets();
     StartArray();
     started = true;
