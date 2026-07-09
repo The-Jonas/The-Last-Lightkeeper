@@ -488,6 +488,7 @@ private:
     bool controlsPanelOpen = false;
     int controlsSelection = 0;
     bool awaitingRebind = false;                         // capturando a próxima tecla
+    float rebindInvalidTimer = 0.0f;                    
     GameAction rebindAction = GameAction::MoveUp;        // ação sendo remapeada
     static constexpr int kControlsRowCount = InputManager::ActionCount + 2; // ações + Restaurar + Voltar
     SDL_Rect controlsRowRects[kControlsRowCount]{};

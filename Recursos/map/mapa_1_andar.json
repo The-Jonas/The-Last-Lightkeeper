@@ -41,6 +41,40 @@
          "name":"Entidades",
          "objects":[
                 {
+                 "gid":43,
+                 "height":316,
+                 "id":951,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":0
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":0
+                        }, 
+                        {
+                         "name":"itemName",
+                         "type":"string",
+                         "value":"Tabua de Madeira"
+                        }, 
+                        {
+                         "name":"unique",
+                         "type":"bool",
+                         "value":true
+                        }],
+                 "rotation":0,
+                 "type":"ItemSpawn",
+                 "visible":true,
+                 "width":245,
+                 "x":1221.0303030303,
+                 "y":295.212121212121
+                }, 
+                {
                  "gid":3,
                  "height":1553,
                  "id":190,
@@ -249,40 +283,6 @@
                  "width":686,
                  "x":1517.60606060606,
                  "y":605.272727272727
-                }, 
-                {
-                 "gid":43,
-                 "height":307.875769769223,
-                 "id":908,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":0
-                        }, 
-                        {
-                         "name":"heightLevel",
-                         "type":"int",
-                         "value":0
-                        }, 
-                        {
-                         "name":"itemName",
-                         "type":"string",
-                         "value":"Tabua de Madeira"
-                        }, 
-                        {
-                         "name":"unique",
-                         "type":"bool",
-                         "value":true
-                        }],
-                 "rotation":25.8234201410165,
-                 "type":"ItemSpawn",
-                 "visible":true,
-                 "width":238.701150612214,
-                 "x":3364.01440308869,
-                 "y":1218.76051825268
                 }, 
                 {
                  "gid":8,
@@ -4544,7 +4544,7 @@
          "y":0
         }],
  "nextlayerid":29,
- "nextobjectid":951,
+ "nextobjectid":952,
  "orientation":"orthogonal",
  "properties":[
         {
@@ -4553,7 +4553,7 @@
          "value":"level_1"
         }],
  "renderorder":"right-down",
- "tiledversion":"1.12.2",
+ "tiledversion":"1.12.1",
  "tileheight":64,
  "tilesets":[
         {

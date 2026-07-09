@@ -150,6 +150,7 @@ private:
     float kLanternPerp  = -18.0f;
 
     Uint8 kDarknessAlpha = 185;
+    float rebindInvalidTimer = 0.0f;
 };
 
 #endif
