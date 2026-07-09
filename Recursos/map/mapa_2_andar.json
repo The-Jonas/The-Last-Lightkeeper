@@ -1641,7 +1641,7 @@
                         }],
                  "rotation":0,
                  "type":"Pilar",
-                 "visible":false,
+                 "visible":true,
                  "width":1610,
                  "x":446.515151515152,
                  "y":1410.36363636364
