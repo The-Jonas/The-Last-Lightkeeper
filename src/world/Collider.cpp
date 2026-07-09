@@ -35,40 +35,10 @@ void Collider::Update(float dt){
 }
 
 void Collider::Render(){
-#ifdef DEBUG
-    // Pega o centro atual da box calculada
-    Vec2 center(box.Center());
-    SDL_Point points[5]; // Array de pontos para desenhar as 4 linhas (o 5º ponto fecha o quadrado voltando ao 1º)
-
-    // Converte ângulo para radianos
-    float angleRad = associated.angleDeg * (M_PI / 180.0); 
-
-    // A lógica abaixo calcula a posição de cada um dos 4 vértices do retângulo rotacionado:
-    // (Ponto Original - Centro) -> Rotaciona -> Soma Centro -> Subtrai Câmera
-
-    // Ponto 1: Canto Superior Esquerdo
-    Vec2 point = (Vec2(box.x, box.y) - center).Rotated(angleRad) + center - Camera::pos;
-    points[0] = {(int)point.x, (int)point.y};
-    points[4] = {(int)point.x, (int)point.y}; // O último ponto é igual ao primeiro para fechar o loop
-
-    // Ponto 2: Canto Superior Direito
-    point = (Vec2(box.x + box.w, box.y) - center).Rotated(angleRad) + center - Camera::pos;
-    points[1] = {(int)point.x, (int)point.y};
-    
-    // Ponto 3: Canto Inferior Direito
-    point = (Vec2(box.x + box.w, box.y + box.h) - center).Rotated(angleRad) + center - Camera::pos;
-    points[2] = {(int)point.x, (int)point.y};
-    
-    // Ponto 4: Canto Inferior Esquerdo
-    point = (Vec2(box.x, box.y + box.h) - center).Rotated(angleRad) + center - Camera::pos;
-    points[3] = {(int)point.x, (int)point.y};
-
-    // Configura a cor da linha para Vermelho
-    SDL_SetRenderDrawColor(Game::GetInstance().GetRenderer(), 255, 0, 0, SDL_ALPHA_OPAQUE);
-    
-    // Desenha as linhas conectando os pontos
-    SDL_RenderDrawLines(Game::GetInstance().GetRenderer(), points, 5);
-#endif // DEBUG
+    // A visualização de colisores agora é feita SÓ pela tecla [B]
+    // (StageState::RenderGameplayCollisionDebug), com cores por tipo e legenda.
+    // Antes este Render desenhava um quadrado VERMELHO em TODO collider sempre que
+    // a build era DEBUG (não respeitava o [B]) — eram os "quadrados aleatórios".
 }
 
 void Collider::SetScale(Vec2 scale) {

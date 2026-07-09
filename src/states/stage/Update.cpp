@@ -513,7 +513,7 @@ void StageState::Update(float dt){
             ? sanityOverlayObj->GetComponent<SpriteRenderer>() : nullptr;
  
         if (overlaySprite) {
-            constexpr float kSanityOverlayThreshold = 80.0f;
+            constexpr float kSanityOverlayThreshold = 95.0f;   // efeito "spider-verse" aparece cedo (sanidade < 95)
             // Piso visível: ao cruzar o threshold (80%), o efeito já aparece num
             // nível perceptível (não em alpha/frame 0) e cresce a partir daí. Sem
             // isso, "disparar em 80%" só ficava visível lá pelos ~65% porque tanto

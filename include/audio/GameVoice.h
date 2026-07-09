@@ -30,6 +30,7 @@ void OnScoldFear();          // repreende o irmãozinho medroso ("para de ser me
 void OnAskToStay();          // protesta quando mandado ficar parado
 void OnBrothersTooFar();     // com medo quando os irmãos se afastam demais
 void OnHidingMonsterClose(); // escondido no armário e o monstro se aproxima
+void OnHidingWhatIfMonster(); // #4 "E se o monstro estiver lá fora?" — sussurro aleatório no armário
 
 // DEBUG: toca uma fala ALEATÓRIA do irmão indicado (true = irmãozão, false =
 // irmãozinho), ignorando cooldown/mute e cortando a fala atual. Usado só pelo

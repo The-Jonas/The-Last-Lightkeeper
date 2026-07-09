@@ -75,6 +75,13 @@ private:
     float charAnimTimer  = 0.0f;
     int   charFrameIndex = 0;
 
+    // ── Versao da arte do menu ────────────────────────────────────────────────
+    // 1 = V2 (Luana) — versão usada. (V1 mantido nas paths caso se queira voltar.)
+    int  menuVersion = 1;
+    const char* ArmPath() const;
+    void BodyFramePath(int frame1based, char* out, size_t n) const;
+    void PreloadMenuVersion(int version);
+
     // ── Braco / lanterna ─────────────────────────────────────────────────────
     float armAngle       = 0.0f;
     float armAngleTarget = 0.0f;
@@ -110,6 +117,14 @@ private:
     void RenderLanternCone(SDL_Renderer* r);
     void RenderArm(SDL_Renderer* r);
     void RenderMenuTexts(SDL_Renderer* r);
+
+    // Desfoque suave do irmãozão (braço + corpo). Reduz em CADEIA (÷2 por passo, cada
+    // um faz média 2×2 de verdade — sem serrilhado/"pixelado") e amplia com filtragem
+    // linear → foco nas opções do menu, não na animação.
+    void RenderBlurredCharacter(SDL_Renderer* r);
+    SDL_Texture* charBlurFull       = nullptr;   // braço+corpo em tamanho de tela
+    static constexpr int kBlurLevels = 4;        // ÷2, ÷4, ÷8, ÷16
+    SDL_Texture* charBlurChain[kBlurLevels] = {}; // pirâmide de redução
 
     // ── Layout carregado do JSON ──────────────────────────────────────────────
     float kCharW       = 720.0f;

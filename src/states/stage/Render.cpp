@@ -21,6 +21,7 @@
 #include "gameplay/ItemPickup.h"
 #include "gameplay/HotbarComponent.h"
 #include "gameplay/Box.h"
+#include "gameplay/Monster.h"
 #include "ui/FadeEffect.h"
 #include "gameplay/Repairable.h"
 #include "gameplay/StairTrigger.h"
@@ -614,58 +615,10 @@ void StageState::Render(){
     }
 
     // ============================================================
-    // HUD MINIMALISTA DE SANIDADE (Barras Flutuantes)
-    // ============================================================
-
-    // Criamos uma função rápida (Lambda) para desenhar a barra de qualquer personagem
-    auto DrawSanityBar = [&](Character* c) {
-        if (!c || c->sanity >= Character::kMaxSanity) return; // Se tá cheio, fica invisível
-
-        float percent = c->sanity / Character::kMaxSanity;
-        float zoom = Camera::GetZoom(); // Pega a pulsação da vertigem!
-        
-        // Tamanho da barra acompanhando o tamanho da lente
-        int barW = static_cast<int>(60 * zoom);
-        int barH = static_cast<int>(6 * zoom);
-
-        // Calcula a posição na tela (Box do personagem - Câmera)
-        int screenX = static_cast<int>((c->GetAssociated().box.x - Camera::pos.x) * zoom);
-        int screenY = static_cast<int>((c->GetAssociated().box.y - Camera::pos.y) * zoom);
-        
-        // A largura da caixa do personagem também sofre zoom na tela, então multiplicamos 
-        int charScreenW = static_cast<int>(c->GetAssociated().box.w * zoom);
-
-        // Centraliza acima da cabeça 
-        int posX = screenX + (charScreenW / 2) - (barW / 2);
-        int posY = screenY - static_cast<int>(8 * zoom);
-
-        SDL_Rect bgRect = { posX, posY, barW, barH };
-        SDL_Rect fgRect = { posX, posY, static_cast<int>(barW * percent), barH };
-
-        // 1. Fundo Escuro
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(renderer, 20, 20, 20, 180);
-        SDL_RenderFillRect(renderer, &bgRect);
-
-        // 2. Cor da barra baseada no desespero
-        if (percent > 0.6f) {
-            SDL_SetRenderDrawColor(renderer, 220, 220, 230, 220); // Estável (Branco)
-        } else if (percent > 0.25f) {
-            SDL_SetRenderDrawColor(renderer, 190, 170, 60, 220);  // Tensão (Amarelo)
-        } else {
-            SDL_SetRenderDrawColor(renderer, 150, 40, 40, 220);   // Pânico (Vermelho)
-        }
-        
-        SDL_RenderFillRect(renderer, &fgRect);
-        
-        // Limpa as configurações de cor da engine
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    };
-
-    // Aplica a regra para os dois irmãos independentemente
-    DrawSanityBar(Character::player);
-    DrawSanityBar(Character::littleBrother);
+    // Barra de sanidade acima da cabeça REMOVIDA de vez (inclusive em debug): o
+    // jogador não vê mais o número/estado da sanidade — o feedback vem só pelos
+    // indicadores de tela (overlay "spider-verse" + batimento cardíaco). A mecânica
+    // de sanidade continua igual; apenas não é mais exibida aqui.
 
     // ── HUD DO PODER DO IRMÃOZINHO ────────────────────────────────────────────
     // Mostra uma bola no canto inferior esquerdo quando controlando o irmãozinho.
@@ -880,6 +833,7 @@ void StageState::Render(){
         if (dfont) {
             struct DbgLine { std::string text; bool on; };
             const DbgLine dls[] = {
+                {std::string("[B] Colisao/fisica: ") + (showMapPhysicsDebug ? "ON" : "OFF"), showMapPhysicsDebug},
                 {std::string("[I] Invisivel p/ monstro: ") + (debugMonsterBlind ? "ON" : "OFF"), debugMonsterBlind},
                 {std::string("[G] Camera livre: ") + (debugFreeCam ? "ON" : "OFF"), debugFreeCam},
             };
@@ -896,6 +850,50 @@ void StageState::Render(){
                     SDL_RenderCopy(renderer, tex, nullptr, &dst);
                     SDL_DestroyTexture(tex);
                     yy += th + 4;
+                }
+            }
+
+            // LEGENDA das cores de colisão — só com [B] ligado. Cada item: um
+            // quadradinho da cor + o que ela significa.
+            if (showMapPhysicsDebug) {
+                struct LegItem { Uint8 r, g, b; const char* label; };
+                const LegItem legend[] = {
+                    {255,   0,   0, "Monstro: HURTBOX (dano ao irmao)"},
+                    {  0, 255, 120, "Monstro: colisao de NAV (CIRCULO)"},
+                    {255, 255,   0, "Monstro: bounds do sprite"},
+                    {255,   0, 255, "Monstro: collider (componente)"},
+                    {  0, 220, 255, "Caixa/barril (empurravel)"},
+                    {255, 190,  70, "Irmaozao: pe/colisao (CIRCULO amarelo)"},
+                    { 90, 255, 200, "Irmaozinho: pe/colisao (CIRCULO verde-agua)"},
+                    {255,  60,  60, "Jogador: HITBOX de dano (CIRCULO vermelho)"},
+                    {255,  60,  60, "Mapa: paredes/colisao estatica"},
+                    {  0, 220, 255, "Mapa: chao/escada"},
+                };
+                auto lfont = Resources::GetFont("Recursos/font/times.ttf", 15);
+                yy += 6;
+                for (const auto& li : legend) {
+                    SDL_Color tcol{225, 225, 230, 235};
+                    SDL_Surface* sf = lfont ? TTF_RenderUTF8_Blended(lfont.get(), li.label, tcol) : nullptr;
+                    const int th = sf ? sf->h : 14;
+                    const int sw = th;   // lado do quadradinho = altura do texto
+                    SDL_Texture* tex = sf ? SDL_CreateTextureFromSurface(renderer, sf) : nullptr;
+                    const int tw = sf ? sf->w : 0;
+                    if (sf) SDL_FreeSurface(sf);
+                    // fundo escuro atrás da linha p/ leitura sobre o cenário
+                    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 150);
+                    SDL_Rect bg{winW - (sw + 6 + tw) - 12, yy - 1, (sw + 6 + tw) + 8, th + 2};
+                    SDL_RenderFillRect(renderer, &bg);
+                    // quadradinho da cor
+                    SDL_SetRenderDrawColor(renderer, li.r, li.g, li.b, 255);
+                    SDL_Rect sw_rect{winW - (sw + 6 + tw) - 8, yy, sw, th};
+                    SDL_RenderFillRect(renderer, &sw_rect);
+                    // rótulo
+                    if (tex) {
+                        SDL_Rect dst{winW - tw - 8, yy, tw, th};
+                        SDL_RenderCopy(renderer, tex, nullptr, &dst);
+                        SDL_DestroyTexture(tex);
+                    }
+                    yy += th + 3;
                 }
             }
         }
@@ -974,19 +972,29 @@ void StageState::RenderGameplayCollisionDebug(SDL_Renderer* renderer) const {
         }
         const bool isBig = (go == bigCharacterObject);
         const bool isSmall = (go == smallCharacterObject);
-        Uint8 pr = 200, pg = 230, pb = 255;
+        // Cor por TIPO de collider (ver a legenda desenhada por RenderDebugToggleStatus):
+        //  laranja=irmãozão · verde-água=irmãozinho · magenta=monstro ·
+        //  ciano=caixa/barril (empurrável) · dourado=footprint de cenário (nav).
+        Uint8 pr, pg, pb;
         if (isBig) {
-            pr = 255;
-            pg = 190;
-            pb = 70;
+            pr = 255; pg = 190; pb = 70;                 // irmãozão
         } else if (isSmall) {
-            pr = 90;
-            pg = 255;
-            pb = 200;
+            pr = 90;  pg = 255; pb = 200;                // irmãozinho
+        } else if (go->GetComponent<Monster>() != nullptr) {
+            pr = 255; pg = 0;   pb = 255;                // monstro
+        } else if (go->GetComponent<Box>() != nullptr) {
+            pr = 0;   pg = 220; pb = 255;                // caixa/barril empurrável
+        } else {
+            pr = 255; pg = 215; pb = 0;                  // footprint de cenário (pilar/mesa/armário...)
         }
-        DrawColliderDebugWire(renderer, col->box, static_cast<float>(go->angleDeg), pr, pg, pb, 215);
+        // Para os IRMÃOS não desenhamos o retângulo do Collider: a colisão real deles
+        // é CIRCULAR (círculo dos pés) + hitbox CIRCULAR — desenhados logo abaixo.
+        if (!isBig && !isSmall) {
+            DrawColliderDebugWire(renderer, col->box, static_cast<float>(go->angleDeg), pr, pg, pb, 215);
+        }
 
-        if (go->GetComponent<Character>() != nullptr) {
+        if (Character* ch = go->GetComponent<Character>()) {
+            // Círculo dos PÉS (colisão de movimento com o cenário).
             const float rFoot = go->box.w * 0.25f;
             const Vec2 footWorld(go->box.x + go->box.w * 0.5f, go->box.y + go->box.h - rFoot);
             const Vec2 screen = WorldToScreen(footWorld);
@@ -1002,6 +1010,12 @@ void StageState::RenderGameplayCollisionDebug(SDL_Renderer* renderer) const {
                 fb = 180;
             }
             DrawDebugCircle(renderer, screen.x, screen.y, rScreen, fr, fg, fb, 185);
+
+            // Círculo de HITBOX (dano) — vermelho, como a hurtbox do monstro.
+            const Vec2  hitWorld  = ch->GetHitCircleCenter();
+            const float hitR      = ch->GetHitCircleRadius();
+            const Vec2  hitScreen = WorldToScreen(hitWorld);
+            DrawDebugCircle(renderer, hitScreen.x, hitScreen.y, std::max(1.5f, hitR * z), 255, 60, 60, 200);
         }
     }
 }

@@ -26,8 +26,8 @@ void InputManager::InitDefaultBindings() {
     bindings[static_cast<int>(GameAction::MoveRight)]   = SDLK_d;
     bindings[static_cast<int>(GameAction::Interact)]    = SDLK_e;
     bindings[static_cast<int>(GameAction::UseItem)]     = SDLK_f;
-    bindings[static_cast<int>(GameAction::CyclePrev)]   = SDLK_LEFT;
-    bindings[static_cast<int>(GameAction::CycleNext)]   = SDLK_RIGHT;
+    bindings[static_cast<int>(GameAction::CyclePrev)]   = SDLK_LEFT;   // item anterior
+    bindings[static_cast<int>(GameAction::CycleNext)]   = SDLK_RIGHT;  // próximo item
     bindings[static_cast<int>(GameAction::SwapBrother)] = SDLK_LCTRL;
     bindings[static_cast<int>(GameAction::ToggleMode)]  = SDLK_q;
 }

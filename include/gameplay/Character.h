@@ -63,6 +63,11 @@ public:
     Vec2 GetFootCircleCenter() const;
     float GetFootCircleRadius() const;
 
+    // Círculo de HITBOX (dano do monstro): centrado no corpo, um pouco maior que o
+    // círculo dos pés — assim o "acerto" no jogador também é redondo, não retangular.
+    Vec2 GetHitCircleCenter() const;
+    float GetHitCircleRadius() const;
+
     GameObject& GetAssociated() { return associated; }
     Vec2 GetSpeed() const { return speed; }
     Vec2 GetCenter();                                                   // Para pegar o centro do personagem

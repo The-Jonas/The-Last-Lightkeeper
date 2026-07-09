@@ -3,6 +3,7 @@
 #include "engine/GameObject.h"
 #include "gameplay/Box.h"
 #include "gameplay/Character.h"
+#include "gameplay/Monster.h"
 #include "gameplay/ItemPickup.h"
 #include "gameplay/Jornal.h"
 #include "gameplay/Candlestick.h"
@@ -538,6 +539,15 @@ void StageState::ApplyCoupledPushMovement(const Vec2& prevPlayerPos) {
 
     if (activePushBox->TryMoveBy(dx, dy)) {
         GameSfx::NotifyBoxSlide();
+        // #2 O barulho de arrastar a caixa/barril chama o monstro para investigar.
+        // NotifyNoise é auto-throttled (noiseCooldownTimer), então chamar por frame é seguro.
+        const Vec2 noisePos = boxObj.box.Center();
+        for (auto& go : GetObjectArray()) {
+            if (Monster* m = go->GetComponent<Monster>()) {
+                m->NotifyNoise(noisePos);
+                break;
+            }
+        }
     } else {
         bigCharacterObject->box.x = prevPlayerPos.x;
         bigCharacterObject->box.y = prevPlayerPos.y;

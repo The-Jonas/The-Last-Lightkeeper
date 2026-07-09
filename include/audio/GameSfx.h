@@ -19,7 +19,9 @@ void StopAllGameplay();
 // Funções para fazer o áudio ficar direcional
 void SetChannelSpatial(int channel, float srcX, float srcY, float listX, float listY, float maxDist = 800.0f);
 void ClearChannelSpatial(int channel);
-// fleeing=true usa a variante ACELERADA dos passos (monstro fugindo da luz).
+// Passos por-frame da animação (um som por frame). Chamar quando o frame muda.
+void PlayMonsterStep(int frameIndex, float monsterX, float monsterY, float playerX, float playerY, float maxDist);
+// Agora só cuida dos rangidos de madeira esporádicos (passos = PlayMonsterStep).
 void UpdateMonsterFootsteps(float dt, float moveSpeed, float monsterX, float monsterY, float playerX, float playerY, bool fleeing = false);
 
 void NotifyBoxSlide();

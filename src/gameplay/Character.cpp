@@ -750,6 +750,18 @@ Vec2 Character::GetFootCircleCenter() const {
     return Vec2(associated.box.x + associated.box.w * 0.5f, associated.box.y + associated.box.h - r);
 }
 
+float Character::GetHitCircleRadius() const {
+    // Um pouco maior que o círculo dos pés p/ cobrir o tronco (dano justo).
+    float baseW = (baselineBoxW > 0.0f) ? baselineBoxW : associated.box.w;
+    return baseW * 0.42f;
+}
+
+Vec2 Character::GetHitCircleCenter() const {
+    // Centrado horizontalmente e um pouco abaixo do meio vertical (massa do corpo).
+    return Vec2(associated.box.x + associated.box.w * 0.5f,
+                associated.box.y + associated.box.h * 0.55f);
+}
+
 void Character::Issue(Command task) {                       // Adiciona comando na fila
     taskQueue.push(task);
 }

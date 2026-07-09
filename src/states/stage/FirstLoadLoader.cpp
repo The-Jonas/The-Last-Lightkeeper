@@ -57,7 +57,7 @@ StageFirstLoadData EmbeddedDefaults() {
     ItemDef apple{"Apple", "Recursos/img/items/apple.png", -1, false, 1, {}};
     ItemDef brokenFlashlight{"Broken Flashlight",
                              "Recursos/img/items/Isqueiro.png",
-                             100,
+                             60,
                              true,
                              2,
                              {{ItemProperty::LIGHT_SOURCE, 1.0f}}};
@@ -74,7 +74,7 @@ StageFirstLoadData EmbeddedDefaults() {
     d.startingFlashlight =
         ItemDef{"Flashlight",
                 "Recursos/img/items/Isqueiro.png",
-                100,
+                60,
                 true,
                 0,
                 {{ItemProperty::LIGHT_SOURCE, 1.0f}}};

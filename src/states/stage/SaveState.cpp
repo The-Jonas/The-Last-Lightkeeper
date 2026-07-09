@@ -573,6 +573,75 @@ void StageState::HandlePauseMenuInput() {
     }
 }
 
+// #19 Desenha um losango (diamante) preenchido centrado em (cx,cy) — divisor
+// decorativo sob o título "PAUSA", como na referência.
+static void DrawDiamond(SDL_Renderer* renderer, float cx, float cy, float halfW, float halfH,
+                        Uint8 r, Uint8 g, Uint8 b, Uint8 a) {
+    SDL_SetRenderDrawColor(renderer, r, g, b, a);
+    const int steps = static_cast<int>(halfH);
+    for (int i = 0; i <= steps; ++i) {
+        const float f = (steps > 0) ? static_cast<float>(i) / steps : 0.0f;
+        const float w = halfW * (1.0f - f);   // afina em direção às pontas de cima/baixo
+        SDL_RenderDrawLineF(renderer, cx - w, cy - i, cx + w, cy - i);
+        SDL_RenderDrawLineF(renderer, cx - w, cy + i, cx + w, cy + i);
+    }
+}
+
+// #19 Gera o desfoque do cenário (GPU): reduz o alvo da cena (renderTarget) para
+// um alvo pequeno; ao ampliar depois com filtragem linear surge o borrão barato
+// (sem SDL_RenderReadPixels, que quebra em alguns backends). Retorna false se não
+// houver cena para borrar. NÃO desenha nada na tela — só prepara pauseBlurTex.
+bool StageState::BuildPauseBlurTexture(SDL_Renderer* renderer, int winW, int winH) {
+    if (!renderTarget) {
+        return false;
+    }
+
+    constexpr int kDownscale = 8;   // quanto menor o alvo, mais forte o borrão
+    const int smallW = std::max(1, winW / kDownscale);
+    const int smallH = std::max(1, winH / kDownscale);
+
+    if (!pauseBlurTex) {
+        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");   // linear
+        pauseBlurTex = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
+                                         SDL_TEXTUREACCESS_TARGET, smallW, smallH);
+    }
+    if (!pauseBlurTex) {
+        return false;
+    }
+
+    // Filtragem linear nas duas texturas para suavizar as duas etapas de escala.
+    SDL_SetTextureScaleMode(renderTarget, SDL_ScaleModeLinear);
+    SDL_SetTextureScaleMode(pauseBlurTex, SDL_ScaleModeLinear);
+
+    SDL_Texture* prev = SDL_GetRenderTarget(renderer);
+    SDL_SetRenderTarget(renderer, pauseBlurTex);
+    SDL_RenderCopy(renderer, renderTarget, nullptr, nullptr);
+    SDL_SetRenderTarget(renderer, prev);
+    return true;
+}
+
+// #19 Desenha o cenário borrado APENAS atrás de um box (recorte), não na tela
+// inteira. Amplia pauseBlurTex para a tela cheia mas com clip no retângulo do box,
+// então o borrão fica alinhado com o que está por trás daquele box. Véu escuro só
+// dentro do box para contraste do texto. Fora dos boxes o jogo aparece nítido.
+void StageState::DrawBlurBehindRect(SDL_Renderer* renderer, const SDL_Rect& rect, int winW, int winH) {
+    if (!pauseBlurTex) {
+        // Sem desfoque disponível: painel escuro simples só no box.
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer, 10, 10, 16, 205);
+        SDL_RenderFillRect(renderer, &rect);
+        return;
+    }
+    SDL_RenderSetClipRect(renderer, &rect);
+    const SDL_Rect full{0, 0, winW, winH};
+    SDL_SetTextureAlphaMod(pauseBlurTex, 255);
+    SDL_RenderCopy(renderer, pauseBlurTex, nullptr, &full);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 8, 8, 14, 140);
+    SDL_RenderFillRect(renderer, &rect);
+    SDL_RenderSetClipRect(renderer, nullptr);
+}
+
 void StageState::RenderPauseMenu(SDL_Renderer* renderer) {
     if (!renderer || !pauseMenuOpen) {
         return;
@@ -582,9 +651,14 @@ void StageState::RenderPauseMenu(SDL_Renderer* renderer) {
     const int winH = Game::GetInstance().GetWindowsHeight();
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 155);
-    const SDL_Rect full{0, 0, winW, winH};
-    SDL_RenderFillRect(renderer, &full);
+
+    // #19 Prepara o desfoque UMA vez; ele é aplicado só atrás de cada box adiante
+    // (não na tela inteira). Um véu leve global mantém o menu legível sem esconder
+    // o cenário — bem mais sutil que o escurecimento anterior.
+    BuildPauseBlurTexture(renderer, winW, winH);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 60);
+    const SDL_Rect fullDim{0, 0, winW, winH};
+    SDL_RenderFillRect(renderer, &fullDim);
 
     const int itemW = 380;
     const int itemH = 56;
@@ -593,17 +667,21 @@ void StageState::RenderPauseMenu(SDL_Renderer* renderer) {
     const int startY = (winH - totalH) / 2;
     const int x = (winW - itemW) / 2;
 
-    if (auto titleFont = Resources::GetFont("Recursos/font/times.ttf", 44)) {
-        SDL_Color tc{220, 200, 140, 255};
+    // Título "PAUSA" + divisor em losango logo abaixo.
+    if (auto titleFont = Resources::GetFont("Recursos/font/times.ttf", 46)) {
+        SDL_Color tc{225, 205, 145, 255};
         SDL_Surface* s = TTF_RenderUTF8_Blended(titleFont.get(), "PAUSA", tc);
         if (s) {
             SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, s);
-            const SDL_Rect d{(winW - s->w) / 2, startY - 80, s->w, s->h};
+            const SDL_Rect d{(winW - s->w) / 2, startY - 96, s->w, s->h};
+            const int dividerY = d.y + s->h + 16;
             SDL_FreeSurface(s);
             if (t) {
                 SDL_RenderCopy(renderer, t, nullptr, &d);
                 SDL_DestroyTexture(t);
             }
+            DrawDiamond(renderer, winW * 0.5f, static_cast<float>(dividerY), 9.0f, 7.0f,
+                        200, 180, 110, 230);
         }
     }
 
@@ -613,13 +691,20 @@ void StageState::RenderPauseMenu(SDL_Renderer* renderer) {
         pauseMenuItemRects[i] = r;
         const bool sel = (i == pauseMenuSelection);
 
-        SDL_SetRenderDrawColor(renderer, sel ? 70 : 35, sel ? 60 : 35, sel ? 40 : 42, 235);
-        SDL_RenderFillRect(renderer, &r);
-        SDL_SetRenderDrawColor(renderer, sel ? 220 : 120, sel ? 190 : 120, sel ? 110 : 120, 255);
+        // #19 Desfoque SÓ atrás deste box (efeito "vidro fosco"); o resto da tela
+        // fica nítido. Depois um leve tom por cima (âmbar no selecionado) + borda.
+        DrawBlurBehindRect(renderer, r, winW, winH);
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        if (sel) {
+            SDL_SetRenderDrawColor(renderer, 120, 96, 50, 90);
+            SDL_RenderFillRect(renderer, &r);
+        }
+        SDL_SetRenderDrawColor(renderer, sel ? 230 : 120, sel ? 200 : 120, sel ? 125 : 130,
+                               sel ? 255 : 165);
         SDL_RenderDrawRect(renderer, &r);
 
         if (font) {
-            SDL_Color c = sel ? SDL_Color{245, 235, 205, 255} : SDL_Color{185, 185, 185, 255};
+            SDL_Color c = sel ? SDL_Color{248, 238, 208, 255} : SDL_Color{195, 195, 200, 235};
             SDL_Surface* s = TTF_RenderUTF8_Blended(font.get(), kPauseMenuLabels[i], c);
             if (s) {
                 SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, s);
@@ -1331,8 +1416,8 @@ void StageState::RenderTutorials(SDL_Renderer* renderer) {
         y += 56;
     }
     if (cycleTutTimer > 0.0f && controllingBig) {
-        const std::string prev = keyName(im.GetBinding(GameAction::CyclePrev), "1");
-        const std::string next = keyName(im.GetBinding(GameAction::CycleNext), "3");
+        const std::string prev = keyName(im.GetBinding(GameAction::CyclePrev), "Left");
+        const std::string next = keyName(im.GetBinding(GameAction::CycleNext), "Right");
         drawBanner(cycleTutTimer,
                    "Use [" + prev + "] e [" + next + "] para trocar de item na mochila", y);
         y += 56;

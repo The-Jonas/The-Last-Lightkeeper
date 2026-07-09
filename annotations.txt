@@ -5,7 +5,7 @@
  - Patroll logo após sabotar window, criar um "delay" entre sabotagens
  - Imagem da UnB
  - Aumentar o HUD de inventário, usar HUD de items circular, porcentagem de durabilidade circular também
- - Esconder barrinha de sanidade
+ - Esconder barrinha de sanidadenow
  - Diminiur treshhold para mostrar "spider-verse"
  - Deixar barril mais pesado
  - Diminuir capacidade do isqueiro
@@ -15,5 +15,7 @@
  - Mudar textos "Level X" -> "Andar X"
  - Animação de segurar isqueiro possui duas verões: com isqueiro ligado e com isqueiro desligado
  - Discrepância entre Tiled assets (tamanhos, posições, angulos) com o que está sendo renderizado (FIXXX!!!!)
- - Colocar igual bonitinha, legalzinha do flávio
+ - Colocar HUD versão bonitinha, legalzinha do flávio
+ - Adicionar blur na imagem do irmaozao no menu inicial
  - Mudar menu in game para menu bonitinhalegalzinha, deixar as caixas com fundo transparent e blur
+ 

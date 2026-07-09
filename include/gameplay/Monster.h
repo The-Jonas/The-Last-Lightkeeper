@@ -19,9 +19,7 @@ public:
         INVESTIGATE,                                    // Indo até a última posição onde viu a luz / ouviu algo
         HUNT,                                           // Tocou em um irmão no escuro - perseguição agressiva ás cegas
         CHASE,                                          // Viu os irmãos e está correndo atrás (ou tocou neles no escuro)
-        CAMP_CLOSET,                                    // Viu os irmãos entrarem no armário e está esperando na frente
         FLEE_LIGHT,                                     // Entrou em área muito iluminada — recua
-        LURK,                                           // Ronda nas bordas da luz, esperando ela sair/apagar
         SABOTAGE_WINDOW,                                // Vai dar prioridade a abrir a janela pra apagar as velas
         UNSTUCK                                         // Preso na geometria: vira "fantasma" (sem dano) e sai andando p/ longe do jogador
     };
@@ -35,7 +33,7 @@ public:
     void NotifyCollision(GameObject& other) override;
     
     void AddPatrolPoint(Vec2 point);                    // Chamado pelo SpawnFactory / LevelManager para injetar waypoints do Tiled
-    void NotifyClosetOccupied(Vec2 closetWorldPos);     // Chamado pelo Closet quando os irmãos entram nele
+    void NotifyNoise(Vec2 noiseWorldPos);               // #2 Chamado ao empurrar caixas/barris: o monstro ouve e investiga
 
     // Getter para o Irmãozinho renderizar a silhueta
     float GetVisionRevealTimer() const { return visionRevealTimer; }
@@ -74,9 +72,7 @@ private:
     void UpdateInvestigate (float dt);
     void UpdateChase       (float dt);
     void UpdateHunt        (float dt);
-    void UpdateCampCloset  (float dt);
     void UpdateFleeLigth   (float dt);
-    void UpdateLurk        (float dt);
     void UpdateUnstuck     (float dt);   // recuperação de "preso na geometria"
  
     // ── Sensores ──────────────────────────────────────────────────────────────
@@ -120,10 +116,10 @@ private:
     float memoryDecayTimer  = 0.0f;                     // Conta quanto faz que perdeu visão
     bool  hasMemory         = false;
  
-    // Posição do armário onde os irmãos entraram
-    Vec2  closetTargetPos;
+    // Tempo que os irmãos estão escondidos (sem mais campana no armário). Ao passar
+    // de kCampMaxTime, dispara o modo estratégico (cerco às janelas).
     float campTimer         = 0.0f;
-    float kCampMaxTime = 18.0f;        // Segundos que ele fica de campana (monster.json)
+    float kCampMaxTime = 18.0f;        // Segundos escondidos até o cerco às janelas (monster.json)
 
     // Timer para o irmãozinho revelar a silhueta
     float visionRevealTimer = 0.0f;
@@ -145,12 +141,8 @@ private:
     float kFleeLightAvoidTime   = 12.0f;
     float kFleeLightAvoidRadius = 520.0f;
     float kFleeDistance         = 500.0f;  // quão longe recua ao fugir da luz (monster.json)
+    float kFleeLightRadiusFraction = 0.85f; // fração do raio da luz que já faz o monstro fugir (era 0.60) (monster.json)
 
-    // Propriedades do LURK
-    float lurkTimer = 0.0f;
-    static constexpr float kLurkMaxTime = 12.0f; // Desiste de rondar após esse tempo
-    static constexpr float kLurkRepositionInterval = 1.5f; // A cada quanto reavalia posição
- 
     // ── Patrulha ──────────────────────────────────────────────────────────────
     std::vector<Vec2> patrolPoints;
     int  patrolIndex  = 0;
@@ -166,6 +158,7 @@ private:
     float kMemoryDecayTime       = 10.0f;  // Segundos até esquecer posição
     float kWindowRadarInterval   = 6.0f;    // procura janelas com mais frequência
     float kWindowRadarRange      = 2900.0f; // alcance do radar de janelas (sabota de longe)
+    float kSabotageDelay         = 4.0f;    // #5 pausa (patrulha) imposta depois de abrir uma janela, antes da próxima
     static constexpr float kFleeThreshold         = 0.70f;  // Iluminação que faz ele recuar
     static constexpr float kPathRefreshInterval   = 0.30f;  // Segundos entre recálculos de path
     static constexpr float kNavFootRadius         = 18.0f;  // footprint de navegação BEM menor: passa por corredores/quinas sem travar (o dano NÃO usa isto)
@@ -173,22 +166,37 @@ private:
 
     float windowRadarTimer = 0.0f;                          // Timer separado para o radar de janelas (não compartilhado com pathfinding)
 
+    // ── Audição de ruído (empurrar caixas/barris) ─────────────────────────────
+    // #2: quando o jogador empurra uma caixa/barril perto, o monstro "ouve" e vai
+    // investigar. Throttle p/ não re-disparar a cada frame de empurrão. (monster.json)
+    float noiseCooldownTimer = 0.0f;
+    float kNoiseHearRadius   = 950.0f;   // só ouve empurrões dentro deste raio
+    float kNoiseCooldown     = 1.5f;     // intervalo mínimo entre reações a ruído
+
     // ── Variáveis de Sabotagem ────────────────────────────────────────────────
     Window* targetWindow = nullptr;
     Window* FindNearbyClosedWindow();
     void UpdateSabotageWindow(float dt);
 
     // ── Modo estratégico ──────────────────────────────────────────────────────
-    // Depois de procurar os irmãos escondidos por um tempo (CAMP_CLOSET), o
-    // monstro desiste da campana e passa a caçar TODAS as janelas do andar até
-    // abri-las — o que apaga as velas e força o jogador a fugir do nível.
+    // Depois que os irmãos ficam escondidos por kCampMaxTime (contado em Update,
+    // sem campana no armário), o monstro passa a caçar TODAS as janelas do andar
+    // até abri-las — o que apaga as velas e força o jogador a fugir do nível.
     bool strategicMode = false;
     static constexpr float kStrategicRadarInterval = 1.0f;  // reavalia janela alvo mais rápido
     static bool AnyBrotherHidden();                          // algum irmão está escondido no armário?
 
-    // ── Imunidade a luz ────────────────────────────────────────────────
+    // ── Luz durante CHASE/HUNT ─────────────────────────────────────────────────
+    // Ao ENTRAR em CHASE/HUNT há uma GRAÇA curta em que ignora a luz (não foge só
+    // por avistar o jogador numa área iluminada). Passada a graça, cada vez que
+    // PISA na luz há uma CHANCE de ignorá-la (maior caçando); senão, foge. Fora de
+    // CHASE/HUNT (patrulha/investiga/sabota) SEMPRE foge da luz. (monster.json)
     float chaseGraceTimer = 0.0f;
-    static constexpr float kChaseGraceDuration = 3.0f;
+    float kChaseGraceDuration     = 1.5f;   // graça de entrada (ignora luz)
+    float kChaseIgnoreLightChance = 0.50f;  // CHASE: chance de ignorar a luz
+    float kHuntIgnoreLightChance  = 0.85f;  // HUNT: chance (maior) de ignorar a luz
+    bool  lightDecisionMade = false;        // já rolou a decisão desta exposição à luz?
+    bool  lightIgnored      = false;        // decidiu ignorar a luz atual?
     float chaseNoSightTimer = 0.0f;
     float spotSoundCooldown = 0.0f;
     static constexpr float kSpotSoundCooldown = 6.0f;

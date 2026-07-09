@@ -3,7 +3,7 @@
 
   "speed_patrol": 85,
   "speed_investigate": 120,
-  "speed_chase": 170,
+  "speed_chase": 210,
   "speed_hunt": 185,
   "speed_flee": 220,
 
@@ -16,10 +16,18 @@
 
   "window_radar_interval": 6,
   "window_radar_range": 2900,
+  "sabotage_delay": 4,
+
+  "noise_hear_radius": 950,
+  "noise_cooldown": 1.5,
 
   "flee_light_avoid_time": 12,
   "flee_light_avoid_radius": 520,
   "flee_distance": 500,
+  "flee_light_radius_fraction": 0.85,
+  "chase_grace_duration": 1.5,
+  "chase_ignore_light_chance": 0.50,
+  "hunt_ignore_light_chance": 0.85,
 
   "sanity_damage_dark": 80,
   "sanity_damage_lit": 50,

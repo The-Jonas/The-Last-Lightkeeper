@@ -314,9 +314,14 @@ Game::Game(std::string title) {
         exit(1);
     }
     Mix_AllocateChannels(32);
-    Mix_ReserveChannels(9);
-    // Canais 0..N-1 não são escolhidos por Mix_PlayChannel(-1): o anel de ondas usa o canal 0 explicitamente
-    // (ver StageState). Efeitos continuam em 1+.
+    // Reserva 0..13 para os canais FIXOS de SFX (waves..heartbeat=10, pool de passos
+    // do monstro=11..13). Antes reservava só 9, então Mix_PlayChannel(-1) — usado pela
+    // VOZ e pelos one-shots — caía nos canais 9..13 e um passo do monstro (canal fixo
+    // 11..13) HALTAVA a fala no meio da frase. Com 14 reservados, a voz/one-shots vão
+    // para 14..31 e nunca colidem com os SFX fixos.
+    Mix_ReserveChannels(14);
+    // Canais 0..13 não são escolhidos por Mix_PlayChannel(-1): usados explicitamente
+    // pelos loops/one-shots fixos (ver GameSfx). Voz e efeitos livres ficam em 14+.
     const int masterVolume = (MIX_MAX_VOLUME * masterVolumePercent) / 100;
     Mix_Volume(-1, masterVolume);
     Mix_VolumeMusic(MusicVolume());

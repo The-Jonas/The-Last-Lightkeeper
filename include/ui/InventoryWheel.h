@@ -20,13 +20,16 @@ private:
     int lastKnownActive = -1;
     float bobTimer = 0.0f;
 
-    static constexpr float kSlotSize = 64.0f;
-    static constexpr float kIconSize = 48.0f;
-    static constexpr float kArcRadius = 110.0f;
-    static constexpr float kAnchorXFraction = 0.12f;
-    static constexpr float kAnchorYOffset = -100.0f;
+    // Roda VERTICAL (itens sobem/descem): ativo no centro, anterior acima,
+    // próximo abaixo; o arco abre para a esquerda. Slots circulares + anel de
+    // durabilidade radial.
+    static constexpr float kSlotSize = 88.0f;
+    static constexpr float kIconSize = 62.0f;
+    static constexpr float kArcRadius = 150.0f;   // raio do arco vertical
+    static constexpr float kAnchorXFraction = 0.115f;  // X do slot ATIVO (borda esquerda)
+    static constexpr float kAnchorYFraction = 0.68f;   // Y do slot ATIVO (mais para baixo do canto)
     static constexpr float kSlideSpeed = 10.0f;
-    static constexpr float kGaugeHeight = 4.0f;
+    static constexpr float kRingThickness = 7.0f;   // espessura do anel de durabilidade
 
     float GetAnchorX() const;
     float GetAnchorY() const;

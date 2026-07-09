@@ -279,7 +279,9 @@ HeldPropVisual Inventory::GetHeldPropVisual() const {
     }
     const std::string& name = active->def.name;
     if (name == "Flashlight" || name == "Broken Flashlight") {
-        return HeldPropVisual::Lighter;
+        // #16 Isqueiro APAGADO → mãos vazias (animação idle/walk normal).
+        // Só aparece na mão quando aceso. (Aceso = luz ligada de verdade.)
+        return isLightToggledOn ? HeldPropVisual::Lighter : HeldPropVisual::None;
     }
     if (name == "Lamp") {
         return HeldPropVisual::Lamp;

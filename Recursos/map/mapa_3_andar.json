@@ -48,12 +48,47 @@
                  "id":956,
                  "name":"",
                  "opacity":1,
+                 "properties":[
+                        {
+                         "name":"nameObj",
+                         "type":"string",
+                         "value":"Estante_Quebrada"
+                        }],
                  "rotation":359.150563286973,
                  "type":"Recipiente_Decoracao",
                  "visible":true,
                  "width":740.673901830304,
                  "x":633.735674502072,
                  "y":498.333478144408
+                }, 
+                {
+                 "gid":11,
+                 "height":190,
+                 "id":993,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":150
+                        }, 
+                        {
+                         "name":"direction",
+                         "type":"string",
+                         "value":"frente"
+                        }, 
+                        {
+                         "name":"startsLit",
+                         "type":"bool",
+                         "value":true
+                        }],
+                 "rotation":0,
+                 "type":"Castical",
+                 "visible":true,
+                 "width":96,
+                 "x":1410,
+                 "y":85
                 }, 
                 {
                  "gid":5,
@@ -65,8 +100,8 @@
                  "type":"PlayerSpawn_Big",
                  "visible":true,
                  "width":127,
-                 "x":1405,
-                 "y":413
+                 "x":1403,
+                 "y":405
                 }, 
                 {
                  "gid":6,
@@ -78,8 +113,8 @@
                  "type":"PlayerSpawn_Small",
                  "visible":true,
                  "width":126,
-                 "x":1551.90909090909,
-                 "y":290.81818181818
+                 "x":1581.90909090909,
+                 "y":362.81818181818
                 }, 
                 {
                  "gid":3,
@@ -104,7 +139,7 @@
                         {
                          "name":"direction",
                          "type":"string",
-                         "value":"esquerda"
+                         "value":"direita"
                         }, 
                         {
                          "name":"startsLit",
@@ -148,40 +183,6 @@
                  "width":481.333,
                  "x":3088.67,
                  "y":882.666
-                }, 
-                {
-                 "gid":7,
-                 "height":48,
-                 "id":950,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":0
-                        }, 
-                        {
-                         "name":"heightLevel",
-                         "type":"int",
-                         "value":0
-                        }, 
-                        {
-                         "name":"itemName",
-                         "type":"string",
-                         "value":"Lamp"
-                        }, 
-                        {
-                         "name":"unique",
-                         "type":"bool",
-                         "value":true
-                        }],
-                 "rotation":0,
-                 "type":"ItemSpawn",
-                 "visible":true,
-                 "width":48,
-                 "x":1920,
-                 "y":2453
                 }, 
                 {
                  "gid":1,
@@ -473,6 +474,11 @@
                          "name":"heightLevel",
                          "type":"int",
                          "value":2
+                        }, 
+                        {
+                         "name":"itemName",
+                         "type":"string",
+                         "value":"Fuel"
                         }],
                  "rotation":0,
                  "type":"ItemSpawn",
@@ -487,6 +493,22 @@
                  "id":966,
                  "name":"",
                  "opacity":1,
+                 "properties":[
+                        {
+                         "name":"depthOffset",
+                         "type":"float",
+                         "value":0
+                        }, 
+                        {
+                         "name":"heightLevel",
+                         "type":"int",
+                         "value":0
+                        }, 
+                        {
+                         "name":"itemName",
+                         "type":"string",
+                         "value":"Fuel"
+                        }],
                  "rotation":0,
                  "type":"",
                  "visible":true,
@@ -661,35 +683,6 @@
                  "width":170.270425158979,
                  "x":1259.16728901315,
                  "y":1733.67084704332
-                }, 
-                {
-                 "gid":11,
-                 "height":190,
-                 "id":993,
-                 "name":"",
-                 "opacity":1,
-                 "properties":[
-                        {
-                         "name":"depthOffset",
-                         "type":"float",
-                         "value":150
-                        }, 
-                        {
-                         "name":"direction",
-                         "type":"string",
-                         "value":"frente"
-                        }, 
-                        {
-                         "name":"startsLit",
-                         "type":"bool",
-                         "value":true
-                        }],
-                 "rotation":0,
-                 "type":"Castical",
-                 "visible":true,
-                 "width":96,
-                 "x":1410,
-                 "y":85
                 }, 
                 {
                  "gid":13,
@@ -3488,7 +3481,7 @@
                         {
                          "name":"depthOffset",
                          "type":"float",
-                         "value":200
+                         "value":0
                         }, 
                         {
                          "name":"direction",
@@ -3506,6 +3499,18 @@
                  "width":96,
                  "x":1821.33333333333,
                  "y":1232.33333333333
+                }, 
+                {
+                 "height":316,
+                 "id":999,
+                 "name":"",
+                 "opacity":1,
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":380,
+                 "x":2038,
+                 "y":1058
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -3514,7 +3519,7 @@
          "y":0
         }],
  "nextlayerid":28,
- "nextobjectid":998,
+ "nextobjectid":1000,
  "orientation":"orthogonal",
  "properties":[
         {

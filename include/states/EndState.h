@@ -14,7 +14,9 @@ struct SDL_Renderer;
 
 class EndState : public State {
 public:
-    EndState();
+    // creditsOnly=true: aberto pelo menu "Créditos" (rola os créditos sem a
+    // intro de vitória e sem depender de GameData::playerVictory).
+    explicit EndState(bool creditsOnly = false);
     ~EndState();
 
     void LoadAssets() override;
@@ -26,6 +28,7 @@ public:
     void Resume() override;
 
 private:
+    bool creditsOnly = false;   // aberto pelo menu (créditos sem intro de vitória)
     Music backgroundMusic;
     GameObject* gameOverTitle = nullptr;
     GameObject* causeSubtitle = nullptr;

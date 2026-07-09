@@ -517,7 +517,7 @@ void StageState::RenderLevelTitleBanner(SDL_Renderer* renderer) {
     SDL_RenderFillRect(renderer, &backdrop);
 
     char label[32];
-    std::snprintf(label, sizeof(label), "Level %d", levelTitleNumber);
+    std::snprintf(label, sizeof(label), "Andar %d", levelTitleNumber);
 
     auto font = Resources::GetFont("Recursos/font/times.ttf", 72);
     if (!font) {

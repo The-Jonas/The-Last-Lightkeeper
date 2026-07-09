@@ -145,6 +145,10 @@ StageState::~StageState(){
         SDL_DestroyTexture(sceneTransitionFrame);
         sceneTransitionFrame = nullptr;
     }
+    if (pauseBlurTex) {
+        SDL_DestroyTexture(pauseBlurTex);
+        pauseBlurTex = nullptr;
+    }
 }
 
 void StageState::LoadAssets() {

@@ -111,6 +111,16 @@ void Closet::Update(float dt) {
             }
         }
 
+        // #4 Sussurro aleatório "E se o monstro estiver lá fora?" enquanto escondido.
+        // Conta regressiva independente do latch acima; ao zerar, tenta falar e
+        // sorteia o próximo intervalo. GameVoice ignora o pedido se já houver voz
+        // tocando ou o cooldown global não tiver passado — então nunca atropela.
+        whisperTimer -= dt;
+        if (whisperTimer <= 0.0f) {
+            GameVoice::OnHidingWhatIfMonster();
+            ArmWhisperTimer();
+        }
+
         if (!inputFrozen && controllingBig &&
             InputManager::GetInstance().ActionPress(GameAction::Interact)) {
             ExitCloset();
@@ -160,10 +170,16 @@ SDL_Rect Closet::GetInteractionRect() const {
     return { x, y, w, h };
 }
 
+void Closet::ArmWhisperTimer() {
+    // Intervalo aleatório entre sussurros: 8–16 s. Assim não vira metrônomo.
+    whisperTimer = 8.0f + static_cast<float>(rand() % 800) / 100.0f;
+}
+
 void Closet::EnterCloset() {
     GameSfx::PlayClosetOpen();
     isOccupied = true;
     hideVoiceArmed = true;   // cada esconderijo começa podendo avisar do monstro uma vez
+    ArmWhisperTimer();       // #4 primeiro sussurro só depois de alguns segundos escondido
     
     // --- SALVA A POSIÇÃO DE ENTRADA EXATA DE CADA UM ---
     if (Character::player) {
@@ -185,19 +201,8 @@ void Closet::EnterCloset() {
 
     HideChar(Character::player);
     HideChar(Character::littleBrother);
-
-    // Notifica o monstro que os irmãos entraram no armário
-    StageState* stage = Game::TryGetStageState();
-    if (stage) {
-        // Percorre os objetos procurando o Monster
-        // (Você pode guardar um ponteiro para o Monster no StageState para evitar isso)
-        for (auto& go : stage->GetObjectArray()) {
-            if (Monster* m = go->GetComponent<Monster>()) {
-                m->NotifyClosetOccupied(associated.box.Center());
-                break;
-            }
-        }
-    }
+    // (O monstro NÃO faz mais campana no armário — o cerco às janelas é disparado
+    //  por AnyBrotherHidden() dentro de Monster::Update, sem precisar de aviso.)
 }
 
 void Closet::ExitCloset() {

@@ -48,7 +48,7 @@ private:
     // canto inferior direito preenche conforme o progresso.
     float skipHoldTimer = 0.0f;
     bool  finished = false;
-    static constexpr float kSkipHoldDuration = 3.0f;
+    static constexpr float kSkipHoldDuration = 1.5f;   // -50% (era 3.0): pular a cutscene mais rápido
 
     // Áudio começa junto do 1º avanço do vídeo → ambos partem sincronizados.
     bool audioStarted = false;

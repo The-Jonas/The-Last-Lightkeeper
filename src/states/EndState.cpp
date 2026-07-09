@@ -33,19 +33,20 @@ void LayoutCenteredText(GameObject* label, float yOffset = 0.0f) {
 
 } // namespace
 
-EndState::EndState() = default;
+EndState::EndState(bool creditsOnly) : creditsOnly(creditsOnly) {}
 
 EndState::~EndState() = default;
 
 void EndState::LoadAssets() {
     Mix_HaltMusic();
 
-    std::string musicFile;
-    if (GameData::playerVictory) {
-        musicFile = "Recursos/audio/soundtracks/dark_harmonics_Dark_Rumble_Atmos_02_191.mp3";
-    } else {
-        musicFile = "Recursos/audio/soundtracks/Akane's Regret.mp3";
-    }
+    // Créditos = vitória OU "Créditos" no menu principal. Nos créditos toca a
+    // música dedicada; na derrota, a música de fim de jogo.
+    const bool credits = GameData::playerVictory || creditsOnly;
+
+    std::string musicFile = credits
+        ? "Recursos/audio/soundtracks/ES_Zone of Deception - DEX 1200.mp3"
+        : "Recursos/audio/soundtracks/Akane's_Regret.mp3";
 
     backgroundMusic.Open(musicFile);
     if (backgroundMusic.IsOpen()) {
@@ -53,9 +54,12 @@ void EndState::LoadAssets() {
         backgroundMusic.Play(-1);
     }
 
-    if (GameData::playerVictory) {
-        // Vitória / fim da fatia jogável → rola os créditos finais.
+    if (credits) {
+        // Rola os créditos finais. Abertos pelo menu: pula a intro de "vitória".
         creditsMode = true;
+        if (creditsOnly) {
+            introDone = true;
+        }
     } else {
         GameObject* titleGO = new GameObject();
         titleGO->z = 10;
@@ -115,10 +119,16 @@ void EndState::Update(float dt) {
             return;
         }
 
+        // Aberto pelo menu: ESC volta ao menu a qualquer momento (botão "voltar").
+        if (creditsOnly && input.KeyPress(ESCAPE_KEY)) {
+            ReturnToMainMenu();
+            return;
+        }
+
         // Fase 2 — rolo de créditos/pós-créditos.
         if (!creditsFinished) {
-            // Segurar ESPAÇO/ESC ACELERA o rolo (não pula direto para o fim).
-            const bool fast = input.IsKeyDown(SPACE_KEY) || input.IsKeyDown(ESCAPE_KEY);
+            // Segurar ESPAÇO (e ESC na vitória) ACELERA o rolo (não pula ao fim).
+            const bool fast = input.IsKeyDown(SPACE_KEY) || (!creditsOnly && input.IsKeyDown(ESCAPE_KEY));
             constexpr float kScrollSpeed = 130.0f;        // px/s (acompanha a fonte grande)
             constexpr float kFastScrollSpeed = 800.0f;    // rolagem rápida ao segurar
             creditsScrollY += (fast ? kFastScrollSpeed : kScrollSpeed) * dt;
@@ -149,7 +159,12 @@ void EndState::Update(float dt) {
 // TitleState válido embaixo.
 void EndState::ReturnToMainMenu() {
     popRequested = true;
-    Game::GetInstance().Push(new TitleState());
+    // Aberto pelo menu: o TitleState já está embaixo — só volta a ele (sem
+    // duplicar). Vitória/derrota: empilha um TitleState novo (a pilha pode estar
+    // vazia embaixo, senão o jogo fecharia).
+    if (!creditsOnly) {
+        Game::GetInstance().Push(new TitleState());
+    }
 }
 
 void EndState::Render() {

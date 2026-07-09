@@ -121,6 +121,21 @@ bool StageState::IsTileWalkable(int tx, int ty) const {
 }
 
 // Não conecta andares: usa o `isElevated` atual do agente (mesmo grafo que `Character` no chão/escada atual).
+// Colisão CÍRCULO × retângulo orientado (OBB). Leva o centro do círculo ao espaço
+// local da box (des-rotaciona pelo ângulo dela) e mede a distância ao ponto mais
+// próximo do retângulo. Usada para o footprint circular do monstro contornar props.
+static bool CircleVsOBB(float cx, float cy, float r, const Rect& box, float angleRad) {
+    const Vec2 c = box.Center();
+    const Vec2 local = Vec2(cx - c.x, cy - c.y).Rotated(-angleRad);
+    const float hx = box.w * 0.5f;
+    const float hy = box.h * 0.5f;
+    const float closestX = std::max(-hx, std::min(local.x, hx));
+    const float closestY = std::max(-hy, std::min(local.y, hy));
+    const float dx = local.x - closestX;
+    const float dy = local.y - closestY;
+    return (dx * dx + dy * dy) <= (r * r);
+}
+
 bool StageState::IsTileNavigableFor(const GameObject* agent, int tx, int ty, float footRadius) const {
     if (!agent || !IsTileWalkable(tx, ty)) {
         return false;
@@ -171,10 +186,21 @@ bool StageState::IsTileNavigableFor(const GameObject* agent, int tx, int ty, flo
         if (go == agent) continue;
         Collider* col = go->GetComponent<Collider>();
         if (!col) continue;
-        Rect a = footRect;
-        Rect b = col->box;
         const float angleRad = static_cast<float>(go->angleDeg) * (static_cast<float>(M_PI) / 180.0f);
-        if (Collision::IsColliding(a, b, 0.0f, angleRad)) {
+        bool hit;
+        if (footRadius > 0.0f) {
+            // Footprint CIRCULAR (monstro): usa círculo × OBB p/ deslizar em torno
+            // dos props em vez de "encaixar" o quadrado do footprint nas quinas.
+            hit = CircleVsOBB(static_cast<float>(footCircle.center.x),
+                              static_cast<float>(footCircle.center.y),
+                              static_cast<float>(footCircle.radius), col->box, angleRad);
+        } else {
+            // Demais agentes (irmãos): mantém o teste retângulo × OBB de antes.
+            Rect a = footRect;
+            Rect b = col->box;
+            hit = Collision::IsColliding(a, b, 0.0f, angleRad);
+        }
+        if (hit) {
             return false;
         }
     }

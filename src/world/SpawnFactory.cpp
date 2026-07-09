@@ -43,6 +43,7 @@ void ApplyTiledBox(GameObject* obj, const EntitySpawn& spawn) {
     obj->angleDeg = spawn.rotation;
     obj->rotateAroundBottomLeft = true;   // objetos-tile do Tiled giram pelo rodapé-esquerdo
 }
+
 } // namespace
 
 void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, const StageFirstLoadData& cfg) {
@@ -246,10 +247,31 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
             GameObject& itemObj = pickup->GetAssociated();
             itemObj.tiledId = spawn.tiledId;
 
-            itemObj.box.x = spawn.x;
-            itemObj.box.y = spawn.y - itemObj.box.h;
+            // #17: renderiza no CHÃO exatamente a arte que o Tiled mostra para este
+            // gid (a imagem do tileset), em vez do ícone de inventário (def.spritePath).
+            // Assim o item no mundo fica WYSIWYG com o Tiled. O ícone da mochila
+            // continua vindo do def (inalterado).
+            if (const std::string* tileImg = stage.level.GetTileImagePath(spawn.gid)) {
+                if (SpriteRenderer* sr = itemObj.GetComponent<SpriteRenderer>()) {
+                    sr->Open(*tileImg);
+                }
+            }
 
-            // A MECÂNICA (Passamos o 0, 1 ou 2 para ditar qual o comportamento da altura do item) 
+            // EXCEÇÃO da regra (pedido do design): itens "Fuel" SEMPRE desenham o
+            // galão lighter_fuel.png no chão, independentemente do tile do Tiled.
+            if (itemName == "Fuel") {
+                if (SpriteRenderer* sr = itemObj.GetComponent<SpriteRenderer>()) {
+                    sr->Open("Recursos/img/items/lighter_fuel.png");
+                }
+            }
+
+            // #17 FIX: o ItemSpawn era o ÚNICO prop que NÃO chamava ApplyTiledBox —
+            // usava o tamanho NATIVO do sprite e ignorava w/h e rotação do Tiled, então
+            // óleo e tábua saíam com tamanho/posição/ângulo errados. Agora segue o objeto
+            // do Tiled (largura, altura, rotação, pivô inferior-esquerdo) como os demais.
+            ApplyTiledBox(&itemObj, spawn);
+
+            // A MECÂNICA (Passamos o 0, 1 ou 2 para ditar qual o comportamento da altura do item)
             pickup->SetHeightLevel(itemHeightLevel);
 
             // O VISUAL (Aplicamos o pixel exato para o Y-Sort não bugar)
@@ -469,7 +491,10 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         std::string caminho = "Recursos/img/objetos/barril/barril_" + std::to_string(typeB) + ".png";
 
         if (interactive) {
-            barrelObj->AddComponent(new Box(*barrelObj, false, caminho, empty));
+            // #10 Barris mais pesados: reduz o multiplicador de empurrão em relacao ao valor
+            // "empty" do Tiled (empurrar fica mais lento). O piso de 0.1 vem de SetSpeedMultiplier.
+            constexpr float kBarrelWeightScale = 0.55f;
+            barrelObj->AddComponent(new Box(*barrelObj, false, caminho, empty * kBarrelWeightScale));
         } else {
             barrelObj->AddComponent(new SpriteRenderer(*barrelObj, caminho));
         }
