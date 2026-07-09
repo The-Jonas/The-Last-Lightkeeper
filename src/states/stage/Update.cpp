@@ -73,6 +73,7 @@ void StageState::Update(float dt){
 
     lastFrameDt = dt;
     dynamicColliderCacheDirty = true;
+    if (rebindInvalidTimer > 0.0f) rebindInvalidTimer -= dt;
 
     // Cursor visível em TODO o menu de pausa (menu + configurações + confirmar sair),
     // que são navegáveis com o mouse; no resto do jogo o cursor fica escondido.

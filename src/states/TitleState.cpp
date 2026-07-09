@@ -357,7 +357,24 @@ void TitleState::UpdateConfig(InputManager& input) {
         if(awaitingRebind) {
             if(input.KeyPress(SDLK_ESCAPE)) { awaitingRebind=false; return; }
             int key=input.PollAnyKeyPressed();
-            if(key!=0) { input.SetBinding(rebindAction,key); awaitingRebind=false; }
+            if(key!=0) {
+                static const int kAllowed[] = {
+                    SDLK_a,SDLK_b,SDLK_c,SDLK_d,SDLK_e,SDLK_f,SDLK_g,SDLK_h,
+                    SDLK_i,SDLK_j,SDLK_k,SDLK_l,SDLK_m,SDLK_n,SDLK_o,SDLK_p,
+                    SDLK_q,SDLK_r,SDLK_s,SDLK_t,SDLK_u,SDLK_v,SDLK_w,SDLK_x,
+                    SDLK_y,SDLK_z,
+                    SDLK_0,SDLK_1,SDLK_2,SDLK_3,SDLK_4,
+                    SDLK_5,SDLK_6,SDLK_7,SDLK_8,SDLK_9,
+                    SDLK_UP,SDLK_DOWN,SDLK_LEFT,SDLK_RIGHT,
+                    SDLK_RETURN,SDLK_SPACE,SDLK_BACKSPACE,SDLK_TAB,
+                    SDLK_LSHIFT,SDLK_RSHIFT,SDLK_LCTRL,SDLK_RCTRL,
+                    SDLK_LALT,SDLK_RALT,
+                };
+                bool allowed=false;
+                for(int k:kAllowed) if(k==key){allowed=true;break;}
+                if(allowed){ input.SetBinding(rebindAction,key); awaitingRebind=false; rebindInvalidTimer=0.0f; }
+                else { rebindInvalidTimer=2.0f; }
+            }
             return;
         }
         if(input.KeyPress(SDLK_UP)||input.KeyPress(SDLK_w))
@@ -428,7 +445,9 @@ void TitleState::RenderConfigVideo(SDL_Renderer* r, int px, int py, int pw, int 
 
 void TitleState::RenderConfigControles(SDL_Renderer* r, int px, int py, int pw, int ph) {
     auto labelFont=Resources::GetFont("Recursos/font/Broadsheet_0.ttf",18);
+
     if(!labelFont) return;
+    
     const int rowH=36, gap=4, contentTop=10;
     for(int i=0;i<kControlsRowCount;i++) {
         const int rowY=py+contentTop+i*(rowH+gap);
@@ -447,10 +466,21 @@ void TitleState::RenderConfigControles(SDL_Renderer* r, int px, int py, int pw, 
             auto a=static_cast<GameAction>(i);
             DrawText(r,labelFont.get(),InputManager::ActionLabel(a),rr.x+12,ty,lc);
             bool capturing=(awaitingRebind&&rebindAction==a);
-            const char* kn=capturing?"Pressione uma tecla...":
-                SDL_GetKeyName(InputManager::GetInstance().GetBinding(a));
-            SDL_Color kc=capturing?SDL_Color{230,200,90,255}:lc;
-            DrawText(r,labelFont.get(),kn,rr.x+rr.w-12,ty,kc,2,0);
+            const char* kn;
+            SDL_Color kc;
+            if (capturing) {
+                if (rebindInvalidTimer > 0.0f) {
+                    kn = "Tecla invalida!";       // erro no lugar do prompt
+                    kc = {255, 80, 80, 255};      // vermelho
+                } else {
+                    kn = "Pressione uma tecla...";
+                    kc = {230, 200, 90, 255};     // amarelo
+                }
+            } else {
+                kn = SDL_GetKeyName(InputManager::GetInstance().GetBinding(a));
+                kc = lc;
+            }
+            DrawText(r, labelFont.get(), kn, rr.x+rr.w-12, ty, kc, 2, 0);
         } else if(i==InputManager::ActionCount) {
             DrawText(r,labelFont.get(),"Restaurar padrao",rr.x+12,ty,lc);
         } else {
@@ -542,6 +572,7 @@ void TitleState::RenderConfig(SDL_Renderer* r) {
 //  Update
 // ─────────────────────────────────────────────────────────────────────────────
 void TitleState::Update(float dt) {
+    if (rebindInvalidTimer > 0.0f) rebindInvalidTimer -= dt;
     InputManager& input=InputManager::GetInstance();
     hasContinueSave=SaveManager::HasSave();
     if(!hasContinueSave&&menuSelection==1) menuSelection=0;
@@ -641,7 +672,7 @@ void TitleState::RenderLanternCone(SDL_Renderer* r) {
     float ba = std::atan2(op.cy - ly, op.cx - lx);
 
     // ── 1. O FEIXE DE LUZ (Retângulo Torto) ──────────────────────
-    constexpr float kLensRadius = 54.0f;  // Ajuste se a luz vazar pelas laterais da lanterna
+    constexpr float kLensRadius = 35.0f;  // Ajuste se a luz vazar pelas laterais da lanterna
     constexpr float kSpotRadius = 130.0f; 
     
     float pCos = std::cos(ba + 1.57079632f); 

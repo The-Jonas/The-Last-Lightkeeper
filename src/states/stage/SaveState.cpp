@@ -1069,8 +1069,27 @@ void StageState::HandleControlsPanelInput() {
         }
         const int key = input.PollAnyKeyPressed();
         if (key != 0) {
-            input.SetBinding(rebindAction, key);
-            awaitingRebind = false;
+            static const int kAllowed[] = {
+                SDLK_a,SDLK_b,SDLK_c,SDLK_d,SDLK_e,SDLK_f,SDLK_g,SDLK_h,
+                SDLK_i,SDLK_j,SDLK_k,SDLK_l,SDLK_m,SDLK_n,SDLK_o,SDLK_p,
+                SDLK_q,SDLK_r,SDLK_s,SDLK_t,SDLK_u,SDLK_v,SDLK_w,SDLK_x,
+                SDLK_y,SDLK_z,
+                SDLK_0,SDLK_1,SDLK_2,SDLK_3,SDLK_4,
+                SDLK_5,SDLK_6,SDLK_7,SDLK_8,SDLK_9,
+                SDLK_UP,SDLK_DOWN,SDLK_LEFT,SDLK_RIGHT,
+                SDLK_RETURN,SDLK_SPACE,SDLK_BACKSPACE,SDLK_TAB,
+                SDLK_LSHIFT,SDLK_RSHIFT,SDLK_LCTRL,SDLK_RCTRL,
+                SDLK_LALT,SDLK_RALT,
+            };
+            bool allowed = false;
+            for (int k : kAllowed) if (k == key) { allowed = true; break; }
+            if (allowed) {
+                input.SetBinding(rebindAction, key);
+                awaitingRebind = false;
+                rebindInvalidTimer = 0.0f;
+            } else {
+                rebindInvalidTimer = 2.0f;
+            }
         }
         return;
     }
@@ -1200,6 +1219,12 @@ void StageState::RenderControlsPanel(SDL_Renderer* renderer) {
         } else {
             drawText("Voltar", rr.x + 14, textY, lc, labelFont.get(), 0, 0);
         }
+    }
+
+    if (rebindInvalidTimer > 0.0f) {
+        drawText("Tecla indisponivel! Use letras, numeros ou setas.",
+            px + panelW/2, py + panelH - 30,
+            {255, 80, 80, 255}, labelFont.get(), 1, 0);
     }
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
