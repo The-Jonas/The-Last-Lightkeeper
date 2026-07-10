@@ -60,10 +60,12 @@ void Monster::LoadTuning() {
         rd("noise_hear_radius", kNoiseHearRadius);
         rd("noise_cooldown", kNoiseCooldown);
         rd("sabotage_delay", kSabotageDelay);
+        rd("post_sabotage_idle", kPostSabotageIdle);
         rd("flee_light_avoid_time", kFleeLightAvoidTime);
         rd("flee_light_avoid_radius", kFleeLightAvoidRadius);
         rd("flee_light_radius_fraction", kFleeLightRadiusFraction);
         rd("chase_grace_duration", kChaseGraceDuration);
+        rd("first_chase_grace_duration", kFirstChaseGraceDuration);
         rd("chase_ignore_light_chance", kChaseIgnoreLightChance);
         rd("hunt_ignore_light_chance", kHuntIgnoreLightChance);
         rd("flee_distance", kFleeDistance);
@@ -102,6 +104,7 @@ void Monster::Update(float dt) {
     stateTimer       += dt;
     pathRefreshTimer += dt;
     windowRadarTimer += dt;  // timer separado para radar de janelas
+    if (postSabotageIdleTimer > 0.0f) postSabotageIdleTimer -= dt;  // pausa pós-sabotagem (wall-clock)
     if (spotSoundCooldown > 0.0f) spotSoundCooldown -= dt;
     if (huntScreamTimer  > 0.0f) huntScreamTimer  -= dt;
     if (noiseCooldownTimer > 0.0f) noiseCooldownTimer -= dt;
@@ -225,7 +228,8 @@ void Monster::Update(float dt) {
     // vai abrindo uma janela atrás da outra até dominar o andar.
     // Respeita uma pista fresca dos irmãos (hasMemory): só caça janelas quando não
     // está no encalço. No modo estratégico o intervalo é curto (caça relentless).
-    if ((state == MonsterState::PATROL || state == MonsterState::INVESTIGATE) && !hasMemory) {
+    if ((state == MonsterState::PATROL || state == MonsterState::INVESTIGATE) && !hasMemory &&
+        postSabotageIdleTimer <= 0.0f) {   // não recomeça a caçar janela durante a pausa pós-sabotagem
         const float radarInterval = strategicMode ? kStrategicRadarInterval : kWindowRadarInterval;
         if (windowRadarTimer >= radarInterval) {
             windowRadarTimer = 0.0f;
@@ -551,7 +555,14 @@ void Monster::TransitionTo(MonsterState next) {
 
         case MonsterState::CHASE:
             moveSpeed = kSpeedChase;
-            chaseGraceTimer   = kChaseGraceDuration;
+            // 1ª perseguição: graça estendida (garante 5 s ignorando a luz) para o
+            // monstro não parar de perseguir logo que começa. Depois, graça normal.
+            if (!firstChaseGraceGiven) {
+                firstChaseGraceGiven = true;
+                chaseGraceTimer = kFirstChaseGraceDuration;
+            } else {
+                chaseGraceTimer = kChaseGraceDuration;
+            }
             chaseNoSightTimer = 0.0f;
             if (isActualTransition && spotSoundCooldown <= 0.0f) {
                 GameSfx::PlayMonsterSpot();
@@ -649,15 +660,10 @@ void Monster::CheckDamageCollision() {
         // Não acerta quem está escondido no armário (flag confiável) nem quem está
         // no meio de uma interação.
         if (c->isHidden || c->currentState == Character::ActionState::INTERACTING) return false;
-        // HITBOX do jogador agora é um CÍRCULO (corpo), testado contra a caixa de
-        // dano (AABB) do monstro — acerto redondo, não retangular.
-        const Vec2  pc = c->GetHitCircleCenter();
-        const float pr = c->GetHitCircleRadius();
-        const float closestX = std::max<float>(dmgBox.x, std::min<float>(pc.x, dmgBox.x + dmgBox.w));
-        const float closestY = std::max<float>(dmgBox.y, std::min<float>(pc.y, dmgBox.y + dmgBox.h));
-        const float dx = pc.x - closestX;
-        const float dy = pc.y - closestY;
-        return (dx * dx + dy * dy) <= (pr * pr);
+        // HURTBOX do jogador é um QUADRADO (AABB) do corpo, testado contra a
+        // caixa de dano (AABB) do monstro — acerto retangular, tamanho fixo.
+        SDL_Rect hb = c->GetHitRect();
+        return SDL_HasIntersection(&hb, &dmgBox) == SDL_TRUE;
     };
 
     bool hit = false;
@@ -698,6 +704,15 @@ void Monster::CheckDamageCollision() {
 //  SUB-UPDATES
 // ─────────────────────────────────────────────────────────────────────────────
 void Monster::UpdatePatrol(float dt) {
+    // Pausa pós-sabotagem: fica PARADO (sem andar) até o timer zerar (contado no
+    // topo do Update). As checagens de luz/visão (antes deste dispatch) ainda
+    // podem interrompê-la — se o jogador aparece, ele reage normalmente.
+    if (postSabotageIdleTimer > 0.0f) {
+        currentPath.clear();     // descarta rota residual → não escorrega
+        stateTimer = 0.0f;
+        return;
+    }
+
     MoveAlongPath(dt, moveSpeed);
 
     if (HasReachedTarget() || HasNoPath()) {
@@ -1252,6 +1267,9 @@ void Monster::UpdateSabotageWindow(float dt) {
         // Armar o timer negativo faz a próxima varredura só acontecer depois da pausa
         // (vale tanto no modo normal quanto no estratégico — mantém o cerco, mas com ritmo).
         windowRadarTimer = -kSabotageDelay;
+        // Após abrir a janela, o monstro fica PARADO alguns segundos (kPostSabotageIdle)
+        // antes de voltar a andar — um respiro/pausa sinistra. Só depois patrulha.
+        postSabotageIdleTimer = kPostSabotageIdle;
         TransitionTo(MonsterState::PATROL);
         return;
     }

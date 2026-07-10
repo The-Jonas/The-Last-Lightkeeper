@@ -818,6 +818,7 @@ void StageState::Render(){
 
     RenderInteractionPrompt(renderer);
     RenderTutorials(renderer);
+    RenderMonsterScare(renderer);
     RenderVoiceSubtitle(renderer);
     RenderLevelTitleBanner(renderer);
     RenderPauseMenu(renderer);
@@ -988,34 +989,26 @@ void StageState::RenderGameplayCollisionDebug(SDL_Renderer* renderer) const {
             pr = 255; pg = 215; pb = 0;                  // footprint de cenário (pilar/mesa/armário...)
         }
         // Para os IRMÃOS não desenhamos o retângulo do Collider: a colisão real deles
-        // é CIRCULAR (círculo dos pés) + hitbox CIRCULAR — desenhados logo abaixo.
+        // é QUADRADA (caixa dos pés) + hurtbox QUADRADA — desenhadas logo abaixo.
         if (!isBig && !isSmall) {
             DrawColliderDebugWire(renderer, col->box, static_cast<float>(go->angleDeg), pr, pg, pb, 215);
         }
 
         if (Character* ch = go->GetComponent<Character>()) {
-            // Círculo dos PÉS (colisão de movimento com o cenário).
-            const float rFoot = go->box.w * 0.25f;
-            const Vec2 footWorld(go->box.x + go->box.w * 0.5f, go->box.y + go->box.h - rFoot);
-            const Vec2 screen = WorldToScreen(footWorld);
-            const float rScreen = std::max(1.5f, rFoot * z);
+            // Caixas AABB estáveis do jogador (não mudam com a animação).
+            auto drawWorldRect = [&](const SDL_Rect& wr, Uint8 cr, Uint8 cg, Uint8 cb) {
+                const Vec2 tl = WorldToScreen(Vec2(static_cast<float>(wr.x), static_cast<float>(wr.y)));
+                SDL_FRect sr{ tl.x, tl.y, wr.w * z, wr.h * z };
+                SDL_SetRenderDrawColor(renderer, cr, cg, cb, 210);
+                SDL_RenderDrawRectF(renderer, &sr);
+            };
+            // Caixa dos PÉS (colisão com o cenário) — verde/amarelo.
             Uint8 fr = 80, fg = 255, fb = 120;
-            if (isBig) {
-                fr = 255;
-                fg = 240;
-                fb = 60;
-            } else if (isSmall) {
-                fr = 60;
-                fg = 255;
-                fb = 180;
-            }
-            DrawDebugCircle(renderer, screen.x, screen.y, rScreen, fr, fg, fb, 185);
-
-            // Círculo de HITBOX (dano) — vermelho, como a hurtbox do monstro.
-            const Vec2  hitWorld  = ch->GetHitCircleCenter();
-            const float hitR      = ch->GetHitCircleRadius();
-            const Vec2  hitScreen = WorldToScreen(hitWorld);
-            DrawDebugCircle(renderer, hitScreen.x, hitScreen.y, std::max(1.5f, hitR * z), 255, 60, 60, 200);
+            if (isBig)        { fr = 255; fg = 240; fb = 60; }
+            else if (isSmall) { fr = 60;  fg = 255; fb = 180; }
+            drawWorldRect(ch->GetFootRect(), fr, fg, fb);
+            // HURTBOX (dano do monstro) — vermelho.
+            drawWorldRect(ch->GetHitRect(), 255, 60, 60);
         }
     }
 }

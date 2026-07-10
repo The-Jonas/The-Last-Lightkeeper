@@ -223,6 +223,7 @@ void OnItemPickup()         { if (Chance(40)) PlayOneOf2(gPickupA, kTxtBigPickup
 void OnPickupWoodPlank()    { Play(gPickupA, kTxtBigPickupA); }   // "Isso vai servir." SEMPRE (tábua de madeira)
 void OnBagFull()            { Play(gBagFull, kTxtBigBagFull); }
 void OnDragObject()         { if (Chance(35)) Play(gDrag, kTxtBigDrag, 6000); }
+void OnHeavyBarrel()        { Play(gDrag, kTxtBigDrag, 6000); }   // barril imóvel (peso 0): "Ah, isso pesa..." SEMPRE
 void OnActionBlocked()      { Play(gCant, kTxtBigCant, 800); }
 void OnScoldFear()          { PlayOneOf2(gScoldA, kTxtBigScoldA, gScoldB, kTxtBigScoldB); }  // irmãozão repreende o medroso
 

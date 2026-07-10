@@ -543,6 +543,14 @@ Game::Game(std::string title) {
         exit(1);
     }
 
+    // ===== [EXPERIMENTO: FILTRAGEM LINEAR GLOBAL] ============================
+    // Filtragem LINEAR (bilinear) como PADRÃO de todas as texturas — a arte do
+    // jogo é pintada (não pixel-art), então o (down/up)scale fica suave em vez de
+    // "pixelado". Precisa ser definido ANTES de criar texturas/renderer.
+    // >>> Se ficar ruim (borrado demais), REVERTER: remover esta linha. <<<
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");   // "0"=nearest (padrão), "1"=linear
+    // =========================================================================
+
     //Cria Renderizador
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED); // SDL_RENDERER_ACCELERATED, para requisitar o uso de OpenGL ou Direct3D.
     if (!renderer) {
@@ -629,6 +637,15 @@ int Game::GetWindowsWidth() {
 
 int Game::GetWindowsHeight() {
     return windowsHeight;
+}
+
+// 1.0 a 1080p de altura; proporcional nas demais resoluções lógicas.
+float Game::UiScale() {
+    if (!instance || instance->windowsHeight <= 0) return 1.0f;
+    float s = static_cast<float>(instance->windowsHeight) / 1080.0f;
+    if (s < 0.55f) s = 0.55f;   // não deixa a UI ilegível em resoluções minúsculas
+    if (s > 2.50f) s = 2.50f;
+    return s;
 }
 
 bool Game::IsDebugBuild() {

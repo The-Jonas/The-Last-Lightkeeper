@@ -278,16 +278,6 @@ void StopFootstepLoop() {
     gFootstepLoopActive = false;
 }
 
-void StopAllGameplayAudio() {
-    StopFootstepLoop();
-    StopCandleLoop();
-    StopBoxMovingLoop();
-    gBoxIsMoving = false;
-    if (gHeartbeatActive) {
-        Mix_HaltChannel(kChannelHeartbeat);
-        gHeartbeatActive = false;
-    }
-}
 
 void ApplyFootstepLoopVolume(Sound& sound) {
     const int channel = sound.GetChannel();
@@ -406,6 +396,15 @@ void MaintainBoxPushLoop() {
         return;
     }
     StartBoxMovingLoop();
+}
+
+// Parou de mover (mas ainda grudado): silencia o loop de arrasto SEM o "thud" de
+// soltar. O loop volta assim que NotifyBoxSlide sinalizar movimento de novo.
+void PauseBoxPushLoop() {
+    if (gBoxIsMoving) {
+        StopBoxMovingLoop();
+        gBoxIsMoving = false;
+    }
 }
 
 void NotifyBoxPushEnd() {
@@ -532,6 +531,19 @@ void StopWindLoop() {
 
 void PlayCandleBlowOut() {
     PlaySound(gCandleBlowOutSound);
+}
+
+// Loops de gameplay SEM o vento (o vento é disparado por evento de janela e não
+// seria re-armado sozinho). Público (declarado no header) para o PAUSAR usar.
+void StopAllGameplayAudio() {
+    StopFootstepLoop();
+    StopCandleLoop();
+    StopBoxMovingLoop();
+    gBoxIsMoving = false;
+    if (gHeartbeatActive) {
+        Mix_HaltChannel(kChannelHeartbeat);
+        gHeartbeatActive = false;
+    }
 }
 
 void StopAllGameplay() {

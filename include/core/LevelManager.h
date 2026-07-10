@@ -61,6 +61,10 @@ public:
     // Permite testar a colisão enviando um Círculo ao invés de um Retângulo!
     bool CheckCollision(const Circle& entityCircle, bool isElevated = false);
 
+    // Gatilho do Repairable: true se a caixa (ex.: pés do irmãozão) encosta em
+    // alguma forma "repairable_trigger" definida no mapa (Tiled).
+    bool CheckRepairableTrigger(const SDL_Rect& entityBox);
+
     void RenderBackground(SDL_Renderer* renderer);
     void RenderDebug(SDL_Renderer* renderer);
     /// Map collision from Tiled (runtime; not tied to DEBUG preprocessor).
@@ -96,6 +100,9 @@ private:
     // Funções matemáticas auxiliares para resolver cada tipo de forma
     bool CheckRectVsCircle(const SDL_Rect& rect, const Circle& circle);
     bool CheckPolygonVsPolygon(const Polygon& p1, const Polygon& p2);
+    // Retângulo (AABB do jogador) vs polígono — funciona para polígonos CÔNCAVOS
+    // (SAT só serve para convexos). Evita atravessar paredes em L, etc.
+    bool CheckPolygonVsRect(const Polygon& poly, const SDL_Rect& rect);
 
     // Ferramenta matemática para testar um polígono contra um círculo
     bool CheckPolygonVsCircle(const Polygon& poly, const Circle& circle);
@@ -108,6 +115,7 @@ private:
     std::vector<Polygon> chaoBuraco;
     std::vector<Polygon> floorWoodZones;
     std::vector<Polygon> floorStoneZones;
+    std::vector<Polygon> repairableTriggers;   // formas "repairable_trigger" (Tiled)
     int footstepWoodFallbackMinY = 2100;
     std::vector<Circle> circleColliders;
 

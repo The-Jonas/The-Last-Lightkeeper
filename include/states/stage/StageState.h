@@ -213,6 +213,13 @@ public:
     bool swapTutArmed = true;
     float abilityTutTimer = 0.0f;   // habilidade do irmãozinho (E)
     bool abilityTutArmed = true;
+    // Após o tutorial da habilidade (abertura do 2º andar), enfileira o tutorial
+    // de troca de personagem — mas só o mostra quando a tela de tutoriais estiver
+    // vazia (sem outro banner ativo nem pendente); caso contrário, espera terminar.
+    bool swapAfterAbilityPending = false;
+    // Aviso "preciso de uma tábua": arma ao chegar no vão da escada sem a tábua;
+    // re-arma ao se afastar, para avisar de novo numa nova aproximação.
+    bool repairWarnArmed = true;
     // Tutorial de movimento (WASD): aparece no começo se o jogador ficar parado
     // sem nunca ter andado.
     float moveTutTimer = 0.0f;
@@ -253,6 +260,19 @@ public:
     // Chamado pelo Monster ao tocar um irmão.
     void TriggerMonsterHitFeedback();
 
+    // Susto "FUJA E SE ESCONDA!!!": texto grande, tremendo, um pouco acima do
+    // centro, na 1ª vez que o monstro entra em CHASE. Fica no mínimo
+    // kMonsterScareMinTime s; depois some (com fade-out) quando o monstro para.
+    bool  monsterScareShown  = false;   // já disparou uma vez neste nível
+    bool  monsterScareActive = false;   // texto na tela (visível OU em fade-out)
+    float monsterScareElapsed = 0.0f;   // tempo desde que apareceu
+    float monsterScareFadeOut = 0.0f;   // > 0 durante o fade-out (s restantes)
+    static constexpr float kMonsterScareMinTime = 5.0f;   // mínimo garantido na tela
+    static constexpr float kMonsterScareFadeIn  = 0.25f;
+    static constexpr float kMonsterScareFadeOut = 0.6f;
+    void UpdateMonsterScare(float dt);
+    void RenderMonsterScare(SDL_Renderer* renderer);
+
     // Sequência final: ao alcançar a escada no último andar, uma sucessão rápida
     // de clarões (a luz do farol se aproximando) satura a tela até o branco total,
     // e então os créditos/pós-créditos entram (EndState).
@@ -287,6 +307,9 @@ public:
 
     RadioAsset* GetReachableRadio() const { return reachableRadio; }
     void SetReachableRepairable(Repairable* r) { reachableRepairable = r; }
+    // Sinaliza que o irmãozão chegou no vão a consertar mas NÃO tem o item
+    // necessário — dispara o aviso "preciso de uma tábua" (ver UpdateTutorials).
+    void SetRepairableInReachNoItem(bool v) { repairableInReachNoItem = v; }
 
     Character* GetBigCharacterComponent()   const { return bigCharacter; }
     Character* GetSmallCharacterComponent() const { return smallCharacter; }
@@ -359,6 +382,7 @@ private:
     void RenderGameplayCollisionDebug(SDL_Renderer* renderer) const;     // Com showMapPhysicsDebug: colliders + foot circles
     void RenderCompanionFollowPathDebug(SDL_Renderer* renderer) const;   // Com showMapPhysicsDebug: polylinha do seguidor (modo junto)
     void UpdateBoxInteraction();
+    void DetachActivePushBox();   // solta a caixa/barril ativo (para som, estado, velocidade)
     void ApplyCoupledPushMovement(const Vec2& prevPlayerPos);
     void RenderInteractionGlowIfNeeded(GameObject& go);
     void RegisterAllCandleLights();
@@ -446,6 +470,7 @@ private:
     Window* reachableWindow = nullptr;
     Closet* reachableCloset = nullptr;
     Repairable* reachableRepairable = nullptr;
+    bool repairableInReachNoItem = false;   // no vão da escada sem a tábua (reset por frame)
     bool journalViewerOpen = false;
     bool journalViewerClosing = false;
     float journalAnimTimer = 0.0f;

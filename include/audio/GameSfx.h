@@ -16,6 +16,11 @@ void PlayCandleBlow();      // som de soprar/apagar pelo jogador
 /// depois que o StageState para de atualizar.
 void StopAllGameplay();
 
+/// Como StopAllGameplay, mas SEM parar o vento (o loop de vento é disparado por
+/// evento de janela e não seria re-armado sozinho). Usado ao PAUSAR: silencia os
+/// loops que o mundo pausado deixaria tocando (passos, vela, caixa, batimento).
+void StopAllGameplayAudio();
+
 /// Parada TOTAL de efeitos (todos os canais do mixer, inclusive rádio/ondas/vento/
 /// monstro). Usada nas transições nível↔menu para nenhum som sobreviver.
 void HardStopAll();
@@ -30,6 +35,7 @@ void UpdateMonsterFootsteps(float dt, float moveSpeed, float monsterX, float mon
 
 void NotifyBoxSlide();
 void MaintainBoxPushLoop();
+void PauseBoxPushLoop();     // pausa o loop de arrasto (parou de mover) — sem o "thud" de soltar
 void NotifyBoxPushEnd();
 void PlayLighterToggle(bool turningOn);
 void UpdateBigBrotherFootsteps(float dt, float moveSpeed, bool isBigBrother, FootstepSurface surface);

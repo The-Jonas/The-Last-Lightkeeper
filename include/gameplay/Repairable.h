@@ -8,8 +8,10 @@
 
 class Repairable : public Component {
 public:
-    // O construtor recebe o caminho do arquivo que representa o objeto consertado e a distância que o jogador precisa estar para interagir
-    Repairable(GameObject& associated, std::string fixedSpritePath, std::string requiredItem, std::string soundPath, float interactionDistance = 130.0f, Vec2 interactionOffset = Vec2(0, 0));
+    // O construtor recebe o caminho do arquivo que representa o objeto consertado.
+    // O GATILHO de interação é uma forma "repairable_trigger" do mapa (Tiled) —
+    // basta o irmãozão encostar nela (ver LevelManager::CheckRepairableTrigger).
+    Repairable(GameObject& associated, std::string fixedSpritePath, std::string requiredItem, std::string soundPath);
     ~Repairable();
 
     void Update(float dt) override;
@@ -24,8 +26,6 @@ private:
     std::string fixedSpritePath;
     std::string requiredItem;
     std::string soundPath;
-    float interactionDistance;
-    Vec2 interactionOffset;
     bool isRepaired;
 
     float repairTimer    = 0.0f;

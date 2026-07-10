@@ -137,7 +137,8 @@ void InventoryWheel::Update(float dt) {
 }
 
 float InventoryWheel::GetAnchorX() const {
-    return static_cast<float>(Game::GetInstance().GetWindowsWidth()) * kAnchorXFraction + kSlotSize * 0.5f;
+    return static_cast<float>(Game::GetInstance().GetWindowsWidth()) * kAnchorXFraction
+           + kSlotSize * 0.5f * Game::UiScale();
 }
 
 float InventoryWheel::GetAnchorY() const {
@@ -157,13 +158,14 @@ void InventoryWheel::GetSlotScreenPos(int visibleOffset, int visibleCount, float
     float angleDeg = shiftedOffset * angleStep;
     float angleRad = angleDeg * static_cast<float>(M_PI) / 180.0f;
 
+    const float arcRadius = kArcRadius * Game::UiScale();
     const float activeX = GetAnchorX();
     const float activeY = GetAnchorY();
-    const float ccx = activeX - kArcRadius;   // centro do arco à esquerda do ativo
+    const float ccx = activeX - arcRadius;   // centro do arco à esquerda do ativo
     const float ccy = activeY;
 
-    outX = ccx + kArcRadius * std::cos(angleRad);
-    outY = ccy + kArcRadius * std::sin(angleRad);
+    outX = ccx + arcRadius * std::cos(angleRad);
+    outY = ccy + arcRadius * std::sin(angleRad);
 }
 
 float InventoryWheel::GetSlotAlpha(int distanceFromCenter, int) const {
@@ -180,6 +182,7 @@ float InventoryWheel::GetSlotScale(int distanceFromCenter, int) const {
 
 void InventoryWheel::DrawSlot(SDL_Renderer* renderer, int stackIndex, float x, float y,
                                float alpha, float scale, bool isActive) const {
+    scale *= Game::UiScale();   // escala p/ a resolução (além da perspectiva do slot)
     const float scaledSize = kSlotSize * scale;
     const float halfSize = scaledSize * 0.5f;
     const float slotX = x - halfSize;
@@ -216,7 +219,7 @@ void InventoryWheel::DrawSlot(SDL_Renderer* renderer, int stackIndex, float x, f
     const Inventory::ItemStack* stack = inventory.GetStack(stackIndex);
     if (!stack) return;
 
-    const float iconSize = kIconSize * scale;
+    const float iconSize = kIconSize * scale * 2.25f;   // +50% e +50% (só a imagem do item)
     const float iconX = slotX + (scaledSize - iconSize) * 0.5f;
     const float iconY = slotY + (scaledSize - iconSize) * 0.5f - 4.0f * scale;
 
@@ -289,8 +292,11 @@ void InventoryWheel::DrawRefuelSelector(SDL_Renderer* renderer) {
     const std::vector<int> targets = inventory.GetRefuelTargetIndices();
     if (targets.empty()) return;
 
-    int winW = 0, winH = 0;
-    SDL_GetRendererOutputSize(renderer, &winW, &winH);
+    // Espaço LÓGICO (resolução escolhida) — NÃO o tamanho físico da tela — e
+    // escala de UI para caber/ficar consistente em qualquer resolução.
+    const int winW = Game::GetInstance().GetWindowsWidth();
+    const int winH = Game::GetInstance().GetWindowsHeight();
+    const float u = Game::UiScale();
     const float cx = winW * 0.5f;
     const float cy = winH * 0.5f;
 
@@ -301,22 +307,27 @@ void InventoryWheel::DrawRefuelSelector(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 175);
     SDL_RenderFillRectF(renderer, &full);
 
+    auto scaledFont = [&](int base, int floorPx) {
+        return Resources::GetFont("Recursos/font/times.ttf",
+                                  std::max(floorPx, static_cast<int>(std::lround(base * u))));
+    };
+
     // Título.
-    auto titleFont = Resources::GetFont("Recursos/font/times.ttf", 30);
+    auto titleFont = scaledFont(30, 14);
     DrawCenteredText(renderer, titleFont ? titleFont.get() : nullptr,
                      "Escolha qual item quer abastecer",
-                     cx, cy - 150.0f, SDL_Color{240, 228, 195, 255});
+                     cx, cy - 150.0f * u, SDL_Color{240, 228, 195, 255});
 
     // Linha de candidatos.
     const int n = static_cast<int>(targets.size());
     const int sel = inventory.GetRefuelSelection();
-    const float slot = 118.0f;
-    const float gap  = 46.0f;
+    const float slot = 118.0f * u;
+    const float gap  = 46.0f * u;
     const float totalW = n * slot + (n - 1) * gap;
     const float startCX = cx - totalW * 0.5f + slot * 0.5f;
     const float pulse = 1.0f + std::sin(bobTimer * 4.0f) * 0.04f;
 
-    auto nameFont = Resources::GetFont("Recursos/font/times.ttf", 18);
+    auto nameFont = scaledFont(18, 10);
 
     for (int i = 0; i < n; ++i) {
         const bool selected = (i == sel);
@@ -359,13 +370,13 @@ void InventoryWheel::DrawRefuelSelector(SDL_Renderer* renderer) {
             if (ratio > 0.6f)       { gR = 70;  gG = 180; gB = 80; }
             else if (ratio > 0.25f) { gR = 210; gG = 170; gB = 50; }
             else                    { gR = 200; gG = 55;  gB = 55; }
-            DrawDurabilityRing(renderer, scx, cy, radius + 9.0f, 6.0f, ratio,
+            DrawDurabilityRing(renderer, scx, cy, radius + 9.0f * u, 6.0f * u, ratio,
                                gR, gG, gB, selected ? 255 : 160);
         }
 
         // Nome do item abaixo do slot.
         DrawCenteredText(renderer, nameFont ? nameFont.get() : nullptr,
-                         RefuelDisplayName(stack->def.name), scx, cy + radius + 16.0f,
+                         RefuelDisplayName(stack->def.name), scx, cy + radius + 16.0f * u,
                          selected ? SDL_Color{245, 232, 200, 255}
                                   : SDL_Color{160, 160, 170, 220});
     }
@@ -380,10 +391,10 @@ void InventoryWheel::DrawRefuelSelector(SDL_Renderer* renderer) {
     const std::string rt = keyName(im.GetBinding(GameAction::MoveRight), "D");
     const std::string useK = keyName(im.GetBinding(GameAction::UseItem), "F");
 
-    auto hintFont = Resources::GetFont("Recursos/font/times.ttf", 17);
+    auto hintFont = scaledFont(17, 10);
     DrawCenteredText(renderer, hintFont ? hintFont.get() : nullptr,
                      "[" + lf + "] / [" + rt + "] escolher     [" + useK + "] confirmar     [ESC] cancelar",
-                     cx, cy + 140.0f, SDL_Color{205, 200, 185, 235});
+                     cx, cy + 140.0f * u, SDL_Color{205, 200, 185, 235});
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }
@@ -400,9 +411,10 @@ void InventoryWheel::DrawCycleKeyHints(SDL_Renderer* renderer) {
     GetSlotScreenPos(visibleCount - 1, visibleCount, 0.0f, bx, by);  // slot de baixo
 
     // Meia-altura do slot das pontas (para colar as caixas acima/abaixo dele).
+    const float u = Game::UiScale();
     const int half = visibleCount / 2;
-    const float edgeSlotHalf = kSlotSize * GetSlotScale(half, visibleCount) * 0.5f;
-    const float slotGap = 10.0f;
+    const float edgeSlotHalf = kSlotSize * GetSlotScale(half, visibleCount) * 0.5f * u;
+    const float slotGap = 10.0f * u;
 
     InputManager& im = InputManager::GetInstance();
     auto keyName = [](int code, const char* fallback) {
@@ -415,13 +427,14 @@ void InventoryWheel::DrawCycleKeyHints(SDL_Renderer* renderer) {
     // Imagem da tecla-seta (mesma p/ os dois; a da ESQUERDA é espelhada) + rótulo
     // pequeno logo ABAIXO da imagem.
     auto keyTex = Resources::GetImage("Recursos/img/hud/key_arrow.png");
-    auto font   = Resources::GetFont("Recursos/font/times.ttf", 13);   // texto pequeno
+    auto font   = Resources::GetFont("Recursos/font/times.ttf",
+                                     std::max(13, static_cast<int>(std::lround(20.0f * u))));
 
     // dir = -1 (acima do slot de cima) / +1 (abaixo do de baixo).
     // leftArrow=true → espelha a imagem (seta apontando p/ a esquerda).
     auto drawKeyHint = [&](float slotCX, float slotCY, float dir, bool leftArrow, const std::string& label) {
-        const float imgSize = 30.0f;   // imagem pequena
-        const float textGap = 1.0f;
+        const float imgSize = 47.0f * u;   // 30→39 (+30%) →47 (+20%)
+        const float textGap = 1.0f * u;
 
         SDL_Texture* txt = nullptr; int tw = 0, th = 0;
         if (font) {
@@ -531,10 +544,12 @@ void InventoryWheel::DrawUseHint(SDL_Renderer* renderer, float activeX, float ac
     // Mesmo tamanho/estilo das dicas de seta (DrawCycleKeyHints): ícone da tecla
     // (~30px) + rótulo pequeno logo abaixo. Aqui o ícone é a tecla [F] e o texto
     // é "Usar".
+    const float u = Game::UiScale();
     auto keyTex = Resources::GetImage("Recursos/img/hud/key_f.png");
-    auto font = Resources::GetFont("Recursos/font/times.ttf", 13);
-    const float imgSize = 30.0f;
-    const float textGap = 1.0f;
+    auto font = Resources::GetFont("Recursos/font/times.ttf",
+                                   std::max(13, static_cast<int>(std::lround(20.0f * u))));
+    const float imgSize = 47.0f * u;   // 30→39 (+30%) →47 (+20%)
+    const float textGap = 1.0f * u;
 
     SDL_Texture* txt = nullptr; int tw = 0, th = 0;
     if (font) {
@@ -548,8 +563,8 @@ void InventoryWheel::DrawUseHint(SDL_Renderer* renderer, float activeX, float ac
 
     const float totalH = imgSize + (txt ? textGap + th : 0.0f);
     // À direita do slot ativo (lado aberto da roda), bloco centralizado na vertical.
-    const float gap = 40.0f;
-    const float cx = activeX + kSlotSize * 0.5f + gap + imgSize * 0.5f;
+    const float gap = 40.0f * u;
+    const float cx = activeX + kSlotSize * 0.5f * u + gap + imgSize * 0.5f;
     const float top = activeY - totalH * 0.5f;
 
     if (keyTex) {

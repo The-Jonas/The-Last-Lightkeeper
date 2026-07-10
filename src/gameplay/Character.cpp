@@ -26,16 +26,17 @@ void TryNudgeOutOfStaticGeometry(StageState* stage, Character* character, Collid
         return;
     }
 
-    // Pega o círculo travado no tamanho original!
-    Circle c;
-    
-    // Isso cria uma margem de segurança contra os erros de ponto flutuante
-    c.radius = character->GetFootCircleRadius() - (kFootCollisionSkinPx + 2); 
-    Vec2 footPos = character->GetFootCircleCenter();
-    c.center.x = footPos.x;
-    c.center.y = footPos.y;
+    // Caixa QUADRADA dos pés, com uma margem extra de segurança (skin + 2px).
+    auto footBoxWithMargin = [&]() {
+        SDL_Rect r = character->GetFootRect();
+        const int m = kFootCollisionSkinPx + 2;
+        r.x += m; r.y += m; r.w -= 2 * m; r.h -= 2 * m;
+        if (r.w < 1) r.w = 1;
+        if (r.h < 1) r.h = 1;
+        return r;
+    };
 
-    if (!stage->level.CheckCollision(c, isElevated)) {
+    if (!stage->level.CheckCollision(footBoxWithMargin(), isElevated)) {
         return;                                                 // Não está preso de verdade. Foge da função imediatamente sem gastar a CPU!
     }
 
@@ -56,13 +57,8 @@ void TryNudgeOutOfStaticGeometry(StageState* stage, Character* character, Collid
             go.box.x += mx * d;
             go.box.y += my * d;
             collider->Update(0);
-            
-            // Atualiza o centro do círculo depois de mover
-            Vec2 newFootPos = character->GetFootCircleCenter();
-            c.center.x = newFootPos.x;
-            c.center.y = newFootPos.y;
-            
-            if (!stage->level.CheckCollision(c, isElevated)) {
+
+            if (!stage->level.CheckCollision(footBoxWithMargin(), isElevated)) {
                 return;                                         // Empurrou pra fora com sucesso! Interrompe o processo.
             }
 
@@ -228,10 +224,11 @@ void Character::RestoreCollisionBox(float centerX, float footY) {
     // Ajusta a escala do colisor com os Setters
     Collider* col = (Collider*)associated.GetComponent<Collider>();
     if (col) {
-        float absoluteHitboxW = baselineBoxW * 0.45f;
-        float absoluteHitboxH = baselineBoxH * 0.12f;
+        float absoluteHitboxW = baselineBoxW * 0.5f;
+        float absoluteHitboxH = baselineBoxH * 0.20f;   // altura (2x da original), inalterada
 
         Vec2 newScale(absoluteHitboxW / associated.box.w, absoluteHitboxH / associated.box.h);
+        // Base da caixa ancorada nos pés (footY): a caixa fica na sola.
         float offsetY = (associated.box.h / 2.0f) * (1.0f - newScale.y);
 
         col->SetScale(newScale);
@@ -307,7 +304,7 @@ void Character::Start() {
     EnsureBaselineBox();
 
     // Define o tamanho proporcional da HitBox (Na sola do pé)
-    Vec2 scale(0.45f, 0.12f);
+    Vec2 scale(0.45f, 0.20f);
     // Calculo automatico do deslocamento Y
     float offsetY = (associated.box.h / 2.0f) * (1.0f - scale.y);
     // Adiciona o colisor
@@ -338,7 +335,7 @@ void Character::Update(float dt) {
         }
 
         // Escondido no armário: mesmo "congelado", o irmãozinho controlado ainda
-        // pode usar o poder de visão (revelar o monstro) apertando Interact.
+        // pode usar o poder de visão (revelar o monstro) apertando UseItem (F).
         if (isHidden) {
             UpdateVisionPower(dt);
         }
@@ -400,19 +397,13 @@ void Character::Update(float dt) {
         // Atualiza a posição do collider manualmente para teste futuro
         collider->Update(0);
 
-        Circle playerCircleX;
-        playerCircleX.radius = GetFootCircleRadius() - kFootCollisionSkinPx;
-        
-        // Passando x e y separadamente
-        Vec2 footCenterX = GetFootCircleCenter();
-        playerCircleX.center.x = footCenterX.x;
-        playerCircleX.center.y = footCenterX.y;
-
-        if (stage->level.CheckCollision(playerCircleX, isElevated)) {
+        // Caixa de colisão QUADRADA nos pés (AABB estável) — não muda com a animação.
+        SDL_Rect footBoxX = GetFootCollisionRect();
+        if (stage->level.CheckCollision(footBoxX, isElevated)) {
             associated.box.x = oldX;
             speed.x = 0;
             // Update forçado para reverter o collider caso colida
-            collider->Update(0); 
+            collider->Update(0);
         }
 
         // --- TESTE DO EIXO Y ---
@@ -421,17 +412,10 @@ void Character::Update(float dt) {
 
         collider->Update(0);
 
-        Circle playerCircleY;
-        playerCircleY.radius = GetFootCircleRadius() - kFootCollisionSkinPx;
-        
-        // Passando x e y separadamente
-        Vec2 footCenterY = GetFootCircleCenter();
-        playerCircleY.center.x = footCenterY.x;
-        playerCircleY.center.y = footCenterY.y;
-
+        SDL_Rect footBoxY = GetFootCollisionRect();
         // NO EIXO Y TAMBÉM:
-        if (stage->level.CheckCollision(playerCircleY, isElevated)) {
-            associated.box.y = oldY; 
+        if (stage->level.CheckCollision(footBoxY, isElevated)) {
+            associated.box.y = oldY;
             speed.y = 0;
         }
 
@@ -566,7 +550,9 @@ void Character::UpdateVisionPower(float dt) {
     // assim pode usar o poder de visão).
     const bool actionAllowed = (currentState != ActionState::INTERACTING) || isHidden;
 
-    if (isBeingControlled && !inputFrozen && InputManager::GetInstance().ActionPress(GameAction::Interact) &&
+    // A habilidade de visão do irmãozinho agora é no UseItem (F) — o Interact (E)
+    // passou a servir para ele ENTRAR/SAIR de armários, como o irmãozão.
+    if (isBeingControlled && !inputFrozen && InputManager::GetInstance().ActionPress(GameAction::UseItem) &&
         visionPowerTimer <= 0.0f && visionCooldown <= 0.0f && actionAllowed) {
 
         visionPowerTimer = kVisionDuration;
@@ -704,30 +690,23 @@ void Character::PreloadAnimationFrames() {
 }
 
 
-void Character::Render() { 
+void Character::Render() {
 #ifdef DEBUG
-    // Agora desenhamos usando a Fonte da Verdade (associated.box)
     SDL_Renderer* renderer = Game::GetInstance().GetRenderer();
-    
-    // O X continua centralizado na imagem real
-    int cx = (int)(associated.box.x + (associated.box.w / 2) - Camera::pos.x);
-    
-    // O raio e o Y também baseados na imagem real (idêntico ao Update)
-    int r = (int)GetFootCircleRadius(); 
-    int cy = (int)(associated.box.y + associated.box.h - r - Camera::pos.y);
 
-    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255); // Cor Verde
-    
-    // Desenha o círculo linha por linha...
-    const int kSeg = 36;
-    for (int i = 0; i < kSeg; i++) {
-        float a0 = ((float)i / kSeg) * 2.0f * M_PI;
-        float a1 = ((float)(i + 1) / kSeg) * 2.0f * M_PI;
-        
-        SDL_RenderDrawLine(renderer, 
-            cx + (int)(cos(a0) * r), cy + (int)(sin(a0) * r), 
-            cx + (int)(cos(a1) * r), cy + (int)(sin(a1) * r));
-    }
+    // Caixa de COLISÃO dos pés (verde) — quadrado estável.
+    SDL_Rect foot = GetFootRect();
+    foot.x -= (int)Camera::pos.x;
+    foot.y -= (int)Camera::pos.y;
+    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
+    SDL_RenderDrawRect(renderer, &foot);
+
+    // HURTBOX do corpo (vermelho) — quadrado estável (dano do monstro).
+    SDL_Rect hit = GetHitRect();
+    hit.x -= (int)Camera::pos.x;
+    hit.y -= (int)Camera::pos.y;
+    SDL_SetRenderDrawColor(renderer, 255, 60, 60, 255);
+    SDL_RenderDrawRect(renderer, &hit);
 #endif
 }
 
@@ -754,16 +733,49 @@ Vec2 Character::GetFootCircleCenter() const {
     return Vec2(associated.box.x + associated.box.w * 0.5f, associated.box.y + associated.box.h - r);
 }
 
-float Character::GetHitCircleRadius() const {
-    // Um pouco maior que o círculo dos pés p/ cobrir o tronco (dano justo).
-    float baseW = (baselineBoxW > 0.0f) ? baselineBoxW : associated.box.w;
-    return baseW * 0.42f;
+// centerX (box.x+box.w/2) e footY (box.y+box.h) são mantidos ESTÁVEIS a cada
+// frame por RefreshAnimSprite/RestoreCollisionBox — então ancoramos as hitboxes
+// neles e usamos SEMPRE a caixa-base (baselineBoxW/H) para o tamanho, de forma
+// que as caixas não mudem de tamanho nem de lugar quando a animação troca.
+SDL_Rect Character::GetFootRect() const {
+    // A caixa de colisão dos pés é a do componente Collider — mantida ESTÁVEL e no
+    // tamanho certo (tira fina nos pés) por RestoreCollisionBox + Collider::Update,
+    // independente da animação. É a caixa que o jogo já usa como "verdade".
+    if (Collider* col = associated.GetComponent<Collider>()) {
+        const Rect& b = col->box;
+        return SDL_Rect{ static_cast<int>(b.x), static_cast<int>(b.y),
+                         static_cast<int>(b.w), static_cast<int>(b.h) };
+    }
+    // Fallback (sem Collider — não deve ocorrer com os irmãos): quadrado pela base.
+    const float baseW = (baselineBoxW > 0.0f) ? baselineBoxW : associated.box.w;
+    const float side = baseW * 0.5f;
+    const float centerX = associated.box.x + associated.box.w * 0.5f;
+    const float footY   = associated.box.y + associated.box.h;
+    return SDL_Rect{ static_cast<int>(centerX - side * 0.5f),
+                     static_cast<int>(footY - side),
+                     static_cast<int>(side), static_cast<int>(side) };
 }
 
-Vec2 Character::GetHitCircleCenter() const {
-    // Centrado horizontalmente e um pouco abaixo do meio vertical (massa do corpo).
-    return Vec2(associated.box.x + associated.box.w * 0.5f,
-                associated.box.y + associated.box.h * 0.55f);
+SDL_Rect Character::GetFootCollisionRect() const {
+    SDL_Rect r = GetFootRect();
+    const int s = kFootCollisionSkinPx;   // margem contra erros de ponto flutuante
+    r.x += s; r.y += s; r.w -= 2 * s; r.h -= 2 * s;
+    if (r.w < 1) r.w = 1;
+    if (r.h < 1) r.h = 1;
+    return r;
+}
+
+SDL_Rect Character::GetHitRect() const {
+    const float baseW = (baselineBoxW > 0.0f) ? baselineBoxW : associated.box.w;
+    const float baseH = (baselineBoxH > 0.0f) ? baselineBoxH : associated.box.h;
+    const float w = baseW * 0.50f;
+    const float h = baseH * 0.60f;
+    const float centerX = associated.box.x + associated.box.w * 0.5f;
+    const float footY   = associated.box.y + associated.box.h;
+    const float centerY = footY - baseH * 0.45f;   // tronco (fixo pela base, não pela arte atual)
+    return SDL_Rect{ static_cast<int>(centerX - w * 0.5f),
+                     static_cast<int>(centerY - h * 0.5f),
+                     static_cast<int>(w), static_cast<int>(h) };
 }
 
 void Character::Issue(Command task) {                       // Adiciona comando na fila

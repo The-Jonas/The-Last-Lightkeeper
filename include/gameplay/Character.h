@@ -69,14 +69,18 @@ public:
     float sanity = 100.0f;          
     constexpr static float kMaxSanity = 100.0f;
 
-    // Círculo dos pés (mesmo de colisão com chão / desenho DEBUG): raio = largura * 0.25, centro nos pés.
+    // Ponto dos pés (para consulta de superfície de passo). Estável entre frames.
     Vec2 GetFootCircleCenter() const;
     float GetFootCircleRadius() const;
 
-    // Círculo de HITBOX (dano do monstro): centrado no corpo, um pouco maior que o
-    // círculo dos pés — assim o "acerto" no jogador também é redondo, não retangular.
-    Vec2 GetHitCircleCenter() const;
-    float GetHitCircleRadius() const;
+    // HITBOXES QUADRADAS (retângulos AABB) com tamanho FIXO pela caixa-base e
+    // âncora no pé — NÃO mudam de tamanho/posição com a animação.
+    // GetFootRect: caixa de COLISÃO com o cenário (quadrado nos pés).
+    // GetFootCollisionRect: a mesma com a margem de segurança (skin) aplicada.
+    // GetHitRect: HURTBOX do corpo (dano do monstro).
+    SDL_Rect GetFootRect() const;
+    SDL_Rect GetFootCollisionRect() const;
+    SDL_Rect GetHitRect() const;
 
     GameObject& GetAssociated() { return associated; }
     Vec2 GetSpeed() const { return speed; }

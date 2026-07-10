@@ -159,12 +159,14 @@ private:
     float kWindowRadarInterval   = 6.0f;    // procura janelas com mais frequência
     float kWindowRadarRange      = 2900.0f; // alcance do radar de janelas (sabota de longe)
     float kSabotageDelay         = 4.0f;    // #5 pausa (patrulha) imposta depois de abrir uma janela, antes da próxima
+    float kPostSabotageIdle      = 8.0f;    // depois de abrir a janela, fica PARADO estes segundos antes de voltar a patrulhar
     static constexpr float kFleeThreshold         = 0.70f;  // Iluminação que faz ele recuar
     static constexpr float kPathRefreshInterval   = 0.30f;  // Segundos entre recálculos de path
     static constexpr float kNavFootRadius         = 18.0f;  // footprint de navegação BEM menor: passa por corredores/quinas sem travar (o dano NÃO usa isto)
     static constexpr float kSightLosRadius        = 25.0f;  // raio fino p/ checar parede na linha de visão (1.6)
 
     float windowRadarTimer = 0.0f;                          // Timer separado para o radar de janelas (não compartilhado com pathfinding)
+    float postSabotageIdleTimer = 0.0f;                     // >0: monstro fica parado após abrir uma janela (conta regressiva)
 
     // ── Audição de ruído (empurrar caixas/barris) ─────────────────────────────
     // #2: quando o jogador empurra uma caixa/barril perto, o monstro "ouve" e vai
@@ -193,6 +195,10 @@ private:
     // CHASE/HUNT (patrulha/investiga/sabota) SEMPRE foge da luz. (monster.json)
     float chaseGraceTimer = 0.0f;
     float kChaseGraceDuration     = 1.5f;   // graça de entrada (ignora luz)
+    // Na 1ª perseguição (CHASE) a graça é garantida por mais tempo, para o monstro
+    // COMPROMETER-SE com a caçada e não parar logo de cara. Depois, volta ao normal.
+    float kFirstChaseGraceDuration = 5.0f;
+    bool  firstChaseGraceGiven = false;
     float kChaseIgnoreLightChance = 0.50f;  // CHASE: chance de ignorar a luz
     float kHuntIgnoreLightChance  = 0.85f;  // HUNT: chance (maior) de ignorar a luz
     bool  lightDecisionMade = false;        // já rolou a decisão desta exposição à luz?
