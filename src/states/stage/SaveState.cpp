@@ -20,6 +20,7 @@
 #include "SDL_include.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <unordered_set>
 
@@ -421,64 +422,105 @@ void StageState::RenderInteractionPrompt(SDL_Renderer* renderer) {
     if (!renderer) {
         return;
     }
-    // Só o irmão maior interage; e não mostra durante menu/modais/jornal.
-    if (controlledCharacter != bigCharacter || IsPlayerInputFrozen()) {
+    // Não mostra durante menu/modais/jornal.
+    if (IsPlayerInputFrozen()) {
         return;
     }
 
-    // Escolhe a AÇÃO do interagível de maior prioridade ao alcance.
-    const char* action = nullptr;
-    if (bigCharacter && bigCharacter->isHidden) {
-        // Escondido no armário: mantém SEMPRE o aviso de como sair.
-        action = "Sair do esconderijo";
-    } else if (!activePushBox) {
-        if (reachablePushBox) {
-            action = "Empurrar";
-        } else if (reachableCloset) {
-            action = "Esconder";
-        } else if (reachableRepairable) {  
-            action = "Consertar";
-        } else if (reachableJornal) {
-            action = "Ler";
-        } else if (reachableCandle) {
-            action = reachableCandle->IsLit() ? "Apagar" : "Acender";
-        } else if (reachableWindow) {
-            if (reachableWindow->GetState() == Window::WindowState::OPEN) {
-                action = "Fechar";
-            }
-        } else if (reachableRadio) {                          
-            action = reachableRadio->IsPlaying() ? "Desligar" : "Ligar";
-        } else if (reachablePickup && IsPickupStillTracked(reachablePickup) &&
-                   !IsPickupBlocked(reachablePickup)) {
-            action = "Pegar";
+    InputManager& imPrompt = InputManager::GetInstance();
+    auto keyLabel = [&imPrompt](GameAction a, const char* fallback) {
+        const char* k = SDL_GetKeyName(imPrompt.GetBinding(a));
+        return (k && k[0] != '\0') ? std::string(k) : std::string(fallback);
+    };
+
+    // Até TRÊS linhas (irmãozinho escondido: sair + habilidade + trocar).
+    std::string lines[3];
+    int lineCount = 0;
+
+    const bool hidden = controlledCharacter && controlledCharacter->isHidden;
+    if (hidden) {
+        // Escondidos: AMBOS os irmãos saem com Interact (E) e podem TROCAR de
+        // personagem. Só o irmãozinho tem a HABILIDADE de visão, agora em UseItem (F).
+        lines[lineCount++] = "[" + keyLabel(GameAction::Interact, "E") + "] Sair do esconderijo";
+        if (controlledCharacter == smallCharacter) {
+            lines[lineCount++] = "[" + keyLabel(GameAction::UseItem, "F") + "] Usar habilidade do irmaozinho";
         }
-    }
-    if (!action) {
-        return;
+        lines[lineCount++] = "[" + keyLabel(GameAction::SwapBrother, "Ctrl") + "] Trocar de personagem";
+    } else if (controlledCharacter == bigCharacter) {
+        // Irmão maior fora do esconderijo: todas as interações do rodapé.
+        const char* action = nullptr;
+        if (!activePushBox) {
+            if (reachablePushBox) {
+                action = "Empurrar";
+            } else if (reachableCloset) {
+                action = "Esconder";
+            } else if (reachableRepairable) {
+                action = "Consertar";
+            } else if (reachableJornal) {
+                action = "Ler";
+            } else if (reachableCandle) {
+                action = reachableCandle->IsLit() ? "Apagar" : "Acender";
+            } else if (reachableWindow) {
+                if (reachableWindow->GetState() == Window::WindowState::OPEN) {
+                    action = "Fechar";
+                }
+            } else if (reachableRadio) {
+                action = reachableRadio->IsPlaying() ? "Desligar" : "Ligar";
+            } else if (reachablePickup && IsPickupStillTracked(reachablePickup) &&
+                       !IsPickupBlocked(reachablePickup)) {
+                action = "Pegar";
+            }
+        }
+        if (!action) {
+            return;
+        }
+        lines[lineCount++] = "[" + keyLabel(GameAction::Interact, "E") + "] " + std::string(action);
+    } else {
+        // Irmãozinho fora do esconderijo: só pode se ESCONDER num armário.
+        if (!reachableCloset) {
+            return;
+        }
+        lines[lineCount++] = "[" + keyLabel(GameAction::Interact, "E") + "] Esconder";
     }
 
-    // O prefixo segue a tecla atualmente vinculada à ação Interagir (4.1).
-    const char* keyName = SDL_GetKeyName(InputManager::GetInstance().GetBinding(GameAction::Interact));
-    if (!keyName || keyName[0] == '\0') {
-        keyName = "E";
+    if (lineCount == 0) {
+        return;
     }
-    char label[64];
-    std::snprintf(label, sizeof(label), "[%s] %s", keyName, action);
 
     auto font = Resources::GetFont("Recursos/font/times.ttf", 24);
     if (!font) {
         return;
     }
     SDL_Color color{240, 235, 220, 255};
-    SDL_Surface* surface = TTF_RenderUTF8_Blended(font.get(), label, color);
-    if (!surface) {
-        return;
+
+    // Renderiza cada linha; empilha verticalmente dentro de uma única caixa.
+    SDL_Texture* texs[3] = {nullptr, nullptr, nullptr};
+    int tws[3] = {0, 0, 0};
+    int ths[3] = {0, 0, 0};
+    int maxW = 0;
+    int totalH = 0;
+    const int lineGap = 6;
+    for (int i = 0; i < lineCount; ++i) {
+        SDL_Surface* surface = TTF_RenderUTF8_Blended(font.get(), lines[i].c_str(), color);
+        if (!surface) {
+            continue;
+        }
+        texs[i] = SDL_CreateTextureFromSurface(renderer, surface);
+        tws[i] = surface->w;
+        ths[i] = surface->h;
+        SDL_FreeSurface(surface);
+        if (tws[i] > maxW) {
+            maxW = tws[i];
+        }
+        if (i > 0) {
+            totalH += lineGap;
+        }
+        totalH += ths[i];
     }
-    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
-    const int tw = surface->w;
-    const int th = surface->h;
-    SDL_FreeSurface(surface);
-    if (!texture) {
+    if (maxW == 0) {
+        for (int i = 0; i < lineCount; ++i) {
+            if (texs[i]) SDL_DestroyTexture(texs[i]);
+        }
         return;
     }
 
@@ -487,19 +529,29 @@ void StageState::RenderInteractionPrompt(SDL_Renderer* renderer) {
     const int winH = game.GetWindowsHeight();
     const int padX = 18;
     const int padY = 10;
-    const int textX = (winW - tw) / 2;
-    const int textY = winH - 110;
-    const SDL_Rect bg{textX - padX, textY - padY, tw + padX * 2, th + padY * 2};
+    const int bgW = maxW + padX * 2;
+    const int bgH = totalH + padY * 2;
+    const int bgX = (winW - bgW) / 2;
+    const int bgY = (winH - 72) - bgH;   // caixa ancorada logo acima do rodapé
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer, 20, 20, 26, 185);
+    const SDL_Rect bg{bgX, bgY, bgW, bgH};
     SDL_RenderFillRect(renderer, &bg);
     SDL_SetRenderDrawColor(renderer, 200, 180, 110, 200);
     SDL_RenderDrawRect(renderer, &bg);
 
-    const SDL_Rect dst{textX, textY, tw, th};
-    SDL_RenderCopy(renderer, texture, nullptr, &dst);
-    SDL_DestroyTexture(texture);
+    int curY = bgY + padY;
+    for (int i = 0; i < lineCount; ++i) {
+        if (!texs[i]) {
+            continue;
+        }
+        const int lx = (winW - tws[i]) / 2;
+        const SDL_Rect dst{lx, curY, tws[i], ths[i]};
+        SDL_RenderCopy(renderer, texs[i], nullptr, &dst);
+        SDL_DestroyTexture(texs[i]);
+        curY += ths[i] + lineGap;
+    }
 }
 
 namespace {
@@ -1240,6 +1292,7 @@ int sPickupTutShown = 0;
 int sRefuelTutShown = 0;
 int sCycleTutShown = 0;        // dica de trocar item na roda (1x por sessão)
 int sLighterEmptyTutShown = 0; // aviso "luz apagou" (1x por sessão)
+int sLampTutShown = 0;         // explicação da lamparina ao pegá-la (1x por sessão)
 bool sFarVoiceArmed = true;   // fala de medo do irmãozinho (sem limite de 3x)
 }
 
@@ -1353,6 +1406,17 @@ void StageState::UpdateTutorials(float dt) {
         }
     }
 
+    // Explicação da LAMPARINA ao pegá-la (1x por sessão): ilumina mais e dura mais,
+    // porém ocupa as duas mãos — não dá para empurrar objetos com ela.
+    {
+        if (sLampTutShown < 1 && controlledCharacter == bigCharacter &&
+            inventory.HasItem("Lamp")) {
+            sLampTutShown++;
+            RequestTutorial("A lamparina ilumina mais forte e dura mais, mas ocupa as duas maos "
+                            "(voce nao pode empurrar objetos)");
+        }
+    }
+
     // Tutorial de REABASTECER (F): só quando o jogador está SEGURANDO o
     // combustível (item selecionado na roda). Ensina a despejá-lo no isqueiro.
     {
@@ -1448,10 +1512,40 @@ void StageState::UpdateTutorials(float dt) {
         if (abilityTutArmed && sAbilityTutShown < kMaxTutorialShows) {
             sAbilityTutShown++;
             abilityTutArmed = false;
-            RequestTutorial("Pressione [" + tutKey(imTut.GetBinding(GameAction::Interact), "E") + "] para usar a habilidade do irmaozinho");
+            RequestTutorial("Pressione [" + tutKey(imTut.GetBinding(GameAction::UseItem), "F") + "] para usar a habilidade do irmaozinho");
+            // Enfileira o tutorial de TROCA para logo após este — mas só será
+            // exibido quando a tela de tutoriais ficar vazia (ver bloco abaixo).
+            if (sSwapTutShown < kMaxTutorialShows) {
+                swapAfterAbilityPending = true;
+            }
         }
     } else {
         abilityTutArmed = true;   // re-arma ao voltar a controlar o irmãozão
+    }
+
+    // Tutorial de TROCA enfileirado após o da habilidade: só dispara quando NÃO há
+    // nenhum tutorial na tela (nem ativo nem pendente), para não cortar o banner
+    // atual — espera o que estiver tocando terminar por completo.
+    if (swapAfterAbilityPending && activeTutText.empty() && activeTutTimer <= 0.0f &&
+        pendingTutText.empty()) {
+        swapAfterAbilityPending = false;
+        if (sSwapTutShown < kMaxTutorialShows) {
+            sSwapTutShown++;
+            swapTutArmed = false;
+            RequestTutorial("Pressione [" + tutKey(imTut.GetBinding(GameAction::SwapBrother), "Ctrl") + "] para trocar de personagem");
+        }
+    }
+
+    // Aviso do vão da escada: chegou no ponto de conserto SEM a tábua de madeira.
+    // Avisa uma vez por aproximação; re-arma ao se afastar (repairableInReachNoItem
+    // é recomputado a cada frame pelo Repairable::Update).
+    if (repairableInReachNoItem && controlledCharacter == bigCharacter) {
+        if (repairWarnArmed) {
+            repairWarnArmed = false;
+            RequestTutorial("Preciso de uma tabua de madeira para consertar este buraco...");
+        }
+    } else {
+        repairWarnArmed = true;   // re-arma ao sair de perto (ou trocar de personagem)
     }
 }
 
@@ -1468,7 +1562,11 @@ void StageState::RenderTutorials(SDL_Renderer* renderer) {
     else if (elapsed < 0.4f)      a01 = elapsed / 0.4f;             // fade in
     a01 = a01 * a01 * (3.0f - 2.0f * a01);                          // smoothstep
 
-    auto font = Resources::GetFont("Recursos/font/times.ttf", 24);
+    // Escala p/ a resolução: fonte/margens/posição proporcionais (consistente
+    // em telas grandes e cabendo em resoluções baixas).
+    const float u = Game::UiScale();
+    auto font = Resources::GetFont("Recursos/font/times.ttf",
+                                   std::max(12, static_cast<int>(std::lround(24.0f * u))));
     if (!font) return;
     SDL_Color col{245, 232, 200, 255};
     SDL_Surface* sf = TTF_RenderUTF8_Blended(font.get(), activeTutText.c_str(), col);
@@ -1481,9 +1579,9 @@ void StageState::RenderTutorials(SDL_Renderer* renderer) {
     SDL_SetTextureAlphaMod(t, static_cast<Uint8>(255.0f * a01));
 
     const int winW = Game::GetInstance().GetWindowsWidth();
-    const int padX = 22;
-    const int padY = 12;
-    const int y = 70;
+    const int padX = static_cast<int>(std::lround(22 * u));
+    const int padY = static_cast<int>(std::lround(12 * u));
+    const int y = static_cast<int>(std::lround(70 * u));
     const int x = (winW - tw) / 2;
     const SDL_Rect bg{x - padX, y - padY, tw + padX * 2, th + padY * 2};
 
@@ -1494,6 +1592,81 @@ void StageState::RenderTutorials(SDL_Renderer* renderer) {
     SDL_RenderDrawRect(renderer, &bg);
     const SDL_Rect d{x, y, tw, th};
     SDL_RenderCopy(renderer, t, nullptr, &d);
+    SDL_DestroyTexture(t);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+}
+
+void StageState::RenderMonsterScare(SDL_Renderer* renderer) {
+    if (!renderer || !monsterScareActive || IsPlayerInputFrozen()) {
+        return;
+    }
+
+    const float elapsed = monsterScareElapsed;
+
+    // Fade-in curto na entrada; fade-out ao esconder (quando o monstro para).
+    float a01 = 1.0f;
+    if (monsterScareFadeOut > 0.0f) {
+        a01 = monsterScareFadeOut / kMonsterScareFadeOut;         // fade-out
+    } else if (elapsed < kMonsterScareFadeIn) {
+        a01 = elapsed / kMonsterScareFadeIn;                      // fade-in
+    }
+    a01 = std::max(0.0f, std::min(1.0f, a01));
+
+    const float u = Game::UiScale();
+    auto font = Resources::GetFont("Recursos/font/times.ttf",
+                                   std::max(24, static_cast<int>(std::lround(64.0f * u))));
+    if (!font) return;
+
+    const char* text = "FUJA E SE ESCONDA!!!";
+    SDL_Color red{225, 30, 28, 255};
+    SDL_Surface* sf = TTF_RenderUTF8_Blended(font.get(), text, red);
+    if (!sf) return;
+    SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, sf);
+    const int tw = sf->w;
+    const int th = sf->h;
+    SDL_FreeSurface(sf);
+    if (!t) return;
+    SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND);
+
+    const int winW = Game::GetInstance().GetWindowsWidth();
+    const int winH = Game::GetInstance().GetWindowsHeight();
+
+    // Ocupa ~42% da largura (metade do tamanho anterior) e PULSA em torno disso;
+    // tremor forte para alarmar.
+    const float baseScale = (tw > 0) ? (winW * 0.425f) / static_cast<float>(tw) : 1.0f;
+    const float pulse = 1.0f + 0.06f * std::sin(elapsed * 13.0f);
+    const float w = static_cast<float>(tw) * baseScale * pulse;
+    const float h = static_cast<float>(th) * baseScale * pulse;
+
+    // Movimento (tremor) reduzido em 50%.
+    const float shakeAmp = (5.0f + 2.5f * std::sin(elapsed * 2.7f)) * u;
+    const float shakeX = std::sin(elapsed * 47.0f) * shakeAmp;
+    const float shakeY = std::cos(elapsed * 41.0f) * shakeAmp;
+
+    const float cx = winW * 0.5f + shakeX;
+    const float cy = winH * 0.36f + shakeY;   // um pouco acima do centro
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+    // Véu escuro atrás do texto (destaca e aumenta a tensão).
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, static_cast<Uint8>(95.0f * a01));
+    const SDL_FRect veil{0.0f, cy - h * 0.85f, static_cast<float>(winW), h * 1.7f};
+    SDL_RenderFillRectF(renderer, &veil);
+
+    // Sombra preta deslocada.
+    const float off = 5.0f * u;
+    SDL_SetTextureColorMod(t, 0, 0, 0);
+    SDL_SetTextureAlphaMod(t, static_cast<Uint8>(200.0f * a01));
+    const SDL_FRect shadow{cx - w * 0.5f + off, cy - h * 0.5f + off, w, h};
+    SDL_RenderCopyF(renderer, t, nullptr, &shadow);
+
+    // Texto vermelho principal, com flicker de brilho.
+    const Uint8 b = static_cast<Uint8>(255.0f * (0.80f + 0.20f * std::sin(elapsed * 28.0f)));
+    SDL_SetTextureColorMod(t, b, b, b);
+    SDL_SetTextureAlphaMod(t, static_cast<Uint8>(255.0f * a01));
+    const SDL_FRect dst{cx - w * 0.5f, cy - h * 0.5f, w, h};
+    SDL_RenderCopyF(renderer, t, nullptr, &dst);
+
     SDL_DestroyTexture(t);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }

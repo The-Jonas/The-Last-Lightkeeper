@@ -24,6 +24,7 @@ void OnItemPickup();         // ocasionalmente comenta ao pegar um item
 void OnPickupWoodPlank();    // "Isso vai servir." — SEMPRE ao pegar a Tabua de Madeira
 void OnBagFull();            // "minha bolsa tá pesada" — bolsa encheu
 void OnDragObject();         // às vezes, ao começar a arrastar um objeto
+void OnHeavyBarrel();        // "Ah, isso pesa..." — SEMPRE, ao desistir de um barril imóvel (peso 0)
 void OnActionBlocked();      // "não consigo" — apertou interagir e não pôde agir
 void OnScoldFear();          // repreende o irmãozinho medroso ("para de ser medroso" / "quer que o monstro te coma?")
 

@@ -28,13 +28,14 @@ LevelManager::~LevelManager() {
     chaoBuraco.clear();
     floorWoodZones.clear();
     floorStoneZones.clear();
+    repairableTriggers.clear();
     footstepWoodFallbackMinY = 2100;
     circleColliders.clear();
     objPolyColliders.clear();
     objRectColliders.clear();
     entitySpawns.clear();
     levelTransitionZones.clear();
-    
+
 }
 
 void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
@@ -61,6 +62,7 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
         chaoBuraco.clear();
         floorWoodZones.clear();
     floorStoneZones.clear();
+    repairableTriggers.clear();
     footstepWoodFallbackMinY = 2100;
         circleColliders.clear();
         objPolyColliders.clear();
@@ -137,7 +139,34 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
 
                         float finalX = obj.value("x", 0.0f) + layerOffsetX;
                         float finalY = obj.value("y", 0.0f) + layerOffsetY;
-                    
+
+                        // GATILHO do Repairable ("repairable_trigger", por name OU type):
+                        // não é parede — é só uma zona de interação. Aceita polígono
+                        // (forma/ângulo desenhado no Tiled) ou retângulo.
+                        if (type == "repairable_trigger" ||
+                            obj.value("name", std::string()) == "repairable_trigger") {
+                            Polygon trig;
+                            if (obj.contains("polygon")) {
+                                for (auto& p : obj["polygon"]) {
+                                    trig.vertices.push_back({ (int)(finalX + p.value("x", 0.0f)),
+                                                              (int)(finalY + p.value("y", 0.0f)) });
+                                }
+                            } else {
+                                const float w = obj.value("width", 0.0f);
+                                const float h = obj.value("height", 0.0f);
+                                if (w > 0.0f && h > 0.0f) {
+                                    trig.vertices.push_back({ (int)finalX,       (int)finalY });
+                                    trig.vertices.push_back({ (int)(finalX + w), (int)finalY });
+                                    trig.vertices.push_back({ (int)(finalX + w), (int)(finalY + h) });
+                                    trig.vertices.push_back({ (int)finalX,       (int)(finalY + h) });
+                                }
+                            }
+                            if (trig.vertices.size() >= 3) {
+                                repairableTriggers.push_back(trig);
+                            }
+                            continue;   // nunca vira colisor/parede
+                        }
+
                         if (obj.contains("polygon")) {
                             Polygon poly;
                             for (auto& p : obj["polygon"]) {
@@ -463,41 +492,41 @@ bool LevelManager::CheckCollision(const SDL_Rect& entityBox, bool isElevated) {
             if (SDL_HasIntersection(&entityBox, &rectCol)) return true;
         }
         for (const auto& polyCol : objPolyColliders) {
-            Polygon entityPoly;
-            entityPoly.vertices = {
-                {entityBox.x,              entityBox.y},
-                {entityBox.x + entityBox.w, entityBox.y},
-                {entityBox.x + entityBox.w, entityBox.y + entityBox.h},
-                {entityBox.x,              entityBox.y + entityBox.h}
-            };
-            if (CheckPolygonVsPolygon(entityPoly, polyCol)) return true;
+            // Côncavo-seguro (SAT deixava atravessar polígonos côncavos).
+            if (CheckPolygonVsRect(polyCol, entityBox)) return true;
         }
         // ─────────────────────────────────────────────────────────────────
 
     }
 
     // ==========================================================
-    // Checagem contra Polígonos (SAT) - Essa parte roda sempre!
-    
-    // Transforma-se temporariamente o SDL_React do jogador em um Polígono
-    Polygon entityPoly;
-    entityPoly.vertices = {
-        {entityBox.x, entityBox.y},
-        {entityBox.x + entityBox.w, entityBox.y},
-        {entityBox.x + entityBox.w, entityBox.y + entityBox.h},
-        {entityBox.x, entityBox.y + entityBox.h}
-    };
-
+    // Checagem contra Polígonos do chão — roda sempre (chão normal ou escada).
     // Escolhe qual lista de polígonos verificar!
     const auto& listaAtiva = isElevated ? chaoEscada : chaoNormal;
 
     for (const auto& polyCol : listaAtiva) {
-        if (CheckPolygonVsPolygon(entityPoly, polyCol)) {
+        if (CheckPolygonVsRect(polyCol, entityBox)) {
             return true;
         }
     }
 
+    // Na escada QUEBRADA, o buraco também colide (igual à versão de círculo).
+    if (isElevated && !escadaConsertada) {
+        for (const auto& polyCol : chaoBuraco) {
+            if (CheckPolygonVsRect(polyCol, entityBox)) return true;
+        }
+    }
+
     return false; // Se não bateu em nada, o caminho está livre!
+}
+
+bool LevelManager::CheckRepairableTrigger(const SDL_Rect& entityBox) {
+    for (const auto& poly : repairableTriggers) {
+        if (CheckPolygonVsRect(poly, entityBox)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool LevelManager::CheckRectVsCircle(const SDL_Rect& rect, const Circle& circle) {
@@ -590,6 +619,75 @@ bool LevelManager::CheckPolygonVsPolygon(const Polygon& p1, const Polygon& p2) {
     
     // Se testou todos os eixos e nenhuma teve vão livre, estão colidindo.
     return true;
+}
+
+// Rect (AABB) vs polígono, CÔNCAVO-seguro. Detecta os 3 casos de sobreposição:
+// (1) um canto do rect DENTRO do polígono; (2) um vértice do polígono DENTRO do
+// rect; (3) qualquer aresta do polígono cruzando qualquer aresta do rect. O SAT
+// (CheckPolygonVsPolygon) só vale para convexos e deixava o quadrado atravessar
+// paredes côncavas — este teste é o mesmo tipo de robustez do círculo.
+bool LevelManager::CheckPolygonVsRect(const Polygon& poly, const SDL_Rect& rect) {
+    const size_t n = poly.vertices.size();
+    if (n < 3) return false;
+
+    // Broad phase.
+    int minX = poly.vertices[0].x, maxX = minX, minY = poly.vertices[0].y, maxY = minY;
+    for (const auto& v : poly.vertices) {
+        minX = std::min(minX, v.x); maxX = std::max(maxX, v.x);
+        minY = std::min(minY, v.y); maxY = std::max(maxY, v.y);
+    }
+    if (maxX < rect.x || minX > rect.x + rect.w || maxY < rect.y || minY > rect.y + rect.h) {
+        return false;
+    }
+
+    const float rx = static_cast<float>(rect.x), ry = static_cast<float>(rect.y);
+    const float rw = static_cast<float>(rect.w), rh = static_cast<float>(rect.h);
+    const float corners[4][2] = { {rx, ry}, {rx + rw, ry}, {rx + rw, ry + rh}, {rx, ry + rh} };
+
+    // (1) Algum canto do rect está dentro do polígono? (ponto-no-polígono / ray casting)
+    auto pointInPoly = [&](float px, float py) {
+        bool inside = false;
+        for (size_t i = 0, j = n - 1; i < n; j = i++) {
+            const float xi = poly.vertices[i].x, yi = poly.vertices[i].y;
+            const float xj = poly.vertices[j].x, yj = poly.vertices[j].y;
+            if (((yi > py) != (yj > py)) &&
+                (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) {
+                inside = !inside;
+            }
+        }
+        return inside;
+    };
+    for (const auto& c : corners) {
+        if (pointInPoly(c[0], c[1])) return true;
+    }
+
+    // (2) Algum vértice do polígono está dentro do rect?
+    SDL_Rect r = rect;
+    for (const auto& v : poly.vertices) {
+        SDL_Point p{ v.x, v.y };
+        if (SDL_PointInRect(&p, &r)) return true;
+    }
+
+    // (3) Alguma aresta do polígono cruza alguma aresta do rect?
+    auto segIntersect = [](float ax, float ay, float bx, float by,
+                           float cx, float cy, float dx, float dy) {
+        auto cross = [](float x1, float y1, float x2, float y2) { return x1 * y2 - y1 * x2; };
+        const float d1 = cross(dx - cx, dy - cy, ax - cx, ay - cy);
+        const float d2 = cross(dx - cx, dy - cy, bx - cx, by - cy);
+        const float d3 = cross(bx - ax, by - ay, cx - ax, cy - ay);
+        const float d4 = cross(bx - ax, by - ay, dx - ax, dy - ay);
+        return (((d1 > 0) != (d2 > 0)) && ((d3 > 0) != (d4 > 0)));
+    };
+    for (size_t i = 0; i < n; i++) {
+        const float ax = poly.vertices[i].x, ay = poly.vertices[i].y;
+        const float bx = poly.vertices[(i + 1) % n].x, by = poly.vertices[(i + 1) % n].y;
+        for (int k = 0; k < 4; k++) {
+            const float cx = corners[k][0], cy = corners[k][1];
+            const float dx = corners[(k + 1) % 4][0], dy = corners[(k + 1) % 4][1];
+            if (segIntersect(ax, ay, bx, by, cx, cy, dx, dy)) return true;
+        }
+    }
+    return false;
 }
 
 void LevelManager::RenderBackground(SDL_Renderer* renderer) {
@@ -841,6 +939,20 @@ void LevelManager::RenderCollisionOverlay(SDL_Renderer* renderer) const {
 
     SDL_SetRenderDrawColor(renderer, 180, 180, 200, 210);
     for (const auto& poly : floorStoneZones) {
+        for (size_t i = 0; i < poly.vertices.size(); i++) {
+            SDL_Point p1 = poly.vertices[i];
+            SDL_Point p2 = poly.vertices[(i + 1) % poly.vertices.size()];
+            const float x1 = (static_cast<float>(p1.x) - Camera::pos.x) * zm;
+            const float y1 = (static_cast<float>(p1.y) - Camera::pos.y) * zm;
+            const float x2 = (static_cast<float>(p2.x) - Camera::pos.x) * zm;
+            const float y2 = (static_cast<float>(p2.y) - Camera::pos.y) * zm;
+            SDL_RenderDrawLineF(renderer, x1, y1, x2, y2);
+        }
+    }
+
+    // Gatilhos do Repairable (verde)
+    SDL_SetRenderDrawColor(renderer, 90, 240, 120, 235);
+    for (const auto& poly : repairableTriggers) {
         for (size_t i = 0; i < poly.vertices.size(); i++) {
             SDL_Point p1 = poly.vertices[i];
             SDL_Point p2 = poly.vertices[(i + 1) % poly.vertices.size()];

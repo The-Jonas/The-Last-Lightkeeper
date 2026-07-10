@@ -209,6 +209,15 @@ void TitleState::LoadAssets() {
         menuTexts[i]=go;
     }
     
+    // Filtragem LINEAR também no fundo e no logo (alta resolução, escalados p/
+    // caber) — evita o aspecto pixelado do downscale nearest-neighbor.
+    if (auto t = Resources::GetImage("Recursos/img/menu/parede.png")) {
+        SDL_SetTextureScaleMode(t.get(), SDL_ScaleModeLinear);
+    }
+    if (auto t = Resources::GetImage("Recursos/img/menu/LOGO_BRANCA_1.png")) {
+        SDL_SetTextureScaleMode(t.get(), SDL_ScaleModeLinear);
+    }
+
     hasContinueSave = SaveManager::HasSave();
 
     // Seleção inicial SEMPRE em "Novo Jogo" (índice 0). "Continuar" (índice 1) só
@@ -272,10 +281,16 @@ void TitleState::BodyFramePath(int frame1based, char* out, size_t n) const {
 void TitleState::PreloadMenuVersion(int version) {
     const int saved = menuVersion;
     menuVersion = version;
-    Resources::GetImage(ArmPath());
+    // Assets do menu são de alta resolução e escalados para caber na tela; sem
+    // filtragem LINEAR o (down)scale nearest-neighbor deixa tudo "pixelado".
+    if (auto t = Resources::GetImage(ArmPath())) {
+        SDL_SetTextureScaleMode(t.get(), SDL_ScaleModeLinear);
+    }
     for (int i = 1; i <= kCharFrames; ++i) {
         char p[192]; BodyFramePath(i, p, sizeof(p));
-        Resources::GetImage(p);
+        if (auto t = Resources::GetImage(p)) {
+            SDL_SetTextureScaleMode(t.get(), SDL_ScaleModeLinear);
+        }
     }
     menuVersion = saved;
 }

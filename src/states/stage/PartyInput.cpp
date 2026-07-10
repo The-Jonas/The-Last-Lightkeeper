@@ -63,8 +63,8 @@ void StageState::HandlePartyInput() {
     InputManager& input = InputManager::GetInstance();
 
     // Trocar de irmão É permitido enquanto escondido (ex.: assumir o irmãozinho
-    // para usar o poder de visão). O que fica restrito ao irmãozão é apenas
-    // ENTRAR/SAIR do esconderijo (ver Closet.cpp).
+    // para usar o poder de visão). Entrar/sair do esconderijo (E) agora vale para
+    // AMBOS os irmãos (ver Closet.cpp).
     if (input.ActionPress(GameAction::SwapBrother)) {
         SwapControlledCharacter();
     }

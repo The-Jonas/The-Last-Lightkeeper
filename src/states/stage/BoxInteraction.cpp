@@ -467,7 +467,6 @@ void StageState::UpdateBoxInteraction() {
     GameSfx::UpdateCandleProximity(IsPlayerNearLitCandle());
 
     InputManager& input = InputManager::GetInstance();
-    const bool eHeld = input.ActionDown(GameAction::Interact);
     const bool ePressed = input.ActionPress(GameAction::Interact);
     const bool boxPushBlocked = IsHoldingLamp(inventory);
     ItemPickup* reachableItem = FindClosestReachableItem();
@@ -479,58 +478,72 @@ void StageState::UpdateBoxInteraction() {
         GameVoice::OnActionBlocked();
     }
 
+    // Pegou a lâmpada enquanto empurrava → solta a caixa automaticamente.
     if (boxPushBlocked && activePushBox) {
-        GameSfx::NotifyBoxPushEnd();
-        activePushBox = nullptr;
-        if (bigCharacter && bigCharacter->currentState == Character::ActionState::PUSHING_BOX) {
-            bigCharacter->currentState = Character::ActionState::NORMAL;
-        }
+        DetachActivePushBox();
     }
 
-    if (eHeld) {
-        if (!boxPushBlocked && !activePushBox && reachablePushBox &&
-            IsPushBoxCloserThanItem(reachableItem, reachablePushBox)) {
+    // EMPURRAR É UM TOGGLE (não é mais segurar-para-empurrar): aperta E para
+    // GRUDAR na caixa/barril, aperta E de novo para SOLTAR. Só o irmãozão e só
+    // quando a caixa é o interagível mais próximo. As demais interações com E
+    // (pegar item, vela, janela, rádio, jornal) continuam iguais.
+    if (ePressed && !boxPushBlocked) {
+        if (activePushBox) {
+            // Já grudado → solta (soltar sempre é permitido, independente do que
+            // mais esteja por perto).
+            DetachActivePushBox();
+        } else if (reachablePushBox &&
+                   IsPushBoxCloserThanItem(reachableItem, reachablePushBox)) {
+            // Gruda na caixa/barril (toggle ligado) — vale para móvel e imóvel.
             activePushBox = reachablePushBox;
-            GameVoice::OnDragObject();   // às vezes comenta o peso ("isso pesa")
             if (bigCharacterObject) {
                 const GameObject& boxObj = reachablePushBox->GetAssociated();
                 pushBoxOffset.x = boxObj.box.x - bigCharacterObject->box.x;
                 pushBoxOffset.y = boxObj.box.y - bigCharacterObject->box.y;
             }
-
             if (bigCharacter) {
                 bigCharacter->currentState = Character::ActionState::PUSHING_BOX;
-                // O personagem pega a lerdeza da caixa pra ele (em outras palavras ele fica mais lento)
+                // O personagem pega a lerdeza da caixa (fica mais lento).
                 bigCharacter->SetSpeedMultiplier(activePushBox->GetWeightMultiplier());
             }
         }
-    } else if (activePushBox) {
-        GameSfx::NotifyBoxPushEnd();
-        activePushBox = nullptr;
-        if (bigCharacter && bigCharacter->currentState == Character::ActionState::PUSHING_BOX) {
-            bigCharacter->currentState = Character::ActionState::NORMAL;
-
-            if (activePushBox && !activePushBox->GetAssociated().IsDead()) {
-                bigCharacter->SetSpeedMultiplier(activePushBox->GetWeightMultiplier());
-            } else {
-                activePushBox = nullptr;
-        }
-
-            // --- DEVOLVE A VELOCIDADE NORMAL AO SOLTAR ---
-            bigCharacter->SetSpeedMultiplier(1.0f);
-        }
-        
     }
 
     Box::SetActivePushTarget(activePushBox);
 
-    if (wasPushingLastFrame && input.KeyRelease(SDLK_e)) {
+    // Salva o progresso ao SOLTAR (transição empurrando → parado), capturando a
+    // nova posição da caixa.
+    if (wasPushingLastFrame && !activePushBox) {
         SaveCurrentProgress();
     }
     wasPushingLastFrame = activePushBox != nullptr;
-    if (activePushBox) {
+
+    // Som de arrasto (CAIXA_MADEIRALONGO): SÓ enquanto grudado numa caixa/barril E
+    // o irmãozão está de fato SE MOVENDO. Parado (ou barril imóvel, que zera a
+    // velocidade ao ser bloqueado) → silêncio.
+    constexpr float kBoxDragMovingSpeed = 5.0f;
+    const bool bigBroMoving = activePushBox && bigCharacter &&
+                              bigCharacter->GetSpeed().Magnitude() > kBoxDragMovingSpeed;
+    if (bigBroMoving) {
         GameSfx::MaintainBoxPushLoop();
+    } else {
+        GameSfx::PauseBoxPushLoop();
     }
+}
+
+void StageState::DetachActivePushBox() {
+    if (!activePushBox) {
+        return;
+    }
+    GameSfx::NotifyBoxPushEnd();
+    activePushBox = nullptr;
+    if (bigCharacter) {
+        if (bigCharacter->currentState == Character::ActionState::PUSHING_BOX) {
+            bigCharacter->currentState = Character::ActionState::NORMAL;
+        }
+        bigCharacter->SetSpeedMultiplier(1.0f);   // devolve a velocidade normal
+    }
+    Box::SetActivePushTarget(nullptr);
 }
 
 void StageState::ApplyCoupledPushMovement(const Vec2& prevPlayerPos) {
@@ -565,6 +578,12 @@ void StageState::ApplyCoupledPushMovement(const Vec2& prevPlayerPos) {
             }
         }
     } else {
+        // A caixa/barril não se moveu. Se for um barril IMÓVEL (peso 0), o jogador
+        // TENTOU mover algo que não sai do lugar → reclama do peso na hora ("Ah,
+        // isso pesa..."). O cooldown de 6 s no áudio evita repetição.
+        if (activePushBox->GetWeightMultiplier() <= 0.0f) {
+            GameVoice::OnHeavyBarrel();
+        }
         bigCharacterObject->box.x = prevPlayerPos.x;
         bigCharacterObject->box.y = prevPlayerPos.y;
         if (Collider* playerCol = bigCharacterObject->GetComponent<Collider>()) {
@@ -581,10 +600,17 @@ void StageState::RenderInteractionGlowIfNeeded(GameObject& go) {
 
     Box* box = go.GetComponent<Box>();
     if (box && box->IsPushable()) {
+        // Barril IMÓVEL (peso 0): destaque VERMELHO — sinaliza "não dá pra mover",
+        // mas ainda pode ser agarrado (clicável).
+        const bool immovable = box->GetWeightMultiplier() <= 0.0f;
         if (box == activePushBox) {
-            DrawSpriteInteractionGlow(go, 255, 220, 0);
+            if (immovable) {
+                DrawSpriteInteractionGlow(go, 255, 64, 64, 1.14f);
+            } else {
+                DrawSpriteInteractionGlow(go, 255, 220, 0);
+            }
         } else if (box == reachablePushBox) {
-            if (IsHoldingLamp(inventory)) {
+            if (IsHoldingLamp(inventory) || immovable) {
                 DrawSpriteInteractionGlow(go, 255, 64, 64, 1.14f);
             } else {
                 DrawSpriteInteractionGlow(go, 255, 255, 255);

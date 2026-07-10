@@ -83,8 +83,14 @@ public:
 
     float GetDeltaTime();                       // Retorna o valor de dt
 
-    int GetWindowsWidth();                      // Funções get para altura e 
+    int GetWindowsWidth();                      // Funções get para altura e
     int GetWindowsHeight();                     // largura da janela do jogo
+
+    // Fator de escala da UI: 1.0 na resolução de referência (1080p de altura);
+    // proporcional em outras resoluções lógicas. HUD/tutoriais/overlays com
+    // tamanhos em pixels multiplicam por isto para caberem em resoluções baixas
+    // e ficarem consistentes nas altas. Clampado para evitar extremos.
+    static float UiScale();
 
     // true quando compilado com alvo `mingw32-make debug` (-DDEBUG)
     static bool IsDebugBuild();

@@ -10,6 +10,7 @@
 #include "engine/Camera.h"
 #include "engine/Component.h"
 #include "gameplay/Character.h"
+#include "gameplay/Monster.h"
 #include "world/Collider.h"
 #include "world/Collision.h"
 #include "core/GameData.h"
@@ -216,13 +217,16 @@ void StageState::Update(float dt){
         if (!pauseMenuOpen) {
             pauseMenuOpen = true;       // nada aberto: abre o menu de pausa
             pauseMenuSelection = 0;
+            // Pausa NÃO simula o mundo, então o Character::Update que pararia os
+            // loops de SFX não roda: silencia os passos (e demais loops de
+            // gameplay) na hora, senão continuam tocando durante a pausa.
+            GameSfx::StopAllGameplayAudio();
             return;  // consome o ESC deste frame
         }
         // Algum overlay aberto: o ESC é tratado pelos handlers abaixo (fecha/volta).
     }
 
-    // Menu de pausa aberto: processa a navegação do overlay ativo, mas NÃO retorna
-    // — o mundo continua simulando (input do jogador congelado mais abaixo).
+    // Menu de pausa aberto: processa a navegação do overlay ativo.
     if (pauseMenuOpen) {
         if (controlsPanelOpen) {
             HandleControlsPanelInput();
@@ -234,6 +238,11 @@ void StageState::Update(float dt){
     }
     // "Reiniciar nível" agenda pop + recarrega: não rode o resto do frame.
     if (popRequested) {
+        return;
+    }
+    // O menu de pausa PAUSA o jogo de verdade (como ler um documento): não
+    // simula o mundo enquanto está aberto — só o overlay (tratado acima) roda.
+    if (pauseMenuOpen) {
         return;
     }
 
@@ -296,6 +305,7 @@ void StageState::Update(float dt){
         TryInteractWindowOnKeyPress();
         TryInteractRadioOnKeyPress();
         UpdateTutorials(dt);
+        UpdateMonsterScare(dt);
     }
     UpdateInventoryLight();
 
@@ -303,6 +313,7 @@ void StageState::Update(float dt){
 
     reachableCloset = nullptr;   // recomputado pelos Closet::Update neste frame
     reachableRepairable = nullptr;
+    repairableInReachNoItem = false;   // recomputado pelo Repairable::Update neste frame
     UpdateArray(dt);                                                                    // Percorre o vetor de GameObjects chamando o Update de cada um
 
     UpdateWindowLockdown(dt);   // todas as janelas abertas → apaga/mantém apagadas as velas
@@ -651,5 +662,52 @@ void StageState::UpdateWindowLockdown(float /*dt*/) {
     }
     if (allOpen) {
         GameSfx::PlayCandleBlowOut();   // sopro geral ao trancar o andar
+    }
+}
+
+// Susto "FUJA E SE ESCONDA!!!": dispara na 1ª vez que o monstro entra em CHASE.
+// Fica na tela no MÍNIMO kMonsterScareMinTime s; depois, some (com fade-out) só
+// quando o monstro deixa de perseguir.
+void StageState::UpdateMonsterScare(float dt) {
+    // Localiza o monstro e lê seu estado atual.
+    Monster* monster = nullptr;
+    for (const auto& goPtr : objectArray) {
+        GameObject* go = goPtr.get();
+        if (!go || go->IsDead()) continue;
+        if (Monster* m = go->GetComponent<Monster>()) {
+            monster = m;
+            break;
+        }
+    }
+    const bool chasing = monster && monster->GetState() == Monster::MonsterState::CHASE;
+
+    // 1ª entrada em CHASE → dispara o susto (uma única vez neste nível).
+    if (chasing && !monsterScareShown) {
+        monsterScareShown = true;
+        monsterScareActive = true;
+        monsterScareElapsed = 0.0f;
+        monsterScareFadeOut = 0.0f;
+    }
+
+    if (!monsterScareActive) {
+        return;
+    }
+
+    monsterScareElapsed += dt;
+
+    // Já em fade-out: termina de sumir.
+    if (monsterScareFadeOut > 0.0f) {
+        monsterScareFadeOut -= dt;
+        if (monsterScareFadeOut <= 0.0f) {
+            monsterScareFadeOut = 0.0f;
+            monsterScareActive = false;
+        }
+        return;
+    }
+
+    // Fica no MÍNIMO kMonsterScareMinTime s na tela; passado esse mínimo, só some
+    // (com fade-out) quando o monstro DEIXA de perseguir.
+    if (monsterScareElapsed >= kMonsterScareMinTime && !chasing) {
+        monsterScareFadeOut = kMonsterScareFadeOut;
     }
 }

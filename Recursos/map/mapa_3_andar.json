@@ -148,7 +148,7 @@
                         }],
                  "rotation":0,
                  "type":"Pilar",
-                 "visible":true,
+                 "visible":false,
                  "width":2847,
                  "x":440.136363636364,
                  "y":1399.22727272727
@@ -4472,6 +4472,35 @@
                  "width":0,
                  "x":1933,
                  "y":2157
+                }, 
+                {
+                 "height":0,
+                 "id":1066,
+                 "name":"repairable_trigger",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":0,
+                         "y":0
+                        }, 
+                        {
+                         "x":69,
+                         "y":100
+                        }, 
+                        {
+                         "x":409,
+                         "y":-99
+                        }, 
+                        {
+                         "x":300,
+                         "y":-230
+                        }],
+                 "rotation":0,
+                 "type":"repairable_trigger",
+                 "visible":true,
+                 "width":0,
+                 "x":2805,
+                 "y":448
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -4480,7 +4509,7 @@
          "y":0
         }],
  "nextlayerid":29,
- "nextobjectid":1066,
+ "nextobjectid":1067,
  "orientation":"orthogonal",
  "properties":[
         {

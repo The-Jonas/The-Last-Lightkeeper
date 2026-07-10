@@ -66,10 +66,12 @@ void Closet::Update(float dt) {
     // Congela a interação enquanto um overlay (menu/modal) está ativo.
     const bool inputFrozen = stage && stage->IsPlayerInputFrozen();
 
-    // Só o IRMÃOZÃO (personagem controlado = grande) pode entrar/sair do armário.
-    // O irmãozinho apenas segue junto — nunca se esconde sozinho.
-    const bool controllingBig =
-        stage->GetControlledCharacter() == stage->GetBigCharacterComponent();
+    // AMBOS os irmãos podem entrar/sair do armário (E). Ao esconder, os dois se
+    // escondem juntos; usa-se o alcance do personagem CONTROLADO no momento.
+    Character* controlled = stage->GetControlledCharacter();
+    const bool canUseCloset =
+        controlled == stage->GetBigCharacterComponent() ||
+        controlled == stage->GetSmallCharacterComponent();
 
     if (isOccupied) {
         // Atualiza a fresta: apaga se o isqueiro acabar, acende se tiver combustível
@@ -121,18 +123,19 @@ void Closet::Update(float dt) {
             ArmWhisperTimer();
         }
 
-        if (!inputFrozen && controllingBig &&
+        if (!inputFrozen && canUseCloset &&
             InputManager::GetInstance().ActionPress(GameAction::Interact)) {
             ExitCloset();
         }
 
     } else {
-        SDL_Rect reachBox = Character::player->GetInteractionRect(1);
+        SDL_Rect reachBox = canUseCloset ? controlled->GetInteractionRect(1)
+                                         : Character::player->GetInteractionRect(1);
         SDL_Rect interactZone = GetInteractionRect();
 
-        // Só exibe/aceita a opção de esconder controlando o irmãozão e encostando
-        // na FRENTE da porta correta.
-        if (controllingBig && SDL_HasIntersection(&reachBox, &interactZone)) {
+        // Aceita esconder com qualquer irmão controlado, encostando na FRENTE da
+        // porta correta.
+        if (canUseCloset && SDL_HasIntersection(&reachBox, &interactZone)) {
             if (stage) {
                 stage->SetReachableCloset(this);   // alimenta o prompt central do rodapé
             }
