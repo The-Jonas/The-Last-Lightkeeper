@@ -36,7 +36,7 @@
     { "text": "Luana Duque", "size": 80, "gap": 80 },
 
     { "text": "Programadores", "size": 48, "gap": 16 },
-    { "text": "João Victor Pereira", "size": 80, "gap": 80 },
+    { "text": "João Victor Pereira", "size": 80, "gap": 8 },
     { "text": "Matheus Azevedo", "size": 80, "gap": 8 },
 
     { "text": "Engine", "size": 48, "gap": 16 },
@@ -58,12 +58,21 @@
     { "text": "Luana Duque", "size": 80, "gap": 80 },
 
     { "text": "Elenco de Dublagem", "size": 48, "gap": 16 },
-    { "text": "Henrique do Nascimento Vieira", "size": 80, "gap": 8 },
-    { "text": "Haru Braga Vasconcelos", "size": 80, "gap": 80 },
+    { "text": "Henrique do Nascimento Vieira - Voz do Irmãozão", "size": 80, "gap": 8 },
+    { "text": "Haru Braga Vasconcelos - Voz do Irmãozinho", "size": 80, "gap": 80 },
 
     { "text": "Controle de Qualidade", "size": 48, "gap": 16 },
-    { "text": "(placeholder)", "size": 80, "gap": 80 },
-
+    { "text": "Isabele Barroso", "size": 80, "gap": 8 },
+    { "text": "Carlos Eduardo Azevedo", "size": 80, "gap": 8 },
+    { "text": "Kefferson Souza", "size": 80, "gap": 8 },
+    { "text": "Felipe Pez", "size": 80, "gap": 8 },
+    { "text": "Gabriel Boere", "size": 80, "gap": 8 },
+    { "text": "Agatha Beraldi", "size": 80, "gap": 8 },
+    { "text": "Oliver Dias", "size": 80, "gap": 8 },
+    { "text": "Gabriela Rocato", "size": 80, "gap": 8 },
+    { "text": "Carlos Reis", "size": 80, "gap": 8 },
+    { "text": "Helen Rejane Batista Louzeiro", "size": 80, "gap": 80 },
+    
     { "text": "Agradecimentos", "size": 48, "gap": 16 },
     { "text": "Família e amigos", "size": 80, "gap": 8 },
     { "text": "A todos que jogaram", "size": 80, "gap": 120 },

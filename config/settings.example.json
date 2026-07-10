@@ -3,10 +3,10 @@
   "window_width": 1920,
   "window_height": 1080,
   "master_volume": 70,
-  "ambient_volume": 50,
+  "ambient_volume": 30,
   "sfx_volume": 100,
-  "voice_volume": 100,
-  "brightness": 100,
+  "voice_volume": 60,
+  "brightness": 50,
   "fullscreen": false,
   "keybindings": {
     "move_up": "W",

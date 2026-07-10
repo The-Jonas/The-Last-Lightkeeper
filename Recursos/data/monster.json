@@ -17,6 +17,7 @@
   "window_radar_interval": 6,
   "window_radar_range": 2900,
   "sabotage_delay": 4,
+  "post_sabotage_idle": 8,
 
   "noise_hear_radius": 950,
   "noise_cooldown": 1.5,

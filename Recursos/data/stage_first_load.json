@@ -21,11 +21,11 @@
   ],
   "navWorld": { "w": 4358, "h": 3276 },
   "navTilePx": 64,
-  "startingFlashlightDurability": 20,
+  "startingFlashlightDurability": 30,
   "startingFlashlight": {
     "name": "Flashlight",
     "spritePath": "Recursos/img/items/Isqueiro.png",
-    "maxDurability": 80,
+    "maxDurability": 120,
     "durabilityDecreases": true,
     "sortOrder": 0,
     "properties": [{ "prop": "LIGHT_SOURCE", "value": 1.0 }]
@@ -42,7 +42,7 @@
     {
       "name": "Broken Flashlight",
       "spritePath": "Recursos/img/items/Isqueiro.png",
-      "maxDurability": 80,
+      "maxDurability": 120,
       "durabilityDecreases": true,
       "sortOrder": 2,
       "properties": [{ "prop": "LIGHT_SOURCE", "value": 1.0 }]

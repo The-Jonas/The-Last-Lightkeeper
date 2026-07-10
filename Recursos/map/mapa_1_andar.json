@@ -366,7 +366,7 @@
                         }],
                  "rotation":0,
                  "type":"Pilar",
-                 "visible":true,
+                 "visible":false,
                  "width":2847,
                  "x":439,
                  "y":1406
@@ -2998,7 +2998,7 @@
                  "visible":true,
                  "width":0,
                  "x":64.5,
-                 "y":1266
+                 "y":1271
                 }, 
                 {
                  "height":0,
@@ -4221,7 +4221,7 @@
                         }],
                  "rotation":0,
                  "type":"Escada",
-                 "visible":false,
+                 "visible":true,
                  "width":0,
                  "x":2122,
                  "y":-88
@@ -4511,6 +4511,35 @@
                  "width":2608.26254826255,
                  "x":548,
                  "y":436
+                }, 
+                {
+                 "height":0,
+                 "id":952,
+                 "name":"repairable_trigger",
+                 "opacity":1,
+                 "polygon":[
+                        {
+                         "x":0,
+                         "y":0
+                        }, 
+                        {
+                         "x":57.3333333333335,
+                         "y":104
+                        }, 
+                        {
+                         "x":433.333333333333,
+                         "y":-61.3333333333334
+                        }, 
+                        {
+                         "x":290.666666666667,
+                         "y":-210.666666666667
+                        }],
+                 "rotation":0,
+                 "type":"repairable_trigger",
+                 "visible":true,
+                 "width":0,
+                 "x":2813.33333333333,
+                 "y":436
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -4519,7 +4548,7 @@
          "y":0
         }],
  "nextlayerid":29,
- "nextobjectid":952,
+ "nextobjectid":953,
  "orientation":"orthogonal",
  "properties":[
         {
@@ -4528,7 +4557,7 @@
          "value":"level_1"
         }],
  "renderorder":"right-down",
- "tiledversion":"1.12.1",
+ "tiledversion":"1.12.2",
  "tileheight":64,
  "tilesets":[
         {
