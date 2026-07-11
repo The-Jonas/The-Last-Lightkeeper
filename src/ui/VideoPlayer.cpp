@@ -4,6 +4,7 @@
 #include "engine/GameObject.h"
 #include "engine/Camera.h"
 #include <iostream>
+#include <vector>
 
 // Callback que em C puro que o pl_mpeg chama para entregar um frame de vídeo.
 void OnVideoFrame(plm_t *plm, plm_frame_t * frame, void *user) {
@@ -35,7 +36,24 @@ VideoPlayer::VideoPlayer(GameObject& associated, std::string file) : Component(a
         plm_get_width(plm),
         plm_get_height(plm)
     );
-    
+
+    // Uma textura YUV recém-criada vem com os planos NÃO inicializados, o que
+    // aparece como um frame VERDE (Y/croma zerados) por um instante — visível ao
+    // pular a cutscene antes do 1º frame decodificar. Preenchemos de PRETO já na
+    // criação: luma 0 e croma neutro (128).
+    if (videoTexture) {
+        const int w  = plm_get_width(plm);
+        const int h  = plm_get_height(plm);
+        const int cw = (w + 1) / 2;
+        const int ch = (h + 1) / 2;
+        std::vector<Uint8> yPlane(static_cast<size_t>(w) * h, 0);       // preto
+        std::vector<Uint8> cPlane(static_cast<size_t>(cw) * ch, 128);   // croma neutro
+        SDL_UpdateYUVTexture(videoTexture, nullptr,
+                             yPlane.data(), w,
+                             cPlane.data(), cw,
+                             cPlane.data(), cw);
+    }
+
     // Estica o GameObject para preencher a tela inteira (FULL HD)
     associated.box.w = Game::GetInstance().GetWindowsWidth();
     associated.box.h = Game::GetInstance().GetWindowsHeight();

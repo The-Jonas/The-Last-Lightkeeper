@@ -1,4 +1,5 @@
 #include "core/LevelManager.h"
+#include "core/CrashHandler.h"
 #include "engine/Camera.h"
 #include <SDL2/SDL_image.h>
 #include <cmath>
@@ -39,6 +40,7 @@ LevelManager::~LevelManager() {
 }
 
 void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
+    CrashHandler::Log("LoadLevel: %s", path.c_str());
     std::ifstream file(path);
     if (!file.is_open()) {
         std::cout << "Erro: Arquivo do mapa nao encontrado -> " << path << std::endl;

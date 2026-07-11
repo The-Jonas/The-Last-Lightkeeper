@@ -34,6 +34,11 @@ void OnBrothersTooFar();     // com medo quando os irmãos se afastam demais
 void OnHidingMonsterClose(); // escondido no armário e o monstro se aproxima
 void OnHidingWhatIfMonster(); // #4 "E se o monstro estiver lá fora?" — sussurro aleatório no armário
 
+// Faroleiro (LightKeeper) — o faroleiro move as cortinas para ajudar os irmãos.
+// Toca uma fala ALEATÓRIA do faroleiro sempre que uma cortina começa a se mover
+// (abrir ou fechar), para o jogador perceber quem o está ajudando.
+void OnCurtainMoved();
+
 // DEBUG: toca uma fala ALEATÓRIA do irmão indicado (true = irmãozão, false =
 // irmãozinho), ignorando cooldown/mute e cortando a fala atual. Usado só pelo
 // atalho de desenvolvedor (VOICE_TEST_KEY) em builds de debug.

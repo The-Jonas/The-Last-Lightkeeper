@@ -107,8 +107,8 @@ void Window::Render() {
     float screenX = center.x - Camera::pos.x;
     float screenY = center.y - Camera::pos.y;
 
-    //ÁREA DE INTERAÇÃO (VERDE) - Raio de 100 pixels
-    stage_internal::DrawDebugCircle(renderer, screenX, screenY, 200.0f, 50, 255, 50, 180);
+    //ÁREA DE INTERAÇÃO (VERDE) - Raio de 260 px (bate com o teste em GetReachableWindow)
+    stage_internal::DrawDebugCircle(renderer, screenX, screenY, 260.0f, 50, 255, 50, 180);
 
     //ÁREA DE VENTO (AZUL CLARO) - Usa o windRadius
     stage_internal::DrawDebugCircle(renderer, screenX, screenY, windRadius, 100, 200, 255, 180);

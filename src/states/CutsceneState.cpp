@@ -226,6 +226,19 @@ void CutsceneState::Update(float dt) {
 }
 
 void CutsceneState::Render() {
+    // Fundo escuro por baixo do vídeo: garante que qualquer instante sem frame
+    // pronto (1º frame ainda decodificando, ou vídeo que não carregou) apareça
+    // ESCURO em vez do verde da textura YUV não inicializada.
+    SDL_Renderer* renderer = Game::GetInstance().GetRenderer();
+    if (renderer) {
+        const int winW = Game::GetInstance().GetWindowsWidth();
+        const int winH = Game::GetInstance().GetWindowsHeight();
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+        SDL_SetRenderDrawColor(renderer, 8, 8, 12, 255);
+        const SDL_Rect full{0, 0, winW, winH};
+        SDL_RenderFillRect(renderer, &full);
+    }
+
     RenderArray();
     RenderSubtitle(Game::GetInstance().GetRenderer());
     RenderSkipHint(Game::GetInstance().GetRenderer());

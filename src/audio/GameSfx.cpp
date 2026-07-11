@@ -204,6 +204,14 @@ void PlaySound(Sound& sound) {
     }
 }
 
+// Este MESMO som já está tocando agora? Verifica o canal em que ele tocou por
+// último E confirma que o chunk daquele canal ainda é o dele (o canal pode ter
+// sido reaproveitado por outro efeito). Usado para não empilhar o mesmo som.
+bool IsSoundPlaying(Sound& sound) {
+    const int ch = sound.GetChannel();
+    return ch >= 0 && Mix_Playing(ch) && Mix_GetChunk(ch) == sound.GetChunk();
+}
+
 Sound& FootstepSound(FootstepSurface surface) {
     switch (surface) {
     case FootstepSurface::Wood:
@@ -385,7 +393,11 @@ void NotifyBoxSlide() {
     }
 
     if (!gBoxIsMoving) {
-        PlaySound(gBoxStartSound);
+        // Não empilha o "início de arrasto" se ele ainda estiver tocando (arrancadas
+        // rápidas / re-grude faziam o CAIXA_Madeira soar 2–3x seguidas).
+        if (!IsSoundPlaying(gBoxStartSound)) {
+            PlaySound(gBoxStartSound);
+        }
         gBoxIsMoving = true;
     }
     StartBoxMovingLoop();

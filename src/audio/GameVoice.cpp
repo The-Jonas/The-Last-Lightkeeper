@@ -1,5 +1,6 @@
 #include "audio/GameVoice.h"
 #include "audio/Sound.h"
+#include "core/CrashHandler.h"
 #include "core/Game.h"
 
 #define INCLUDE_SDL_MIXER
@@ -30,6 +31,23 @@ constexpr const char* kLilStayA   = "Recursos/audio/Dublagem/IRMÃOZINHO/E_se_o_
 constexpr const char* kLilStayB   = "Recursos/audio/Dublagem/IRMÃOZINHO/eu_nao_quero.wav";
 constexpr const char* kLilHide    = "Recursos/audio/Dublagem/IRMÃOZINHO/nao_sai_o_monstro.wav";
 
+// ── Faroleiro (LightKeeper) ─────────────────────────────────────────────────
+// Falas tocadas aleatoriamente quando o faroleiro move uma cortina (3º andar).
+constexpr const char* kKeeperLines[] = {
+    "Recursos/audio/Dublagem/FAROLEIRO/Faroleiro_1.wav",
+    "Recursos/audio/Dublagem/FAROLEIRO/Faroleiro_2.wav",
+    "Recursos/audio/Dublagem/FAROLEIRO/Faroleiro_3.wav",
+    "Recursos/audio/Dublagem/FAROLEIRO/Faroleiro_4.wav",
+    "Recursos/audio/Dublagem/FAROLEIRO/Faroleiro_5.wav",
+    "Recursos/audio/Dublagem/FAROLEIRO/Faroleiro_6.wav",
+    "Recursos/audio/Dublagem/FAROLEIRO/Faroleiro_7.wav",
+};
+constexpr int kKeeperLineCount = sizeof(kKeeperLines) / sizeof(kKeeperLines[0]);
+// Legenda única para todas as falas do faroleiro (são grunhidos de esforço).
+constexpr const char* kTxtKeeper = "[Faroleiro: grunhido]";
+// Volume das falas do faroleiro relativo às demais (50% = metade, mais distante).
+constexpr int kKeeperVolumePercent = 50;
+
 // ── Legendas (subtitles) ────────────────────────────────────────────────────
 // Texto exibido enquanto cada fala toca. Inferido dos nomes dos arquivos —
 // AJUSTE aqui para bater exatamente com o que foi dublado.
@@ -50,6 +68,7 @@ constexpr const char* kTxtLilHide    = "Não sai! O monstro...";
 Sound gCall, gPickupA, gPickupB, gDrag, gBagFull, gCant;
 Sound gScoldA, gScoldB;
 Sound gScaredA, gScaredB, gStayA, gStayB, gHide;
+Sound gKeeper[kKeeperLineCount];   // falas do faroleiro (cortinas)
 
 bool gLoaded = false;
 bool gMuted = false;
@@ -95,6 +114,34 @@ void NormalizeChunkToPeak(Mix_Chunk* c, float targetFrac, float maxGain) {
     }
 }
 
+// Filtro passa-baixa de 1 polo aplicado ao PCM: abafa os agudos, imitando um som
+// que vem "de longe / de cima" (atravessando o teto do farol). alpha em (0,1);
+// quanto MENOR, mais abafado. ~0.15 ≈ corte em ~1 kHz a 44,1 kHz. Filtra cada
+// canal (estéreo intercalado) com seu próprio estado.
+void LowPassChunk(Mix_Chunk* c, float alpha) {
+    if (!c || !c->abuf || c->alen < sizeof(Sint16)) {
+        return;
+    }
+    Sint16* samples = reinterpret_cast<Sint16*>(c->abuf);
+    const size_t n = c->alen / sizeof(Sint16);
+    int channels = 2;
+    { int f = 0, ch = 2; Uint16 fm = 0; if (Mix_QuerySpec(&f, &fm, &ch)) channels = ch; }
+    if (channels < 1) channels = 1;
+    if (channels > 8) channels = 8;
+    float prev[8] = {0};
+    bool  init[8] = {false};
+    for (size_t i = 0; i < n; ++i) {
+        const int ch = static_cast<int>(i % channels);
+        const float x = static_cast<float>(samples[i]);
+        if (!init[ch]) { prev[ch] = x; init[ch] = true; }
+        const float y = prev[ch] + alpha * (x - prev[ch]);
+        prev[ch] = y;
+        int v = static_cast<int>(std::lround(y));
+        v = std::max(-32768, std::min(32767, v));
+        samples[i] = static_cast<Sint16>(v);
+    }
+}
+
 void EnsureLoaded() {
     if (gLoaded) {
         return;
@@ -112,6 +159,9 @@ void EnsureLoaded() {
     gStayA.Open(kLilStayA);
     gStayB.Open(kLilStayB);
     gHide.Open(kLilHide);
+    for (int i = 0; i < kKeeperLineCount; ++i) {
+        gKeeper[i].Open(kKeeperLines[i]);
+    }
 
     // Normaliza TODAS as falas ao mesmo pico -> irmãozão e irmãozinho ficam com
     // o mesmo volume percebido e o nível geral sobe (as gravações eram baixas).
@@ -125,6 +175,15 @@ void EnsureLoaded() {
             NormalizeChunkToPeak(s->GetChunk(), 0.97f, 10.0f);
         }
     }
+    // Faroleiro: primeiro ABAFA (passa-baixa) para soar distante/"vindo de cima",
+    // depois normaliza para manter um nível consistente com o timbre já abafado.
+    // A redução final de volume (50%) é feita no canal, ao tocar (ver OnCurtainMoved).
+    for (int i = 0; i < kKeeperLineCount; ++i) {
+        if (gKeeper[i].IsOpen()) {
+            LowPassChunk(gKeeper[i].GetChunk(), 0.15f);
+            NormalizeChunkToPeak(gKeeper[i].GetChunk(), 0.97f, 10.0f);
+        }
+    }
 
     gLoaded = true;
 }
@@ -135,10 +194,13 @@ bool VoiceBusy() {
 
 // Aplica o volume da dublagem no canal de voz atual (ver comentário de
 // kVoiceGainPercent). Compartilhado entre a reprodução normal e o debug.
-void ApplyVoiceChannelVolume() {
+// scalePercent atenua uma fala específica (ex.: o faroleiro toca a 50%, mais
+// distante/abafado, "vindo de cima").
+void ApplyVoiceChannelVolume(int scalePercent = 100) {
     if (gChannel >= 0) {
         int vol = (MIX_MAX_VOLUME * Game::voiceVolumePercent) / 100;
         vol = std::min(MIX_MAX_VOLUME, (vol * kVoiceGainPercent) / 100);
+        vol = (vol * scalePercent) / 100;
         Mix_Volume(gChannel, vol);
     }
 }
@@ -146,7 +208,8 @@ void ApplyVoiceChannelVolume() {
 // Toca a fala se: não estiver mudo, o cooldown global já passou e nenhuma outra
 // fala estiver tocando. extraCooldownMs estende a pausa para falas que poderiam
 // repetir muito (arrastar, esconder).
-bool Play(Sound& sound, const char* subtitle, Uint32 extraCooldownMs = 0) {
+bool Play(Sound& sound, const char* subtitle, Uint32 extraCooldownMs = 0,
+          int volScalePercent = 100) {
     if (gMuted) {
         return false;
     }
@@ -157,9 +220,10 @@ bool Play(Sound& sound, const char* subtitle, Uint32 extraCooldownMs = 0) {
     }
     sound.Play();
     gChannel = sound.GetChannel();
-    ApplyVoiceChannelVolume();
+    ApplyVoiceChannelVolume(volScalePercent);
     gNextAllowedMs = now + kGlobalCooldownMs + extraCooldownMs;
     gCurrentSubtitle = subtitle ? subtitle : "";
+    CrashHandler::Log("voz: \"%s\"", subtitle ? subtitle : "(sem legenda)");
 
     // Duração real do clipe → a legenda some exatamente no fim (não dependemos do
     // estado do canal, que pode ser reaproveitado por um SFX depois).
@@ -234,6 +298,16 @@ void OnAskToStay()          { Play(gStayB, kTxtLilStayB); }
 void OnBrothersTooFar()     { PlayOneOf2(gScaredA, kTxtLilScaredA, gScaredB, kTxtLilScaredB); }
 void OnHidingMonsterClose() { Play(gHide, kTxtLilHide, 3000); }
 void OnHidingWhatIfMonster(){ Play(gStayA, kTxtLilStayA, 3000); }  // #4 sussurro medroso no armário
+
+// Faroleiro: grunhido aleatório ao mover uma cortina. Toca a 50% do volume e já
+// vem abafado (passa-baixa no load) para soar distante/"vindo de cima". Cooldown
+// extra evita repetir se duas cortinas se moverem quase juntas — o canal único
+// de voz já impede sobreposição.
+void OnCurtainMoved() {
+    EnsureLoaded();
+    Sound& line = gKeeper[rand() % kKeeperLineCount];
+    Play(line, kTxtKeeper, 2000, kKeeperVolumePercent);
+}
 
 void DebugPlayRandomForControlled(bool bigBrother) {
     EnsureLoaded();

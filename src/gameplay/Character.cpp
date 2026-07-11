@@ -20,6 +20,10 @@
 namespace {
 constexpr int kFootCollisionSkinPx = 1;
 
+// Aumento horizontal (+15%) da caixa de colisão dos pés. Aplica-se só à largura;
+// a altura permanece inalterada. Vale para os dois irmãos (mesma classe).
+constexpr float kCollisionWidthBoost = 1.15f;
+
 /// Se ainda estiver dentro de geometria estática (polígonos/retângulos sobrepostos no mapa), empurra o jogador para fora.
 void TryNudgeOutOfStaticGeometry(StageState* stage, Character* character, Collider* collider, bool isElevated) {
     if (!stage || !collider || !character) {
@@ -224,7 +228,10 @@ void Character::RestoreCollisionBox(float centerX, float footY) {
     // Ajusta a escala do colisor com os Setters
     Collider* col = (Collider*)associated.GetComponent<Collider>();
     if (col) {
-        float absoluteHitboxW = baselineBoxW * 0.5f;
+        // Largura da caixa = 50% da base × 1.15 (+15% horizontal). Altura inalterada.
+        // baselineBoxW/H = MAIOR frame de todas as animações (definido no preload),
+        // então a caixa fica sempre do mesmo tamanho/lugar, independente da animação.
+        float absoluteHitboxW = baselineBoxW * 0.5f * kCollisionWidthBoost;
         float absoluteHitboxH = baselineBoxH * 0.20f;   // altura (2x da original), inalterada
 
         Vec2 newScale(absoluteHitboxW / associated.box.w, absoluteHitboxH / associated.box.h);
@@ -658,11 +665,25 @@ void Character::PreloadAnimationFrames() {
     const Direction allDirs[] = {
         Direction::UP, Direction::DOWN, Direction::LEFT, Direction::RIGHT
     };
- 
+
+    // Enquanto pré-carrega, mede o MAIOR frame (largura/altura) de todas as
+    // animações. Essa maior dimensão vira a BASE IMUTÁVEL da caixa de colisão,
+    // para ela ficar sempre do mesmo tamanho/lugar independente da animação atual.
+    float maxW = 0.0f, maxH = 0.0f;
+    auto consider = [&](const std::string& path) {
+        auto tex = Resources::GetImage(path);
+        if (!tex) return;
+        int w = 0, h = 0;
+        if (SDL_QueryTexture(tex.get(), nullptr, nullptr, &w, &h) == 0) {
+            if (w > maxW) maxW = static_cast<float>(w);
+            if (h > maxH) maxH = static_cast<float>(h);
+        }
+    };
+
     // Carrega idle e walk (moving = false / true)
     for (bool moving : {false, true}) {
         for (Direction d : allDirs) {
- 
+
             if (irmaozaoIdleStrips) {
                 // Irmãozão — precisa cobrir os 3 estados de prop também
                 // (None, Lighter, Lamp) porque cada um é uma pasta diferente
@@ -673,7 +694,7 @@ void Character::PreloadAnimationFrames() {
                         for (Direction d : allDirs) {
                             for (int f = 0; f < kIrmaozaoStripFrameCount; f++) {
                                 std::string path = GetAnimStripPath(d, f, prop, moving);
-                                Resources::GetImage(path);
+                                consider(path);
                             }
                         }
                     }
@@ -682,10 +703,18 @@ void Character::PreloadAnimationFrames() {
                 // Irmãozinho — sem variação de prop
                 for (int f = 0; f < kIrmaozaoStripFrameCount; f++) {
                     std::string path = GetAnimStripPath(d, f, HeldPropVisual::None, moving);
-                    Resources::GetImage(path);
+                    consider(path);
                 }
             }
         }
+    }
+
+    // Base da caixa de colisão = MAIOR frame encontrado (definido ANTES de
+    // EnsureBaselineBox no Start, que então vira só um fallback). Assim a caixa
+    // usa a maior arte como referência e não muda quando a animação troca.
+    if (maxW > 0.0f && maxH > 0.0f) {
+        baselineBoxW = maxW;
+        baselineBoxH = maxH;
     }
 }
 

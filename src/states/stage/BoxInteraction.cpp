@@ -357,8 +357,9 @@ Window* StageState::FindClosestReachableWindow() const {
 
         const float d = playerCenter.Distance(go->box.Center());
         
-        // Raio de distância para conseguir interagir com a janela (ajuste se precisar)
-        if (d < 200.0f && d < closestDist) {
+        // Raio de distância para conseguir interagir com a janela (ajuste se precisar).
+        // 260 = 200 +30% → dá pra interagir de mais longe.
+        if (d < 260.0f && d < closestDist) {
             closestDist = d;
             closest = window;
         }
@@ -578,12 +579,9 @@ void StageState::ApplyCoupledPushMovement(const Vec2& prevPlayerPos) {
             }
         }
     } else {
-        // A caixa/barril não se moveu. Se for um barril IMÓVEL (peso 0), o jogador
-        // TENTOU mover algo que não sai do lugar → reclama do peso na hora ("Ah,
-        // isso pesa..."). O cooldown de 6 s no áudio evita repetição.
-        if (activePushBox->GetWeightMultiplier() <= 0.0f) {
-            GameVoice::OnHeavyBarrel();
-        }
+        // A caixa/barril não se moveu. Barril IMÓVEL (peso 0) agora é SILENCIOSO:
+        // nada acontece ao tentar movê-lo, para o jogador não conseguir distingui-lo
+        // de um barril normal (sem o antigo "Ah, isso pesa...").
         bigCharacterObject->box.x = prevPlayerPos.x;
         bigCharacterObject->box.y = prevPlayerPos.y;
         if (Collider* playerCol = bigCharacterObject->GetComponent<Collider>()) {
@@ -600,17 +598,15 @@ void StageState::RenderInteractionGlowIfNeeded(GameObject& go) {
 
     Box* box = go.GetComponent<Box>();
     if (box && box->IsPushable()) {
-        // Barril IMÓVEL (peso 0): destaque VERMELHO — sinaliza "não dá pra mover",
-        // mas ainda pode ser agarrado (clicável).
-        const bool immovable = box->GetWeightMultiplier() <= 0.0f;
+        // Barril IMÓVEL (peso 0 / "empty" 0) NÃO recebe mais destaque especial:
+        // fica idêntico a um barril normal (branco ao alcance, dourado agarrado).
+        // O jogador interage normalmente e simplesmente nada acontece ao tentar
+        // movê-lo — não dá pra distinguir dos demais. O VERMELHO permanece só para
+        // "segurando lâmpada" (aí não dá pra empurrar nada).
         if (box == activePushBox) {
-            if (immovable) {
-                DrawSpriteInteractionGlow(go, 255, 64, 64, 1.14f);
-            } else {
-                DrawSpriteInteractionGlow(go, 255, 220, 0);
-            }
+            DrawSpriteInteractionGlow(go, 255, 220, 0);
         } else if (box == reachablePushBox) {
-            if (IsHoldingLamp(inventory) || immovable) {
+            if (IsHoldingLamp(inventory)) {
                 DrawSpriteInteractionGlow(go, 255, 64, 64, 1.14f);
             } else {
                 DrawSpriteInteractionGlow(go, 255, 255, 255);

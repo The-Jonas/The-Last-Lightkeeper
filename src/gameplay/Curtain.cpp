@@ -4,6 +4,7 @@
 #include "engine/Camera.h"
 #include "world/Collider.h"
 #include "core/Game.h"
+#include "audio/GameVoice.h"
 
 
 Curtain::Curtain(GameObject& associated, int curtainId,
@@ -36,12 +37,15 @@ void Curtain::Open() {
     state = CurtainState::OPENING;
     // Colisão some imediatamente ao começar a abrir
     if (col) col->SetEnabled(false);
+    // O faroleiro moveu a cortina: fala aleatória (quem está ajudando).
+    GameVoice::OnCurtainMoved();
 }
 
 void Curtain::Close() {
     if (state == CurtainState::CLOSED || state == CurtainState::CLOSING) return;
     state = CurtainState::CLOSING;
     // Colisão só volta quando totalmente fechada (no Update)
+    GameVoice::OnCurtainMoved();
 }
 
 void Curtain::Update(float dt) {

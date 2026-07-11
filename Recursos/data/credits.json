@@ -71,7 +71,10 @@
     { "text": "Oliver Dias", "size": 80, "gap": 8 },
     { "text": "Gabriela Rocato", "size": 80, "gap": 8 },
     { "text": "Carlos Reis", "size": 80, "gap": 8 },
-    { "text": "Helen Rejane Batista Louzeiro", "size": 80, "gap": 80 },
+    { "text": "Helen Rejane Batista Louzeiro", "size": 80, "gap": 8 },
+    { "text": "Vinícius Maximiliana", "size": 80, "gap": 8 },
+    { "text": "Davi Dupin", "size": 80, "gap": 80 },
+
     
     { "text": "Agradecimentos", "size": 48, "gap": 16 },
     { "text": "Família e amigos", "size": 80, "gap": 8 },

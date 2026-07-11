@@ -449,7 +449,12 @@ void StageState::RenderInteractionPrompt(SDL_Renderer* renderer) {
     } else if (controlledCharacter == bigCharacter) {
         // Irmão maior fora do esconderijo: todas as interações do rodapé.
         const char* action = nullptr;
-        if (!activePushBox) {
+        if (activePushBox) {
+            // Já está segurando uma caixa/barril → apertar E de novo SOLTA. Fica
+            // visível o tempo todo enquanto segura, para o jogador saber que pode
+            // soltar (par com o "[E] Empurrar" mostrado antes de agarrar).
+            action = "Soltar";
+        } else {
             if (reachablePushBox) {
                 action = "Empurrar";
             } else if (reachableCloset) {

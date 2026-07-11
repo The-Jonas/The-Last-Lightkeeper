@@ -1,5 +1,6 @@
 #include "core/Game.h"
 #include "core/State.h"
+#include "core/CrashHandler.h"
 #include "states/stage/StageState.h"
 #include "core/InputManager.h"
 #include <cstdlib>
@@ -10,6 +11,7 @@
 #include <algorithm>
 #include <cctype>
 #include <exception>
+#include <typeinfo>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -616,7 +618,8 @@ SDL_Window* Game::GetWindow() {                     // Retorna a Janela
 }
 
 void Game::Push(State* state) {
-    storedState = state;                            // Guarda para empilhar no início do frame                  
+    if (state) CrashHandler::Log("Push estado: %s", typeid(*state).name());
+    storedState = state;                            // Guarda para empilhar no início do frame
 }
 
 void Game::CalculateDeltaTime() {       
