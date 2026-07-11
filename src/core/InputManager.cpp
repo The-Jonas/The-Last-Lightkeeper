@@ -5,7 +5,7 @@
 InputManager::InputManager(){
 
     // Inicializa o array do mouse
-    for(int i = 0; i < 6; i++){
+    for(int i = 0; i < kMouseButtonCount; i++){
         mouseState[i] = false;
         mouseUpdate[i] = 0;
     }
@@ -76,15 +76,21 @@ void InputManager::Update(){
             break;
 
         case SDL_MOUSEBUTTONDOWN:
-            // Pressionamento de botão do mouse
-            mouseState[event.button.button] = true;
-            mouseUpdate[event.button.button] = updateCounter;
+            // Pressionamento de botão do mouse. Ignora botões fora da faixa
+            // suportada (botões laterais de mouse gamer reportam 6, 7, 8+) —
+            // indexar sem checar corromperia a memória.
+            if (ValidMouseButton(event.button.button)) {
+                mouseState[event.button.button] = true;
+                mouseUpdate[event.button.button] = updateCounter;
+            }
             break;
 
-        case SDL_MOUSEBUTTONUP: 
-            // Botão do mouse foi solto
-            mouseState[event.button.button] = false;
-            mouseUpdate[event.button.button] = updateCounter;
+        case SDL_MOUSEBUTTONUP:
+            // Botão do mouse foi solto (mesma checagem de faixa do down).
+            if (ValidMouseButton(event.button.button)) {
+                mouseState[event.button.button] = false;
+                mouseUpdate[event.button.button] = updateCounter;
+            }
             break;
 
         case SDL_MOUSEWHEEL:
@@ -128,14 +134,17 @@ bool InputManager::IsKeyDown(int key){
 
 //Metodos de Consulta de estado (Mouse) -- mesma lógica do teclado, porém utilizando arrays ao invés de tabelas hash
 bool InputManager::MousePress(int button){
+    if (!ValidMouseButton(button)) return false;
     return mouseState[button] && mouseUpdate[button] == updateCounter;
 }
 
 bool InputManager::MouseRelease(int button){
+    if (!ValidMouseButton(button)) return false;
     return !mouseState[button] && mouseUpdate[button] == updateCounter;
 }
 
 bool InputManager::IsMouseDown(int button){
+    if (!ValidMouseButton(button)) return false;
     return mouseState[button];
 }
 

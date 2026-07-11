@@ -1,4 +1,5 @@
 #include "gameplay/HotbarComponent.h"
+#include "core/CrashHandler.h"
 #include "core/Game.h"
 #include "core/InputManager.h"
 #include "gameplay/Box.h"
@@ -61,6 +62,7 @@ PickupOutcome PerformPickup(Inventory& inventory, ItemPickup* closest, std::vect
     }
     closest->Destroy();
     PlayRandomPickupSound();
+    CrashHandler::Log("pegou item: %s", def.name.c_str());
     if (StageState* stage = Game::TryGetStageState()) {
         stage->NotifyItemPickupCollected(closest);
         stage->SaveCurrentProgress();
@@ -71,11 +73,14 @@ PickupOutcome PerformPickup(Inventory& inventory, ItemPickup* closest, std::vect
 // Dispara a fala adequada ao resultado de pegar item: bolsa cheia → "bolsa
 // pesada" (sem a fala normal de pegar); bloqueado → "não consigo"; senão,
 // ocasionalmente comenta.
-void VoiceForPickup(PickupOutcome outcome, const std::string& itemName) {
+void VoiceForPickup(PickupOutcome outcome, const std::string& itemName, bool oilAtMax) {
     const bool woodPlank = (itemName == "Tabua de Madeira");
     switch (outcome) {
     case PickupOutcome::Blocked:
-        GameVoice::OnActionBlocked();
+        // Óleo além do limite de combustível: "minha bolsa tá pesada" (a bolsa já
+        // está cheia de óleo). Qualquer outro bloqueio: "não consigo".
+        if (oilAtMax) GameVoice::OnBagFull();
+        else          GameVoice::OnActionBlocked();
         break;
     case PickupOutcome::PickedUpAndFilled:
         // Pegou (e encheu a bolsa): a tábua sempre solta "Isso vai servir.".
@@ -261,8 +266,12 @@ void HotbarComponent::TryPickupOnKeyPress() {
     const int hLevel = closest->GetHeightLevel();
     if (hLevel == 0 || hLevel == 1) {
         const std::string pickedName = closest->GetDef() ? closest->GetDef()->name : std::string();
+        // Antes de pegar: era óleo E a bolsa já estava no limite de combustível?
+        const bool oilAtMax = closest->GetDef() &&
+                              closest->GetDef()->HasProperty(ItemProperty::FUEL) &&
+                              inventory.IsFuelAtMax();
         const PickupOutcome outcome = PerformPickup(inventory, closest, itemPickups, bigCharacter);
-        VoiceForPickup(outcome, pickedName);
+        VoiceForPickup(outcome, pickedName, oilAtMax);
         if (outcome == PickupOutcome::Blocked) {
             return;   // bolsa cheia: nada foi pego
         }
@@ -278,8 +287,12 @@ void HotbarComponent::TryPickupOnKeyPress() {
 
     if (hLevel == 2) {
         const std::string pickedName = closest->GetDef() ? closest->GetDef()->name : std::string();
+        // Antes de pegar: era óleo E a bolsa já estava no limite de combustível?
+        const bool oilAtMax = closest->GetDef() &&
+                              closest->GetDef()->HasProperty(ItemProperty::FUEL) &&
+                              inventory.IsFuelAtMax();
         const PickupOutcome outcome = PerformPickup(inventory, closest, itemPickups, bigCharacter);
-        VoiceForPickup(outcome, pickedName);
+        VoiceForPickup(outcome, pickedName, oilAtMax);
         if (outcome == PickupOutcome::Blocked) {
             return;
         }

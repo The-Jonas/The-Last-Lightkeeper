@@ -21,7 +21,7 @@
   ],
   "navWorld": { "w": 4358, "h": 3276 },
   "navTilePx": 64,
-  "startingFlashlightDurability": 30,
+  "startingFlashlightDurability": 45,
   "startingFlashlight": {
     "name": "Flashlight",
     "spritePath": "Recursos/img/items/Isqueiro.png",

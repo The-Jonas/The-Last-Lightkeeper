@@ -461,6 +461,14 @@ bool Inventory::HasDepletedLightAndFuel() const {
     return depletedLight && hasFuel;
 }
 
+bool Inventory::IsFuelAtMax() const {
+    int fuelUnits = 0;
+    for (const ItemStack& s : stacks) {
+        if (s.def.HasProperty(ItemProperty::FUEL)) fuelUnits += s.count;
+    }
+    return fuelUnits >= kMaxFuelUnits;
+}
+
 bool Inventory::CanAcceptItem(const ItemDef& def) const {
     // Critério único de "posso pegar este item?", compartilhado pelo AddItem
     // (bloqueia a coleta + dispara a fala "não consigo") e pelo IsPickupBlocked
@@ -469,14 +477,8 @@ bool Inventory::CanAcceptItem(const ItemDef& def) const {
         return false;   // bolsa cheia
     }
     // Combustível é limitado a no máximo kMaxFuelUnits (2) na bolsa.
-    if (def.HasProperty(ItemProperty::FUEL)) {
-        int fuelUnits = 0;
-        for (const ItemStack& s : stacks) {
-            if (s.def.HasProperty(ItemProperty::FUEL)) fuelUnits += s.count;
-        }
-        if (fuelUnits >= kMaxFuelUnits) {
-            return false;   // já tem 2 combustíveis
-        }
+    if (def.HasProperty(ItemProperty::FUEL) && IsFuelAtMax()) {
+        return false;   // já tem 2 combustíveis
     }
     // Fonte de luz é ÚNICA por tipo: nunca aceita um segundo isqueiro/lamparina
     // (a luz é um item único e RECARREGÁVEL, não empilhável).

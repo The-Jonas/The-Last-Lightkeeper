@@ -219,7 +219,7 @@ void InventoryWheel::DrawSlot(SDL_Renderer* renderer, int stackIndex, float x, f
     const Inventory::ItemStack* stack = inventory.GetStack(stackIndex);
     if (!stack) return;
 
-    const float iconSize = kIconSize * scale * 2.25f;   // +50% e +50% (só a imagem do item)
+    const float iconSize = kIconSize * scale;   // +50% (só a imagem do item)
     const float iconX = slotX + (scaledSize - iconSize) * 0.5f;
     const float iconY = slotY + (scaledSize - iconSize) * 0.5f - 4.0f * scale;
 
@@ -433,8 +433,8 @@ void InventoryWheel::DrawCycleKeyHints(SDL_Renderer* renderer) {
     // dir = -1 (acima do slot de cima) / +1 (abaixo do de baixo).
     // leftArrow=true → espelha a imagem (seta apontando p/ a esquerda).
     auto drawKeyHint = [&](float slotCX, float slotCY, float dir, bool leftArrow, const std::string& label) {
-        const float imgSize = 47.0f * u;   // 30→39 (+30%) →47 (+20%)
-        const float textGap = 1.0f * u;
+        const float imgSize = 47.0f * u * 1.5f;   // 30→39 (+30%) →47 (+20%)
+        const float textGap = 1.0f * u * 1.5f;
 
         SDL_Texture* txt = nullptr; int tw = 0, th = 0;
         if (font) {
@@ -548,8 +548,8 @@ void InventoryWheel::DrawUseHint(SDL_Renderer* renderer, float activeX, float ac
     auto keyTex = Resources::GetImage("Recursos/img/hud/key_f.png");
     auto font = Resources::GetFont("Recursos/font/times.ttf",
                                    std::max(13, static_cast<int>(std::lround(20.0f * u))));
-    const float imgSize = 47.0f * u;   // 30→39 (+30%) →47 (+20%)
-    const float textGap = 1.0f * u;
+    const float imgSize = 47.0f * u * 1.5f;   // 30→39 (+30%) →47 (+20%)
+    const float textGap = 1.0f * u * 1.5f;
 
     SDL_Texture* txt = nullptr; int tw = 0, th = 0;
     if (font) {

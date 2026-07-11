@@ -765,8 +765,8 @@
                  "type":"Barril",
                  "visible":true,
                  "width":235,
-                 "x":3198.33333333333,
-                 "y":1115.33333333333
+                 "x":3219,
+                 "y":1118.66666666666
                 }, 
                 {
                  "gid":71,
@@ -783,7 +783,7 @@
                         {
                          "name":"empty",
                          "type":"float",
-                         "value":0.5
+                         "value":0.7
                         }, 
                         {
                          "name":"interactive",
@@ -817,7 +817,7 @@
                         {
                          "name":"empty",
                          "type":"float",
-                         "value":0.5
+                         "value":0.7
                         }, 
                         {
                          "name":"interactive",
@@ -833,8 +833,8 @@
                  "type":"Barril",
                  "visible":true,
                  "width":235,
-                 "x":3056.21212121167,
-                 "y":1175.81818181867
+                 "x":3064.87878787834,
+                 "y":1181.151515152
                 }, 
                 {
                  "gid":68,
@@ -851,7 +851,7 @@
                         {
                          "name":"empty",
                          "type":"float",
-                         "value":0.5
+                         "value":0.7
                         }, 
                         {
                          "name":"interactive",
@@ -953,7 +953,7 @@
                         {
                          "name":"empty",
                          "type":"float",
-                         "value":0.5
+                         "value":0.7
                         }, 
                         {
                          "name":"interactive",
@@ -987,7 +987,7 @@
                         {
                          "name":"empty",
                          "type":"float",
-                         "value":0.5
+                         "value":0.7
                         }, 
                         {
                          "name":"interactive",
@@ -1021,7 +1021,7 @@
                         {
                          "name":"empty",
                          "type":"float",
-                         "value":0.1
+                         "value":0.7
                         }, 
                         {
                          "name":"interactive",
@@ -1219,7 +1219,7 @@
                         {
                          "name":"empty",
                          "type":"float",
-                         "value":0.5
+                         "value":0.7
                         }, 
                         {
                          "name":"interactive",
@@ -1287,7 +1287,7 @@
                         {
                          "name":"empty",
                          "type":"float",
-                         "value":0.5
+                         "value":0.7
                         }, 
                         {
                          "name":"interactive",
@@ -1423,7 +1423,7 @@
                         {
                          "name":"empty",
                          "type":"float",
-                         "value":0.5
+                         "value":0.7
                         }, 
                         {
                          "name":"interactive",
@@ -1457,7 +1457,7 @@
                         {
                          "name":"empty",
                          "type":"float",
-                         "value":0.5
+                         "value":0.7
                         }, 
                         {
                          "name":"interactive",

@@ -19,9 +19,17 @@ A-Luz-do-Farol_*/
 # release build folders (exe + DLLs + Recursos — ~400MB, nunca versionar)
 TLL - release - V*/
 
+# pacotes de build locais de teste (exe + DLLs + Recursos — nunca versionar)
+TLL - Crash Fix/
+TLL-fixed/
+
 # backup dos passos do monstro pré-boost (não versionar)
 _backup_steps/
 
 # cutscene VIDEO sources: só o .mpg convertido (usado pelo jogo) vai versionado;
 # o .mp4 fonte (~90MB) fica de fora para não inchar o repo.
 Recursos/video/*.mp4
+
+# diagnostico de crash gerado em runtime (CrashHandler): relatorios + logs
+crash-reports/
+logs/

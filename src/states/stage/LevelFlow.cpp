@@ -40,6 +40,12 @@ void StageState::ClearGameplayWorld() {
     Character::player = nullptr;
     Character::littleBrother = nullptr;
     objectArray.clear();
+    // testShadowObjects guarda ponteiros CRUS para GameObjects de objectArray.
+    // Ao limpar objectArray (shared_ptr) os objetos são destruídos; se estes
+    // ponteiros ficarem, viram DANGLING e o loop de sombras (StageState::Render)
+    // faz dynamic_cast em memória liberada → crash (use-after-free) após a
+    // transição de fase. Limpar aqui junto com objectArray mantém o invariante.
+    testShadowObjects.clear();
     bigCharacterObject = nullptr;
     smallCharacterObject = nullptr;
     bigCharacter = nullptr;

@@ -90,9 +90,16 @@ private:
     int bindings[static_cast<int>(GameAction::Count)];   // tecla vinculada a cada ação
     void InitDefaultBindings();
 
-    // Membros para o estado do mouse
-    bool mouseState[6]; 
-    int mouseUpdate[6];
+    // Estado do mouse indexado pelo NÚMERO do botão do SDL (1 = esquerdo, 2 =
+    // meio, 3 = direito, 4 = X1, 5 = X2). event.button.button é um Uint8 (0..255)
+    // e mouses "gamer" com botões laterais reportam 6, 7, 8+ — indexar sem
+    // checar estourava estes arrays e corrompia a memória vizinha (causa de
+    // crashes aleatórios). O tamanho cobre 0..kMouseButtonCount-1 e TODO acesso
+    // é validado por ValidMouseButton(); botões acima disso são ignorados.
+    static constexpr int kMouseButtonCount = 8;
+    static bool ValidMouseButton(int b) { return b >= 0 && b < kMouseButtonCount; }
+    bool mouseState[kMouseButtonCount];
+    int mouseUpdate[kMouseButtonCount];
 
     // Outros membros...
     bool quitRequested;

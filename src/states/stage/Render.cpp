@@ -751,6 +751,51 @@ void StageState::Render(){
                     cy + static_cast<int>(std::sin(a1) * kRadius));
             }
 
+            // "[F] Usar" ao lado da bola do poder — igual ao irmãozão (que mostra
+            // no slot ativo da roda). Fica VERMELHO (texto + contorno no ícone da
+            // tecla F) quando o poder está em uso ou recarregando (indisponível).
+            {
+                const bool available = (powerTimer <= 0.0f && cooldown <= 0.0f);
+                const SDL_Color kReady{235, 225, 195, 255};
+                const SDL_Color kBusy {220, 55, 45, 255};
+                const SDL_Color col = available ? kReady : kBusy;
+
+                auto keyTex = Resources::GetImage("Recursos/img/hud/key_f.png");
+                auto font   = Resources::GetFont("Recursos/font/times.ttf", 22);
+
+                constexpr int imgSize = 54;
+                constexpr int hintGap = 20;
+                const int iconX = cx + kRadius + hintGap;   // canto sup-esq do ícone
+                const int iconY = cy - imgSize / 2;
+
+                SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+                if (keyTex) {
+                    SDL_Rect dst{ iconX, iconY, imgSize, imgSize };
+                    SDL_RenderCopy(renderer, keyTex.get(), nullptr, &dst);
+                    // Contorno vermelho ao redor do ícone da tecla F quando indisponível.
+                    if (!available) {
+                        SDL_SetRenderDrawColor(renderer, kBusy.r, kBusy.g, kBusy.b, 255);
+                        for (int t = 1; t <= 3; ++t) {
+                            SDL_Rect ol{ iconX - t, iconY - t, imgSize + 2 * t, imgSize + 2 * t };
+                            SDL_RenderDrawRect(renderer, &ol);
+                        }
+                    }
+                }
+
+                if (font) {
+                    if (SDL_Surface* s = TTF_RenderUTF8_Blended(font.get(), "Usar", col)) {
+                        if (SDL_Texture* txt = SDL_CreateTextureFromSurface(renderer, s)) {
+                            SDL_Rect td{ iconX + imgSize / 2 - s->w / 2,
+                                         iconY + imgSize + 2, s->w, s->h };
+                            SDL_RenderCopy(renderer, txt, nullptr, &td);
+                            SDL_DestroyTexture(txt);
+                        }
+                        SDL_FreeSurface(s);
+                    }
+                }
+            }
+
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
             SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
         }

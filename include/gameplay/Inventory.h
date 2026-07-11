@@ -98,6 +98,9 @@ public:
                       const std::vector<ItemDef>& itemCatalog);
 
     bool CanAcceptItem(const ItemDef& def) const;
+    // True quando já há o máximo de combustível (kMaxFuelUnits) na bolsa — usado
+    // para dizer "minha bolsa tá pesada" ao tentar pegar óleo além do limite.
+    bool IsFuelAtMax() const;
     bool HasItem(const std::string& name) const;
     // True quando existe uma fonte de luz sem carga (0) E há combustível na bolsa
     // — condição para sugerir o tutorial de reabastecimento.

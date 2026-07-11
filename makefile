@@ -9,9 +9,27 @@ INC_PATHS = -I$(INC_PATH) $(addprefix -I,$(SDL_INC_PATH))
 
 FLAGS = -std=c++17 -Wall -pedantic -Wextra -Wno-unused-parameter -Werror=init-self
 
+# Hash do commit atual embutido no binario → aparece no relatorio de crash
+# ("Commit: ..."), tornando cada report auto-identificavel (sabemos a fonte
+# EXATA para symbolizar). "-dirty" marca build com alteracoes nao commitadas.
+# Sem redirecionamento de shell (roda igual em cmd.exe e sh).
+GITHASH := $(shell git rev-parse --short HEAD)
+GITDIRTY := $(shell git status --porcelain)
+ifeq ($(GITHASH),)
+GITHASH := desconhecido
+endif
+ifneq ($(GITDIRTY),)
+GITHASH := $(GITHASH)-dirty
+endif
+FLAGS += -DBUILD_GITHASH=\"$(GITHASH)\"
+
 DFLAGS = -ggdb -O0 -DDEBUG
 
-RFLAGS = -O3 -mtune=native
+# -g embute simbolos de depuracao (DWARF) SEM desligar a otimizacao: permite
+# resolver as entradas [modulo+0xRVA] do relatorio de crash com addr2line.
+# -fno-omit-frame-pointer mantem a cadeia de EBP/RBP: sem isso o StackWalk64 do
+# CrashHandler nao consegue subir alem do frame #0 em 32-bit. Custo de perf ~0.
+RFLAGS = -O3 -mtune=native -g -fno-omit-frame-pointer
 
 INC_PATH = include
 SRC_PATH = src
@@ -38,7 +56,8 @@ SDL_INC_PATH += $(addsuffix /include,$(SDL_PATHS))
 LINK_PATH = $(addprefix -L,$(addsuffix /lib,$(SDL_PATHS)))
 FLAGS += -mwindows
 DFLAGS += -mconsole
-LIBS := -lmingw32 -lSDL2main $(LIBS)
+# dbghelp: usado pelo CrashHandler para pilha de chamadas + minidump.
+LIBS := -lmingw32 -lSDL2main $(LIBS) -ldbghelp
 
 # Ícone do .exe: compila appicon.rc (que aponta pro appicon.ico) com windres e
 # linka o objeto resultante no executável. Só no Windows.
