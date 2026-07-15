@@ -22,7 +22,12 @@
     #define WIN32_LEAN_AND_MEAN
   #endif
   #include <windows.h>
-  #include <dbghelp.h>
+  #ifdef __MINGW32__
+    // dbghelp.h tem suporte limitado no MinGW — stack trace e minidump indisponiveis
+    #define CRASH_HANDLER_NO_DBGHELP
+  #else
+    #include <dbghelp.h>
+  #endif
 #else
   #include <sys/stat.h>
   #include <unistd.h>
@@ -196,6 +201,7 @@ void WriteRegisters(std::FILE* f, CONTEXT* ctx) {
 #endif
 }
 
+#ifndef CRASH_HANDLER_NO_DBGHELP
 // Varredura BRUTA da pilha: em builds 32-bit -O3 (sem frame pointer), StackWalk64
 // costuma parar no #0. Aqui lemos a pilha a partir de ESP/RSP e listamos todo
 // valor que caia dentro do modulo JOGO — candidatos a endereço de retorno. Nem
@@ -368,6 +374,7 @@ void WriteMiniDump(EXCEPTION_POINTERS* ep) {
                       type, ep ? &mei : nullptr, nullptr, nullptr);
     CloseHandle(hFile);
 }
+#endif // CRASH_HANDLER_NO_DBGHELP
 
 // Escreve o relatório completo (usado tanto pelo filtro SEH quanto pelo
 // std::terminate, que passa ep = nullptr).
@@ -393,12 +400,19 @@ void WriteReport(EXCEPTION_POINTERS* ep, const char* reason) {
         std::fprintf(f, "Motivo    : %s\n", reason);
     }
 
+#ifndef CRASH_HANDLER_NO_DBGHELP
     WriteStackTrace(f, ep ? ep->ContextRecord : nullptr);
+#else
+    std::fputs("\n===== Pilha de chamadas =====\n", f);
+    std::fputs("(stack trace indisponivel em build MinGW)\n", f);
+#endif
     DumpCrumbs(f);
     std::fflush(f);
     std::fclose(f);
 
+#ifndef CRASH_HANDLER_NO_DBGHELP
     WriteMiniDump(ep);
+#endif
 
     // Avisa o jogador (best effort) — no build -mwindows nao ha console.
     char msg[512];

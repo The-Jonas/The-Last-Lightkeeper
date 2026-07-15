@@ -77,7 +77,7 @@ void EndState::LoadAssets() {
         causeGO->z = 10;
         SDL_Color causeColor = {190, 120, 120, 230};
         const char* causeText = GameData::deathByMonster
-            ? "O monstro alcancou vocês na escuridão."
+            ? "O monstro alcançou vocês na escuridão."
             : "A escuridão consumiu a sanidade de vocês.";
         Text* cause = new Text(*causeGO, "Recursos/font/times.ttf", 24, Text::BLENDED,
                                causeText, causeColor);

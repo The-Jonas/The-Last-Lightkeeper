@@ -19,18 +19,11 @@
 
 namespace {
 constexpr int kFootCollisionSkinPx = 1;
+constexpr float kCollisionWidthBoost = 1.15f; // Aumento horizontal (+15%) na hitbox dos pés
 
-// Aumento horizontal (+15%) da caixa de colisão dos pés. Aplica-se só à largura;
-// a altura permanece inalterada. Vale para os dois irmãos (mesma classe).
-constexpr float kCollisionWidthBoost = 1.15f;
-
-/// Se ainda estiver dentro de geometria estática (polígonos/retângulos sobrepostos no mapa), empurra o jogador para fora.
 void TryNudgeOutOfStaticGeometry(StageState* stage, Character* character, Collider* collider, bool isElevated) {
-    if (!stage || !collider || !character) {
-        return;
-    }
+    if (!stage || !collider || !character) return;
 
-    // Caixa QUADRADA dos pés, com uma margem extra de segurança (skin + 2px).
     auto footBoxWithMargin = [&]() {
         SDL_Rect r = character->GetFootRect();
         const int m = kFootCollisionSkinPx + 2;
@@ -40,39 +33,32 @@ void TryNudgeOutOfStaticGeometry(StageState* stage, Character* character, Collid
         return r;
     };
 
-    if (!stage->level.CheckCollision(footBoxWithMargin(), isElevated)) {
-        return;                                                 // Não está preso de verdade. Foge da função imediatamente sem gastar a CPU!
-    }
+    if (!stage->level.CheckCollision(footBoxWithMargin(), isElevated)) return;
 
     GameObject& go = character->GetAssociated();
     const float dists[] = {4.0f, 16.0f, 32.0f};
     const int dirs[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+    
     for (float d : dists) {
         for (const auto& dir : dirs) {
             float mx = static_cast<float>(dir[0]);
             float my = static_cast<float>(dir[1]);
             const float len = std::sqrt(mx * mx + my * my);
-            if (len > 1e-3f) {
-                mx /= len;
-                my /= len;
-            }
+            if (len > 1e-3f) { mx /= len; my /= len; }
 
-            // Empurra para testar a rota de fuga
             go.box.x += mx * d;
             go.box.y += my * d;
             collider->Update(0);
 
-            if (!stage->level.CheckCollision(footBoxWithMargin(), isElevated)) {
-                return;                                         // Empurrou pra fora com sucesso! Interrompe o processo.
-            }
+            if (!stage->level.CheckCollision(footBoxWithMargin(), isElevated)) return;
 
-            // Falhou, estava pior que antes. Desfaz o movimento e tenta outra direção.
             go.box.x -= mx * d;
             go.box.y -= my * d;
             collider->Update(0);
         }
     }
 }
+
 constexpr const char* kIrmaozaoIdleRoot = "Recursos/img/personagens/irmaozao_idle/";
 constexpr const char* kIrmaozaoWalkRoot = "Recursos/img/personagens/irmaozao_walk/";
 constexpr const char* kIrmaozaoIdleLighterRoot = "Recursos/img/personagens/irmaozao_idle_lighter/";
@@ -80,7 +66,6 @@ constexpr const char* kIrmaozaoIdleLampRoot = "Recursos/img/personagens/irmaozao
 constexpr const char* kIrmaozaoWalkLighterRoot = "Recursos/img/personagens/irmaozao_walk_lighter/";
 constexpr const char* kIrmaozaoWalkLampRoot    = "Recursos/img/personagens/irmaozao_walk_lamp/";
 
-// Para as animações do irmãozinho
 constexpr const char* kIrmaozinhoIdleRoot = "Recursos/img/personagens/irmaozinho_idle/";
 constexpr const char* kIrmaozinhoWalkRoot = "Recursos/img/personagens/irmaozinho_walk/";
 
@@ -89,17 +74,17 @@ constexpr int kIrmaozaoStripFrameCount = 6;
 constexpr float kIrmaozaoStripFrameSeconds = 0.11f;
 } // namespace
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Construtores e Setup Inicial
+// ─────────────────────────────────────────────────────────────────────────────
+Character::Command::Command(CommandType type, float x, float y): type(type), pos(x, y) {}
 
-// Implementação do construtor da classe aninhada Command.
-Character::Command::Command(CommandType type, float x, float y): type(type), pos(x, y){}
-
-// Implementação do Character
 Character* Character::player = nullptr;
 Character* Character::littleBrother = nullptr;
 
 Character::Character(GameObject& associated, std::string spritePath, bool useIrmaozaoIdleStrips)
     : Component(associated), irmaozaoIdleStrips(useIrmaozaoIdleStrips) {
-    // Definições das animações (modo clássico: spritesheet)
+    
     constexpr int PLAYER_FRAMES_PER_ROW = 1;
     constexpr int PLAYER_ROWS = 1;
 
@@ -110,22 +95,15 @@ Character::Character(GameObject& associated, std::string spritePath, bool useIrm
 
     currentDirection = Direction::DOWN;
     baseSpritePath = spritePath;
-
-
     stripAnimTimer = 0.0f;
     stripFrameIndex = 0;
     
-    // ambos os personagens pegam o primeiro frame da animação no construtor
     const std::string first = GetAnimStripPath(currentDirection, stripFrameIndex);
     SpriteRenderer* sprite = new SpriteRenderer(associated, first, PLAYER_FRAMES_PER_ROW, PLAYER_ROWS);
     associated.AddComponent(sprite);
 
-    if (player == nullptr) {
-        player = this;
-    }
-    if (littleBrother == this) {
-        littleBrother = nullptr;
-    }
+    if (player == nullptr) player = this;
+    if (littleBrother == this) littleBrother = nullptr;
 
     speed = Vec2(0, 0);
     targetSpeed = Vec2(0, 0);
@@ -137,105 +115,85 @@ Character::Character(GameObject& associated, std::string spritePath, bool useIrm
     }
 }
 
+Character::~Character() {                               
+    if (player == this) player = nullptr;
+    if (littleBrother == this) littleBrother = nullptr;
+}
+
+void Character::Start() {
+    PreloadAnimationFrames(); 
+    EnsureBaselineBox();
+
+    // Adiciona o colisor na base (sola dos pés)
+    Vec2 scale(0.45f, 0.20f);
+    float offsetY = (associated.box.h / 2.0f) * (1.0f - scale.y);
+    associated.AddComponent(new Collider(associated, scale, Vec2(0, offsetY)));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Gerenciamento de Animação e Sprites
+// ─────────────────────────────────────────────────────────────────────────────
 std::string Character::GetAnimStripPath(Direction dir, int frameIndex, HeldPropVisual prop, bool moving) const {
     int fi = frameIndex % kIrmaozaoStripFrameCount;
-    if (fi < 0) {
-        fi += kIrmaozaoStripFrameCount;
-    }
+    if (fi < 0) fi += kIrmaozaoStripFrameCount;
     const int n = fi + 1;
 
     const char* root;
-
     if (irmaozaoIdleStrips) {
-        if (prop == HeldPropVisual::Lighter) {
-            root = moving ? kIrmaozaoWalkLighterRoot : kIrmaozaoIdleLighterRoot;
-        } else if (prop == HeldPropVisual::Lamp) {
-            root = moving ? kIrmaozaoWalkLampRoot : kIrmaozaoIdleLampRoot;
-        } else {
-            root = moving ? kIrmaozaoWalkRoot : kIrmaozaoIdleRoot;
-        }
+        if (prop == HeldPropVisual::Lighter) root = moving ? kIrmaozaoWalkLighterRoot : kIrmaozaoIdleLighterRoot;
+        else if (prop == HeldPropVisual::Lamp) root = moving ? kIrmaozaoWalkLampRoot : kIrmaozaoIdleLampRoot;
+        else root = moving ? kIrmaozaoWalkRoot : kIrmaozaoIdleRoot;
     } else {
-        root = moving? kIrmaozinhoWalkRoot : kIrmaozinhoIdleRoot;
-
-        if (dir == Direction::RIGHT) {
-            dir = Direction::LEFT;
-        }
+        root = moving ? kIrmaozinhoWalkRoot : kIrmaozinhoIdleRoot;
+        if (dir == Direction::RIGHT) dir = Direction::LEFT;
     }
 
     const char* ext = ".png";
-
     switch (dir) {
-    case Direction::UP:
-        return std::string(root) + "trás/FRAME_" + std::to_string(n) + ext;
-    case Direction::DOWN:
-        return std::string(root) + "frente/FRAME_" + std::to_string(n) + ext;
-    case Direction::LEFT:
-        return std::string(root) + "esquerda/FRAME_" + std::to_string(n) + ext;
-    case Direction::RIGHT:
-        return std::string(root) + "direita/FRAME_" + std::to_string(n) + ext;
+        case Direction::UP:    return std::string(root) + "trás/FRAME_" + std::to_string(n) + ext;
+        case Direction::DOWN:  return std::string(root) + "frente/FRAME_" + std::to_string(n) + ext;
+        case Direction::LEFT:  return std::string(root) + "esquerda/FRAME_" + std::to_string(n) + ext;
+        case Direction::RIGHT: return std::string(root) + "direita/FRAME_" + std::to_string(n) + ext;
     }
     return std::string(root) + "frente/FRAME_1" + ext;
 }
 
 std::string Character::IrmaozaoPickLampStripPath(Direction dir, int frameIndex) const {
     int fi = frameIndex % kIrmaozaoStripFrameCount;
-    if (fi < 0) {
-        fi += kIrmaozaoStripFrameCount;
-    }
+    if (fi < 0) fi += kIrmaozaoStripFrameCount;
     const int n = fi + 1;
     const std::string root = "Recursos/img/personagens/irmaozao_pick_lamp/";
 
-    if (dir == Direction::LEFT) {
-        return root + "esquerda/FRAME_" + std::to_string(n) + ".bmp";
-    }
+    if (dir == Direction::LEFT) return root + "esquerda/FRAME_" + std::to_string(n) + ".bmp";
 
     const char* subdir = "frente";
     switch (dir) {
-    case Direction::UP:
-        subdir = "trás";
-        break;
-    case Direction::DOWN:
-        subdir = "frente";
-        break;
-    case Direction::LEFT:
-        break;
-    case Direction::RIGHT:
-        subdir = "direita";
-        break;
+        case Direction::UP:    subdir = "trás"; break;
+        case Direction::DOWN:  subdir = "frente"; break;
+        case Direction::LEFT:  break;
+        case Direction::RIGHT: subdir = "direita"; break;
     }
-
     return root + subdir + "/FRAME_" + std::to_string(n) + ".bmp";
 }
 
 void Character::EnsureBaselineBox() {
-    if (baselineBoxW > 0.0f) {
-        return;
-    }
+    if (baselineBoxW > 0.0f) return;
     baselineBoxW = associated.box.w;
     baselineBoxH = associated.box.h;
 }
 
 void Character::RestoreCollisionBox(float centerX, float footY) {
     EnsureBaselineBox();
-    if (baselineBoxW <= 0.0f || baselineBoxH <= 0.0f) {
-        return;
-    }
+    if (baselineBoxW <= 0.0f || baselineBoxH <= 0.0f) return;
 
-    // Não esmaga a imagem, só centraliza o pé
     associated.box.x = centerX - (associated.box.w * 0.5f);
     associated.box.y = footY - associated.box.h;
 
-    // Ajusta a escala do colisor com os Setters
-    Collider* col = (Collider*)associated.GetComponent<Collider>();
-    if (col) {
-        // Largura da caixa = 50% da base × 1.15 (+15% horizontal). Altura inalterada.
-        // baselineBoxW/H = MAIOR frame de todas as animações (definido no preload),
-        // então a caixa fica sempre do mesmo tamanho/lugar, independente da animação.
+    if (Collider* col = (Collider*)associated.GetComponent<Collider>()) {
         float absoluteHitboxW = baselineBoxW * 0.5f * kCollisionWidthBoost;
-        float absoluteHitboxH = baselineBoxH * 0.20f;   // altura (2x da original), inalterada
+        float absoluteHitboxH = baselineBoxH * 0.20f; 
 
         Vec2 newScale(absoluteHitboxW / associated.box.w, absoluteHitboxH / associated.box.h);
-        // Base da caixa ancorada nos pés (footY): a caixa fica na sola.
         float offsetY = (associated.box.h / 2.0f) * (1.0f - newScale.y);
 
         col->SetScale(newScale);
@@ -249,18 +207,14 @@ std::string Character::GetShadowSpritePath() const {
 }
 
 void Character::NotifyInventoryLightChanged() {
-    if (!irmaozaoIdleStrips) {
-        return;
-    }
+    if (!irmaozaoIdleStrips) return;
     playingPickLampAnim = false;
     pickLampAnimTimer = 0.0f;
     pickLampFrameIndex = 0;
     RefreshAnimSprite();
 }
 
-void Character::PlayPickLampAnimation() {
-// Animação removida
-}
+void Character::PlayPickLampAnimation() {}
 
 void Character::RefreshAnimSprite() {
     SpriteRenderer* sprite = associated.GetComponent<SpriteRenderer>();
@@ -284,98 +238,84 @@ void Character::RefreshAnimSprite() {
     sprite->Open(path);
     sprite->SetFrameCount(1, 1);
     sprite->SetFrame(0);
-
-    if (!irmaozaoIdleStrips && currentDirection == Direction::RIGHT) {
-        sprite->SetFlip(SDL_FLIP_HORIZONTAL);
-    } else {
-        sprite->SetFlip(SDL_FLIP_NONE);
-    }
+    sprite->SetFlip((!irmaozaoIdleStrips && currentDirection == Direction::RIGHT) ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
 
     RestoreCollisionBox(centerX, footY);
 }
 
-// Destrutor de Character
-Character::~Character() {                               
-    if (player == this) {                                                               // Se este era o jogador principal, define o ponteiro estático como nulo.
-        player = nullptr;
+void Character::PreloadAnimationFrames() {
+    const Direction allDirs[] = { Direction::UP, Direction::DOWN, Direction::LEFT, Direction::RIGHT };
+    float maxW = 0.0f, maxH = 0.0f;
+
+    auto consider = [&](const std::string& path) {
+        auto tex = Resources::GetImage(path);
+        if (!tex) return;
+        int w = 0, h = 0;
+        if (SDL_QueryTexture(tex.get(), nullptr, nullptr, &w, &h) == 0) {
+            if (w > maxW) maxW = static_cast<float>(w);
+            if (h > maxH) maxH = static_cast<float>(h);
+        }
+    };
+
+    for (bool moving : {false, true}) {
+        for (Direction d : allDirs) {
+            if (irmaozaoIdleStrips) {
+                for (HeldPropVisual prop : {HeldPropVisual::None, HeldPropVisual::Lighter, HeldPropVisual::Lamp}) {
+                    for (int f = 0; f < kIrmaozaoStripFrameCount; f++) {
+                        consider(GetAnimStripPath(d, f, prop, moving));
+                    }
+                }
+            } else {
+                for (int f = 0; f < kIrmaozaoStripFrameCount; f++) {
+                    consider(GetAnimStripPath(d, f, HeldPropVisual::None, moving));
+                }
+            }
+        }
     }
-    if (littleBrother == this) {
-        littleBrother = nullptr;
+
+    if (maxW > 0.0f && maxH > 0.0f) {
+        baselineBoxW = maxW;
+        baselineBoxH = maxH;
     }
 }
 
-void Character::Start() {
-    PreloadAnimationFrames();   // carrega tudo de uma vez antes do gameplay
-
-
-    EnsureBaselineBox();
-
-    // Define o tamanho proporcional da HitBox (Na sola do pé)
-    Vec2 scale(0.45f, 0.20f);
-    // Calculo automatico do deslocamento Y
-    float offsetY = (associated.box.h / 2.0f) * (1.0f - scale.y);
-    // Adiciona o colisor
-    associated.AddComponent(new Collider(associated, scale, Vec2(0,offsetY)));          // Cria o colisor aqui para evitar delay de posição
-}
-
+// ─────────────────────────────────────────────────────────────────────────────
+//  Update Principal
+// ─────────────────────────────────────────────────────────────────────────────
 void Character::Update(float dt) {
-
-    // Trava de segurança contra a "Espiral da Morte" do Delta Time!
-    // Se o frame demorar mais que 0.033s (30 FPS), a física ignora a diferença
-    // para o personagem não atravessar as paredes ou bugar os cálculos.
-    if (dt > 0.033f) {
-        dt = 0.033f;
-    }
+    if (dt > 0.033f) dt = 0.033f; // Cap em 30 FPS para estabilidade física
     
-    // ==========================================
-    // SE ESTIVER INTERAGINDO, CONGELA TUDO
-    // ==========================================
+    // ── Interação ─────────────────────────────────────────────────────────────
     if (currentState == ActionState::INTERACTING) {
-        speed = Vec2(0.0f, 0.0f);                       // zera a velocidade
-        targetSpeed = Vec2(0.0f, 0.0f);                 // zera o alvo também
-
-        Mix_HaltChannel(3);                             // Para o loop de passos diretamente pelo canal fixo
+        speed = Vec2(0.0f, 0.0f);
+        targetSpeed = Vec2(0.0f, 0.0f);
+        Mix_HaltChannel(3);
 
         interactTimer -= dt;
-        if (interactTimer <= 0.0f) {
-            currentState = ActionState::NORMAL;         // Libera o movimento quando o tempo acaba
-        }
+        if (interactTimer <= 0.0f) currentState = ActionState::NORMAL;
 
-        // Escondido no armário: mesmo "congelado", o irmãozinho controlado ainda
-        // pode usar o poder de visão (revelar o monstro) apertando UseItem (F).
-        if (isHidden) {
-            UpdateVisionPower(dt);
-        }
-        return;                                         // Sai do Update prematuramente para não processar movimento!
+        if (isHidden) UpdateVisionPower(dt);
+        return; 
     }
 
-    //Animator* animator = associated.GetComponent<Animator>();
+    // ── Fila de Movimento ─────────────────────────────────────────────────────
     bool hasMoveCommand = false;
-
-    //Processa a fila de comandos
-    while (!taskQueue.empty()) {                        // Chegamos se há alguma ação na fila
-        Command cmd = taskQueue.front();                // Enquanto houver checamos o tipo e
-        taskQueue.pop();                                // quando finalizada tiramos da fila
+    while (!taskQueue.empty()) {
+        Command cmd = taskQueue.front();
+        taskQueue.pop();
 
         if (cmd.type == Command::MOVE) {
-            //Calcula a direção normalizada
-            Vec2 targePos = cmd.pos;
-            Vec2 direction = (targePos - associated.box.Center()).Normalized();
-            //Define velocidade-alvo para suavização de movimento
+            Vec2 direction = (cmd.pos - associated.box.Center()).Normalized();
             targetSpeed = direction * (linearSpeed * speedMultiplier);
             hasMoveCommand = true;
         } 
     }
 
-    if (!hasMoveCommand) {
-        targetSpeed = Vec2(0, 0);
-    }
+    if (!hasMoveCommand) targetSpeed = Vec2(0, 0);
 
     auto approach = [](float current, float target, float maxDelta) {
         float delta = target - current;
-        if (std::fabs(delta) <= maxDelta) {
-            return target;
-        }
+        if (std::fabs(delta) <= maxDelta) return target;
         return current + ((delta > 0.0f) ? maxDelta : -maxDelta);
     };
 
@@ -384,77 +324,53 @@ void Character::Update(float dt) {
     speed.x = approach(speed.x, targetSpeed.x, maxDelta);
     speed.y = approach(speed.y, targetSpeed.y, maxDelta);
 
-    // REFATORANDO COM A LÓGICA DE MOVIMENTAÇÃO COM SLIDE COLLISION
-
+    // ── Colisão Slide ─────────────────────────────────────────────────────────
     Collider* collider = associated.GetComponent<Collider>();
 
-    if (collider != nullptr){
-
+    if (collider != nullptr) {
         StageState* stage = Game::TryGetStageState();
         if (!stage) {
             associated.box.x += speed.x * dt;
             associated.box.y += speed.y * dt;
             collider->Update(0);
         } else {
+            // Eixo X
+            float oldX = associated.box.x;
+            associated.box.x += speed.x * dt;
+            collider->Update(0);
 
-        // --- TESTE DO EIXO X ---
-        float oldX = associated.box.x;
-        associated.box.x += speed.x * dt;
+            if (stage->level.CheckCollision(GetFootCollisionRect(), isElevated)) {
+                associated.box.x = oldX;
+                speed.x = 0;
+                collider->Update(0);
+            }
 
-        // Atualiza a posição do collider manualmente para teste futuro
-        collider->Update(0);
+            // Eixo Y
+            float oldY = associated.box.y;
+            associated.box.y += speed.y * dt;
+            collider->Update(0);
 
-        // Caixa de colisão QUADRADA nos pés (AABB estável) — não muda com a animação.
-        SDL_Rect footBoxX = GetFootCollisionRect();
-        if (stage->level.CheckCollision(footBoxX, isElevated)) {
-            associated.box.x = oldX;
-            speed.x = 0;
-            // Update forçado para reverter o collider caso colida
+            if (stage->level.CheckCollision(GetFootCollisionRect(), isElevated)) {
+                associated.box.y = oldY;
+                speed.y = 0;
+            }
+
+            collider->Update(0);
+            TryNudgeOutOfStaticGeometry(stage, this, collider, isElevated);
             collider->Update(0);
         }
-
-        // --- TESTE DO EIXO Y ---
-        float oldY = associated.box.y;
-        associated.box.y += speed.y * dt;
-
-        collider->Update(0);
-
-        SDL_Rect footBoxY = GetFootCollisionRect();
-        // NO EIXO Y TAMBÉM:
-        if (stage->level.CheckCollision(footBoxY, isElevated)) {
-            associated.box.y = oldY;
-            speed.y = 0;
-        }
-
-        collider->Update(0);
-
-        TryNudgeOutOfStaticGeometry(stage, this, collider, isElevated);
-        collider->Update(0);
-        }
-
     } else {
-        // Fallback caso o GameObject não tenha Collider (não deve acontecer com os irmãos)
         associated.box.x += speed.x * dt;
         associated.box.y += speed.y * dt;
     }
 
-    // ==============================================
-    // Troca de sprite / animação por direção (congelada enquanto empurra caixa)
-
+    // ── Animação e Direção ────────────────────────────────────────────────────
     if (currentState != ActionState::PUSHING_BOX) {
         Direction newDirection = currentDirection;
 
-        // Direção de OLHAR vem da INTENÇÃO de movimento (targetSpeed = teclas
-        // pressionadas), não da velocidade real. Assim pressionar W vira o
-        // personagem p/ CIMA mesmo quando bloqueado (sem mudar de posição).
-        if (std::abs(targetSpeed.x) > 0.1f) {
-            newDirection = (targetSpeed.x > 0.0f) ? Direction::RIGHT : Direction::LEFT;
-        }
-        else if (std::abs(targetSpeed.y) > 0.1f) {
-            newDirection = (targetSpeed.y > 0.0f) ? Direction::DOWN : Direction::UP;
-        }
+        if (std::abs(targetSpeed.x) > 0.1f) newDirection = (targetSpeed.x > 0.0f) ? Direction::RIGHT : Direction::LEFT;
+        else if (std::abs(targetSpeed.y) > 0.1f) newDirection = (targetSpeed.y > 0.0f) ? Direction::DOWN : Direction::UP;
 
-        // REMOVIDO O IF Agora ambos rodam o loop de animação:
         const bool moving = speed.Magnitude() > kIrmaozaoMovingSpeedThreshold;
 
         if (moving != stripWasMoving && !playingPickLampAnim) {
@@ -463,7 +379,7 @@ void Character::Update(float dt) {
             stripAnimTimer = 0.0f;
             RefreshAnimSprite();
         }
-        // Sem o requisito `&& moving`: vira mesmo parado/bloqueado.
+
         if (newDirection != currentDirection) {
             currentDirection = newDirection;
             if (!playingPickLampAnim) {
@@ -472,7 +388,6 @@ void Character::Update(float dt) {
             }
             RefreshAnimSprite();
         }
-        
 
         stripAnimTimer += dt;
         while (stripAnimTimer >= kIrmaozaoStripFrameSeconds) {
@@ -482,67 +397,46 @@ void Character::Update(float dt) {
         }
     }
 
+    // ── Efeitos Sonoros ───────────────────────────────────────────────────────
     StageState* stage = Game::TryGetStageState();
     if (irmaozaoIdleStrips && stage && currentState != ActionState::INTERACTING) {
         const Vec2 foot = GetFootCircleCenter();
-        const FootstepSurface surface = stage->level.QueryFootstepSurface(
-            static_cast<int>(foot.x), static_cast<int>(foot.y), isElevated);
+        const FootstepSurface surface = stage->level.QueryFootstepSurface(static_cast<int>(foot.x), static_cast<int>(foot.y), isElevated);
         GameSfx::UpdateBigBrotherFootsteps(dt, speed.Magnitude(), true, surface);
     }
 
-    // ============================================================
-    // SISTEMA DE SANIDADE (BASEADO NO CONTATO REAL COM A LUZ)
-    // ============================================================
-
+    // ── Sistema de Sanidade ───────────────────────────────────────────────────
     float myLightContact = 1.0f;
-
     if (stage) {
-        // Puxa a variável correta dependendo de qual irmão é
-        if (irmaozaoIdleStrips) {
-            myLightContact = stage->bigIlluminationLevel;
-        } else {
-            myLightContact = stage->smallIlluminationLevel;
-        }
+        myLightContact = irmaozaoIdleStrips ? stage->bigIlluminationLevel : stage->smallIlluminationLevel;
     }
 
-    const float darknessThreshold = 0.1f;   // Abaixo de 10% de luz é escuridão
-    const float sanityDrainRate = 8.0f;     // Perde 8 pontos de sanidade por segundo
-    const float sanityRegenRate = 12.0f;    // Recupera 12 pontos de sanidade por segundo
+    const float darknessThreshold = 0.1f; 
+    const float sanityDrainRate = 8.0f; 
+    const float sanityRegenRate = 12.0f; 
 
     if (myLightContact < darknessThreshold) {
-        // Tá escuro, drena a sanidade...
         sanity -= sanityDrainRate * dt;
-
-        if (sanity <= 0.0f) {
-            sanity = 0.0f;
-            if (Game::debugMode) {
-                std::cout << "[GAME OVER] O personagem foi engolido pela escuridao!" << std::endl;
-                std::cout << "[GAME OVER] Sanidade atual: " << sanity << std::endl;
-            }
-        }
-    }
-    else {
-        // Tá claro, recupera...
+        if (sanity <= 0.0f) sanity = 0.0f;
+    } else {
         sanity += sanityRegenRate * dt;
-        if (sanity > kMaxSanity) {
-            sanity = kMaxSanity;            // Trava no 100, nunca ultrapassa
-        }
+        if (sanity > kMaxSanity) sanity = kMaxSanity; 
     }
 
-    // Poder de visão do irmãozinho (revela o monstro).
     UpdateVisionPower(dt);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Poder de Visão e Interação
+// ─────────────────────────────────────────────────────────────────────────────
 void Character::UpdateVisionPower(float dt) {
-    if (irmaozaoIdleStrips) {   // só o irmãozinho tem o poder
-        return;
-    }
+    if (irmaozaoIdleStrips) return; 
 
     if (visionPowerTimer > 0.0f) {
         visionPowerTimer -= dt;
         if (visionPowerTimer <= 0.0f) {
             visionPowerTimer = 0.0f;
-            visionCooldown = kVisionCooldown;  // Começa a recarga ao acabar
+            visionCooldown = kVisionCooldown;
         }
     }
 
@@ -551,19 +445,12 @@ void Character::UpdateVisionPower(float dt) {
     StageState* stageCtrl = Game::TryGetStageState();
     bool isBeingControlled = stageCtrl && stageCtrl->GetControlledCharacter() == this;
     const bool inputFrozen = stageCtrl && stageCtrl->IsPlayerInputFrozen();
-
-    // Pode ativar quando NÃO está travado numa interação — OU quando está
-    // escondido no armário (aí ele está "congelado" como INTERACTING, mas ainda
-    // assim pode usar o poder de visão).
     const bool actionAllowed = (currentState != ActionState::INTERACTING) || isHidden;
 
-    // A habilidade de visão do irmãozinho agora é no UseItem (F) — o Interact (E)
-    // passou a servir para ele ENTRAR/SAIR de armários, como o irmãozão.
     if (isBeingControlled && !inputFrozen && InputManager::GetInstance().ActionPress(GameAction::UseItem) &&
         visionPowerTimer <= 0.0f && visionCooldown <= 0.0f && actionAllowed) {
 
         visionPowerTimer = kVisionDuration;
-        if (Game::debugMode) std::cout << "[PODER] Irmãozinho ativou visão!\n";
 
         if (stageCtrl) {
             for (auto& go : stageCtrl->GetObjectArray()) {
@@ -575,43 +462,26 @@ void Character::UpdateVisionPower(float dt) {
     }
 }
 
-
-void Character::NotifyCollision(GameObject& other) {
-}
+void Character::NotifyCollision(GameObject& other) {}
 
 SDL_Rect Character::GetInteractionRect(int targetHeightLevel) const {
-    int reachDistance = 50;                                                 // o quão longe o braço chega
-    int boxSize = 60;                                                       // o tamanho da "mão" que vai checar a colisão
-    
+    int reachDistance = 50; 
+    int boxSize = 60; 
     int centerX = associated.box.x + (associated.box.w / 2);
     int footY = associated.box.y + associated.box.h;
 
-    // FAZENDO A MÁGICA DA ALTURA (EIXO Z FALSO)
     int zOffset = 0;
-    if (targetHeightLevel == 1) {
-        zOffset = 140;
-    }
-    else if (targetHeightLevel == 2) {
-        zOffset = 260;
-    }
+    if (targetHeightLevel == 1) zOffset = 140;
+    else if (targetHeightLevel == 2) zOffset = 260;
 
-    // Centraliza a caixa de interação no pé inicialmente
-    SDL_Rect interactBox = { 
-        centerX - (boxSize / 2), 
-        (footY - (boxSize / 2)) - zOffset, 
-        boxSize, 
-        boxSize 
-    };
+    SDL_Rect interactBox = { centerX - (boxSize / 2), (footY - (boxSize / 2)) - zOffset, boxSize, boxSize };
 
-    // Desloca a caixa para a frente baseado na direção já existente!
     switch (currentDirection) {
         case Direction::UP:
             interactBox.y -= reachDistance;
             interactBox.h += 20;
             break;
-        case Direction::DOWN:
-            interactBox.y += reachDistance;
-            break;
+        case Direction::DOWN: interactBox.y += reachDistance; break;
         case Direction::LEFT:
             interactBox.x -= reachDistance;
             interactBox.y -= 20;
@@ -621,116 +491,43 @@ SDL_Rect Character::GetInteractionRect(int targetHeightLevel) const {
             interactBox.y -= 20;
             break;
     }
-
     return interactBox;
 }
 
 void Character::PositionForCoop(Character* leader) {
     if (!leader) return;
 
-    // Lê a mente do líder: Copia a direção pra olharem pro mesmo lado
-    this->currentDirection = leader-> currentDirection;
-
+    this->currentDirection = leader->currentDirection;
     RefreshAnimSprite();
 
-    // POSIÇÃO:
-    float distance = 45.0f; // O quão longe o Irmãozinho fica na frente (ajuste no olho)
-
-    // Alinha os centros no eixo X perfeitamente
+    float distance = 45.0f;
     this->associated.box.x = leader->associated.box.x + (leader->associated.box.w / 2.0f) - (this->associated.box.w / 2.0f);
 
-    // Alinha a base dos pés no eixo Y perfeitamente
     float leaderFootY = leader->associated.box.y + leader->associated.box.h;
     float myFootY = this->associated.box.y + this->associated.box.h;
     this->associated.box.y += (leaderFootY - myFootY);
 
-    // Move para a direção que estão olhando
     switch (leader->currentDirection) {
-        case Direction::UP:
-            this->associated.box.y -= distance;
-            break;
-        case Direction::DOWN:
-            this->associated.box.y += distance;
-            break;
-        case Direction::LEFT:
-            this->associated.box.x -= distance;
-            break;
-        case Direction::RIGHT:
-            this->associated.box.x += distance;
-            break;
+        case Direction::UP:    this->associated.box.y -= distance; break;
+        case Direction::DOWN:  this->associated.box.y += distance; break;
+        case Direction::LEFT:  this->associated.box.x -= distance; break;
+        case Direction::RIGHT: this->associated.box.x += distance; break;
     }
 }
 
-void Character::PreloadAnimationFrames() {
-    const Direction allDirs[] = {
-        Direction::UP, Direction::DOWN, Direction::LEFT, Direction::RIGHT
-    };
-
-    // Enquanto pré-carrega, mede o MAIOR frame (largura/altura) de todas as
-    // animações. Essa maior dimensão vira a BASE IMUTÁVEL da caixa de colisão,
-    // para ela ficar sempre do mesmo tamanho/lugar independente da animação atual.
-    float maxW = 0.0f, maxH = 0.0f;
-    auto consider = [&](const std::string& path) {
-        auto tex = Resources::GetImage(path);
-        if (!tex) return;
-        int w = 0, h = 0;
-        if (SDL_QueryTexture(tex.get(), nullptr, nullptr, &w, &h) == 0) {
-            if (w > maxW) maxW = static_cast<float>(w);
-            if (h > maxH) maxH = static_cast<float>(h);
-        }
-    };
-
-    // Carrega idle e walk (moving = false / true)
-    for (bool moving : {false, true}) {
-        for (Direction d : allDirs) {
-
-            if (irmaozaoIdleStrips) {
-                // Irmãozão — precisa cobrir os 3 estados de prop também
-                // (None, Lighter, Lamp) porque cada um é uma pasta diferente
-                for (HeldPropVisual prop : {HeldPropVisual::None,
-                                             HeldPropVisual::Lighter,
-                                             HeldPropVisual::Lamp}) {
-                    for (bool moving : {false, true}) {  // <- moving já estava aqui, cobre automaticamente
-                        for (Direction d : allDirs) {
-                            for (int f = 0; f < kIrmaozaoStripFrameCount; f++) {
-                                std::string path = GetAnimStripPath(d, f, prop, moving);
-                                consider(path);
-                            }
-                        }
-                    }
-                }
-            } else {
-                // Irmãozinho — sem variação de prop
-                for (int f = 0; f < kIrmaozaoStripFrameCount; f++) {
-                    std::string path = GetAnimStripPath(d, f, HeldPropVisual::None, moving);
-                    consider(path);
-                }
-            }
-        }
-    }
-
-    // Base da caixa de colisão = MAIOR frame encontrado (definido ANTES de
-    // EnsureBaselineBox no Start, que então vira só um fallback). Assim a caixa
-    // usa a maior arte como referência e não muda quando a animação troca.
-    if (maxW > 0.0f && maxH > 0.0f) {
-        baselineBoxW = maxW;
-        baselineBoxH = maxH;
-    }
-}
-
-
+// ─────────────────────────────────────────────────────────────────────────────
+//  Utilitários Geométricos (Hitboxes e Debug)
+// ─────────────────────────────────────────────────────────────────────────────
 void Character::Render() {
 #ifdef DEBUG
     SDL_Renderer* renderer = Game::GetInstance().GetRenderer();
 
-    // Caixa de COLISÃO dos pés (verde) — quadrado estável.
     SDL_Rect foot = GetFootRect();
     foot.x -= (int)Camera::pos.x;
     foot.y -= (int)Camera::pos.y;
     SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
     SDL_RenderDrawRect(renderer, &foot);
 
-    // HURTBOX do corpo (vermelho) — quadrado estável (dano do monstro).
     SDL_Rect hit = GetHitRect();
     hit.x -= (int)Camera::pos.x;
     hit.y -= (int)Camera::pos.y;
@@ -742,9 +539,7 @@ void Character::Render() {
 void Character::ClearMovement() {
     speed = Vec2(0.0f, 0.0f);
     targetSpeed = Vec2(0.0f, 0.0f);
-    while (!taskQueue.empty()) {
-        taskQueue.pop();
-    }
+    while (!taskQueue.empty()) taskQueue.pop();
 }
 
 Vec2 Character::GetCenter() {
@@ -752,7 +547,6 @@ Vec2 Character::GetCenter() {
 }
 
 float Character::GetFootCircleRadius() const {
-    // Em vez de usar a largura da arte atual, usamos a largura base imutável
     float baseW = (baselineBoxW > 0.0f) ? baselineBoxW : associated.box.w;
     return baseW * 0.25f;
 }
@@ -762,32 +556,21 @@ Vec2 Character::GetFootCircleCenter() const {
     return Vec2(associated.box.x + associated.box.w * 0.5f, associated.box.y + associated.box.h - r);
 }
 
-// centerX (box.x+box.w/2) e footY (box.y+box.h) são mantidos ESTÁVEIS a cada
-// frame por RefreshAnimSprite/RestoreCollisionBox — então ancoramos as hitboxes
-// neles e usamos SEMPRE a caixa-base (baselineBoxW/H) para o tamanho, de forma
-// que as caixas não mudem de tamanho nem de lugar quando a animação troca.
 SDL_Rect Character::GetFootRect() const {
-    // A caixa de colisão dos pés é a do componente Collider — mantida ESTÁVEL e no
-    // tamanho certo (tira fina nos pés) por RestoreCollisionBox + Collider::Update,
-    // independente da animação. É a caixa que o jogo já usa como "verdade".
     if (Collider* col = associated.GetComponent<Collider>()) {
         const Rect& b = col->box;
-        return SDL_Rect{ static_cast<int>(b.x), static_cast<int>(b.y),
-                         static_cast<int>(b.w), static_cast<int>(b.h) };
+        return SDL_Rect{ static_cast<int>(b.x), static_cast<int>(b.y), static_cast<int>(b.w), static_cast<int>(b.h) };
     }
-    // Fallback (sem Collider — não deve ocorrer com os irmãos): quadrado pela base.
     const float baseW = (baselineBoxW > 0.0f) ? baselineBoxW : associated.box.w;
     const float side = baseW * 0.5f;
     const float centerX = associated.box.x + associated.box.w * 0.5f;
     const float footY   = associated.box.y + associated.box.h;
-    return SDL_Rect{ static_cast<int>(centerX - side * 0.5f),
-                     static_cast<int>(footY - side),
-                     static_cast<int>(side), static_cast<int>(side) };
+    return SDL_Rect{ static_cast<int>(centerX - side * 0.5f), static_cast<int>(footY - side), static_cast<int>(side), static_cast<int>(side) };
 }
 
 SDL_Rect Character::GetFootCollisionRect() const {
     SDL_Rect r = GetFootRect();
-    const int s = kFootCollisionSkinPx;   // margem contra erros de ponto flutuante
+    const int s = kFootCollisionSkinPx; 
     r.x += s; r.y += s; r.w -= 2 * s; r.h -= 2 * s;
     if (r.w < 1) r.w = 1;
     if (r.h < 1) r.h = 1;
@@ -801,17 +584,15 @@ SDL_Rect Character::GetHitRect() const {
     const float h = baseH * 0.60f;
     const float centerX = associated.box.x + associated.box.w * 0.5f;
     const float footY   = associated.box.y + associated.box.h;
-    const float centerY = footY - baseH * 0.45f;   // tronco (fixo pela base, não pela arte atual)
-    return SDL_Rect{ static_cast<int>(centerX - w * 0.5f),
-                     static_cast<int>(centerY - h * 0.5f),
-                     static_cast<int>(w), static_cast<int>(h) };
+    const float centerY = footY - baseH * 0.45f; 
+    return SDL_Rect{ static_cast<int>(centerX - w * 0.5f), static_cast<int>(centerY - h * 0.5f), static_cast<int>(w), static_cast<int>(h) };
 }
 
-void Character::Issue(Command task) {                       // Adiciona comando na fila
+void Character::Issue(Command task) {
     taskQueue.push(task);
 }
 
-void Character::SetSpeedMultiplier(float multiplier) { // Ajusta o multiplicador de velocidade
+void Character::SetSpeedMultiplier(float multiplier) {
     if (multiplier < 0.1f) {
         speedMultiplier = 0.1f;
         return;
@@ -819,11 +600,6 @@ void Character::SetSpeedMultiplier(float multiplier) { // Ajusta o multiplicador
     speedMultiplier = multiplier;
 }
 
-void Character::SetBaseSpeed(float speed) { // Ajusta a velocidade base
-    if (speed > 0.0f) {
-        linearSpeed = speed;
-    }
+void Character::SetBaseSpeed(float speed) {
+    if (speed > 0.0f) linearSpeed = speed;
 }
-
-
-

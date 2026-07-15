@@ -50,7 +50,7 @@
                         {
                          "name":"depthOffset",
                          "type":"float",
-                         "value":0
+                         "value":-200
                         }, 
                         {
                          "name":"heightLevel",
@@ -71,8 +71,8 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":245,
-                 "x":1221.0303030303,
-                 "y":295.212121212121
+                 "x":1200.0303030303,
+                 "y":244.212121212121
                 }, 
                 {
                  "gid":3,
@@ -4557,7 +4557,7 @@
          "value":"level_1"
         }],
  "renderorder":"right-down",
- "tiledversion":"1.12.2",
+ "tiledversion":"1.12.1",
  "tileheight":64,
  "tilesets":[
         {
