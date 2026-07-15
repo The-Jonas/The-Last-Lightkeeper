@@ -1,61 +1,253 @@
-# A-Luz-do-Farol---Jogo
-Um jogo desenvolvido em grupo, para a disciplina de Introdução a Desenvolvimento de Jogos da Universidade de Brasília
+<div align="center">
 
-## Arquitetura (resumo)
+<!-- Logo do jogo -->
+<img src="Gifs%20and%20Images/menu.gif" alt="Menu Principal" width="800"/>
 
-- Pilha de estados (`Game`): típico fluxo **Title → Loading → Stage**; o gameplay pesado está em **`StageState`**.
-- **`Game::TryGetStageState()`** devolve **`nullptr`** quando o estado atual não é o estágio — componentes devem sempre checar antes de usar (evita casts inseguros).
-- **`StageState`** está dividido em vários `.cpp` em `src/states/stage/` (Load, Update, Render, Navigation, Lighting, party input, lifecycle); mapa em **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)**.
-- Código-fonte organizado por domínio em pastas (`core/`, `engine/`, `gameplay/`, `states/stage/`, etc.) — ver **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)**.
-- **`StageOceanAmbientController`** concentra o loop de ondas (`Mix_Chunk` no canal reservado), mantendo os mesmos volumes/comportamentos de antes.
+# 🕯️ The Last Lightkeeper
+### *A Luz do Farol*
 
-## Configuração
+> *Dois irmãos. Um farol. Uma criatura que teme a luz — mas não por muito tempo.*
 
-| Fonte | Conteúdo |
-|-------|-----------|
-| **`.env`** (opcional, pasta ao rodar o exe) | `MASTER_VOLUME=0–100`. Linhas `#` ignoradas; chaves/valores trimados; valores ruins são ignorados. |
-| **`config/settings.json`** (opcional) | `window_width`, `window_height`. Ausente ou JSON inválido → usa `Game::WINDOW_WIDTH` / `Game::WINDOW_HEIGHT` em **`include/Game.h`**. Exemplo: **`config/settings.example.json`**. |
+[![C++17](https://img.shields.io/badge/C%2B%2B-17-blue?style=for-the-badge&logo=cplusplus)](https://en.cppreference.com/w/cpp/17)
+[![SDL2](https://img.shields.io/badge/SDL2-2.x-orange?style=for-the-badge)](https://www.libsdl.org/)
+[![Windows](https://img.shields.io/badge/Windows-10%2F11-0078D6?style=for-the-badge&logo=windows)](https://www.microsoft.com/windows)
+[![UnB IDJ](https://img.shields.io/badge/UnB-Introdução_ao_Desenvolvimento_de_Jogos-darkgreen?style=for-the-badge)](https://www.unb.br)
 
-## Dados (`Recursos/data`)
+</div>
 
-- **`Recursos/data/stage_first_load.json`** — define OST, mapa, navegação, ciclo de pickups no chão, lanterna inicial e candidatos do áudio das ondas.
-- Se o arquivo faltar ou falhar ao ler, o jogo usa **fallback embutido** com os mesmos valores antigos e registra aviso no stderr (`src/states/stage/FirstLoadLoader.cpp`).
+---
 
-## Build de desenvolvimento (Windows)
+## 📖 Sobre o Jogo
 
-```bat
+**The Last Lightkeeper** é um jogo de terror e sobrevivência top-down desenvolvido como trabalho final da disciplina de **Introdução ao Desenvolvimento de Jogos** da Universidade de Brasília (UnB).
+
+Dois irmãos estão perdidos nesse univero e sua única fuga é um farol abandonado. Dentro dele, algo os aguarda nas sombras — uma criatura que odeia a luz, mas que aprende a combatê-la. Os irmãos precisam subir até o topo do farol, resolvendo puzzles, gerenciando recursos de luz e fugindo de um inimigo que nunca descansa. Durante o caminho para a luz, encontram documentos que contam tanto da história dos acontecimentos atuais, quanto do passado do farol.
+
+> ⚠️ **Demo:** Esta versão contém **3 dos 10 andares** previstos no design original. O jogo completo expandiria a narrativa até o topo do farol.
+
+---
+
+## 🎮 Gameplay
+
+<div align="center">
+
+### Os Andares
+
+<div align="center">
+
+<img src="Gifs%20and%20Images/Andar_1.png" width="700"/>
+
+*Primeiro Andar — Sala de entrada, aprenda os controles e o básico de sobrevivência*
+
+<br/>
+
+<img src="Gifs%20and%20Images/Andar_2.png" width="700"/>
+
+*Segundo Andar — O monstro começa a patrulhar de verdade*
+
+<br/>
+
+<img src="Gifs%20and%20Images/Andar_3.png" width="700"/>
+
+*Terceiro Andar — Cortinas, puzzles de luz e o cerco final*
+
+</div>
+
+---
+
+### 🕯️ Interação e Sobrevivência
+
+<div align="center">
+<img src="Gifs%20and%20Images/interacao.gif" alt="Interação com objetos" width="700"/>
+</div>
+
+> Colete itens, acenda velas e gerencie o estoque de combustível do seu isqueiro. A luz é sua única proteção — mas ela também dura um tempo.
+
+---
+
+### 🪟 Janelas e Estratégia do Monstro
+
+<div align="center">
+<img src="Gifs%20and%20Images/janelas.gif" alt="Sistema de janelas" width="700"/>
+</div>
+
+> O monstro não é passivo. Quando os irmãos se escondem, ele começa a **abrir janelas** estrategicamente para apagar as velas do andar e forçá-los a sair das sombras.
+
+---
+
+### 👁️ O Monstro
+
+<div align="center">
+<img src="Gifs%20and%20Images/monstro.gif" alt="Monstro em ação" width="700"/>
+</div>
+
+> Ser visto é o começo do fim. O monstro possui uma IA com **7 estados de comportamento** — ele patrulha, investiga, persegue, caça, foge da luz, sabota o ambiente e se recupera quando preso. Use o poder do Irmãozinho para criar flashes de luz e repeli-lo quando necessário.
+
+---
+
+### 🏁 Progresso
+
+<div align="center">
+<img src="Gifs%20and%20Images/progresso.gif" alt="Subindo de andar" width="700"/>
+</div>
+
+> O objetivo é simples: **suba.** Resolva o puzzle de cada andar, repare as escadas e suba para o próximo nível. Mas o monstro fica mais ameaçador conforme você avança.
+
+---
+
+## 🎯 Mecânicas Principais
+
+| Mecânica | Descrição |
+|---|---|
+| 🔦 **Sistema de Luz** | Isqueiro com durabilidade, velas acendíveis, campo de visão na luz |
+| 🧠 **IA Adaptativa** | Monstro com 7 estados — patrulha, perseguição, sabotagem e mais |
+| 👬 **Dois Personagens** | Alterne entre Irmãozão e Irmãozinho, cada um com habilidades únicas |
+| 📦 **Física de Objetos** | Barris e caixas com peso variável, empurráveis para criar estratégias |
+| 🪟 **Sistema de Janelas** | Janelas abertas apagam velas próximas — proteja ou sabote |
+| 🧩 **Puzzles por Andar** | Cada andar tem um objetivo único para avançar |
+| 💾 **Save System** | Progresso salvo automaticamente entre andares |
+| ⚙️ **Controles Remapeáveis** | Configure as teclas e os sons pelo menu de configurações |
+
+---
+
+## 🕹️ Controles Padrão
+
+| Ação | Tecla |
+|---|---|
+| Mover | `W` `A` `S` `D` |
+| Interagir | `E` |
+| Usar item | `F` |
+| Item anterior / próximo | `←` `→` |
+| Trocar personagem | `Left Ctrl` |
+| Modo duplo | `Q` |
+| Pausar | `Esc` |
+
+> Todos os controles podem ser remapeados em **Configurações → Controles**.
+
+---
+
+## 🛠️ Como Compilar e Executar
+
+### Pré-requisitos
+
+- **Windows 10 ou 11**
+- **MinGW / TDM-GCC** (32-bit) com suporte a C++17
+- As bibliotecas SDL2 já estão incluídas na pasta `SDL2/` do repositório
+
+### Compilação
+
+```bash
+# Clone o repositório
+git clone https://github.com/The-Jonas/The-Last-Lightkeeper.git
+cd The-Last-Lightkeeper
+
+# Compilar versão de release
+mingw32-make
+
+# Compilar versão de desenvolvimento (com debug visual e atalhos extras)
 mingw32-make debug
-```
 
-## Pasta `dist/` — build de release para compartilhar
-
-Gera **`dist\JOGO.exe`**, as DLLs do SDL em **`dist\`** e a cópia de **`dist\Recursos\`** com os mesmos caminhos do jogo (`Recursos\...`). O jogador deve **executar o `.exe` a partir dentro da pasta `dist`** (ou zipar **`dist`** inteira e enviar).
-
-**Release no Windows:** o `makefile` pode ligar **`-static-libgcc -static-libstdc++`** nos alvos `release` / `package` / `dist`, para máquinas sem runtime MinGW. Se algum binário não estático reclamar de **`libgcc_s_*.dll`** / **`libstdc++-6.dll`**, use **`mingw32-make dist`** conforme o makefile ou instale o runtime correspondente.
-
-**Comando principal (clean + release + cópia):**
-
-```bat
+# Gerar a versão para distribuição
 mingw32-make dist
+OU
+Execute o deploy.bat (na pasta scripts)
 ```
 
-(Na pasta raiz do projeto, onde está o `makefile`.)
+### Executar
 
-**Alternativas:**
-
-| Comando | Efeito |
-|--------|--------|
-| `mingw32-make package` ou `mingw32-make ship` | Só empacota; não apaga objetos intermediários primeiro |
-| `mingw32-make dist DIST_DIR=pasta_qualquer` | Coloca o bundle em `pasta_qualquer\` |
-
-**Via script:**
-
-```bat
-scripts\build-dist.bat
+```bash
+./JOGO.exe
 ```
 
-**Depois:** compacte **`dist`** em um `.zip` e publique em itch.io, Drive, etc. Inclua na descrição: “descompactar e rodar **`JOGO.exe`** dentro da pasta”.
+> **Nota:** Execute a partir da raiz do repositório para que os recursos (`Recursos/`) sejam encontrados corretamente.
 
-## Verificação local (pre-push)
+### Atalhos de Debug (versão dev)
 
-Sem CI obrigatório no repositório: antes de enviar alterações, rode **`mingw32-make debug`** e um smoke rápido (menu → carregar → estágio → inventário/luz/movimento). Detalhes em **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)**.
+| Atalho | Função |
+|---|---|
+| `F5` | Pular para o próximo andar |
+| `B` | Visualizar caixas de colisão |
+| `L` | Alternar luzes |
+| `M` | Silenciar música |
+
+---
+
+## 🏗️ Arquitetura Técnica
+
+O jogo foi desenvolvido com uma **engine própria** em C++17 + SDL2, sem uso de engines comerciais.
+
+```
+The-Last-Lightkeeper/
+├── src/
+│   ├── audio/         # Dublagem, efeitos sonoros, música
+│   ├── core/          # Game loop, recursos, input, save
+│   ├── engine/        # ECS: GameObject, Component, Camera, Sprite
+│   ├── gameplay/      # Monstro, personagens, itens, cortinas, janelas
+│   ├── lighting/      # Sistema de iluminação e sombras dinâmicas
+│   ├── states/        # TitleState, StageState, EndState e transições
+│   ├── ui/            # HUD, inventário, silhueta do monstro
+│   └── world/         # TileMap, Collider, SpawnFactory
+├── include/           # Headers
+├── Recursos/
+│   ├── img/           # Sprites, tiles, UI
+│   ├── audio/         # Trilhas e efeitos sonoros
+│   ├── font/          # Fontes
+│   ├── maps/          # Feitos no Tiled, disponíveis em JSON
+│   └── data/          # Configurações em JSON (monster.json, etc.)
+└── SDL2/              # Bibliotecas SDL2 (já incluídas)
+```
+
+**Tecnologias:**
+
+| Biblioteca | Uso |
+|---|---|
+| SDL2 | Renderização, input, janela |
+| SDL2_image | Carregamento de texturas PNG/JPG |
+| SDL2_mixer | Áudio multicanal (MP3, WAV) |
+| SDL2_ttf | Renderização de texto UTF-8 |
+| nlohmann/json | Leitura de mapas e configurações |
+| Tiled | Editor de mapas (formato JSON) |
+
+---
+
+## 👥 Equipe
+
+<div align="center">
+
+### 💻 Programação
+
+| | Contribuidor |
+|:-:|:-:|
+| 👤 | **João Victor Pereira** |
+| 👤 | **Matheus Azevedo** |
+
+### 🎨 Design
+
+| | Contribuidor |
+|:-:|:-:|
+| 👤 | **Flávio de Oliveira Salão** |
+| 👤 | **Bryan** |
+| 👤 | **Haru Braga Vasconcelos** |
+
+### 📢 Comunicação
+
+| | Contribuidor |
+|:-:|:-:|
+| 👤 | **Luana** |
+| 👤 | **Amanda Cavalcante** |
+
+</div>
+
+---
+
+## 📄 Licença
+
+Este projeto foi desenvolvido para fins acadêmicos como trabalho da disciplina de **Introdução ao Desenvolvimento de Jogos** da **Universidade de Brasília (UnB)**.
+
+---
+
+<div align="center">
+
+*🕯️ A luz acabará. E a monstruosidade permanecerá.*
+
+</div>
