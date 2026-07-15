@@ -78,7 +78,7 @@ Dois irmãos estão perdidos nesse universo e sua única fuga é um farol abando
 <img src="Gifs%20and%20Images/monstro.gif" alt="Monstro em ação" width="700"/>
 </div>
 
-> Ser visto é o começo do fim. O monstro possui uma IA com **7 estados de comportamento** — ele patrulha, investiga, persegue, caça, foge da luz, sabota o ambiente e se recupera quando preso. Use o poder do Irmãozinho para criar flashes de luz e repeli-lo quando necessário.
+> Ser visto é o começo do fim. O monstro possui uma IA com **7 estados de comportamento** — ele patrulha, investiga, persegue, caça, foge da luz, sabota o ambiente e se recupera quando preso. Use o poder do Irmãozinho para enxergá-lo e a luz para o repelir quando necessário.
 
 ---
 
