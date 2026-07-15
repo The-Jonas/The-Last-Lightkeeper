@@ -1,6 +1,5 @@
 <div align="center">
 
-<!-- Logo do jogo -->
 <img src="Gifs%20and%20Images/menu.gif" alt="Menu Principal" width="800"/>
 
 # 🕯️ The Last Lightkeeper
@@ -21,15 +20,13 @@
 
 **The Last Lightkeeper** é um jogo de terror e sobrevivência top-down desenvolvido como trabalho final da disciplina de **Introdução ao Desenvolvimento de Jogos** da Universidade de Brasília (UnB).
 
-Dois irmãos estão perdidos nesse univero e sua única fuga é um farol abandonado. Dentro dele, algo os aguarda nas sombras — uma criatura que odeia a luz, mas que aprende a combatê-la. Os irmãos precisam subir até o topo do farol, resolvendo puzzles, gerenciando recursos de luz e fugindo de um inimigo que nunca descansa. Durante o caminho para a luz, encontram documentos que contam tanto da história dos acontecimentos atuais, quanto do passado do farol.
+Dois irmãos estão perdidos nesse universo e sua única fuga é um farol abandonado. Dentro dele, algo os aguarda nas sombras — uma criatura que odeia a luz, mas que aprende a combatê-la. Os irmãos precisam subir até o topo do farol, resolvendo puzzles, gerenciando recursos de luz e fugindo de um inimigo que nunca descansa. Durante o caminho para a luz, encontram documentos que contam tanto da história dos acontecimentos atuais, quanto do passado do farol.
 
 > ⚠️ **Demo:** Esta versão contém **3 dos 10 andares** previstos no design original. O jogo completo expandiria a narrativa até o topo do farol.
 
 ---
 
 ## 🎮 Gameplay
-
-<div align="center">
 
 ### Os Andares
 
@@ -106,7 +103,7 @@ Dois irmãos estão perdidos nesse univero e sua única fuga é um farol abandon
 | 🪟 **Sistema de Janelas** | Janelas abertas apagam velas próximas — proteja ou sabote |
 | 🧩 **Puzzles por Andar** | Cada andar tem um objetivo único para avançar |
 | 💾 **Save System** | Progresso salvo automaticamente entre andares |
-| ⚙️ **Controles Remapeáveis** | Configure as teclas e os sons pelo menu de configurações |
+| ⚙️ **Controles Remapeáveis** | Configure as teclas pelo menu de configurações |
 
 ---
 
@@ -149,8 +146,7 @@ mingw32-make debug
 
 # Gerar a versão para distribuição
 mingw32-make dist
-OU
-Execute o deploy.bat (na pasta scripts)
+# OU execute o deploy.bat (na pasta scripts)
 ```
 
 ### Executar
@@ -176,25 +172,25 @@ Execute o deploy.bat (na pasta scripts)
 
 O jogo foi desenvolvido com uma **engine própria** em C++17 + SDL2, sem uso de engines comerciais.
 
-```
+```text
 The-Last-Lightkeeper/
 ├── src/
-│   ├── audio/         # Dublagem, efeitos sonoros, música
-│   ├── core/          # Game loop, recursos, input, save
-│   ├── engine/        # ECS: GameObject, Component, Camera, Sprite
-│   ├── gameplay/      # Monstro, personagens, itens, cortinas, janelas
-│   ├── lighting/      # Sistema de iluminação e sombras dinâmicas
-│   ├── states/        # TitleState, StageState, EndState e transições
-│   ├── ui/            # HUD, inventário, silhueta do monstro
-│   └── world/         # TileMap, Collider, SpawnFactory
-├── include/           # Headers
+│   ├── audio/          # Dublagem, efeitos sonoros, música
+│   ├── core/           # Game loop, recursos, input, save
+│   ├── engine/         # ECS: GameObject, Component, Camera, Sprite
+│   ├── gameplay/       # Monstro, personagens, itens, cortinas, janelas
+│   ├── lighting/       # Sistema de iluminação e sombras dinâmicas
+│   ├── states/         # TitleState, StageState, EndState e transições
+│   ├── ui/             # HUD, inventário, silhueta do monstro
+│   └── world/          # TileMap, Collider, SpawnFactory
+├── include/            # Headers
 ├── Recursos/
-│   ├── img/           # Sprites, tiles, UI
-│   ├── audio/         # Trilhas e efeitos sonoros
-│   ├── font/          # Fontes
-│   ├── maps/          # Feitos no Tiled, disponíveis em JSON
-│   └── data/          # Configurações em JSON (monster.json, etc.)
-└── SDL2/              # Bibliotecas SDL2 (já incluídas)
+│   ├── img/            # Sprites, tiles, UI
+│   ├── audio/          # Trilhas e efeitos sonoros
+│   ├── font/           # Fontes
+│   ├── maps/           # Feitos no Tiled, disponíveis em JSON
+│   └── data/           # Configurações em JSON (monster.json, etc.)
+└── SDL2/               # Bibliotecas SDL2 (já incluídas)
 ```
 
 **Tecnologias:**
@@ -226,14 +222,14 @@ The-Last-Lightkeeper/
 | | Contribuidor |
 |:-:|:-:|
 | 👤 | **Flávio de Oliveira Salão** |
-| 👤 | **Bryan** |
+| 👤 | **Bryan Gomes Silva** |
 | 👤 | **Haru Braga Vasconcelos** |
 
 ### 📢 Comunicação
 
 | | Contribuidor |
 |:-:|:-:|
-| 👤 | **Luana** |
+| 👤 | **Luana de Moura Duque** |
 | 👤 | **Amanda Cavalcante** |
 
 </div>
