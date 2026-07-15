@@ -18,7 +18,7 @@
 
 ## 📖 Sobre o Jogo
 
-**The Last Lightkeeper** é um jogo de terror e sobrevivência top-down desenvolvido como trabalho final da disciplina de **Introdução ao Desenvolvimento de Jogos** da Universidade de Brasília (UnB).
+**The Last Lightkeeper** é um jogo de terror e gerenciamento de recursos top-down desenvolvido como trabalho da disciplina de **Introdução ao Desenvolvimento de Jogos** da Universidade de Brasília (UnB).
 
 Dois irmãos estão perdidos nesse universo e sua única fuga é um farol abandonado. Dentro dele, algo os aguarda nas sombras — uma criatura que odeia a luz, mas que aprende a combatê-la. Os irmãos precisam subir até o topo do farol, resolvendo puzzles, gerenciando recursos de luz e fugindo de um inimigo que nunca descansa. Durante o caminho para a luz, encontram documentos que contam tanto da história dos acontecimentos atuais, quanto do passado do farol.
 
