@@ -182,7 +182,7 @@ void StageState::LoadAssets() {
     }
 
     if (!lightTweakPanel) {
-        lightTweakPanel = std::make_unique<LightTweakPanel>(lightMaskParams, lightMaskShape);
+        lightTweakPanel = std::make_unique<LightTweakPanel>(lightMaskParams, lightMaskShape, &visionParams);
     }
 
     levelWorldW = cfg.navWorldW;

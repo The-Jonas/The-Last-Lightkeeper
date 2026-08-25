@@ -12,7 +12,7 @@ class InputManager;
 
 class LightTweakPanel {
 public:
-    LightTweakPanel(LightMaskParams& params, LightMaskShape& shape);
+    LightTweakPanel(LightMaskParams& params, LightMaskShape& shape, PlayerVisionParams* vision = nullptr);
     ~LightTweakPanel();
 
     LightTweakPanel(const LightTweakPanel&) = delete;
@@ -24,8 +24,11 @@ public:
 
     bool visible = false;
     bool durabilityEnabled = true;
+    /// 0 = luz/sombra (paginas antigas); 1 = campo de visao + filtro preto-e-branco.
+    int page = 0;
+    static constexpr int kPageCount = 2;
 
-    static constexpr int kLogicalRows = 32;
+    static constexpr int kLogicalRows = 56;
 
 private:
     static constexpr int kPanelWMax = 248;
@@ -33,11 +36,14 @@ private:
     static constexpr int kRowH = 40;
     static constexpr int kBarH = 9;
     static constexpr int kFirstRowY = 44;
-    static constexpr int kBarOffsetY = 22;
     static constexpr int kPadX = 8;
 
     LightMaskParams& params;
     LightMaskShape& shape;
+    PlayerVisionParams* vision = nullptr;
+    int lastPage = 0;
+    /// Altura da janela do ultimo frame — as linhas encolhem para caberem todas.
+    int lastWinH = 1080;
     LightMaskShape lastShape = LightMaskShape::Circle;
     int focusedSlot = 0;
     int dragSlot = -1;
@@ -51,6 +57,16 @@ private:
     char rowLabelBuf[kLogicalRows][128]{};
 
     void refreshActiveRows();
+    /// Altura de linha efectiva: `kRowH` quando cabe, menos quando ha linhas a
+    /// mais para a altura da janela.
+    int rowHeight() const;
+    int barOffsetY() const;
+    /// Linha desenhada como botao (acao imediata) em vez de barra.
+    static bool isButtonRow(int logicalRow);
+    /// Linha desenhada como caixa de seleccao (liga/desliga).
+    static bool isToggleRow(int logicalRow);
+    bool toggleRowValue(int logicalRow) const;
+    void flipToggleRow(int logicalRow);
     int logicalRowAtSlot(int slotIndex) const;
     int slotCount() const;
 

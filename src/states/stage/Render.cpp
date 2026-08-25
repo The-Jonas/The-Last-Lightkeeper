@@ -17,6 +17,7 @@
 #include "ui/Text.h"
 #include "lighting/TopDownLightShadows.h"
 #include "lighting/LightShadowProfile.h"
+#include "lighting/ScenePostFx.h"
 #include "gameplay/Item.h"
 #include "gameplay/ItemPickup.h"
 #include "gameplay/HotbarComponent.h"
@@ -29,6 +30,10 @@
 #include "audio/GameSfx.h"
 #include "audio/GameVoice.h"
 #include "gameplay/Window.h"
+#include "gameplay/Jornal.h"
+#include "gameplay/CandleStick.h"
+#include "gameplay/RadioAsset.h"
+#include "gameplay/Closet.h"
 #include <iostream>
 #include <fstream>
 #include <algorithm>
@@ -129,6 +134,11 @@ void StageState::Render(){
     const bool durabilityOn = lightTweakPanel ? lightTweakPanel->durabilityEnabled : true;
     const LightMaskParams lighterLightParams =
         lighterFromInventory && durabilityOn ? inventory.BuildLighterLightParams(lightMaskParams) : lightMaskParams;
+
+    // ── CAMPO DE VISAO DO PERSONAGEM CONTROLADO ──────────────────────────────
+    // Recalcula o cone (direcao suavizada) + o circulo dos pes. Alimenta duas
+    // coisas: o buraco na malha de escuridao e o filtro preto-e-branco final.
+    UpdatePlayerVision(lastFrameDt);
 
     const bool bigCircleOnlyLight =
         cursorPreviewLightEnabled && previewLightLockedToPlayer && previewLightAnchorPlayer == bigCharacterObject;
@@ -398,9 +408,36 @@ void StageState::Render(){
     // ===================================================================
     constexpr int kHudZ = 100;
     for (const auto& go : objectArray) {
-        if (go->z < kHudZ) {
-            RenderInteractionGlowIfNeeded(*go);
-            go->Render();
+        if (go->z >= kHudZ) {
+            continue;
+        }
+
+        // ── OBJETOS INTERAGIVEIS ─────────────────────────────────────────────
+        // Sob a camada monocromatica o objeto nao existe para o jogador: so
+        // aparece quando o campo de visao o alcanca. A transicao e suave para
+        // nao "piscar" quando o cone varre o chao. A interaccao NAO muda — o
+        // objeto continua a poder ser usado se o jogador chegar la.
+        SpriteRenderer* fadeSprite = nullptr;
+        if (visionFrame.valid && ShouldHideOutsideVision(*go)) {
+            const float visAt = VisionVisibilityAtScreen(WorldToScreen(go->box.Center()));
+            const float reveal = std::max(0.01f, visionParams.itemRevealThreshold);
+            const float shown = Clamp01(visAt / reveal);
+            if (shown <= 0.01f) {
+                continue;
+            }
+            if (shown < 0.999f) {
+                fadeSprite = go->GetComponent<SpriteRenderer>();
+                if (fadeSprite) {
+                    fadeSprite->SetTint(255, 255, 255, static_cast<Uint8>(shown * 255.0f));
+                }
+            }
+        }
+
+        RenderInteractionGlowIfNeeded(*go);
+        go->Render();
+
+        if (fadeSprite) {
+            fadeSprite->SetTint(255, 255, 255, 255);
         }
     }
 
@@ -423,8 +460,13 @@ void StageState::Render(){
             occCtx.cameraY = Camera::pos.y;
             occCtx.zoom = Camera::GetZoom();
         }
-        // Joga a escuridão por cima de tudo (chão + sombras + sprites) respeitando os raios de luz:
-        radialGeometry->RenderMany(g.GetRenderer(), g.GetWindowsWidth(), g.GetWindowsHeight(), screenLights, occCtx);
+        // Joga a escuridão por cima de tudo (chão + sombras + sprites) respeitando os raios de luz.
+        // O campo de visao entra aqui como duas luzes SINTETICAS (cone + circulo dos pes): elas
+        // so abrem o buraco na escuridao — nao entram na lista `screenLights`, logo nao projetam
+        // sombras de sprite nem contam para a sanidade.
+        std::vector<RadialLightOverlay::ScreenLight> maskLights = screenLights;
+        AppendVisionMaskLights(maskLights);
+        radialGeometry->RenderMany(g.GetRenderer(), g.GetWindowsWidth(), g.GetWindowsHeight(), maskLights, occCtx);
 
 
         if (shadowsEnabled && staticShadowEdgesBuilt && !staticShadowEdges.empty()) {
@@ -510,15 +552,39 @@ void StageState::Render(){
         }
     }
 
-    if (lightTweakPanel && lightTweakPanel->visible) {
-        lightTweakPanel->Render(g.GetRenderer(), g.GetWindowsWidth(), g.GetWindowsHeight());
-    }
-
-    if (showMapPhysicsDebug) {
-        SDL_Renderer* dbgR = g.GetRenderer();
-        level.RenderCollisionOverlay(dbgR);
-        RenderGameplayCollisionDebug(dbgR);
-        RenderCompanionFollowPathDebug(dbgR);
+    // ===================================================================
+    // 6.9 CARIMBO "NAO FICAR CINZENTO" NOS DOIS IRMAOS
+    // ===================================================================
+    // Os irmaos mantem a cor mesmo fora do cone. O shader nao sabe distinguir
+    // que pixeis sao deles, por isso carimbamos a silhueta no canal ALFA do alvo
+    // da cena: o modo de mistura deixa o RGB intacto e poe o alfa a zero onde o
+    // sprite e opaco. Tem de ser DEPOIS da malha de escuridao — ela desenha com
+    // BLEND e voltaria a subir o alfa.
+    if (scenePostFx && scenePostFx->IsAvailable()) {
+        const SDL_BlendMode stampBlend = ScenePostFx::NoGrayStampBlendMode();
+        if (stampBlend != SDL_BLENDMODE_INVALID) {
+            auto stampNoGray = [&](GameObject* obj) {
+                if (obj == nullptr) {
+                    return;
+                }
+                SpriteRenderer* sr = obj->GetComponent<SpriteRenderer>();
+                if (sr == nullptr) {
+                    return;
+                }
+                SDL_Texture* tex = sr->GetTexturePtr();
+                if (tex == nullptr) {
+                    return;
+                }
+                SDL_BlendMode prev = SDL_BLENDMODE_BLEND;
+                SDL_GetTextureBlendMode(tex, &prev);
+                if (SDL_SetTextureBlendMode(tex, stampBlend) == 0) {
+                    sr->Render();
+                }
+                SDL_SetTextureBlendMode(tex, prev);
+            };
+            stampNoGray(bigCharacterObject);
+            stampNoGray(smallCharacterObject);
+        }
     }
 
     // Devolve o controle para o Monitor real!
@@ -526,7 +592,25 @@ void StageState::Render(){
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
 
+    // ===================================================================
+    // 6.5 FILTRO PRETO-E-BRANCO FORA DO CAMPO DE VISAO
+    // ===================================================================
+    // A copia normal vai SEMPRE primeiro: alem de deixar o viewport do SDL
+    // montado (necessario para o quad do shader acertar o letterbox do
+    // SDL_RenderSetLogicalSize), garante imagem na tela caso o pos-processamento
+    // nao esteja disponivel neste driver.
+    // BLENDMODE_NONE e obrigatorio: o carimbo acima poe alfa zero nos irmaos e
+    // uma copia com mistura fa-los-ia desaparecer.
+    SDL_SetTextureBlendMode(renderTarget, SDL_BLENDMODE_NONE);
     SDL_RenderCopy(renderer, renderTarget, nullptr, nullptr);
+
+    if (!scenePostFx) {
+        scenePostFx = std::make_unique<ScenePostFx>();
+        scenePostFx->Init(renderer);
+    }
+    if (scenePostFx->IsAvailable()) {
+        scenePostFx->Render(renderer, renderTarget, winW, winH, visionFrame, visionParams);
+    }
 
     // Brilho do jogador (overlay): <100 escurece, >100 clareia (lift de sombras).
     const int brightness = Game::brightnessPercent;
@@ -602,6 +686,21 @@ void StageState::Render(){
             overlaySprite->SetTint(255, 255, 255, 255);
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
         }
+    }
+
+    // ── FERRAMENTAS DE DEBUG ─────────────────────────────────────────────────
+    // Desenhadas DEPOIS do pos-processamento, na tela: assim o painel de afinacao
+    // e os overlays de colisao mantem a cor e continuam legiveis fora do campo
+    // de visao.
+    if (showMapPhysicsDebug) {
+        SDL_Renderer* dbgR = g.GetRenderer();
+        level.RenderCollisionOverlay(dbgR);
+        RenderGameplayCollisionDebug(dbgR);
+        RenderCompanionFollowPathDebug(dbgR);
+    }
+
+    if (lightTweakPanel && lightTweakPanel->visible) {
+        lightTweakPanel->Render(g.GetRenderer(), g.GetWindowsWidth(), g.GetWindowsHeight());
     }
 
     // ====================================

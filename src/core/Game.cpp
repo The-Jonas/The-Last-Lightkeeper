@@ -553,11 +553,38 @@ Game::Game(std::string title) {
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");   // "0"=nearest (padrão), "1"=linear
     // =========================================================================
 
+    // ===== [BACKEND DE RENDER: PREFERIR OPENGL] ==============================
+    // O filtro preto-e-branco fora do campo de visao (ScenePostFx) precisa de um
+    // fragment shader, e isso so existe no backend "opengl" do SDL. A dica abaixo
+    // apenas PREFERE esse backend; se o driver nao o tiver, o SDL escolhe outro e
+    // o jogo corre na mesma — apenas sem o filtro monocromatico.
+    // >>> Para forcar o backend antigo: TLL_RENDER_DRIVER=direct3d no ambiente. <<<
+    {
+        const char* forcedDriver = SDL_getenv("TLL_RENDER_DRIVER");
+        SDL_SetHint(SDL_HINT_RENDER_DRIVER, (forcedDriver && forcedDriver[0]) ? forcedDriver : "opengl");
+        SDL_SetHint(SDL_HINT_RENDER_BATCHING, "1");
+    }
+
     //Cria Renderizador
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED); // SDL_RENDERER_ACCELERATED, para requisitar o uso de OpenGL ou Direct3D.
     if (!renderer) {
+        // A dica de backend pode ter escolhido um driver que falha nesta maquina:
+        // limpa-a e tenta outra vez com a escolha automatica do SDL.
+        std::cerr << "SDL_CreateRenderer (opengl) falhou: " << SDL_GetError() << " — a tentar o backend automatico." << std::endl;
+        SDL_SetHint(SDL_HINT_RENDER_DRIVER, "");
+        renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    }
+    if (!renderer) {
         std::cerr << "SDL_CreateRenderer falhou: " << SDL_GetError() << std::endl;
         exit(1);
+    }
+
+    {
+        SDL_RendererInfo rinfo;
+        SDL_zero(rinfo);
+        if (SDL_GetRendererInfo(renderer, &rinfo) == 0 && rinfo.name) {
+            std::cout << "[Render] backend SDL: " << rinfo.name << std::endl;
+        }
     }
 
     SDL_ShowCursor(SDL_DISABLE);   // esconde o cursor do mouse (o mouse ainda mira a lanterna)

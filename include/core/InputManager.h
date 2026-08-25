@@ -27,6 +27,8 @@
 #define FREE_CAMERA_TOGGLE_KEY SDLK_g    // debug: camera livre seguindo o mouse
 #define PANEL_ROW_PREV_KEY SDLK_LEFTBRACKET
 #define PANEL_ROW_NEXT_KEY SDLK_RIGHTBRACKET
+// Alterna a pagina do painel de afinacao: luz/sombra <-> campo de visao + filtro PB.
+#define PANEL_PAGE_TOGGLE_KEY SDLK_BACKSLASH
 #define LEFT_MOUSE_BUTTON SDL_BUTTON_LEFT
 
 // Ações de gameplay remapeáveis (4.1). A navegação de menus e as teclas de

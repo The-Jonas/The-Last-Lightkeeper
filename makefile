@@ -2,7 +2,7 @@ COMPILER = g++
 RMDIR = rm -rdf
 RM = rm -f
 
-DEP_FLAGS = -M -MT $@ -MT $(BIN_PATH)/$(*F).o -MP -MF $@
+DEP_FLAGS = -M -MT $@ -MT $(BIN_PATH)/$*.o -MP -MF $@
 LIBS = -lSDL2 -lSDL2_image -lSDL2_mixer -lSDL2_ttf -lm
 
 INC_PATHS = -I$(INC_PATH) $(addprefix -I,$(SDL_INC_PATH))
@@ -220,5 +220,11 @@ ifeq ($(OS), Windows_NT)
 	echo.
 endif
 
+# ATENCAO: cifrao SIMPLES. `.SECONDEXPANSION` so vale para pre-requisitos de
+# regras - NAO para a directiva `include`. Com `$$(DEP_FILES)` o make procurava
+# um ficheiro chamado literalmente "$(DEP_FILES)", nao o encontrava, e o `-`
+# do `-include` calava o erro: os .d NUNCA entravam. Consequencia: mudar um
+# HEADER nao recompilava nada, e a build incremental misturava objetos com
+# layouts de classe diferentes -> ACCESS_VIOLATION ao entrar na fase.
 .SECONDEXPANSION:
--include $$(DEP_FILES)
+-include $(DEP_FILES)

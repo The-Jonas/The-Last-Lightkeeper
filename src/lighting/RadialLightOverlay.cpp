@@ -142,7 +142,9 @@ float RadialLightOverlay::AlphaAt(float dx, float dy, LightMaskShape shape, cons
             return dMax;
         }
         const float angAbs = std::fabs(std::atan2(perp, f));
-        const float featherAng = std::max(0.04f, half * 0.18f);
+        const float featherAng = (params.coneFeatherDeg > 0.0f)
+                                     ? std::max(0.01f, params.coneFeatherDeg * static_cast<float>(M_PI) / 180.0f)
+                                     : std::max(0.04f, half * 0.18f);
         if (angAbs > half + featherAng) {
             return dMax;
         }
@@ -151,7 +153,8 @@ float RadialLightOverlay::AlphaAt(float dx, float dy, LightMaskShape shape, cons
         const float t = std::max(tr, ta);
         const float radialAlpha = combine(t);
         const float angFade = std::max(0.0f, std::min(1.0f, (half + featherAng - angAbs) / featherAng));
-        const float lenFeather = std::max(12.0f, L * 0.14f);
+        const float lenFeather = (params.coneLengthFeatherPx > 0.0f) ? std::max(2.0f, params.coneLengthFeatherPx)
+                                                                    : std::max(12.0f, L * 0.14f);
         const float lenFade = std::max(0.0f, std::min(1.0f, (L - f) / lenFeather));
         const float edgeFade = angFade * lenFade;
         return dMax - (dMax - radialAlpha) * edgeFade;
@@ -368,6 +371,9 @@ void RadialLightOverlay::RenderMany(SDL_Renderer* renderer, int windowW, int win
         default:
             break;
         }
+        const float ambientMax =
+            std::max(0.0f, std::min(255.0f, static_cast<float>(gridRef.ambientDarknessMax)));
+
         const int gridX = std::max(20, static_cast<int>(std::ceil(static_cast<float>(passW) / gridStep)));
         const int gridY = std::max(12, static_cast<int>(std::ceil(static_cast<float>(passH) / gridStep)));
         const float stepX = static_cast<float>(passW) / static_cast<float>(gridX);
@@ -382,7 +388,10 @@ void RadialLightOverlay::RenderMany(SDL_Renderer* renderer, int windowW, int win
             for (int x = 0; x <= gridX; x++) {
                 const float px = std::min(static_cast<float>(passW), x * stepX);
                 const float py = std::min(static_cast<float>(passH), y * stepY);
-                float alpha = 255.0f;
+                // Parte do ESCURO AMBIENTE, nao do preto puro: onde nao chega luz
+                // nenhuma a cena fica escura mas ainda legivel (o filtro
+                // preto-e-branco do ScenePostFx trata da cor).
+                float alpha = ambientMax;
                 float torchWarm = 0.0f;
                 float torchWarmth = 0.0f;
                 for (const PreparedLight& light : prep) {
@@ -530,6 +539,7 @@ void RadialLightOverlay::RenderMany(SDL_Renderer* renderer, int windowW, int win
                 p.params.rMaxMinimo *= smin;
                 p.params.marginExtraAlemDoCanto *= smin;
                 p.params.coneLengthPx *= smin;
+                p.params.coneLengthFeatherPx *= smin;
                 p.params.rectHalfWidthPx *= smin;
                 p.params.rectHalfHeightPx *= smin;
                 p.params.rectSoftBandPx *= smin;

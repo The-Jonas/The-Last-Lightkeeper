@@ -35,6 +35,9 @@ public:
     void SetCameraFollower(bool follow);                    // O CameraFollower vai escolher se o objeto fica fixo no mapa (false)
     bool cameraFollower;                                    // ou se ele segue a câmera (true), como por exemplo ser usado em elementos de fundo
     const std::string& GetSourceFile() const { return sourceFile; }
+    /// Textura crua. Serve para trocar o modo de mistura por um desenho apenas
+    /// (ver `ScenePostFx::NoGrayStampBlendMode`). Nao guardar o ponteiro.
+    SDL_Texture* GetTexturePtr() const { return texture.get(); }
 
 private:
     std::string sourceFile;

@@ -45,6 +45,30 @@ const char* kRowLabels[LightTweakPanel::kLogicalRows] = {
     "Sombra sprite: escala max",
     "Criar luz em C / clique",
     "Durabilidade (itens)",
+    "Visao: ligada",
+    "Visao: meio-angulo",
+    "Visao: borda suave (graus)",
+    "Visao: alcance (px mundo)",
+    "Visao: fade do alcance",
+    "Visao: apice a frente",
+    "Visao: vel. de giro",
+    "Pes: raio (px mundo)",
+    "Mascara: gamma do corte",
+    "PB: forca do cinzento",
+    "PB: levantar preto",
+    "PB: forca do tom frio",
+    "PB: ganho na visao",
+    "Escuro ambiente (sem luz)",
+    "PB: brilho da camada",
+    "PB: tamanho do pixel",
+    "PB: desfoque (px)",
+    "Vinheta: forca",
+    "Vinheta: inicio",
+    "Itens so no campo de visao",
+    "Itens: limiar de revelacao",
+    "Interagiveis so na visao",
+    "Barris so na visao",
+    "Visao sem luz: escuridao",
 };
 
 void destroyTex(SDL_Texture*& t) {
@@ -52,6 +76,15 @@ void destroyTex(SDL_Texture*& t) {
         SDL_DestroyTexture(t);
         t = nullptr;
     }
+}
+
+/// Pagina 1: campo de visao do jogador + filtro preto-e-branco. As mesmas
+/// barras servem para experimentar o formato do cone e a forca do monocromatico
+/// sem recompilar.
+void appendVisionRows(std::vector<int>& out) {
+    out = {32, 33, 34, 35, 36, 37, 38, 39, 40, 55,
+           41, 46, 47, 48, 42, 43, 49, 50,
+           51, 53, 54, 52, 44, 45, 0};
 }
 
 void appendRowsForShape(LightMaskShape s, std::vector<int>& out) {
@@ -80,8 +113,8 @@ void appendRowsForShape(LightMaskShape s, std::vector<int>& out) {
 
 } // namespace
 
-LightTweakPanel::LightTweakPanel(LightMaskParams& paramsIn, LightMaskShape& shapeIn)
-    : params(paramsIn), shape(shapeIn), lastShape(shapeIn) {
+LightTweakPanel::LightTweakPanel(LightMaskParams& paramsIn, LightMaskShape& shapeIn, PlayerVisionParams* visionIn)
+    : params(paramsIn), shape(shapeIn), vision(visionIn), lastShape(shapeIn) {
     refreshActiveRows();
 }
 
@@ -91,7 +124,65 @@ LightTweakPanel::~LightTweakPanel() {
     }
 }
 
+bool LightTweakPanel::isButtonRow(int logicalRow) {
+    return logicalRow == 30;
+}
+
+bool LightTweakPanel::isToggleRow(int logicalRow) {
+    return logicalRow == 31 || logicalRow == 32 || logicalRow == 51 || logicalRow == 53 || logicalRow == 54;
+}
+
+int LightTweakPanel::rowHeight() const {
+    const int available = std::max(120, lastWinH - kFirstRowY - 20);
+    const int rows = std::max(1, slotCount());
+    return std::max(19, std::min(kRowH, available / rows));
+}
+
+int LightTweakPanel::barOffsetY() const {
+    return std::max(9, rowHeight() - kBarH - 5);
+}
+
+bool LightTweakPanel::toggleRowValue(int logicalRow) const {
+    if (logicalRow == 31) {
+        return durabilityEnabled;
+    }
+    if (logicalRow == 32) {
+        return vision != nullptr && vision->enabled;
+    }
+    if (logicalRow == 51) {
+        return vision != nullptr && vision->hideItemsOutsideVision;
+    }
+    if (logicalRow == 53) {
+        return vision != nullptr && vision->hideInteractablesOutsideVision;
+    }
+    if (logicalRow == 54) {
+        return vision != nullptr && vision->hidePushablesOutsideVision;
+    }
+    return false;
+}
+
+void LightTweakPanel::flipToggleRow(int logicalRow) {
+    if (logicalRow == 31) {
+        durabilityEnabled = !durabilityEnabled;
+    } else if (logicalRow == 32 && vision) {
+        vision->enabled = !vision->enabled;
+    } else if (logicalRow == 51 && vision) {
+        vision->hideItemsOutsideVision = !vision->hideItemsOutsideVision;
+    } else if (logicalRow == 53 && vision) {
+        vision->hideInteractablesOutsideVision = !vision->hideInteractablesOutsideVision;
+    } else if (logicalRow == 54 && vision) {
+        vision->hidePushablesOutsideVision = !vision->hidePushablesOutsideVision;
+    }
+}
+
 void LightTweakPanel::refreshActiveRows() {
+    if (page == 1 && vision != nullptr) {
+        appendVisionRows(activeRows);
+        if (focusedSlot >= static_cast<int>(activeRows.size())) {
+            focusedSlot = std::max(0, static_cast<int>(activeRows.size()) - 1);
+        }
+        return;
+    }
     appendRowsForShape(shape, activeRows);
     if (focusedSlot >= static_cast<int>(activeRows.size())) {
         focusedSlot = std::max(0, static_cast<int>(activeRows.size()) - 1);
@@ -202,6 +293,61 @@ float LightTweakPanel::getRowNormalized(int logicalRow) const {
         return 0.0f;
     case 31:
         return durabilityEnabled ? 1.0f : 0.0f;
+    default:
+        break;
+    }
+    if (vision == nullptr) {
+        return 0.0f;
+    }
+    switch (logicalRow) {
+    case 32:
+        return vision->enabled ? 1.0f : 0.0f;
+    case 33:
+        return (vision->coneHalfAngleDeg - 5.0f) / (85.0f - 5.0f);
+    case 34:
+        return (vision->coneFeatherDeg - 0.5f) / (30.0f - 0.5f);
+    case 35:
+        return (vision->coneLengthPx - 80.0f) / (2600.0f - 80.0f);
+    case 36:
+        return vision->coneLengthFeatherPx / 700.0f;
+    case 37:
+        return (vision->coneOriginForwardPx + 40.0f) / (160.0f);
+    case 38:
+        return (vision->turnSpeedDegPerSec - 90.0f) / (2000.0f - 90.0f);
+    case 39:
+        return (vision->footRadiusPx - 16.0f) / (420.0f - 16.0f);
+    case 40:
+        return (vision->maskFalloffGamma - 1.0f) / (8.0f - 1.0f);
+    case 41:
+        return vision->grayStrength;
+    case 42:
+        return vision->monoLift / 0.25f;
+    case 43:
+        return vision->monoTintStrength;
+    case 44:
+        return (vision->visionColorGain - 0.60f) / (2.00f - 0.60f);
+    case 45:
+        return static_cast<float>(params.ambientDarknessMax) / 255.0f;
+    case 46:
+        return vision->monoGain / 1.5f;
+    case 47:
+        return (vision->monoPixelSizePx - 1.0f) / (32.0f - 1.0f);
+    case 48:
+        return vision->monoBlurPx / 24.0f;
+    case 49:
+        return vision->vignetteStrength;
+    case 50:
+        return vision->vignetteStart / 0.95f;
+    case 51:
+        return vision->hideItemsOutsideVision ? 1.0f : 0.0f;
+    case 52:
+        return vision->itemRevealThreshold;
+    case 53:
+        return vision->hideInteractablesOutsideVision ? 1.0f : 0.0f;
+    case 54:
+        return vision->hidePushablesOutsideVision ? 1.0f : 0.0f;
+    case 55:
+        return vision->unlitVisionDarkness / 0.95f;
     default:
         return 0.0f;
     }
@@ -314,17 +460,98 @@ void LightTweakPanel::setRowFromNormalized(int logicalRow, float n01) {
     default:
         break;
     }
+    if (vision == nullptr) {
+        return;
+    }
+    switch (logicalRow) {
+    case 32:
+        vision->enabled = !vision->enabled;
+        break;
+    case 33:
+        vision->coneHalfAngleDeg = 5.0f + u * (85.0f - 5.0f);
+        break;
+    case 34:
+        vision->coneFeatherDeg = 0.5f + u * (30.0f - 0.5f);
+        break;
+    case 35:
+        vision->coneLengthPx = 80.0f + u * (2600.0f - 80.0f);
+        break;
+    case 36:
+        vision->coneLengthFeatherPx = u * 700.0f;
+        break;
+    case 37:
+        vision->coneOriginForwardPx = -40.0f + u * 160.0f;
+        break;
+    case 38:
+        vision->turnSpeedDegPerSec = 90.0f + u * (2000.0f - 90.0f);
+        break;
+    case 39:
+        vision->footRadiusPx = 16.0f + u * (420.0f - 16.0f);
+        break;
+    case 40:
+        vision->maskFalloffGamma = 1.0f + u * (8.0f - 1.0f);
+        break;
+    case 41:
+        vision->grayStrength = u;
+        break;
+    case 42:
+        vision->monoLift = u * 0.25f;
+        break;
+    case 43:
+        vision->monoTintStrength = u;
+        break;
+    case 44:
+        vision->visionColorGain = 0.60f + u * (2.00f - 0.60f);
+        break;
+    case 45:
+        params.ambientDarknessMax = static_cast<Uint8>(u * 255.0f);
+        break;
+    case 46:
+        vision->monoGain = u * 1.5f;
+        break;
+    case 47:
+        vision->monoPixelSizePx = 1.0f + u * (32.0f - 1.0f);
+        break;
+    case 48:
+        vision->monoBlurPx = u * 24.0f;
+        break;
+    case 49:
+        vision->vignetteStrength = u;
+        break;
+    case 50:
+        vision->vignetteStart = u * 0.95f;
+        break;
+    case 51:
+        vision->hideItemsOutsideVision = !vision->hideItemsOutsideVision;
+        break;
+    case 52:
+        vision->itemRevealThreshold = std::max(0.02f, u);
+        break;
+    case 53:
+        vision->hideInteractablesOutsideVision = !vision->hideInteractablesOutsideVision;
+        break;
+    case 54:
+        vision->hidePushablesOutsideVision = !vision->hidePushablesOutsideVision;
+        break;
+    case 55:
+        vision->unlitVisionDarkness = u * 0.95f;
+        break;
+    default:
+        break;
+    }
 }
 
 bool LightTweakPanel::barHit(int mx, int my, int /*winW*/, int panelLeft, int panelW, int slotIndex, float* outN01) const {
     if (slotIndex < 0 || slotIndex >= slotCount()) {
         return false;
     }
-    const int y = kFirstRowY + slotIndex * kRowH;
-    if (logicalRowAtSlot(slotIndex) == 30 || logicalRowAtSlot(slotIndex) == 31) {
+    const int rowH = rowHeight();
+    const int y = kFirstRowY + slotIndex * rowH;
+    const int lr = logicalRowAtSlot(slotIndex);
+    if (isButtonRow(lr) || isToggleRow(lr)) {
         return false;
     }
-    const int by = y + kBarOffsetY;
+    const int by = y + barOffsetY();
     const int bx = panelLeft + kPadX;
     const int bw = std::max(20, panelW - kPadX * 2);
     if (mx < bx || mx > bx + bw || my < by || my > by + kBarH) {
@@ -340,14 +567,16 @@ bool LightTweakPanel::rowButtonHit(int mx, int my, int panelLeft, int panelW, in
     if (slotIndex < 0 || slotIndex >= slotCount()) {
         return false;
     }
-    if (logicalRowAtSlot(slotIndex) != 30 && logicalRowAtSlot(slotIndex) != 31) {
+    const int lr = logicalRowAtSlot(slotIndex);
+    if (!isButtonRow(lr) && !isToggleRow(lr)) {
         return false;
     }
-    const int y = kFirstRowY + slotIndex * kRowH;
+    const int rowH = rowHeight();
+    const int y = kFirstRowY + slotIndex * rowH;
     const int bx = panelLeft + kPadX;
-    const int by = y + 16;
+    const int by = y + std::max(2, rowH / 3);
     const int bw = std::max(20, panelW - kPadX * 2);
-    const int bh = std::max(16, kRowH - 20);
+    const int bh = std::max(12, rowH - std::max(2, rowH / 3) - 3);
     return mx >= bx && mx <= bx + bw && my >= by && my <= by + bh;
 }
 
@@ -455,6 +684,84 @@ void LightTweakPanel::rebuildRowLabel(SDL_Renderer* renderer, int logicalRow) {
         std::snprintf(buf, sizeof(buf), "%s: %s", kRowLabels[logicalRow],
                       durabilityEnabled ? "ligado" : "desligado");
         break;
+    case 32:
+        std::snprintf(buf, sizeof(buf), "%s: %s", kRowLabels[logicalRow],
+                      (vision && vision->enabled) ? "ligado" : "desligado");
+        break;
+    case 33:
+        std::snprintf(buf, sizeof(buf), "%s: %.0f", kRowLabels[logicalRow], vision ? vision->coneHalfAngleDeg : 0.0f);
+        break;
+    case 34:
+        std::snprintf(buf, sizeof(buf), "%s: %.1f", kRowLabels[logicalRow], vision ? vision->coneFeatherDeg : 0.0f);
+        break;
+    case 35:
+        std::snprintf(buf, sizeof(buf), "%s: %.0f", kRowLabels[logicalRow], vision ? vision->coneLengthPx : 0.0f);
+        break;
+    case 36:
+        std::snprintf(buf, sizeof(buf), "%s: %.0f", kRowLabels[logicalRow], vision ? vision->coneLengthFeatherPx : 0.0f);
+        break;
+    case 37:
+        std::snprintf(buf, sizeof(buf), "%s: %.0f", kRowLabels[logicalRow], vision ? vision->coneOriginForwardPx : 0.0f);
+        break;
+    case 38:
+        std::snprintf(buf, sizeof(buf), "%s: %.0f", kRowLabels[logicalRow], vision ? vision->turnSpeedDegPerSec : 0.0f);
+        break;
+    case 39:
+        std::snprintf(buf, sizeof(buf), "%s: %.0f", kRowLabels[logicalRow], vision ? vision->footRadiusPx : 0.0f);
+        break;
+    case 40:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], vision ? vision->maskFalloffGamma : 0.0f);
+        break;
+    case 41:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], vision ? vision->grayStrength : 0.0f);
+        break;
+    case 42:
+        std::snprintf(buf, sizeof(buf), "%s: %.3f", kRowLabels[logicalRow], vision ? vision->monoLift : 0.0f);
+        break;
+    case 43:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], vision ? vision->monoTintStrength : 0.0f);
+        break;
+    case 44:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], vision ? vision->visionColorGain : 0.0f);
+        break;
+    case 45:
+        std::snprintf(buf, sizeof(buf), "%s: %u", kRowLabels[logicalRow],
+                      static_cast<unsigned>(params.ambientDarknessMax));
+        break;
+    case 46:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], vision ? vision->monoGain : 0.0f);
+        break;
+    case 47:
+        std::snprintf(buf, sizeof(buf), "%s: %.1f", kRowLabels[logicalRow], vision ? vision->monoPixelSizePx : 0.0f);
+        break;
+    case 48:
+        std::snprintf(buf, sizeof(buf), "%s: %.1f", kRowLabels[logicalRow], vision ? vision->monoBlurPx : 0.0f);
+        break;
+    case 49:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], vision ? vision->vignetteStrength : 0.0f);
+        break;
+    case 50:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], vision ? vision->vignetteStart : 0.0f);
+        break;
+    case 51:
+        std::snprintf(buf, sizeof(buf), "%s: %s", kRowLabels[logicalRow],
+                      (vision && vision->hideItemsOutsideVision) ? "sim" : "nao");
+        break;
+    case 52:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], vision ? vision->itemRevealThreshold : 0.0f);
+        break;
+    case 53:
+        std::snprintf(buf, sizeof(buf), "%s: %s", kRowLabels[logicalRow],
+                      (vision && vision->hideInteractablesOutsideVision) ? "sim" : "nao");
+        break;
+    case 54:
+        std::snprintf(buf, sizeof(buf), "%s: %s", kRowLabels[logicalRow],
+                      (vision && vision->hidePushablesOutsideVision) ? "sim" : "nao");
+        break;
+    case 55:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow],
+                      vision ? vision->unlitVisionDarkness : 0.0f);
+        break;
     default:
         buf[0] = 0;
         break;
@@ -484,8 +791,10 @@ void LightTweakPanel::rebuildRowLabel(SDL_Renderer* renderer, int logicalRow) {
 }
 
 void LightTweakPanel::Update(InputManager& input, float /*dt*/, int windowW, int windowH) {
-    if (shape != lastShape) {
+    lastWinH = std::max(240, windowH);
+    if (shape != lastShape || page != lastPage) {
         lastShape = shape;
+        lastPage = page;
         refreshActiveRows();
     }
 
@@ -497,12 +806,20 @@ void LightTweakPanel::Update(InputManager& input, float /*dt*/, int windowW, int
         return;
     }
 
+    if (input.KeyPress(PANEL_PAGE_TOGGLE_KEY)) {
+        page = (page + 1) % kPageCount;
+        focusedSlot = 0;
+        dragSlot = -1;
+        refreshActiveRows();
+    }
+
     if (input.KeyPress(LIGHT_SHAPE_CYCLE_KEY)) {
         cycleShape();
         refreshActiveRows();
     }
 
-    if ((shape == LightMaskShape::Circle || shape == LightMaskShape::Torch) && input.KeyPress(CREATE_LIGHT_KEY)) {
+    if (page == 0 && (shape == LightMaskShape::Circle || shape == LightMaskShape::Torch) &&
+        input.KeyPress(CREATE_LIGHT_KEY)) {
         createLightRequested = true;
     }
 
@@ -534,6 +851,12 @@ void LightTweakPanel::Update(InputManager& input, float /*dt*/, int windowW, int
         case 11:
             params.coneFollowMouse = !params.coneFollowMouse;
             return;
+        case 32:
+        case 51:
+        case 53:
+        case 54:
+            flipToggleRow(lr);
+            return;
         case 19:
             params.shadowSoftLayers = std::max(1, std::min(4, params.shadowSoftLayers + dir));
             return;
@@ -551,8 +874,10 @@ void LightTweakPanel::Update(InputManager& input, float /*dt*/, int windowW, int
             step = 0.02f;
         } else if (lr == 23) {
             step = 0.03f;
-        } else if (lr == 30) {
+        } else if (lr == 30 || lr == 31 || lr == 32 || lr == 51 || lr == 53 || lr == 54) {
             step = 0.0f;
+        } else if (lr >= 33) {
+            step = 0.02f;
         }
         if (step > 0.0f) {
             const float v = getRowNormalized(lr);
@@ -575,10 +900,10 @@ void LightTweakPanel::Update(InputManager& input, float /*dt*/, int windowW, int
         for (int s = 0; s < nSlots; s++) {
             if (rowButtonHit(mx, my, panelLeft, panelW, s)) {
                 const int lr = logicalRowAtSlot(s);
-                if (lr == 30) {
+                if (isButtonRow(lr)) {
                     createLightRequested = true;
-                } else if (lr == 31) {
-                    durabilityEnabled = !durabilityEnabled;
+                } else if (isToggleRow(lr)) {
+                    flipToggleRow(lr);
                 }
                 focusedSlot = s;
                 dragSlot = -1;
@@ -603,7 +928,8 @@ void LightTweakPanel::Update(InputManager& input, float /*dt*/, int windowW, int
             // Keep updating from horizontal position while dragging (cursor often leaves the thin bar vertically).
             const int bx = panelLeft + kPadX;
             const int bw = std::max(20, panelW - kPadX * 2);
-            if (logicalRowAtSlot(dragSlot) != 30 && mx >= bx && mx <= bx + bw) {
+            if (!isButtonRow(logicalRowAtSlot(dragSlot)) && !isToggleRow(logicalRowAtSlot(dragSlot)) && mx >= bx &&
+                mx <= bx + bw) {
                 n = static_cast<float>(mx - bx) / static_cast<float>(bw);
                 setRowFromNormalized(logicalRowAtSlot(dragSlot), n);
             }
@@ -624,10 +950,13 @@ bool LightTweakPanel::ConsumeCreateLightRequest() {
     return requested;
 }
 
-void LightTweakPanel::Render(SDL_Renderer* renderer, int windowW, int /*windowH*/) {
+void LightTweakPanel::Render(SDL_Renderer* renderer, int windowW, int windowH) {
     if (!visible || !renderer) {
         return;
     }
+    lastWinH = std::max(240, windowH);
+    const int rowH = rowHeight();
+    const int barDy = barOffsetY();
 
     int panelLeft = 0;
     int panelW = 0;
@@ -635,7 +964,7 @@ void LightTweakPanel::Render(SDL_Renderer* renderer, int windowW, int /*windowH*
 
     const int ptop = 6;
     const int nSlots = slotCount();
-    const int pheight = kFirstRowY + std::max(1, nSlots) * kRowH + 16;
+    const int pheight = kFirstRowY + std::max(1, nSlots) * rowH + 16;
 
     SDL_BlendMode oldBm;
     SDL_GetRenderDrawBlendMode(renderer, &oldBm);
@@ -652,7 +981,11 @@ void LightTweakPanel::Render(SDL_Renderer* renderer, int windowW, int /*windowH*
     SDL_RenderDrawRectF(renderer, &border);
 
     char title[112];
-    std::snprintf(title, sizeof(title), "Afina luz [%s]  K=forma P=ocultar", shapeName());
+    if (page == 1) {
+        std::snprintf(title, sizeof(title), "Campo de visao / PB   \\=luz  P=ocultar");
+    } else {
+        std::snprintf(title, sizeof(title), "Afina luz [%s]  K=forma \\=visao", shapeName());
+    }
     auto font = Resources::GetFont("Recursos/font/times.ttf", 15);
     if (font) {
         SDL_Color tc{255, 240, 200, 255};
@@ -678,14 +1011,14 @@ void LightTweakPanel::Render(SDL_Renderer* renderer, int windowW, int /*windowH*
 
     for (int s = 0; s < nSlots; s++) {
         const int lr = logicalRowAtSlot(s);
-        const int y = kFirstRowY + s * kRowH;
+        const int y = kFirstRowY + s * rowH;
         const int bx = panelLeft + kPadX;
         const int bw = std::max(20, panelW - kPadX * 2);
-        const int by = y + kBarOffsetY;
+        const int by = y + barDy;
 
         if (s == focusedSlot) {
             SDL_SetRenderDrawColor(renderer, 70, 90, 120, 120);
-            SDL_FRect hi{(float)(panelLeft + 2), (float)(y - 2), (float)(panelW - 4), (float)(kRowH - 4)};
+            SDL_FRect hi{(float)(panelLeft + 2), (float)(y - 2), (float)(panelW - 4), (float)(rowH - 4)};
             SDL_RenderFillRectF(renderer, &hi);
         }
 
@@ -697,22 +1030,23 @@ void LightTweakPanel::Render(SDL_Renderer* renderer, int windowW, int /*windowH*
             SDL_RenderCopy(renderer, rowLabelTex[lr], nullptr, &tdst);
         }
 
-        if (lr == 30) {
+        if (isButtonRow(lr)) {
             SDL_SetRenderDrawColor(renderer, 48, 82, 58, 255);
-            SDL_FRect button{(float)bx, (float)(y + 16), (float)bw, (float)std::max(16, kRowH - 20)};
+            const int btnDy = std::max(2, rowH / 3);
+            SDL_FRect button{(float)bx, (float)(y + btnDy), (float)bw, (float)std::max(12, rowH - btnDy - 3)};
             SDL_RenderFillRectF(renderer, &button);
             SDL_SetRenderDrawColor(renderer, 100, 170, 120, 255);
             SDL_RenderDrawRectF(renderer, &button);
-        } else if (lr == 31) {
-            const float cbSize = 18.0f;
+        } else if (isToggleRow(lr)) {
+            const float cbSize = std::min(18.0f, std::max(10.0f, rowH - 8.0f));
             const float cbX = (float)bx;
-            const float cbY = (float)(y + kRowH / 2.0f - cbSize / 2.0f);
+            const float cbY = (float)(y + rowH / 2.0f - cbSize / 2.0f);
             SDL_SetRenderDrawColor(renderer, 40, 40, 52, 255);
             const SDL_FRect cbBg{cbX, cbY, cbSize, cbSize};
             SDL_RenderFillRectF(renderer, &cbBg);
             SDL_SetRenderDrawColor(renderer, 130, 130, 160, 255);
             SDL_RenderDrawRectF(renderer, &cbBg);
-            if (durabilityEnabled) {
+            if (toggleRowValue(lr)) {
                 SDL_SetRenderDrawColor(renderer, 90, 210, 120, 255);
                 const SDL_FRect cbCheck{cbX + 4.0f, cbY + 4.0f, cbSize - 8.0f, cbSize - 8.0f};
                 SDL_RenderFillRectF(renderer, &cbCheck);

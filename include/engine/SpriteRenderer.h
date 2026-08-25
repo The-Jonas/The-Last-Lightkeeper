@@ -28,6 +28,7 @@ public:
     
     void SetCameraFollower(bool follow);
     void RenderHighlight(float scaleBoost, Uint8 r, Uint8 g, Uint8 b, Uint8 a = 220) const;
+    SDL_Texture* GetTexturePtr() const { return sprite.GetTexturePtr(); }
 
 private: 
     Sprite sprite;

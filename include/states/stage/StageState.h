@@ -11,6 +11,7 @@
 #include "world/TileSet.h"
 #include "lighting/LightMaskTypes.h"
 #include "lighting/RadialLightOverlay.h"
+#include "lighting/ScenePostFx.h"
 #include "lighting/LightTweakPanel.h"
 #include "lighting/TopDownLightShadows.h"
 #include "gameplay/Inventory.h"
@@ -425,6 +426,31 @@ private:
     RadialLightOverlay* radialGeometry;                                  // Vignette procedural (várias formas)
     LightMaskParams lightMaskParams;
     LightMaskShape lightMaskShape;
+
+    // ── CAMPO DE VISAO DO PERSONAGEM CONTROLADO ──────────────────────────────
+    // Cone na direcao para onde ele olha + circulo pequeno nos pes. Dentro dele
+    // a camada escura desaparece e a cor volta; fora dele a cena fica em
+    // preto-e-branco (ver ScenePostFx).
+    PlayerVisionParams visionParams;
+    PlayerVisionFrame visionFrame;
+    float visionAxisRad = 0.0f;          // eixo do cone ja suavizado
+    bool visionAxisInitialized = false;
+    std::unique_ptr<ScenePostFx> scenePostFx;
+
+    /// Recalcula `visionFrame` a partir do personagem controlado (roda uma vez
+    /// por frame, no inicio do `Render`).
+    void UpdatePlayerVision(float dt);
+    /// Luzes sinteticas que abrem o buraco do campo de visao na malha de
+    /// escuridao. Nao sao fontes de luz: nao dao sombras nem contam para a
+    /// sanidade.
+    void AppendVisionMaskLights(std::vector<RadialLightOverlay::ScreenLight>& out) const;
+    /// Quanto do campo de visao cobre este ponto do ecra (0 = so camada
+    /// monocromatica, 1 = totalmente visivel). Repete a conta do shader.
+    float VisionVisibilityAtScreen(const Vec2& screenPos) const;
+    /// True quando este objeto e interagivel E a sua categoria esta marcada para
+    /// desaparecer fora do campo de visao.
+    bool ShouldHideOutsideVision(GameObject& go) const;
+
     std::unique_ptr<LightTweakPanel> lightTweakPanel;
     std::vector<LightInstance> lights;
     TileMap* tileMapComp = nullptr;
