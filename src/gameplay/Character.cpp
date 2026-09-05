@@ -326,30 +326,20 @@ void Character::Update(float dt) {
             associated.box.y += speed.y * dt;
             collider->Update(0);
         } else {
-            // Eixo X isolado
-            float oldX = associated.box.x;
+            // Movemos livremente nos dois eixos
             associated.box.x += speed.x * dt;
-            collider->Update(0);
+            associated.box.y += speed.y * dt;
+            collider->Update(0);    
 
-            if (stage->level.CheckCollision(GetFootCollisionCircle(), isElevated)) {
-                associated.box.x = oldX; // Desfaz apenas o X se bater
-                speed.x = 0;
+            // Perguntamos pra física qual é o empurrão necessário para sair das paredes
+            Vec2 pushVector = stage->level.GetCirclePushVector(GetFootCollisionCircle(), isElevated);
+
+            // Se for maior que 0, significa que batemos em algo e precisamos deslizar
+            if (pushVector.Magnitude() > 0.001f) {
+                associated.box.x += pushVector.x;
+                associated.box.y += pushVector.y;
                 collider->Update(0);
             }
-
-            // Eixo Y isolado
-            float oldY = associated.box.y;
-            associated.box.y += speed.y * dt;
-            collider->Update(0);
-
-            if (stage->level.CheckCollision(GetFootCollisionCircle(), isElevated)) {
-                associated.box.y = oldY; // Desfaz apenas o Y se bater
-                speed.y = 0;
-            }
-
-            collider->Update(0);
-            TryNudgeOutOfStaticGeometry(stage, this, collider, isElevated);
-            collider->Update(0);
         }
     } else {
         associated.box.x += speed.x * dt;
@@ -554,12 +544,8 @@ Vec2 Character::GetFootCircleCenter() const {
 
 Circle Character::GetFootCollisionCircle() const {
     Circle c;
-    Vec2 center = GetFootCircleCenter();
-    c.center.x = static_cast<int>(center.x);
-    c.center.y = static_cast<int>(center.y);
-
-    // Multiplicado por 0.85 (85%) para ter uma margem de erro e não agarrar no cenário
-    c.radius = static_cast<int>(GetFootCircleRadius() * 0.85f);
+    c.center = GetFootCircleCenter();
+    c.radius = GetFootCircleRadius() * 0.85f;
     return c;
 }
 

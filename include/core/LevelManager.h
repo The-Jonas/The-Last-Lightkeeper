@@ -19,8 +19,8 @@ struct Polygon {
 
 // Estrutura para Círculos (paineis, pilastras redondas)
 struct Circle {
-    SDL_Point center;
-    int radius;
+    Vec2 center;
+    float radius;
 };
 
 // Ler as camadas das imagens

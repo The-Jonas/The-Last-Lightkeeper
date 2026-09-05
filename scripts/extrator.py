@@ -36,16 +36,12 @@ def extrair_codigo(pastas_alvo, arquivo_headers, arquivo_sources, ignorar_arquiv
     print(f" -> {arquivo_headers}")
     print(f" -> {arquivo_sources}")
 
-# Pastas para varrer
 pastas = ['./include', './src']
 
-# Arquivos exatos que você NÃO quer que sejam copiados
 arquivos_para_ignorar = [
     'pl_mpeg.h', 
-    # 'GameSfx.h', # Exemplo de como adicionar mais
 ]
 
-# Nomes dos arquivos TXT que serão gerados
 extrair_codigo(
     pastas_alvo=pastas, 
     arquivo_headers='codigo_headers.txt', 

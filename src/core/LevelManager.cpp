@@ -63,9 +63,9 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
         chaoNormal.clear();
         chaoBuraco.clear();
         floorWoodZones.clear();
-    floorStoneZones.clear();
-    repairableTriggers.clear();
-    footstepWoodFallbackMinY = 2100;
+        floorStoneZones.clear();
+        repairableTriggers.clear();
+        footstepWoodFallbackMinY = 2100;
         circleColliders.clear();
         objPolyColliders.clear();
         objRectColliders.clear();
@@ -191,11 +191,10 @@ void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
 
                         } else if (obj.contains("ellipse")) {
                             Circle c;
-                            // Usa .value() para evitar crashes se a propriedade não existir
-                            c.radius = (int)obj.value("width", 0.0f) / 2;
-                            c.center.x = (int)finalX + c.radius;
-                            c.center.y = (int)finalY + c.radius;
-                            if (c.radius > 0) circleColliders.push_back(c);
+                            c.radius = obj.value("width", 0.0f) / 2.0f;
+                            c.center.x = finalX + c.radius;
+                            c.center.y = finalY + c.radius;
+                            if (c.radius > 0.0f) circleColliders.push_back(c);
 
                         } else {
                             const std::string objName = obj.value("name", "");
@@ -532,19 +531,13 @@ bool LevelManager::CheckRepairableTrigger(const SDL_Rect& entityBox) {
 }
 
 bool LevelManager::CheckRectVsCircle(const SDL_Rect& rect, const Circle& circle) {
-    // Acha o ponto X e Y mais próximo ao centro do círculo dentro do retângulo
-    int closestX = std::clamp(circle.center.x, rect.x, rect.x + rect.w);
-    int closestY = std::clamp(circle.center.y, rect.y, rect.y + rect.h);
+    float closestX = std::clamp(circle.center.x, (float)rect.x, (float)(rect.x + rect.w));
+    float closestY = std::clamp(circle.center.y, (float)rect.y, (float)(rect.y + rect.h));
 
-    // Calcula a distância entre o centro do círculo e esse ponto mais próximo
-    int distanceX = circle.center.x - closestX;
-    int distanceY = circle.center.y - closestY;
+    float distanceX = circle.center.x - closestX;
+    float distanceY = circle.center.y - closestY;
 
-    // Teorema de Pitágoras (Não vou usar raiz quadrada pra não sobrecarregar o processador)
-    int distanceSquared = (distanceX * distanceX) + (distanceY * distanceY);
-    int radiusSquared = circle.radius * circle.radius;
-
-    return distanceSquared < radiusSquared;
+    return (distanceX * distanceX) + (distanceY * distanceY) < (circle.radius * circle.radius);
 }
 
 bool LevelManager::CheckPolygonVsPolygon(const Polygon& p1, const Polygon& p2) {
@@ -1010,89 +1003,105 @@ void LevelManager::RenderCollisionOverlay(SDL_Renderer* renderer) const {
 }
 
 Vec2 LevelManager::GetCirclePushVector(const Circle& circle, bool isElevated) {
-    Vec2 push(0, 0);
-    float cx = (float)circle.center.x;
-    float cy = (float)circle.center.y;
-    float r = (float)circle.radius;
+    float currentCx = circle.center.x;
+    float currentCy = circle.center.y;
+    float r = circle.radius;
     float rSq = r * r;
 
-    // Resolve impacto em Retângulos (AABB)
-    auto ResolveRect = [&](const SDL_Rect& rect) {
-        float closestX = std::clamp(cx, (float)rect.x, (float)(rect.x + rect.w));
-        float closestY = std::clamp(cy, (float)rect.y, (float)(rect.y + rect.h));
-        float distX = cx - closestX;
-        float distY = cy - closestY;
-        float distSq = (distX * distX) + (distY * distY);
-        
-        if (distSq > 0 && distSq < rSq) {
-            float dist = std::sqrt(distSq);
-            float overlap = r - dist;
-            push.x += (distX / dist) * overlap;
-            push.y += (distY / dist) * overlap;
-        }
-    };
+    // Em cada rodada, achamos a colisão MAIS PROFUNDA e resolvemos só ela.
+    // Isso impede o empurrão duplo em quinas e remove o "ganho de velocidade das famigeradas escadinhas de pixels".
+    for (int iter = 0; iter < 4; iter++) {
+        float maxOverlap = 0.0f;
+        Vec2 bestPush(0, 0);
 
-    // Resolve impacto em outros Círculos
-    auto ResolveCircle = [&](const Circle& other) {
-        float distX = cx - (float)other.center.x;
-        float distY = cy - (float)other.center.y;
-        float distSq = (distX * distX) + (distY * distY);
-        float rSum = r + (float)other.radius;
-        
-        if (distSq > 0 && distSq < rSum * rSum) {
-            float dist = std::sqrt(distSq);
-            float overlap = rSum - dist;
-            push.x += (distX / dist) * overlap;
-            push.y += (distY / dist) * overlap;
-        }
-    };
-
-    // Resolve impacto nas Linhas dos Polígonos (Diagonais do Tiled)
-    auto ResolvePoly = [&](const Polygon& poly) {
-        if (poly.vertices.empty()) return;
-        
-        for (size_t i = 0; i < poly.vertices.size(); i++) {
-            float p1x = (float)poly.vertices[i].x, p1y = (float)poly.vertices[i].y;
-            float p2x = (float)poly.vertices[(i + 1) % poly.vertices.size()].x, p2y = (float)poly.vertices[(i + 1) % poly.vertices.size()].y;
-
-            float lineLenSq = (p2x - p1x) * (p2x - p1x) + (p2y - p1y) * (p2y - p1y);
-            if (lineLenSq == 0) continue;
-            
-            // Projeta o centro do círculo na linha para achar o ponto exato da batida
-            float dot = (((cx - p1x) * (p2x - p1x)) + ((cy - p1y) * (p2y - p1y))) / lineLenSq;
-            float closestX = std::clamp(dot, 0.0f, 1.0f) * (p2x - p1x) + p1x;
-            float closestY = std::clamp(dot, 0.0f, 1.0f) * (p2y - p1y) + p1y;
-
-            float distX = cx - closestX;
-            float distY = cy - closestY;
+        auto ResolveRect = [&](const SDL_Rect& rect) {
+            float closestX = std::clamp(currentCx, (float)rect.x, (float)(rect.x + rect.w));
+            float closestY = std::clamp(currentCy, (float)rect.y, (float)(rect.y + rect.h));
+            float distX = currentCx - closestX;
+            float distY = currentCy - closestY;
             float distSq = (distX * distX) + (distY * distY);
-
-            if (distSq > 0 && distSq < rSq) {
+            
+            if (distSq > 0.0001f && distSq < rSq) {
                 float dist = std::sqrt(distSq);
                 float overlap = r - dist;
-                // Empurra o jogador na direção oposta ao ponto de impacto
-                push.x += (distX / dist) * overlap;
-                push.y += (distY / dist) * overlap;
+                if (overlap > maxOverlap) {
+                    maxOverlap = overlap;
+                    bestPush.x = (distX / dist) * overlap;
+                    bestPush.y = (distY / dist) * overlap;
+                }
             }
+        };
+
+        auto ResolveCircle = [&](const Circle& other) {
+            float distX = currentCx - other.center.x;
+            float distY = currentCy - other.center.y;
+            float distSq = (distX * distX) + (distY * distY);
+            float rSum = r + other.radius;
+            
+            if (distSq > 0.0001f && distSq < rSum * rSum) {
+                float dist = std::sqrt(distSq);
+                float overlap = rSum - dist;
+                if (overlap > maxOverlap) {
+                    maxOverlap = overlap;
+                    bestPush.x = (distX / dist) * overlap;
+                    bestPush.y = (distY / dist) * overlap;
+                }
+            }
+        };
+
+        auto ResolvePoly = [&](const Polygon& poly) {
+            if (poly.vertices.empty()) return;
+            for (size_t i = 0; i < poly.vertices.size(); i++) {
+                float p1x = (float)poly.vertices[i].x, p1y = (float)poly.vertices[i].y;
+                float p2x = (float)poly.vertices[(i + 1) % poly.vertices.size()].x, p2y = (float)poly.vertices[(i + 1) % poly.vertices.size()].y;
+
+                float lineLenSq = (p2x - p1x) * (p2x - p1x) + (p2y - p1y) * (p2y - p1y);
+                if (lineLenSq == 0) continue;
+                
+                float dot = (((currentCx - p1x) * (p2x - p1x)) + ((currentCy - p1y) * (p2y - p1y))) / lineLenSq;
+                float closestX = std::clamp(dot, 0.0f, 1.0f) * (p2x - p1x) + p1x;
+                float closestY = std::clamp(dot, 0.0f, 1.0f) * (p2y - p1y) + p1y;
+
+                float distX = currentCx - closestX;
+                float distY = currentCy - closestY;
+                float distSq = (distX * distX) + (distY * distY);
+
+                if (distSq > 0.0001f && distSq < rSq) {
+                    float dist = std::sqrt(distSq);
+                    float overlap = r - dist;
+                    if (overlap > maxOverlap) {
+                        maxOverlap = overlap;
+                        bestPush.x = (distX / dist) * overlap;
+                        bestPush.y = (distY / dist) * overlap;
+                    }
+                }
+            }
+        };
+
+        if (!isElevated) {
+            for (const auto& rCol : rectColliders) ResolveRect(rCol);
+            for (const auto& rCol : objRectColliders) ResolveRect(rCol);
+            for (const auto& cCol : circleColliders) ResolveCircle(cCol);
+            for (const auto& pCol : objPolyColliders) ResolvePoly(pCol);
         }
-    };
 
-    // Aplica as resoluções nas listas certas
-    if (!isElevated) {
-        for (const auto& rCol : rectColliders) ResolveRect(rCol);
-        for (const auto& rCol : objRectColliders) ResolveRect(rCol);
-        for (const auto& cCol : circleColliders) ResolveCircle(cCol);
-        for (const auto& pCol : objPolyColliders) ResolvePoly(pCol);
+        const auto& listaAtiva = isElevated ? chaoEscada : chaoNormal;
+        for (const auto& poly : listaAtiva) ResolvePoly(poly);
+
+        if (isElevated && !escadaConsertada) {
+            for (const auto& poly : chaoBuraco) ResolvePoly(poly);
+        }
+
+        // Aplica SOMENTE o maior empurrão dessa iteração
+        if (maxOverlap > 0.0f) {
+            currentCx += bestPush.x;
+            currentCy += bestPush.y;
+        } else {
+            break; // Se não tem mais sobreposição, sai do loop imediatamente!
+        }
     }
 
-    const auto& listaAtiva = isElevated ? chaoEscada : chaoNormal;
-    for (const auto& poly : listaAtiva) ResolvePoly(poly);
-
-    if (isElevated && !escadaConsertada) {
-        for (const auto& poly : chaoBuraco) ResolvePoly(poly);
-    }
-
-    return push;
+    return Vec2(currentCx - circle.center.x, currentCy - circle.center.y);
 }
 
 // ==========================================================
