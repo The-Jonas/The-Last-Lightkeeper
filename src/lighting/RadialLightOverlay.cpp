@@ -382,7 +382,7 @@ void RadialLightOverlay::RenderMany(SDL_Renderer* renderer, int windowW, int win
             for (int x = 0; x <= gridX; x++) {
                 const float px = std::min(static_cast<float>(passW), x * stepX);
                 const float py = std::min(static_cast<float>(passH), y * stepY);
-                float alpha = 255.0f;
+                float alpha = static_cast<float>(gridRef.darknessMax);
                 float torchWarm = 0.0f;
                 float torchWarmth = 0.0f;
                 for (const PreparedLight& light : prep) {

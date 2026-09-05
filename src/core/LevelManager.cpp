@@ -1009,6 +1009,92 @@ void LevelManager::RenderCollisionOverlay(SDL_Renderer* renderer) const {
     SDL_SetRenderDrawColor(renderer, dr, dg, db, da);
 }
 
+Vec2 LevelManager::GetCirclePushVector(const Circle& circle, bool isElevated) {
+    Vec2 push(0, 0);
+    float cx = (float)circle.center.x;
+    float cy = (float)circle.center.y;
+    float r = (float)circle.radius;
+    float rSq = r * r;
+
+    // Resolve impacto em Retângulos (AABB)
+    auto ResolveRect = [&](const SDL_Rect& rect) {
+        float closestX = std::clamp(cx, (float)rect.x, (float)(rect.x + rect.w));
+        float closestY = std::clamp(cy, (float)rect.y, (float)(rect.y + rect.h));
+        float distX = cx - closestX;
+        float distY = cy - closestY;
+        float distSq = (distX * distX) + (distY * distY);
+        
+        if (distSq > 0 && distSq < rSq) {
+            float dist = std::sqrt(distSq);
+            float overlap = r - dist;
+            push.x += (distX / dist) * overlap;
+            push.y += (distY / dist) * overlap;
+        }
+    };
+
+    // Resolve impacto em outros Círculos
+    auto ResolveCircle = [&](const Circle& other) {
+        float distX = cx - (float)other.center.x;
+        float distY = cy - (float)other.center.y;
+        float distSq = (distX * distX) + (distY * distY);
+        float rSum = r + (float)other.radius;
+        
+        if (distSq > 0 && distSq < rSum * rSum) {
+            float dist = std::sqrt(distSq);
+            float overlap = rSum - dist;
+            push.x += (distX / dist) * overlap;
+            push.y += (distY / dist) * overlap;
+        }
+    };
+
+    // Resolve impacto nas Linhas dos Polígonos (Diagonais do Tiled)
+    auto ResolvePoly = [&](const Polygon& poly) {
+        if (poly.vertices.empty()) return;
+        
+        for (size_t i = 0; i < poly.vertices.size(); i++) {
+            float p1x = (float)poly.vertices[i].x, p1y = (float)poly.vertices[i].y;
+            float p2x = (float)poly.vertices[(i + 1) % poly.vertices.size()].x, p2y = (float)poly.vertices[(i + 1) % poly.vertices.size()].y;
+
+            float lineLenSq = (p2x - p1x) * (p2x - p1x) + (p2y - p1y) * (p2y - p1y);
+            if (lineLenSq == 0) continue;
+            
+            // Projeta o centro do círculo na linha para achar o ponto exato da batida
+            float dot = (((cx - p1x) * (p2x - p1x)) + ((cy - p1y) * (p2y - p1y))) / lineLenSq;
+            float closestX = std::clamp(dot, 0.0f, 1.0f) * (p2x - p1x) + p1x;
+            float closestY = std::clamp(dot, 0.0f, 1.0f) * (p2y - p1y) + p1y;
+
+            float distX = cx - closestX;
+            float distY = cy - closestY;
+            float distSq = (distX * distX) + (distY * distY);
+
+            if (distSq > 0 && distSq < rSq) {
+                float dist = std::sqrt(distSq);
+                float overlap = r - dist;
+                // Empurra o jogador na direção oposta ao ponto de impacto
+                push.x += (distX / dist) * overlap;
+                push.y += (distY / dist) * overlap;
+            }
+        }
+    };
+
+    // Aplica as resoluções nas listas certas
+    if (!isElevated) {
+        for (const auto& rCol : rectColliders) ResolveRect(rCol);
+        for (const auto& rCol : objRectColliders) ResolveRect(rCol);
+        for (const auto& cCol : circleColliders) ResolveCircle(cCol);
+        for (const auto& pCol : objPolyColliders) ResolvePoly(pCol);
+    }
+
+    const auto& listaAtiva = isElevated ? chaoEscada : chaoNormal;
+    for (const auto& poly : listaAtiva) ResolvePoly(poly);
+
+    if (isElevated && !escadaConsertada) {
+        for (const auto& poly : chaoBuraco) ResolvePoly(poly);
+    }
+
+    return push;
+}
+
 // ==========================================================
 // GETTERS DAS LISTAS DE COLISÃO
 // ==========================================================

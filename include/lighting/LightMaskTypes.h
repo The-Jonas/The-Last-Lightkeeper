@@ -34,7 +34,7 @@ struct LightMaskParams {
     /// Balanced defaults; set Custom to use only the raw fields below without preset clamps.
     LightQualityPreset lightQualityPreset = LightQualityPreset::Balanced;
 
-    Uint8 darknessMax = 250;
+    Uint8 darknessMax = 236;
     float falloffRadiusPx = 400.0f;
     float fatorDicaDeRaio = 1.2f;
     LightFalloffCurve falloffCurve = LightFalloffCurve::Smoothstep;

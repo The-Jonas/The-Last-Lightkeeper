@@ -8,6 +8,7 @@
 #include "core/Game.h"
 #include "core/Resources.h"
 #include "states/stage/StageState.h"
+#include "core/LevelManager.h"
 #include "gameplay/StairTrigger.h"
 #include "core/InputManager.h"
 #include "gameplay/Monster.h"
@@ -24,16 +25,7 @@ constexpr float kCollisionWidthBoost = 1.15f; // Aumento horizontal (+15%) na hi
 void TryNudgeOutOfStaticGeometry(StageState* stage, Character* character, Collider* collider, bool isElevated) {
     if (!stage || !collider || !character) return;
 
-    auto footBoxWithMargin = [&]() {
-        SDL_Rect r = character->GetFootRect();
-        const int m = kFootCollisionSkinPx + 2;
-        r.x += m; r.y += m; r.w -= 2 * m; r.h -= 2 * m;
-        if (r.w < 1) r.w = 1;
-        if (r.h < 1) r.h = 1;
-        return r;
-    };
-
-    if (!stage->level.CheckCollision(footBoxWithMargin(), isElevated)) return;
+    if (!stage->level.CheckCollision(character->GetFootCollisionCircle(), isElevated)) return;
 
     GameObject& go = character->GetAssociated();
     const float dists[] = {4.0f, 16.0f, 32.0f};
@@ -50,7 +42,7 @@ void TryNudgeOutOfStaticGeometry(StageState* stage, Character* character, Collid
             go.box.y += my * d;
             collider->Update(0);
 
-            if (!stage->level.CheckCollision(footBoxWithMargin(), isElevated)) return;
+            if (!stage->level.CheckCollision(character->GetFootCollisionCircle(), isElevated)) return;
 
             go.box.x -= mx * d;
             go.box.y -= my * d;
@@ -334,24 +326,24 @@ void Character::Update(float dt) {
             associated.box.y += speed.y * dt;
             collider->Update(0);
         } else {
-            // Eixo X
+            // Eixo X isolado
             float oldX = associated.box.x;
             associated.box.x += speed.x * dt;
             collider->Update(0);
 
-            if (stage->level.CheckCollision(GetFootCollisionRect(), isElevated)) {
-                associated.box.x = oldX;
+            if (stage->level.CheckCollision(GetFootCollisionCircle(), isElevated)) {
+                associated.box.x = oldX; // Desfaz apenas o X se bater
                 speed.x = 0;
                 collider->Update(0);
             }
 
-            // Eixo Y
+            // Eixo Y isolado
             float oldY = associated.box.y;
             associated.box.y += speed.y * dt;
             collider->Update(0);
 
-            if (stage->level.CheckCollision(GetFootCollisionRect(), isElevated)) {
-                associated.box.y = oldY;
+            if (stage->level.CheckCollision(GetFootCollisionCircle(), isElevated)) {
+                associated.box.y = oldY; // Desfaz apenas o Y se bater
                 speed.y = 0;
             }
 
@@ -522,17 +514,21 @@ void Character::Render() {
 #ifdef DEBUG
     SDL_Renderer* renderer = Game::GetInstance().GetRenderer();
 
-    SDL_Rect foot = GetFootRect();
-    foot.x -= (int)Camera::pos.x;
-    foot.y -= (int)Camera::pos.y;
-    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
-    SDL_RenderDrawRect(renderer, &foot);
+    // --- DESENHA O CÍRCULO DE COLISÃO ---
+    Circle footCircle = GetFootCollisionCircle();
+    float cx = footCircle.center.x - Camera::pos.x;
+    float cy = footCircle.center.y - Camera::pos.y;
+    float rad = footCircle.radius;
 
-    SDL_Rect hit = GetHitRect();
-    hit.x -= (int)Camera::pos.x;
-    hit.y -= (int)Camera::pos.y;
-    SDL_SetRenderDrawColor(renderer, 255, 60, 60, 255);
-    SDL_RenderDrawRect(renderer, &hit);
+    SDL_SetRenderDrawColor(renderer, 0, 255, 255, 255); // Ciano para o círculo
+    const int kSeg = 36;
+    for (int i = 0; i < kSeg; i++) {
+        float a0 = ((float)i / kSeg) * 2.0f * 3.14159f;
+        float a1 = ((float)(i + 1) / kSeg) * 2.0f * 3.14159f;
+        SDL_RenderDrawLineF(renderer, 
+            cx + std::cos(a0) * rad, cy + std::sin(a0) * rad, 
+            cx + std::cos(a1) * rad, cy + std::sin(a1) * rad);
+    }
 #endif
 }
 
@@ -554,6 +550,17 @@ float Character::GetFootCircleRadius() const {
 Vec2 Character::GetFootCircleCenter() const {
     const float r = GetFootCircleRadius();
     return Vec2(associated.box.x + associated.box.w * 0.5f, associated.box.y + associated.box.h - r);
+}
+
+Circle Character::GetFootCollisionCircle() const {
+    Circle c;
+    Vec2 center = GetFootCircleCenter();
+    c.center.x = static_cast<int>(center.x);
+    c.center.y = static_cast<int>(center.y);
+
+    // Multiplicado por 0.85 (85%) para ter uma margem de erro e não agarrar no cenário
+    c.radius = static_cast<int>(GetFootCircleRadius() * 0.85f);
+    return c;
 }
 
 SDL_Rect Character::GetFootRect() const {
