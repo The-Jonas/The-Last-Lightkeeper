@@ -100,18 +100,25 @@ void Window::Render() {
     // ==========================================
     // DEBUG VISUAL 
     // ==========================================
+    // Mesma regra do monstro: estes contornos so aparecem com a tecla [B]
+    // ligada. Antes desenhavam SEMPRE numa build DEBUG e enchiam o ecra.
+    StageState* dbgStage = Game::TryGetStageState();
+    if (!dbgStage || !dbgStage->IsPhysicsDebugOn()) return;
+
     SDL_Renderer* renderer = Game::GetInstance().GetRenderer();
     Vec2 center = associated.box.Center();
     
-    // Calcula a posição na tela (sem o zoom)
-    float screenX = center.x - Camera::pos.x;
-    float screenY = center.y - Camera::pos.y;
+    // Mundo → tela COM zoom (igual ao sprite). Os raios são em pixels de MUNDO,
+    // por isso também multiplicam pelo zoom — senão os círculos mentiam sobre o
+    // alcance real assim que a câmera se afastava.
+    const float z = Camera::GetZoom();
+    const Vec2 screen = Camera::WorldToScreen(center);
 
     //ÁREA DE INTERAÇÃO (VERDE) - Raio de 260 px (bate com o teste em GetReachableWindow)
-    stage_internal::DrawDebugCircle(renderer, screenX, screenY, 260.0f, 50, 255, 50, 180);
+    stage_internal::DrawDebugCircle(renderer, screen.x, screen.y, 260.0f * z, 50, 255, 50, 180);
 
     //ÁREA DE VENTO (AZUL CLARO) - Usa o windRadius
-    stage_internal::DrawDebugCircle(renderer, screenX, screenY, windRadius, 100, 200, 255, 180);
+    stage_internal::DrawDebugCircle(renderer, screen.x, screen.y, windRadius * z, 100, 200, 255, 180);
 #endif
 }
 

@@ -520,17 +520,28 @@ void Character::PositionForCoop(Character* leader) {
 // ─────────────────────────────────────────────────────────────────────────────
 void Character::Render() {
 #ifdef DEBUG
+    // Mesma regra do monstro: estes contornos so aparecem com a tecla [B]
+    // ligada. Antes desenhavam SEMPRE numa build DEBUG e o jogador via uma
+    // especie de segunda copia de si proprio no ecra.
+    StageState* dbgStage = Game::TryGetStageState();
+    if (!dbgStage || !dbgStage->IsPhysicsDebugOn()) return;
+
     SDL_Renderer* renderer = Game::GetInstance().GetRenderer();
 
-    SDL_Rect foot = GetFootRect();
-    foot.x -= (int)Camera::pos.x;
-    foot.y -= (int)Camera::pos.y;
+    // Mundo → tela COM zoom (igual ao sprite). Sem o zoom estas caixas ficavam
+    // deslocadas do personagem e pareciam uma segunda copia dele.
+    const float z = Camera::GetZoom();
+    auto toScreen = [z](const SDL_Rect& worldRect) {
+        const Vec2 p = Camera::WorldToScreen(Vec2(static_cast<float>(worldRect.x), static_cast<float>(worldRect.y)));
+        return SDL_Rect{ static_cast<int>(p.x), static_cast<int>(p.y),
+                         static_cast<int>(worldRect.w * z), static_cast<int>(worldRect.h * z) };
+    };
+
+    SDL_Rect foot = toScreen(GetFootRect());
     SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
     SDL_RenderDrawRect(renderer, &foot);
 
-    SDL_Rect hit = GetHitRect();
-    hit.x -= (int)Camera::pos.x;
-    hit.y -= (int)Camera::pos.y;
+    SDL_Rect hit = toScreen(GetHitRect());
     SDL_SetRenderDrawColor(renderer, 255, 60, 60, 255);
     SDL_RenderDrawRect(renderer, &hit);
 #endif

@@ -279,25 +279,34 @@ void Monster::Render() {
     SDL_Renderer* dbgR = Game::GetInstance().GetRenderer();
     SDL_SetRenderDrawBlendMode(dbgR, SDL_BLENDMODE_BLEND);
 
+    // Mundo → tela COM zoom (igual ao sprite). Sem o zoom todo este desenho
+    // aparecia deslocado do monstro. Os raios são em pixels de MUNDO e por isso
+    // também multiplicam pelo zoom.
+    const float dbgZ = Camera::GetZoom();
+
     // Hitbox de dano
+    const Vec2 dmgTopLeft = Camera::WorldToScreen(Vec2(associated.box.x + associated.box.w * kDamageBoxInset,
+                                                       associated.box.y + associated.box.h * kDamageBoxInset));
     SDL_Rect dmgBox = {
-        static_cast<int>(associated.box.x + associated.box.w * kDamageBoxInset) - static_cast<int>(Camera::pos.x),
-        static_cast<int>(associated.box.y + associated.box.h * kDamageBoxInset) - static_cast<int>(Camera::pos.y),
-        static_cast<int>(associated.box.w * kDamageBoxScale),
-        static_cast<int>(associated.box.h * kDamageBoxScale)
+        static_cast<int>(dmgTopLeft.x),
+        static_cast<int>(dmgTopLeft.y),
+        static_cast<int>(associated.box.w * kDamageBoxScale * dbgZ),
+        static_cast<int>(associated.box.h * kDamageBoxScale * dbgZ)
     };
     SDL_SetRenderDrawColor(dbgR, 255, 0, 0, 100);
     SDL_RenderFillRect(dbgR, &dmgBox);
 
     // Hitbox de navegação (círculo verde)
     const Vec2 c = associated.box.Center();
-    float px = c.x + kNavFootRadius - Camera::pos.x, py = c.y - Camera::pos.y;
+    const Vec2 cScreen = Camera::WorldToScreen(c);
+    const float navRadiusScreen = kNavFootRadius * dbgZ;
+    float px = cScreen.x + navRadiusScreen, py = cScreen.y;
     SDL_SetRenderDrawColor(dbgR, 0, 255, 120, 230);
     
     for (int i = 1; i <= 40; ++i) {
         float a = (static_cast<float>(i) / 40) * 2.0f * 3.14159265f;
-        float nx = c.x - Camera::pos.x + std::cos(a) * kNavFootRadius;
-        float ny = c.y - Camera::pos.y + std::sin(a) * kNavFootRadius;
+        float nx = cScreen.x + std::cos(a) * navRadiusScreen;
+        float ny = cScreen.y + std::sin(a) * navRadiusScreen;
         SDL_RenderDrawLineF(dbgR, px, py, nx, ny);
         px = nx; py = ny;
     }
@@ -322,7 +331,10 @@ void Monster::Render() {
         SDL_Surface* sf = TTF_RenderUTF8_Blended(font.get(), label.c_str(), {255, 255, 255, 255});
         if (sf) {
             SDL_Texture* tex = SDL_CreateTextureFromSurface(dbgR, sf);
-            SDL_Rect dst{ static_cast<int>(c.x - Camera::pos.x) - sf->w / 2, static_cast<int>(associated.box.y - Camera::pos.y) - sf->h - 8, sf->w, sf->h };
+            // O rótulo fica no TAMANHO da fonte (não encolhe com o zoom); só a
+            // âncora acima da cabeça é que passa pelo zoom.
+            const Vec2 labelAnchor = Camera::WorldToScreen(Vec2(c.x, associated.box.y));
+            SDL_Rect dst{ static_cast<int>(labelAnchor.x) - sf->w / 2, static_cast<int>(labelAnchor.y) - sf->h - 8, sf->w, sf->h };
             SDL_RenderCopy(dbgR, tex, nullptr, &dst);
             SDL_FreeSurface(sf);
             SDL_DestroyTexture(tex);
@@ -334,9 +346,11 @@ void Monster::Render() {
         SDL_SetRenderDrawColor(dbgR, 0, 255, 0, 200);
         Vec2 prev = associated.box.Center();
         for (size_t i = static_cast<size_t>(pathStep); i < currentPath.size(); i++) {
+            const Vec2 a = Camera::WorldToScreen(prev);
+            const Vec2 b = Camera::WorldToScreen(currentPath[i]);
             SDL_RenderDrawLine(dbgR,
-                static_cast<int>(prev.x - Camera::pos.x), static_cast<int>(prev.y - Camera::pos.y),
-                static_cast<int>(currentPath[i].x - Camera::pos.x), static_cast<int>(currentPath[i].y - Camera::pos.y));
+                static_cast<int>(a.x), static_cast<int>(a.y),
+                static_cast<int>(b.x), static_cast<int>(b.y));
             prev = currentPath[i];
         }
     }

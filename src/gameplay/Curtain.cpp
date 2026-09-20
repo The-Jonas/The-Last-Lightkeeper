@@ -4,6 +4,7 @@
 #include "engine/Camera.h"
 #include "world/Collider.h"
 #include "core/Game.h"
+#include "states/stage/StageState.h"   // IsPhysicsDebugOn (tecla [B]) no desenho de debug
 #include "audio/GameVoice.h"
 
 
@@ -108,16 +109,24 @@ void Curtain::NotifyCollision(GameObject& other) {
 
 void Curtain::Render() {
 #ifdef DEBUG
+    // Mesma regra do monstro: estes contornos so aparecem com a tecla [B]
+    // ligada. Antes desenhavam SEMPRE numa build DEBUG e enchiam o ecra.
+    StageState* dbgStage = Game::TryGetStageState();
+    if (!dbgStage || !dbgStage->IsPhysicsDebugOn()) return;
+
     SDL_Renderer* r = Game::GetInstance().GetRenderer();
     SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
 
-    // Sprite box — ciano
-    SDL_Rect sb = {
-        static_cast<int>(associated.box.x - Camera::pos.x),
-        static_cast<int>(associated.box.y - Camera::pos.y),
-        static_cast<int>(associated.box.w),
-        static_cast<int>(associated.box.h)
+    // Mundo → tela COM zoom (igual ao sprite).
+    const float z = Camera::GetZoom();
+    auto toScreen = [z](const Rect& worldBox) {
+        const Vec2 p = Camera::WorldToScreen(Vec2(worldBox.x, worldBox.y));
+        return SDL_Rect{ static_cast<int>(p.x), static_cast<int>(p.y),
+                         static_cast<int>(worldBox.w * z), static_cast<int>(worldBox.h * z) };
     };
+
+    // Sprite box — ciano
+    SDL_Rect sb = toScreen(associated.box);
     SDL_SetRenderDrawColor(r, 0, 200, 255, 50);
     SDL_RenderFillRect(r, &sb);
     SDL_SetRenderDrawColor(r, 0, 200, 255, 200);
@@ -125,12 +134,7 @@ void Curtain::Render() {
 
     // Collider — verde=ativo, vermelho=inativo
     if (col) {
-        SDL_Rect cb = {
-            static_cast<int>(col->box.x - Camera::pos.x),
-            static_cast<int>(col->box.y - Camera::pos.y),
-            static_cast<int>(col->box.w),
-            static_cast<int>(col->box.h)
-        };
+        SDL_Rect cb = toScreen(col->box);
         bool alive = col->IsEnabled();
         SDL_SetRenderDrawColor(r, alive?0:255, alive?255:0, 0, 100);
         SDL_RenderFillRect(r, &cb);

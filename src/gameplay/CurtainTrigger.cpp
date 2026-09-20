@@ -76,14 +76,22 @@ void CurtainTrigger::Update(float dt) {
 
 void CurtainTrigger::Render() {
 #ifdef DEBUG
+    // Mesma regra do monstro: estes contornos so aparecem com a tecla [B]
+    // ligada. Antes desenhavam SEMPRE numa build DEBUG e enchiam o ecra.
+    StageState* dbgStage = Game::TryGetStageState();
+    if (!dbgStage || !dbgStage->IsPhysicsDebugOn()) return;
+
     SDL_Renderer* r = Game::GetInstance().GetRenderer();
     SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
 
+    // Mundo → tela COM zoom (igual ao sprite).
+    const float z = Camera::GetZoom();
+    const Vec2 topLeft = Camera::WorldToScreen(Vec2(associated.box.x, associated.box.y));
     SDL_Rect box = {
-        static_cast<int>(associated.box.x - Camera::pos.x),
-        static_cast<int>(associated.box.y - Camera::pos.y),
-        static_cast<int>(associated.box.w),
-        static_cast<int>(associated.box.h)
+        static_cast<int>(topLeft.x),
+        static_cast<int>(topLeft.y),
+        static_cast<int>(associated.box.w * z),
+        static_cast<int>(associated.box.h * z)
     };
 
     // Amarelo = trigger de abrir, Laranja = trigger de fechar

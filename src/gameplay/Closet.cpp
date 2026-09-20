@@ -150,12 +150,20 @@ void Closet::Render() {
     // Rótulo flutuante removido — indicação só no prompt central do rodapé.
 
 #ifdef DEBUG
+    // Mesma regra do monstro: estes contornos so aparecem com a tecla [B]
+    // ligada. Antes desenhavam SEMPRE numa build DEBUG e enchiam o ecra.
+    StageState* dbgStage = Game::TryGetStageState();
+    if (!dbgStage || !dbgStage->IsPhysicsDebugOn()) return;
+
     // --- DEBUG: DESENHA A ZONA DE INTERAÇÃO COM A CÂMERA ---
-    SDL_Rect interactZone = GetInteractionRect();
-    
-    // Subtrai a posição da câmera para desenhar no lugar certo da tela
-    interactZone.x -= Camera::pos.x;
-    interactZone.y -= Camera::pos.y; 
+    SDL_Rect worldZone = GetInteractionRect();
+
+    // Mundo → tela COM zoom (igual ao sprite): só subtrair a câmera esquecia o
+    // zoom e a zona aparecia deslocada do armário.
+    const float z = Camera::GetZoom();
+    const Vec2 topLeft = Camera::WorldToScreen(Vec2(static_cast<float>(worldZone.x), static_cast<float>(worldZone.y)));
+    SDL_Rect interactZone = { static_cast<int>(topLeft.x), static_cast<int>(topLeft.y),
+                              static_cast<int>(worldZone.w * z), static_cast<int>(worldZone.h * z) };
 
     SDL_SetRenderDrawBlendMode(Game::GetInstance().GetRenderer(), SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(Game::GetInstance().GetRenderer(), 0, 255, 0, 150); 
