@@ -692,6 +692,29 @@ bool LevelManager::CheckPolygonVsRect(const Polygon& poly, const SDL_Rect& rect)
     return false;
 }
 
+bool LevelManager::GetWorldBounds(float& outMinX, float& outMinY, float& outMaxX, float& outMaxY) const {
+    bool any = false;
+    for (const auto& imgLayer : imageLayers) {
+        if (imgLayer.texture == nullptr || imgLayer.w <= 0 || imgLayer.h <= 0) {
+            continue;
+        }
+        const float minX = static_cast<float>(imgLayer.x);
+        const float minY = static_cast<float>(imgLayer.y);
+        const float maxX = minX + static_cast<float>(imgLayer.w);
+        const float maxY = minY + static_cast<float>(imgLayer.h);
+        if (!any) {
+            outMinX = minX; outMinY = minY; outMaxX = maxX; outMaxY = maxY;
+            any = true;
+        } else {
+            outMinX = std::min(outMinX, minX);
+            outMinY = std::min(outMinY, minY);
+            outMaxX = std::max(outMaxX, maxX);
+            outMaxY = std::max(outMaxY, maxY);
+        }
+    }
+    return any;
+}
+
 void LevelManager::RenderBackground(SDL_Renderer* renderer) {
     float zoom = Camera::GetZoom();
     // Como o vetor guardou as imagens na ordem do JSON (Parede -> Chão),

@@ -6,6 +6,7 @@
 #include "core/InputManager.h"
 #include "core/Resources.h"
 #include "engine/GameObject.h"
+#include "engine/Camera.h"
 #include "ui/Text.h"
 #include "states/TitleState.h"
 
@@ -191,6 +192,13 @@ void EndState::Render() {
 }
 
 void EndState::Start() {
+    // Este estado desenha tudo em coordenadas de TELA, mas o `Text` renderiza em
+    // coordenadas de mundo (subtrai `Camera::pos`). Como ele é empilhado direto
+    // da fase, sem zerar a câmera o texto sai deslocado — e com a câmera afastada
+    // sairia também na escala errada.
+    Camera::ResetView();
+    Camera::pos = Vec2(0, 0);
+
     // Transição nível→fim/menu: silencia TODO o áudio de gameplay (rádio, ondas,
     // vento, monstro...) para nada sobreviver à morte/vitória. A música do EndState
     // (Mix_Music) é iniciada por LoadAssets e não é afetada.

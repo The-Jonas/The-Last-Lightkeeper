@@ -139,6 +139,7 @@ void CutsceneState::Start() {
     // O vídeo é renderizado em coordenadas de mundo menos Camera::pos; como o
     // stage pré-carregado pode ter mexido nos alvos da câmera, zeramos a posição
     // para o vídeo cobrir a tela a partir de (0,0).
+    Camera::ResetView();
     Camera::pos = Vec2(0, 0);
 
     LoadAssets();

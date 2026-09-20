@@ -44,6 +44,9 @@ void LoadingState::LoadAssets() {
 }
 
 void LoadingState::Start() {
+    // Este estado desenha a interface a 1:1 (posicao = Camera::pos + offset de
+    // tela): devolve a camera ao neutro para o zoom da fase nao encolher tudo.
+    Camera::ResetView();
     GameSfx::NotifyLoadingBegin();
     GameVoice::NotifyLoadingBegin();
     Mix_HaltMusic();

@@ -13,6 +13,12 @@ GameObject* Camera::pairA = nullptr;
 GameObject* Camera::pairB = nullptr;
 GameObject* Camera::pairPrimary = nullptr;
 float Camera::zoom = 1.0f;
+float Camera::baseZoom = 1.0f;
+bool Camera::hasWorldBounds = false;
+float Camera::worldMinX = 0.0f;
+float Camera::worldMinY = 0.0f;
+float Camera::worldMaxX = 0.0f;
+float Camera::worldMaxY = 0.0f;
 float Camera::trauma = 0.0f;
 float Camera::vertigo = 0.0f;
 float Camera::fxTime = 0.0f;
@@ -22,6 +28,11 @@ namespace {
 constexpr float kTraumaDecayPerSec = 1.6f;   // trauma volta a 0 em ~0.6s
 constexpr float kMaxShakePx = 22.0f;          // amplitude máxima do tremor (trauma=1)
 constexpr float kMaxSwayPx = 10.0f;           // amplitude máxima do balanço de vertigem
+
+// Limites do zoom-base. Abaixo de kMinBaseZoom os personagens ficam pequenos
+// demais para se lerem; acima de 1.0 a câmera aproximaria (não é o objetivo).
+constexpr float kMinBaseZoom = 0.50f;
+constexpr float kMaxBaseZoom = 1.00f;
 }
 
 void Camera::AddTrauma(float amount) {
@@ -71,6 +82,80 @@ float Camera::GetZoom() {
     return zoom;
 }
 
+void Camera::SetBaseZoom(float newBaseZoom, bool snap) {
+    if (!(newBaseZoom > 0.0f)) {   // apanha 0, negativos e NaN
+        return;
+    }
+    baseZoom = std::clamp(newBaseZoom, kMinBaseZoom, kMaxBaseZoom);
+    if (snap) {
+        zoom = baseZoom;
+    }
+}
+
+float Camera::GetBaseZoom() {
+    return baseZoom;
+}
+
+Vec2 Camera::WorldToScreen(const Vec2& world) {
+    return Vec2((world.x - pos.x) * zoom, (world.y - pos.y) * zoom);
+}
+
+Vec2 Camera::ScreenToWorld(const Vec2& screen) {
+    const float z = std::max(0.05f, zoom);
+    return Vec2(screen.x / z + pos.x, screen.y / z + pos.y);
+}
+
+void Camera::SetWorldBounds(float minX, float minY, float maxX, float maxY) {
+    if (!(maxX > minX) || !(maxY > minY)) {
+        ClearWorldBounds();
+        return;
+    }
+    worldMinX = minX;
+    worldMinY = minY;
+    worldMaxX = maxX;
+    worldMaxY = maxY;
+    hasWorldBounds = true;
+}
+
+void Camera::ClearWorldBounds() {
+    hasWorldBounds = false;
+}
+
+void Camera::ResetView() {
+    baseZoom = 1.0f;
+    zoom = 1.0f;
+    hasWorldBounds = false;
+    ResetShake();
+}
+
+// Prende a posição-base (sem tremor) dentro do retângulo do mundo. `pos` é o
+// canto superior-esquerdo da vista, e a vista mede janela/zoom em pixels de
+// mundo — por isso o limite da direita é `worldMaxX - viewW`.
+void Camera::ClampPosToWorldBounds() {
+    if (!hasWorldBounds) {
+        return;
+    }
+    Game& game = Game::GetInstance();
+    const float z = std::max(0.05f, zoom);
+    const float viewW = static_cast<float>(game.GetWindowsWidth()) / z;
+    const float viewH = static_cast<float>(game.GetWindowsHeight()) / z;
+    const float worldW = worldMaxX - worldMinX;
+    const float worldH = worldMaxY - worldMinY;
+
+    // Eixo em que o mundo é MENOR que a vista: encostar a uma borda deixaria uma
+    // faixa preta só de um lado, então centra o mundo na tela.
+    if (viewW >= worldW) {
+        pos.x = worldMinX + (worldW - viewW) * 0.5f;
+    } else {
+        pos.x = std::clamp(pos.x, worldMinX, worldMaxX - viewW);
+    }
+    if (viewH >= worldH) {
+        pos.y = worldMinY + (worldH - viewH) * 0.5f;
+    } else {
+        pos.y = std::clamp(pos.y, worldMinY, worldMaxY - viewH);
+    }
+}
+
 void Camera::Update(float dt) {
     // Remove o offset de tremor do frame anterior para que o enquadramento
     // interpole sobre a posição-base limpa (sem acumular o tremor).
@@ -79,8 +164,10 @@ void Camera::Update(float dt) {
     if (pairA && pairB) { // Quando a dupla está ativa, enquadra os dois personagens
         const float followSmoothing = 8.0f;
         const float zoomSmoothing = 6.0f;
-        const float minZoom = 0.65f;
-        const float maxZoom = 1.0f;
+        // Limites relativos ao zoom-base: o modo de dupla afasta a partir do
+        // enquadramento normal, em vez de partir sempre de 1.0.
+        const float maxZoom = baseZoom;
+        const float minZoom = baseZoom * 0.65f;
         const float framePaddingX = 220.0f;
         const float framePaddingY = 180.0f;
 
@@ -130,7 +217,7 @@ void Camera::Update(float dt) {
         float interpolation = 1.0f - std::exp(-followSmoothing * dt);
         pos.x += (targetPos.x - pos.x) * interpolation;
         pos.y += (targetPos.y - pos.y) * interpolation;
-        zoom += (1.0f - zoom) * interpolation;
+        zoom += (baseZoom - zoom) * interpolation;
     } else  {
         // Se não tem foco, a câmera responde ao input
         speed = Vec2(0, 0);
@@ -155,7 +242,13 @@ void Camera::Update(float dt) {
             }
         }
         pos += speed;                                   // Somamos a velocidade da câmera a posição
-        zoom += (1.0f - zoom) * (1.0f - std::exp(-8.0f * dt));
+        zoom += (baseZoom - zoom) * (1.0f - std::exp(-8.0f * dt));
+    }
+
+    // Os limites do mundo só valem quando a câmera segue alguém. O pan livre das
+    // setas é ferramenta de desenvolvedor: ali ver para lá da borda é útil.
+    if (focus != nullptr || (pairA != nullptr && pairB != nullptr)) {
+        ClampPosToWorldBounds();
     }
 
     // ── Tremor + vertigem: somados em `pos` por cima da posição-base ──

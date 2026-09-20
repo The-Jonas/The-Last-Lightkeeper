@@ -84,6 +84,12 @@ public:
 
     FootstepSurface QueryFootstepSurface(int x, int y, bool isElevated) const;
 
+    // Retângulo que a arte do nível ocupa (união de todas as camadas de imagem,
+    // já com os offsets do Tiled). É o que a câmera usa como limite para nunca
+    // mostrar o vazio para lá do mapa. Devolve false quando o nível não tem
+    // nenhuma camada de imagem — nesse caso a câmera fica sem limites.
+    bool GetWorldBounds(float& outMinX, float& outMinY, float& outMaxX, float& outMaxY) const;
+
     // Caminho da imagem do tileset (o que o Tiled MOSTRA) para um gid; nullptr se
     // desconhecido. Usado p/ renderizar exatamente a arte do Tiled (ex.: ItemSpawn).
     const std::string* GetTileImagePath(int gid) const;

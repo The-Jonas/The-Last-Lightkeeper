@@ -851,6 +851,9 @@ void TitleState::RenderBlurredCharacter(SDL_Renderer* r) {
 //  Start / Pause / Resume
 // ─────────────────────────────────────────────────────────────────────────────
 void TitleState::Start() {
+    // Este estado desenha a interface a 1:1 (posicao = Camera::pos + offset de
+    // tela): devolve a camera ao neutro para o zoom da fase nao encolher tudo.
+    Camera::ResetView();
     // Chegando ao menu (boot ou nível→menu): mata qualquer efeito de gameplay que
     // tenha sobrado (rádio etc.). A música do menu é iniciada logo abaixo.
     GameSfx::HardStopAll();
@@ -862,6 +865,7 @@ void TitleState::Start() {
 }
 void TitleState::Pause() {}
 void TitleState::Resume() {
+    Camera::ResetView();
     Camera::pos=Vec2(0,0);
     hasContinueSave=SaveManager::HasSave();
     if(!hasContinueSave) menuSelection=0;
