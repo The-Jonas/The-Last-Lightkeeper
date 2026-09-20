@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A Luz do Farol — field of view panel</title>
+<style>
+  :root{
+    --bg:#0d0f14; --panel:#151922; --line:#242b38; --ink:#dfe4ee; --dim:#96a0b4;
+    --warm:#e8b45c; --cold:#8fb6e8; --good:#7fc08a; --bad:#e0796f;
+    --mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:16px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;padding:32px 20px 80px}
+  .wrap{max-width:1080px;margin:0 auto}
+  h1{font-size:26px;margin:0 0 4px;letter-spacing:.2px}
+  .sub{color:var(--dim);margin:0 0 28px}
+  h2{font-size:19px;margin:36px 0 6px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+  h2 .key{font:13px var(--mono);color:var(--warm);margin-left:8px;letter-spacing:0}
+  .lead{color:var(--dim);margin:8px 0 14px;max-width:78ch}
+  table{width:100%;border-collapse:collapse;margin:10px 0 4px;font-size:14.5px}
+  th{ text-align:left;color:var(--dim);font-weight:600;font-size:12.5px;
+      text-transform:uppercase;letter-spacing:.6px;padding:6px 10px;border-bottom:1px solid var(--line)}
+  td{padding:9px 10px;border-bottom:1px solid #1b202b;vertical-align:top}
+  tr:hover td{background:#11151d}
+  td.n{font:13px var(--mono);color:var(--warm);white-space:nowrap}
+  td.v{font:13px var(--mono);color:var(--cold);white-space:nowrap}
+  .box{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--warm);
+       border-radius:5px;padding:14px 16px;margin:16px 0}
+  .box.f{border-left-color:var(--good)}
+  .box b{color:var(--warm)}
+  .box.f b{color:var(--good)}
+  code{font:13.5px var(--mono);background:#1b2130;padding:1.5px 5px;border-radius:3px;color:#c9d4e8}
+  .formula{background:#0a0c11;border:1px solid var(--line);border-radius:5px;
+           padding:16px 18px;margin:14px 0;font:14px/1.9 var(--mono);color:#c9d4e8;overflow-x:auto}
+  .formula em{color:var(--warm);font-style:normal}
+  .formula s{color:var(--dim);text-decoration:none}
+  ol.steps{max-width:78ch;color:var(--dim)}
+  ol.steps b{color:var(--ink)}
+  .foot{color:var(--dim);font-size:13px;margin-top:44px;border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Field of view panel</h1>
+<p class="sub">Second page of the tweak panel — press <code>\</code> to change page. Every row is live: the game applies the value at once, and the game keeps it for the next run.</p>
+
+<div class="box f">
+<b>The values are saved.</b> Every change goes to <code>config/lighting.json</code>,
+0.8 seconds after you stop moving a slider, and at once when you close the panel.
+The next run reads that file back.
+<br><br>
+The file is written OVER the built-in defaults, one key at a time. A missing key,
+a wrong type or a value that is not a finite number is ignored, and that one field
+keeps its factory value. So the starting point is always the defaults in
+<code>PlayerVisionParams</code> and <code>LightMaskParams</code> — and
+<b>deleting the file resets the game to factory values.</b>
+<br><br>
+<code>scripts\deploy.bat</code> puts the file in the bundle when it exists, so a
+tuned build ships with your values.
+</div>
+
+<div class="box">
+<b>The one rule behind all of it.</b> The cone is not a torch. It says where the
+character LOOKS, not what the character SEES. What the player sees is the product
+of two things:
+<div class="formula">
+seen = <em>GEOMETRY</em> &times; <em>LIGHT</em><br>
+<s>│</s><br>
+<s>├─</s> <em>GEOMETRY</em> = inside the cone, or inside the circle at the feet<br>
+<s>└─</s> <em>LIGHT</em>&nbsp;&nbsp;&nbsp; = the larger of: light that reaches the point,<br>
+<s>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</s>and: how near the character is (a straight ramp)
+</div>
+Where <code>seen</code> is 0 the picture stays monochrome and objects are invisible.
+Where it is 1 the colour comes back in full. So the far end of the cone goes grey
+when no light is there, and an object in the dark fades out with distance instead
+of popping into view.
+</div>
+
+<h2>How the panel is laid out <span class="key">Como o painel esta arrumado</span></h2>
+<p class="lead">The rows are grouped under titles and flow into as many COLUMNS as the window can hold, so nothing is squeezed into one tall strip any more. A group is never split across two columns.</p>
+<p class="lead">Every yes/no row is a CHECKBOX and the whole row is clickable — you do not have to hit the small square. The same rows also answer the <b>+</b> and <b>-</b> keys when the row has focus. The arrow keys move the focus and skip the group titles. <code>\</code> opens and closes the panel, <code>P</code> changes page, <code>K</code> changes the light shape.</p>
+
+<h2>0 · The camera <span class="key">how much map fits on screen</span></h2>
+<p class="lead">One row, at the top of the page. It sets the BASE zoom: the value the camera always returns to. 1.00 is the old framing, where one world pixel is one screen pixel. Below 1.00 the camera pulls back and more of the floor fits on screen.</p>
+<p class="lead">The field of view and the light circles keep their size ON SCREEN when you move this row, so the lit picture looks the same and simply covers more world. The camera also stops at the edge of the painted art, so you never see the black void outside the map.</p>
+<table>
+<tr><th>Row</th><th>What it does</th><th>Default</th></tr>
+<tr><td class="n">Camera: afastar (zoom)</td><td>Base zoom of the camera. 0.75 shows 33% more world on each axis than 1.00. The range is 0.50 to 1.00. Lower values make the brothers small and hard to read.</td><td class="v">0.75</td></tr>
+</table>
+
+<h2>1 · The cone <span class="key">the shape you look through</span></h2>
+<p class="lead">The cone follows the 4-way facing of the controlled brother and turns smoothly. All lengths are in WORLD pixels at the BASE zoom (see section 0): the cone keeps its size on screen, so pulling the camera back reveals more world instead of shrinking the cone.</p>
+<table>
+<tr><th>Row</th><th>What it does</th><th>Default</th></tr>
+<tr><td class="n">Campo de visao: ligado</td><td>Master switch. Off = no cone, no monochrome layer, no object hiding. Use it to compare.</td><td class="v">ligado</td></tr>
+<tr><td class="n">Cone: abertura (meio-ang.)</td><td>HALF of the opening angle, in degrees. 80 gives a 160° cone. Lower values give a narrow beam that you must aim.</td><td class="v">80</td></tr>
+<tr><td class="n">Cone: dureza da borda</td><td>How flat the cone is inside. High = the whole inside has one value and the edge cuts clean (a stencil look). Low = the cone dims from the middle outward (a soft beam look). This is the row that makes the edge a straight line.</td><td class="v">12.0</td></tr>
+<tr><td class="n">Cone: borda lateral (graus)</td><td>Width of the soft band on the two SIDES of the cone. Keep 1 to 2 degrees: that is only anti-aliasing. Raise it for a hazy edge.</td><td class="v">1.5</td></tr>
+<tr><td class="n">Cone: borda da ponta (px)</td><td>Width of the soft band at the FAR END of the cone. 0 gives a hard cut across the view.</td><td class="v">60</td></tr>
+<tr><td class="n">Cone: alcance (px mundo)</td><td>How far the cone reaches. 1250 crosses the whole screen at normal zoom.</td><td class="v">1250</td></tr>
+<tr><td class="n">Cone: apice a frente (px)</td><td>Pushes the tip of the cone forward, away from the chest. It stops the character from seeing behind its own back. Negative values pull it back.</td><td class="v">4</td></tr>
+<tr><td class="n">Cone: velocidade de giro</td><td>Degrees per second the cone axis turns when the character changes direction. High = it snaps. Low = it sweeps.</td><td class="v">720</td></tr>
+</table>
+
+<h2>2 · The feet <span class="key">what you reach without looking</span></h2>
+<p class="lead">A small circle glued to the feet of BOTH brothers, the companion included. Unlike the cone this is real light: it clears the darkness completely and it always brings the colour back.</p>
+<table>
+<tr><td class="n">Pes: raio da luz (px mundo)</td><td>Radius of that circle.</td><td class="v">170</td></tr>
+<tr><td class="n">Pes: dureza da borda</td><td>Same idea as "Cone: dureza da borda", but for the feet circles. Keep it lower than the cone: a hard circle around the feet looks like a cut-out.</td><td class="v">4.0</td></tr>
+</table>
+
+<h2>3 · Light needed to see <span class="key">the new rule</span></h2>
+<p class="lead">These rows decide the LIGHT half of the formula. They are what stops the character from reading a newspaper across a black room only because it faces that way.</p>
+<table>
+<tr><td class="n">Cone sem luz: escuridao</td><td>How much of the darkness stays inside the cone when no light is near. 0 = the cone lights the place by itself. 1 = the cone changes nothing. In between the player makes out shapes but the place stays dark. A real light always wins over this.</td><td class="v">0.45</td></tr>
+<tr><td class="n">Ver so onde ha luz</td><td>Turns the whole rule on and off. "nao" restores the old behaviour: the full cone in colour, and objects visible only for being inside it.</td><td class="v">sim</td></tr>
+<tr><td class="n">Luz: alcance que revela</td><td>Multiplies the reach of every light when the game asks "does light get here?". Below 1 shrinks the colour bubble around each candle. It does NOT change how the light is drawn.</td><td class="v">1.00</td></tr>
+<tr><td class="n">Luz: dureza do alcance</td><td>Shape of that bubble. High = the light counts at almost full strength up to its edge, then stops. Low = it weakens from the flame outward.</td><td class="v">2.60</td></tr>
+<tr><td class="n">Sem luz: ve ate (px mundo)</td><td>With no light at all, an object still shows because it is NEAR. Opacity falls in a straight line from 1 at the character to 0 at this distance. Raise it and the character sees further into the dark.</td><td class="v">300</td></tr>
+</table>
+
+<h2>4 · The light sources themselves <span class="key">yellow, and visible from far</span></h2>
+<p class="lead">These three rows answer a different question: not "what can the character see", but "does a lit candle read as LIT". The first two also appear on page 1 under the Torch shape.</p>
+<div class="box f">
+<b>Why the flame looked washed out.</b> The warm colour of a light used to travel
+only in the darkness mesh, as a vertex colour multiplied by the darkness alpha.
+That alpha is near zero exactly in the MIDDLE of the light, where the darkness has
+already opened — so the tint cancelled itself where it mattered most, and survived
+only on the rim. The yellow now comes from an ADDITIVE disc drawn over each flame,
+which has no such problem.
+</div>
+<table>
+<tr><th>Row</th><th>What it does</th><th>Default</th></tr>
+<tr><td class="n">Tocha: brilho da chama</td><td>Brightness and opacity of that additive disc. This is the row to raise when a lit room does not look different enough from a dark one.</td><td class="v">1.80</td></tr>
+<tr><td class="n">Tocha: raio da chama</td><td>Size of the disc, as a fraction of the light radius. 0.62 covers a good part of the pool of light; lower values keep the yellow tight around the flame.</td><td class="v">0.62</td></tr>
+<tr><td class="n">Luz: devolve a cor</td><td>How much of the colour comes back where LIGHT REACHES, even outside the field of view. 1 = a lit room reads in colour from any angle; 0 = the old rule, where everything outside the cone goes grey. The bubble uses the same reach and the same curve as "Luz: alcance que revela" and "Luz: dureza do alcance".</td><td class="v">1.00</td></tr>
+<tr><td class="n">Luz: tambem foca (nitidez)</td><td>Whether light also removes the BLUR. Off by default: light gives back the colour, not the focus — a lit corner outside the cone is coloured but soft, because the character is not looking at it. 1 = light makes it sharp too.</td><td class="v">0.00</td></tr>
+</table>
+
+<h2>5 · The blur, the highlight and the grey layer <span class="key">the full-screen pass</span></h2>
+<p class="lead">A full-screen OpenGL pass. It runs on the finished picture, so it also covers walls, floor and shadows. The two brothers are stamped out of the blur and always stay sharp.</p>
+<p class="lead"><b>The whole screen keeps its colour.</b> Two things mark the field of view instead:</p>
+<ul class="lead">
+<li><b>Focus.</b> Only the cone and the foot circles are sharp. Everything else is blurred.</li>
+<li><b>Highlight.</b> Inside the field of view the brightness and the saturation go up a little. Both values MULTIPLY what is already on screen, so a corner with no light stays dark: the highlight points, it does not reveal.</li>
+</ul>
+<p class="lead">The old black-and-white filter is still in the shader but it is OFF ("PB: forca do cinzento" = 0). Raise it to bring the grey back; the rows below it then apply again, and colour survives inside the field of view and wherever light reaches.</p>
+<table>
+<tr><td class="n">Desfoque fora da visao (px)</td><td>Blur radius, in screen pixels, applied to everything OUTSIDE the field of view. Only the cone, the foot circles and the two brothers stay sharp. This is the main marker of where the character looks. 0 removes it.</td><td class="v">4.0</td></tr>
+<tr><td class="n">Visao: realce (brilho)</td><td>Brightness inside the field of view. 1.00 = no highlight. Raise it until the wedge reads clearly without looking like a torch beam.</td><td class="v">1.18</td></tr>
+<tr><td class="n">Visao: realce (saturacao)</td><td>Saturation inside the field of view. 1.00 = no change; above 1 the colours inside the wedge are fuller than the rest of the screen.</td><td class="v">1.15</td></tr>
+<tr><td class="n">PB: forca do cinzento</td><td>OFF by default. 1 = fully grey outside the field of view and away from any light. Every "PB:" row below, and the vignette, only does something when this is above 0.</td><td class="v">0.00</td></tr>
+<tr><td class="n">PB: brilho da camada</td><td>Overall brightness of the grey layer. Below 1 darkens it. This row hits everything equally — that is why lights alone were hard to see.</td><td class="v">0.52</td></tr>
+<tr><td class="n">PB: realce das luzes</td><td>Lifts the pixels that are ALREADY bright — a flame, a lamp halo — and leaves the dark ones alone. Raise this to see light sources through the grey.</td><td class="v">0.55</td></tr>
+<tr><td class="n">PB: halo das luzes</td><td>Same lift, but only around a real light source of the scene. It separates "a bright wall" from "a lamp".</td><td class="v">0.35</td></tr>
+<tr><td class="n">PB: levantar preto</td><td>Raises the black point of the grey layer, so full black becomes dark grey. Small values only.</td><td class="v">0.01</td></tr>
+<tr><td class="n">PB: forca do tom frio</td><td>How blue the grey is (moonlight). 0 = neutral grey.</td><td class="v">0.30</td></tr>
+<tr><td class="n">Vinheta: forca</td><td>How much the grey layer darkens toward the screen border.</td><td class="v">0.85</td></tr>
+<tr><td class="n">Vinheta: inicio</td><td>Where that darkening starts. 0 = at the screen centre, 1 = at the corner.</td><td class="v">0.22</td></tr>
+</table>
+
+<h2>6 · Objects <span class="key">what disappears in the dark</span></h2>
+<p class="lead">Three separate switches, because the trade-off is not the same for each. A newspaper that shows only when you look at it is good; a barrel that vanishes while you push it is not. Hiding an object never blocks the interaction — the character can still use it.</p>
+<table>
+<tr><td class="n">Itens so no campo de visao</td><td>Pickups on the floor (<code>ItemPickup</code>).</td><td class="v">sim</td></tr>
+<tr><td class="n">Interagiveis so na visao</td><td>Newspapers, candlesticks, radio, repairables, windows, closets.</td><td class="v">sim</td></tr>
+<tr><td class="n">Barris so na visao</td><td>Barrels and crates you push (<code>Box</code>).</td><td class="v">sim</td></tr>
+<tr><td class="n">Itens: limiar de revelar</td><td>From which fraction of the cone an object counts as fully inside it. Low = the object appears as soon as the cone edge touches it. This sharpens the GEOMETRY half only; the LIGHT half still fades the object.</td><td class="v">0.35</td></tr>
+</table>
+
+<h2>7 · Darkness <span class="key">shared with page 1</span></h2>
+<table>
+<tr><td class="n">Escuro ambiente (sem luz)</td><td>Darkness where NO light arrives. It is the ceiling of the whole mesh: nothing ever gets darker. Lower it and the player still makes out shapes outside the field of view, in black and white.</td><td class="v">200</td></tr>
+<tr><td class="n">Escuro max (overlay)</td><td>Darkness at the EDGE of each real light. Page 1 uses the same row.</td><td class="v">250</td></tr>
+</table>
+
+<h2>How to tune it</h2>
+<ol class="steps">
+<li><b>Start with the shape.</b> Set "Cone: abertura", "Cone: alcance" and "Cone: dureza da borda" until the wedge looks right. Ignore the colour for now.</li>
+<li><b>Then the darkness.</b> "Escuro ambiente" sets how much of the room survives outside the cone. "Cone sem luz: escuridao" sets how much the cone alone lifts.</li>
+<li><b>Then what light reveals.</b> Walk to a candle. "Luz: alcance que revela" sets the size of the colour bubble; "Sem luz: ve ate" sets how far you see with no candle at all.</li>
+<li><b>Then the flames.</b> "Tocha: brilho da chama" until a lit room is obviously not a dark one. "Luz: devolve a cor" says how much colour the pool of light gives back; "PB: realce das luzes" / "PB: halo das luzes" carry the lights that are too weak or too far to reach that.</li>
+<li><b>Last, the look.</b> "Desfoque fora da visao" until the wedge separates from the rest of the screen, then "Visao: realce (brilho)" and "Visao: realce (saturacao)" until you always know where the character is looking. Leave "PB: forca do cinzento" at 0 unless you want the black-and-white pass back.</li>
+</ol>
+
+<p class="foot">Generated for <code>feature/fov-lighting-rework</code>. The rows live in <code>src/lighting/LightTweakPanel.cpp</code>; the defaults in <code>include/lighting/LightMaskTypes.h</code> (<code>PlayerVisionParams</code>). The same visibility formula runs twice and must stay in step: <code>StageState::LightAmountAtScreen</code> in C++ and the fragment shader in <code>src/lighting/ScenePostFx.cpp</code>.</p>
+
+</div>
+</body>
+</html>

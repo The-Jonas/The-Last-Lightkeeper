@@ -1,4 +1,5 @@
 #include "lighting/LightTweakPanel.h"
+#include "lighting/LightTweakStore.h"
 #include "core/InputManager.h"
 #include "core/Resources.h"
 #include "core/Game.h"
@@ -16,7 +17,7 @@ const char* kRowLabels[LightTweakPanel::kLogicalRows] = {
     "Escuro max (overlay)",
     "Raio / tamanho (px)",
     "Curva gamma (Power)",
-    "Curva: 0=smooth 1=pow",
+    "Curva: potencia (pow)",
     "Claridade centro (lift)",
     "Anelos (qualidade)",
     "Segmentos",
@@ -45,50 +46,76 @@ const char* kRowLabels[LightTweakPanel::kLogicalRows] = {
     "Sombra sprite: escala max",
     "Criar luz em C / clique",
     "Durabilidade (itens)",
-    "Visao: ligada",
-    "Visao: meio-angulo",
-    "Visao: borda suave (graus)",
-    "Visao: alcance (px mundo)",
-    "Visao: fade do alcance",
-    "Visao: apice a frente",
-    "Visao: vel. de giro",
-    "Pes: raio (px mundo)",
-    "Mascara: gamma do corte",
+    "Campo de visao: ligado",
+    "Cone: abertura (meio-ang.)",
+    "Cone: borda lateral (graus)",
+    "Cone: alcance (px mundo)",
+    "Cone: borda da ponta (px)",
+    "Cone: apice a frente (px)",
+    "Cone: velocidade de giro",
+    "Pes: raio da luz (px mundo)",
+    "Pes: dureza da borda",
     "PB: forca do cinzento",
     "PB: levantar preto",
     "PB: forca do tom frio",
-    "PB: ganho na visao",
+    "Visao: realce (brilho)",
     "Escuro ambiente (sem luz)",
     "PB: brilho da camada",
-    "PB: tamanho do pixel",
-    "PB: desfoque (px)",
+    "Luz: devolve a cor",
+    "Desfoque fora da visao (px)",
     "Vinheta: forca",
     "Vinheta: inicio",
     "Itens so no campo de visao",
-    "Itens: limiar de revelacao",
+    "Itens: limiar de revelar",
     "Interagiveis so na visao",
     "Barris so na visao",
-    "Visao sem luz: escuridao",
+    "Cone sem luz: escuridao",
+    "Ver so onde ha luz",
+    "Luz: alcance que revela",
+    "Luz: dureza do alcance",
+    "Sem luz: ve ate (px mundo)",
+    "Cone: dureza da borda",
+    "PB: realce das luzes",
+    "PB: halo das luzes",
+    "Tocha: brilho da chama",
+    "Tocha: raio da chama",
+    "Luz: tambem foca (nitidez)",
+    "Camera: afastar (zoom)",
+    "Visao: realce (saturacao)",
 };
 
-void destroyTex(SDL_Texture*& t) {
-    if (t) {
-        SDL_DestroyTexture(t);
-        t = nullptr;
-    }
+// Intervalo da barra do zoom-base. O minimo casa com o limite da propria
+// `Camera` (abaixo disto os irmaos ficam pequenos demais para se lerem).
+constexpr float kCameraZoomMin = 0.50f;
+constexpr float kCameraZoomMax = 1.00f;
+
+// ── GRUPOS ──────────────────────────────────────────────────────────────────
+// Cada grupo e um titulo mais as linhas que lhe pertencem. E daqui que sai a
+// ordem do painel. Uma linha que nao esteja em nenhum grupo NAO se perde: cai
+// no grupo "Outros" no fim (ver `rebuildEntries`), que serve de aviso de que
+// falta arruma-la.
+struct RowGroup {
+    const char* title;
+    std::vector<int> rows;
+};
+
+/// Pagina 0 — luz e sombra. Os grupos listam TODAS as linhas possiveis; cada
+/// forma de luz usa so as suas, por isso o filtro em `rebuildEntries` corta o
+/// que nao interessa e deita fora os grupos que ficam vazios.
+const std::vector<RowGroup>& lightGroups() {
+    static const std::vector<RowGroup> g = {
+        {"Forma da luz", {0, 1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14}},
+        {"Tocha", {22, 23, 24, 25, 26, 27, 63, 64}},
+        {"Sombras", {15, 16, 17, 18, 19, 28, 29}},
+        {"Qualidade", {5, 6, 20, 21}},
+        {"Accoes", {30, 31}},
+    };
+    return g;
 }
 
-/// Pagina 1: campo de visao do jogador + filtro preto-e-branco. As mesmas
-/// barras servem para experimentar o formato do cone e a forca do monocromatico
-/// sem recompilar.
-void appendVisionRows(std::vector<int>& out) {
-    out = {32, 33, 34, 35, 36, 37, 38, 39, 40, 55,
-           41, 46, 47, 48, 42, 43, 49, 50,
-           51, 53, 54, 52, 44, 45, 0};
-}
-
-void appendRowsForShape(LightMaskShape s, std::vector<int>& out) {
-    out.clear();
+/// Que linhas fazem sentido em cada forma de luz. Mesma lista de sempre; so a
+/// ORDEM passou a vir dos grupos.
+void rowsForShape(LightMaskShape s, std::vector<int>& out) {
     switch (s) {
     case LightMaskShape::Circle:
         out = {0, 1, 2, 3, 4, 5, 6, 16, 17, 28, 29, 18, 19, 20, 21, 30, 31};
@@ -103,7 +130,7 @@ void appendRowsForShape(LightMaskShape s, std::vector<int>& out) {
         out = {0, 2, 3, 4, 5, 6, 12, 13, 14, 16, 17, 28, 29, 18, 19, 20, 21, 30, 31};
         break;
     case LightMaskShape::Torch:
-        out = {0, 1, 2, 3, 4, 5, 6, 16, 17, 28, 29, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 30, 31};
+        out = {0, 1, 2, 3, 4, 5, 6, 16, 17, 28, 29, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 63, 64, 30, 31};
         break;
     default:
         out = {0, 1, 2, 3, 4, 5, 6};
@@ -111,98 +138,315 @@ void appendRowsForShape(LightMaskShape s, std::vector<int>& out) {
     }
 }
 
+/// Pagina 1 — campo de visao. A ordem dos grupos segue a ordem por que se
+/// afina: primeiro a camara e a forma do cone, depois o que marca a visao
+/// (foco e realce), depois a luz, e so no fim o preto-e-branco, que hoje vem
+/// desligado.
+const std::vector<RowGroup>& visionGroups() {
+    static const std::vector<RowGroup> g = {
+        {"Camara", {66}},
+        {"Campo de visao", {32, 33, 60, 34, 35, 36, 37, 38}},
+        {"Pes (visao periferica)", {39, 40}},
+        {"Marca da visao: foco e realce", {48, 44, 67, 65}},
+        {"Luz para ver", {56, 57, 58, 59, 55, 47}},
+        {"Escuridao", {45, 0}},
+        {"Objectos fora da visao", {51, 53, 54, 52}},
+        {"Chama", {63, 64}},
+        {"Preto-e-branco (opcional)", {41, 46, 61, 62, 42, 43, 49, 50}},
+    };
+    return g;
+}
+
 } // namespace
 
 LightTweakPanel::LightTweakPanel(LightMaskParams& paramsIn, LightMaskShape& shapeIn, PlayerVisionParams* visionIn)
     : params(paramsIn), shape(shapeIn), vision(visionIn), lastShape(shapeIn) {
-    refreshActiveRows();
+    rebuildEntries();
 }
 
 LightTweakPanel::~LightTweakPanel() {
-    for (int i = 0; i < kLogicalRows; i++) {
-        destroyTex(rowLabelTex[i]);
+    flushSave();   // sair do jogo com uma mexida por gravar nao a perde
+    releaseText();
+}
+
+void LightTweakPanel::markDirty() {
+    dirty = true;
+    saveTimer = 0.0f;   // conta a partir da ULTIMA mexida, nao da primeira
+}
+
+void LightTweakPanel::flushSave() {
+    if (!dirty) {
+        return;
     }
+    dirty = false;
+    saveTimer = 0.0f;
+    LightTweakStore::Save(params, shape, vision ? *vision : PlayerVisionParams{}, durabilityEnabled);
 }
 
 bool LightTweakPanel::isButtonRow(int logicalRow) {
     return logicalRow == 30;
 }
 
+// TODAS as linhas de liga/desliga. Passar uma linha booleana por aqui e o que
+// lhe da caixa de seleccao, clique no meio da linha e as teclas +/-. As linhas
+// 3 e 11 estavam de fora e apareciam como BARRA, que e uma forma estranha de
+// mostrar um sim/nao.
 bool LightTweakPanel::isToggleRow(int logicalRow) {
-    return logicalRow == 31 || logicalRow == 32 || logicalRow == 51 || logicalRow == 53 || logicalRow == 54;
-}
-
-int LightTweakPanel::rowHeight() const {
-    const int available = std::max(120, lastWinH - kFirstRowY - 20);
-    const int rows = std::max(1, slotCount());
-    return std::max(19, std::min(kRowH, available / rows));
-}
-
-int LightTweakPanel::barOffsetY() const {
-    return std::max(9, rowHeight() - kBarH - 5);
+    switch (logicalRow) {
+    case 3:    // curva da luz: smoothstep ou potencia
+    case 11:   // cone segue o rato
+    case 31:   // durabilidade dos itens
+    case 32:   // campo de visao ligado
+    case 51:   // itens so no campo de visao
+    case 53:   // interagiveis so no campo de visao
+    case 54:   // barris so no campo de visao
+    case 56:   // ver so onde ha luz
+        return true;
+    default:
+        return false;
+    }
 }
 
 bool LightTweakPanel::toggleRowValue(int logicalRow) const {
-    if (logicalRow == 31) {
+    switch (logicalRow) {
+    case 3:
+        return params.falloffCurve == LightFalloffCurve::Power;
+    case 11:
+        return params.coneFollowMouse;
+    case 31:
         return durabilityEnabled;
-    }
-    if (logicalRow == 32) {
+    case 32:
         return vision != nullptr && vision->enabled;
-    }
-    if (logicalRow == 51) {
+    case 51:
         return vision != nullptr && vision->hideItemsOutsideVision;
-    }
-    if (logicalRow == 53) {
+    case 53:
         return vision != nullptr && vision->hideInteractablesOutsideVision;
-    }
-    if (logicalRow == 54) {
+    case 54:
         return vision != nullptr && vision->hidePushablesOutsideVision;
+    case 56:
+        return vision != nullptr && vision->requireLightToSee;
+    default:
+        return false;
     }
-    return false;
 }
 
 void LightTweakPanel::flipToggleRow(int logicalRow) {
-    if (logicalRow == 31) {
-        durabilityEnabled = !durabilityEnabled;
-    } else if (logicalRow == 32 && vision) {
-        vision->enabled = !vision->enabled;
-    } else if (logicalRow == 51 && vision) {
-        vision->hideItemsOutsideVision = !vision->hideItemsOutsideVision;
-    } else if (logicalRow == 53 && vision) {
-        vision->hideInteractablesOutsideVision = !vision->hideInteractablesOutsideVision;
-    } else if (logicalRow == 54 && vision) {
-        vision->hidePushablesOutsideVision = !vision->hidePushablesOutsideVision;
-    }
-}
-
-void LightTweakPanel::refreshActiveRows() {
-    if (page == 1 && vision != nullptr) {
-        appendVisionRows(activeRows);
-        if (focusedSlot >= static_cast<int>(activeRows.size())) {
-            focusedSlot = std::max(0, static_cast<int>(activeRows.size()) - 1);
-        }
+    // Passa pelo mesmo caminho de qualquer outra mexida: le o valor, inverte-o
+    // e MANDA-O. Assim ha uma unica funcao a escrever cada campo, e um clique
+    // nunca pode cancelar-se contra uma segunda inversao.
+    if (!isToggleRow(logicalRow)) {
         return;
     }
-    appendRowsForShape(shape, activeRows);
-    if (focusedSlot >= static_cast<int>(activeRows.size())) {
-        focusedSlot = std::max(0, static_cast<int>(activeRows.size()) - 1);
+    if (logicalRow != 3 && logicalRow != 11 && logicalRow != 31 && vision == nullptr) {
+        return;   // pagina do campo de visao sem parametros: nao ha o que mexer
+    }
+    setRowFromNormalized(logicalRow, toggleRowValue(logicalRow) ? 0.0f : 1.0f);
+}
+
+bool LightTweakPanel::entryIsRow(int index) const {
+    return index >= 0 && index < static_cast<int>(entries.size()) && entries[static_cast<size_t>(index)].row >= 0;
+}
+
+void LightTweakPanel::rebuildEntries() {
+    entries.clear();
+
+    const std::vector<RowGroup>* groups = nullptr;
+    std::vector<int> allowed;
+    if (page == 1 && vision != nullptr) {
+        groups = &visionGroups();
+    } else {
+        groups = &lightGroups();
+        rowsForShape(shape, allowed);
+    }
+
+    auto isAllowed = [&](int r) {
+        if (allowed.empty()) {
+            return true;
+        }
+        return std::find(allowed.begin(), allowed.end(), r) != allowed.end();
+    };
+
+    std::vector<int> placed;
+    for (const RowGroup& g : *groups) {
+        std::vector<int> keep;
+        for (int r : g.rows) {
+            if (isAllowed(r)) {
+                keep.push_back(r);
+            }
+        }
+        if (keep.empty()) {
+            continue;   // grupo inteiro fora desta forma de luz
+        }
+        entries.push_back(Entry{-1, g.title, SDL_Rect{0, 0, 0, 0}});
+        for (int r : keep) {
+            entries.push_back(Entry{r, nullptr, SDL_Rect{0, 0, 0, 0}});
+            placed.push_back(r);
+        }
+    }
+
+    // Rede de seguranca: uma linha que a pagina use mas que nao esteja em
+    // nenhum grupo continua a aparecer, em vez de desaparecer sem aviso.
+    std::vector<int> leftovers;
+    for (int r : allowed) {
+        if (std::find(placed.begin(), placed.end(), r) == placed.end()) {
+            leftovers.push_back(r);
+        }
+    }
+    if (!leftovers.empty()) {
+        entries.push_back(Entry{-1, "Outros", SDL_Rect{0, 0, 0, 0}});
+        for (int r : leftovers) {
+            entries.push_back(Entry{r, nullptr, SDL_Rect{0, 0, 0, 0}});
+        }
+    }
+
+    if (!entryIsRow(focusedEntry)) {
+        focusedEntry = 0;
+        moveFocus(+1);
     }
 }
 
-int LightTweakPanel::logicalRowAtSlot(int slotIndex) const {
-    if (slotIndex < 0 || slotIndex >= static_cast<int>(activeRows.size())) {
-        return 0;
+void LightTweakPanel::moveFocus(int dir) {
+    const int n = static_cast<int>(entries.size());
+    if (n < 1) {
+        focusedEntry = 0;
+        return;
     }
-    return activeRows[static_cast<size_t>(slotIndex)];
+    for (int step = 1; step <= n; step++) {
+        const int i = ((focusedEntry + dir * step) % n + n) % n;
+        if (entries[static_cast<size_t>(i)].row >= 0) {
+            focusedEntry = i;
+            return;
+        }
+    }
+    focusedEntry = 0;
 }
 
-int LightTweakPanel::slotCount() const {
-    return static_cast<int>(activeRows.size());
+// ── DISTRIBUICAO POR COLUNAS ────────────────────────────────────────────────
+// Os grupos NAO se partem ao meio: um titulo vai sempre com as suas linhas para
+// a mesma coluna. Primeiro procura-se o menor numero de colunas que caiba na
+// janela; so quando nem o maximo chega e que a altura da linha encolhe.
+void LightTweakPanel::layoutEntries(int winW, int winH) {
+    const int n = static_cast<int>(entries.size());
+    if (n < 1) {
+        panelBox = SDL_Rect{0, 0, 0, 0};
+        return;
+    }
+
+    const int colW = std::min(kColW, std::max(150, winW - kMargin * 2));
+    const int maxColsByWidth =
+        std::max(1, std::min(kMaxCols, (winW - kMargin * 2 + kColGap) / (colW + kColGap)));
+
+    // Alturas de cada grupo, em unidades de "um titulo + n linhas".
+    struct Block {
+        int first = 0;
+        int count = 0;
+    };
+    std::vector<Block> blocks;
+    for (int i = 0; i < n; i++) {
+        if (entries[static_cast<size_t>(i)].row < 0 || blocks.empty()) {
+            blocks.push_back(Block{i, 1});
+        } else {
+            blocks.back().count++;
+        }
+    }
+
+    auto blockHeight = [&](const Block& b, int rh, int hh) {
+        int h = 0;
+        for (int i = b.first; i < b.first + b.count; i++) {
+            h += (entries[static_cast<size_t>(i)].row < 0) ? hh : rh;
+        }
+        return h;
+    };
+
+    // Distribui os blocos por `cols` colunas e devolve a altura da mais alta,
+    // ou -1 quando um bloco sozinho ja nao cabe.
+    std::vector<int> blockCol(blocks.size(), 0);
+    auto tryFit = [&](int cols, int rh, int hh, int availH, bool commit) {
+        std::vector<int> used(static_cast<size_t>(cols), 0);
+        int col = 0;
+        for (size_t bi = 0; bi < blocks.size(); bi++) {
+            const int bh = blockHeight(blocks[bi], rh, hh);
+            if (used[static_cast<size_t>(col)] > 0 && used[static_cast<size_t>(col)] + bh > availH &&
+                col + 1 < cols) {
+                col++;
+            }
+            if (commit) {
+                blockCol[bi] = col;
+            }
+            used[static_cast<size_t>(col)] += bh;
+        }
+        int tallest = 0;
+        for (int u : used) {
+            tallest = std::max(tallest, u);
+        }
+        return tallest;
+    };
+
+    const int chromeH = kTitleH + kFootH + kMargin * 2;
+    const int availH = std::max(120, winH - kMargin * 2 - chromeH);
+
+    rowH = kRowH;
+    headerH = kHeaderH;
+    int cols = 1;
+    for (; cols <= maxColsByWidth; cols++) {
+        if (tryFit(cols, rowH, headerH, availH, false) <= availH) {
+            break;
+        }
+    }
+    if (cols > maxColsByWidth) {
+        // Nem com todas as colunas cabe: encolhe a linha ate caber. Nunca
+        // abaixo de 30 px — e ai que o nome e a barra deixam de caber um por
+        // cima do outro e comecavam a sobrepor-se.
+        cols = maxColsByWidth;
+        while (rowH > 30 && tryFit(cols, rowH, headerH, availH, false) > availH) {
+            rowH--;
+            headerH = std::max(20, rowH - 9);
+        }
+    }
+    const int tallest = tryFit(cols, rowH, headerH, availH, true);
+
+    const int bodyW = cols * colW + (cols - 1) * kColGap;
+    const int bodyH = std::max(rowH, tallest);
+    panelBox.w = bodyW + kMargin * 2;
+    panelBox.h = bodyH + chromeH;
+    panelBox.x = std::max(kMargin, winW - panelBox.w - kMargin);
+    panelBox.y = kMargin;
+
+    std::vector<int> colY(static_cast<size_t>(cols), panelBox.y + kMargin + kTitleH);
+    for (size_t bi = 0; bi < blocks.size(); bi++) {
+        const int c = blockCol[bi];
+        const int x = panelBox.x + kMargin + c * (colW + kColGap);
+        for (int i = blocks[bi].first; i < blocks[bi].first + blocks[bi].count; i++) {
+            Entry& e = entries[static_cast<size_t>(i)];
+            const int h = (e.row < 0) ? headerH : rowH;
+            e.box = SDL_Rect{x, colY[static_cast<size_t>(c)], colW, h};
+            colY[static_cast<size_t>(c)] += h;
+        }
+    }
 }
 
-void LightTweakPanel::layoutPanel(int winW, int& outLeft, int& outPanelW) const {
-    outPanelW = std::min(kPanelWMax, std::max(120, winW - kMarginX * 2));
-    outLeft = std::max(kMarginX, winW - outPanelW - kMarginX);
+SDL_Rect LightTweakPanel::barRectOf(const Entry& e) const {
+    if (e.row < 0 || isButtonRow(e.row) || isToggleRow(e.row)) {
+        return SDL_Rect{0, 0, 0, 0};
+    }
+    const int bx = e.box.x + kPadX;
+    const int bw = std::max(20, e.box.w - kPadX * 2);
+    // A barra fica colada ao fundo da linha, logo abaixo do texto.
+    const int by = e.box.y + e.box.h - kBarH - 5;
+    return SDL_Rect{bx, by, bw, kBarH};
+}
+
+int LightTweakPanel::entryAtPoint(int mx, int my) const {
+    for (int i = 0; i < static_cast<int>(entries.size()); i++) {
+        const Entry& e = entries[static_cast<size_t>(i)];
+        if (e.row < 0) {
+            continue;
+        }
+        if (mx >= e.box.x && mx < e.box.x + e.box.w && my >= e.box.y && my < e.box.y + e.box.h) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 const char* LightTweakPanel::shapeName() const {
@@ -223,6 +467,7 @@ const char* LightTweakPanel::shapeName() const {
 }
 
 void LightTweakPanel::cycleShape() {
+    markDirty();
     const int v = (static_cast<int>(shape) + 1) % 5;
     shape = static_cast<LightMaskShape>(v);
 }
@@ -293,6 +538,10 @@ float LightTweakPanel::getRowNormalized(int logicalRow) const {
         return 0.0f;
     case 31:
         return durabilityEnabled ? 1.0f : 0.0f;
+    case 63:
+        return params.torchGlowStrength / 4.0f;
+    case 64:
+        return (params.torchGlowRadiusScale - 0.05f) / (1.60f - 0.05f);
     default:
         break;
     }
@@ -331,9 +580,9 @@ float LightTweakPanel::getRowNormalized(int logicalRow) const {
     case 46:
         return vision->monoGain / 1.5f;
     case 47:
-        return (vision->monoPixelSizePx - 1.0f) / (32.0f - 1.0f);
+        return vision->lightColorStrength;
     case 48:
-        return vision->monoBlurPx / 24.0f;
+        return vision->outsideBlurPx / 24.0f;
     case 49:
         return vision->vignetteStrength;
     case 50:
@@ -348,12 +597,33 @@ float LightTweakPanel::getRowNormalized(int logicalRow) const {
         return vision->hidePushablesOutsideVision ? 1.0f : 0.0f;
     case 55:
         return vision->unlitVisionDarkness / 0.95f;
+    case 56:
+        return vision->requireLightToSee ? 1.0f : 0.0f;
+    case 57:
+        return (vision->lightReachScale - 0.20f) / (3.00f - 0.20f);
+    case 58:
+        return (vision->lightPerceptionGamma - 0.50f) / (8.00f - 0.50f);
+    case 59:
+        return (vision->unlitFadeDistancePx - 40.0f) / (900.0f - 40.0f);
+    case 60:
+        return (vision->coneEdgeGamma - 1.0f) / (16.0f - 1.0f);
+    case 61:
+        return vision->monoHighlightGain / 2.0f;
+    case 62:
+        return vision->monoLightGlow / 2.0f;
+    case 65:
+        return vision->lightSharpenStrength;
+    case 66:
+        return (vision->cameraZoom - kCameraZoomMin) / (kCameraZoomMax - kCameraZoomMin);
+    case 67:
+        return (vision->visionSaturation - 0.00f) / (2.00f - 0.00f);
     default:
         return 0.0f;
     }
 }
 
 void LightTweakPanel::setRowFromNormalized(int logicalRow, float n01) {
+    markDirty();
     const float u = std::max(0.0f, std::min(1.0f, n01));
     switch (logicalRow) {
     case 0:
@@ -455,7 +725,13 @@ void LightTweakPanel::setRowFromNormalized(int logicalRow, float n01) {
     case 30:
         break;
     case 31:
-        durabilityEnabled = !durabilityEnabled;
+        durabilityEnabled = (u >= 0.5f);
+        break;
+    case 63:
+        params.torchGlowStrength = u * 4.0f;
+        break;
+    case 64:
+        params.torchGlowRadiusScale = 0.05f + u * (1.60f - 0.05f);
         break;
     default:
         break;
@@ -465,7 +741,7 @@ void LightTweakPanel::setRowFromNormalized(int logicalRow, float n01) {
     }
     switch (logicalRow) {
     case 32:
-        vision->enabled = !vision->enabled;
+        vision->enabled = (u >= 0.5f);
         break;
     case 33:
         vision->coneHalfAngleDeg = 5.0f + u * (85.0f - 5.0f);
@@ -510,10 +786,10 @@ void LightTweakPanel::setRowFromNormalized(int logicalRow, float n01) {
         vision->monoGain = u * 1.5f;
         break;
     case 47:
-        vision->monoPixelSizePx = 1.0f + u * (32.0f - 1.0f);
+        vision->lightColorStrength = u;
         break;
     case 48:
-        vision->monoBlurPx = u * 24.0f;
+        vision->outsideBlurPx = u * 24.0f;
         break;
     case 49:
         vision->vignetteStrength = u;
@@ -522,65 +798,124 @@ void LightTweakPanel::setRowFromNormalized(int logicalRow, float n01) {
         vision->vignetteStart = u * 0.95f;
         break;
     case 51:
-        vision->hideItemsOutsideVision = !vision->hideItemsOutsideVision;
+        vision->hideItemsOutsideVision = (u >= 0.5f);
         break;
     case 52:
         vision->itemRevealThreshold = std::max(0.02f, u);
         break;
     case 53:
-        vision->hideInteractablesOutsideVision = !vision->hideInteractablesOutsideVision;
+        vision->hideInteractablesOutsideVision = (u >= 0.5f);
         break;
     case 54:
-        vision->hidePushablesOutsideVision = !vision->hidePushablesOutsideVision;
+        vision->hidePushablesOutsideVision = (u >= 0.5f);
         break;
     case 55:
         vision->unlitVisionDarkness = u * 0.95f;
+        break;
+    case 56:
+        vision->requireLightToSee = (u >= 0.5f);
+        break;
+    case 57:
+        vision->lightReachScale = 0.20f + u * (3.00f - 0.20f);
+        break;
+    case 58:
+        vision->lightPerceptionGamma = 0.50f + u * (8.00f - 0.50f);
+        break;
+    case 59:
+        vision->unlitFadeDistancePx = 40.0f + u * (900.0f - 40.0f);
+        break;
+    case 60:
+        vision->coneEdgeGamma = 1.0f + u * (16.0f - 1.0f);
+        break;
+    case 61:
+        vision->monoHighlightGain = u * 2.0f;
+        break;
+    case 62:
+        vision->monoLightGlow = u * 2.0f;
+        break;
+    case 65:
+        vision->lightSharpenStrength = u;
+        break;
+    case 66:
+        vision->cameraZoom = kCameraZoomMin + u * (kCameraZoomMax - kCameraZoomMin);
+        break;
+    case 67:
+        vision->visionSaturation = u * 2.00f;
         break;
     default:
         break;
     }
 }
 
-bool LightTweakPanel::barHit(int mx, int my, int /*winW*/, int panelLeft, int panelW, int slotIndex, float* outN01) const {
-    if (slotIndex < 0 || slotIndex >= slotCount()) {
-        return false;
+
+// ── Texto em cache ──────────────────────────────────────────────────────────
+
+void LightTweakPanel::freeText(CachedText& t) {
+    if (t.tex) {
+        SDL_DestroyTexture(t.tex);
+        t.tex = nullptr;
     }
-    const int rowH = rowHeight();
-    const int y = kFirstRowY + slotIndex * rowH;
-    const int lr = logicalRowAtSlot(slotIndex);
-    if (isButtonRow(lr) || isToggleRow(lr)) {
-        return false;
-    }
-    const int by = y + barOffsetY();
-    const int bx = panelLeft + kPadX;
-    const int bw = std::max(20, panelW - kPadX * 2);
-    if (mx < bx || mx > bx + bw || my < by || my > by + kBarH) {
-        return false;
-    }
-    if (outN01) {
-        *outN01 = static_cast<float>(mx - bx) / static_cast<float>(bw);
-    }
-    return true;
+    t.w = 0;
+    t.h = 0;
+    t.text[0] = 0;
 }
 
-bool LightTweakPanel::rowButtonHit(int mx, int my, int panelLeft, int panelW, int slotIndex) const {
-    if (slotIndex < 0 || slotIndex >= slotCount()) {
+bool LightTweakPanel::ensureText(SDL_Renderer* renderer, CachedText& t, const char* s, int fontPx, SDL_Color col) {
+    if (!renderer || !s) {
+        return t.tex != nullptr;
+    }
+    if (t.tex != nullptr && std::strcmp(t.text, s) == 0) {
+        return true;   // ja e este texto: nao ha nada a fazer
+    }
+    freeText(t);
+    std::snprintf(t.text, sizeof(t.text), "%s", s);
+    if (t.text[0] == 0) {
         return false;
     }
-    const int lr = logicalRowAtSlot(slotIndex);
-    if (!isButtonRow(lr) && !isToggleRow(lr)) {
+    auto font = Resources::GetFont("Recursos/font/times.ttf", fontPx);
+    if (!font) {
         return false;
     }
-    const int rowH = rowHeight();
-    const int y = kFirstRowY + slotIndex * rowH;
-    const int bx = panelLeft + kPadX;
-    const int by = y + std::max(2, rowH / 3);
-    const int bw = std::max(20, panelW - kPadX * 2);
-    const int bh = std::max(12, rowH - std::max(2, rowH / 3) - 3);
-    return mx >= bx && mx <= bx + bw && my >= by && my <= by + bh;
+    SDL_Surface* surf = TTF_RenderUTF8_Blended(font.get(), t.text, col);
+    if (!surf) {
+        return false;
+    }
+    t.tex = SDL_CreateTextureFromSurface(renderer, surf);
+    t.w = surf->w;
+    t.h = surf->h;
+    SDL_FreeSurface(surf);
+    return t.tex != nullptr;
 }
 
-void LightTweakPanel::rebuildRowLabel(SDL_Renderer* renderer, int logicalRow) {
+void LightTweakPanel::blit(SDL_Renderer* renderer, const CachedText& t, int x, int y, int maxW) {
+    if (!renderer || !t.tex || t.w < 1) {
+        return;
+    }
+    SDL_Rect dst{x, y, t.w, t.h};
+    SDL_Rect src{0, 0, t.w, t.h};
+    if (maxW > 0 && dst.w > maxW) {
+        // Corta em vez de esmagar: um nome comprido perde as ultimas letras,
+        // mas as outras continuam a ler-se com a mesma forma.
+        src.w = maxW;
+        dst.w = maxW;
+    }
+    SDL_RenderCopy(renderer, t.tex, &src, &dst);
+}
+
+void LightTweakPanel::releaseText() {
+    for (int i = 0; i < kLogicalRows; i++) {
+        freeText(rowName[i]);
+        freeText(rowValue[i]);
+    }
+    freeText(titleText);
+    freeText(footText);
+    for (CachedText& t : headerText) {
+        freeText(t);
+    }
+    headerText.clear();
+}
+
+void LightTweakPanel::rebuildRowText(SDL_Renderer* renderer, int logicalRow) {
     if (!renderer || logicalRow < 0 || logicalRow >= kLogicalRows) {
         return;
     }
@@ -732,10 +1067,10 @@ void LightTweakPanel::rebuildRowLabel(SDL_Renderer* renderer, int logicalRow) {
         std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], vision ? vision->monoGain : 0.0f);
         break;
     case 47:
-        std::snprintf(buf, sizeof(buf), "%s: %.1f", kRowLabels[logicalRow], vision ? vision->monoPixelSizePx : 0.0f);
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], vision ? vision->lightColorStrength : 0.0f);
         break;
     case 48:
-        std::snprintf(buf, sizeof(buf), "%s: %.1f", kRowLabels[logicalRow], vision ? vision->monoBlurPx : 0.0f);
+        std::snprintf(buf, sizeof(buf), "%s: %.1f", kRowLabels[logicalRow], vision ? vision->outsideBlurPx : 0.0f);
         break;
     case 49:
         std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], vision ? vision->vignetteStrength : 0.0f);
@@ -762,60 +1097,118 @@ void LightTweakPanel::rebuildRowLabel(SDL_Renderer* renderer, int logicalRow) {
         std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow],
                       vision ? vision->unlitVisionDarkness : 0.0f);
         break;
+    case 56:
+        std::snprintf(buf, sizeof(buf), "%s: %s", kRowLabels[logicalRow],
+                      (vision && vision->requireLightToSee) ? "sim" : "nao");
+        break;
+    case 57:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], vision ? vision->lightReachScale : 0.0f);
+        break;
+    case 58:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow],
+                      vision ? vision->lightPerceptionGamma : 0.0f);
+        break;
+    case 59:
+        std::snprintf(buf, sizeof(buf), "%s: %.0f", kRowLabels[logicalRow],
+                      vision ? vision->unlitFadeDistancePx : 0.0f);
+        break;
+    case 60:
+        std::snprintf(buf, sizeof(buf), "%s: %.1f", kRowLabels[logicalRow], vision ? vision->coneEdgeGamma : 0.0f);
+        break;
+    case 61:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], vision ? vision->monoHighlightGain : 0.0f);
+        break;
+    case 62:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], vision ? vision->monoLightGlow : 0.0f);
+        break;
+    case 63:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], params.torchGlowStrength);
+        break;
+    case 64:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], params.torchGlowRadiusScale);
+        break;
+    case 65:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], vision ? vision->lightSharpenStrength : 0.0f);
+        break;
+    case 66:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], vision ? vision->cameraZoom : 1.0f);
+        break;
+    case 67:
+        std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], vision ? vision->visionSaturation : 1.0f);
+        break;
     default:
         buf[0] = 0;
         break;
     }
-    if (std::strcmp(rowLabelBuf[logicalRow], buf) == 0) {
-        return;
+    // O `switch` acima ja montou "Nome: valor" numa so linha. O painel mostra
+    // as duas metades em sitios diferentes, por isso o VALOR e o que sobra
+    // depois do nome — assim nenhuma das dezenas de linhas acima precisa de
+    // mudar de forma.
+    const char* label = kRowLabels[logicalRow];
+    const char* value = buf;
+    const size_t labelLen = label ? std::strlen(label) : 0;
+    if (labelLen > 0 && std::strncmp(buf, label, labelLen) == 0) {
+        value = buf + labelLen;
+        if (*value == ':') {
+            value++;
+        }
+        while (*value == ' ') {
+            value++;
+        }
     }
-    std::snprintf(rowLabelBuf[logicalRow], sizeof(rowLabelBuf[logicalRow]), "%s", buf);
 
-    destroyTex(rowLabelTex[logicalRow]);
-    rowLabelW[logicalRow] = 0;
-    rowLabelH[logicalRow] = 0;
-
-    auto font = Resources::GetFont("Recursos/font/times.ttf", 14);
-    if (!font) {
-        return;
-    }
-    SDL_Color col{220, 220, 230, 255};
-    SDL_Surface* surf = TTF_RenderUTF8_Blended(font.get(), buf, col);
-    if (!surf) {
-        return;
-    }
-    rowLabelTex[logicalRow] = SDL_CreateTextureFromSurface(renderer, surf);
-    rowLabelW[logicalRow] = surf->w;
-    rowLabelH[logicalRow] = surf->h;
-    SDL_FreeSurface(surf);
+    const SDL_Color nameCol{206, 208, 220, 255};
+    const SDL_Color valueCol{255, 214, 140, 255};
+    ensureText(renderer, rowName[logicalRow], label ? label : "", 14, nameCol);
+    // Uma linha de liga/desliga ja diz tudo pela caixa; repetir "sim"/"nao" ao
+    // lado so ocupava espaco.
+    ensureText(renderer, rowValue[logicalRow], isToggleRow(logicalRow) || isButtonRow(logicalRow) ? "" : value, 14,
+               valueCol);
 }
 
-void LightTweakPanel::Update(InputManager& input, float /*dt*/, int windowW, int windowH) {
-    lastWinH = std::max(240, windowH);
+bool LightTweakPanel::ConsumeCreateLightRequest() {
+    const bool requested = createLightRequested;
+    createLightRequested = false;
+    return requested;
+}
+
+void LightTweakPanel::Update(InputManager& input, float dt, int windowW, int windowH) {
+    // Gravacao adiada: so escreve o ficheiro quando o utilizador para de mexer.
+    if (dirty) {
+        saveTimer += std::max(0.0f, dt);
+        if (saveTimer >= kSaveDelaySec) {
+            flushSave();
+        }
+    }
     if (shape != lastShape || page != lastPage) {
         lastShape = shape;
         lastPage = page;
-        refreshActiveRows();
+        rebuildEntries();
     }
 
     if (input.KeyPress(LIGHT_PANEL_TOGGLE_KEY)) {
         visible = !visible;
+        if (!visible) {
+            flushSave();   // fechar o painel grava logo, sem esperar
+        }
     }
     if (!visible) {
-        dragSlot = -1;
+        dragEntry = -1;
         return;
     }
 
     if (input.KeyPress(PANEL_PAGE_TOGGLE_KEY)) {
         page = (page + 1) % kPageCount;
-        focusedSlot = 0;
-        dragSlot = -1;
-        refreshActiveRows();
+        lastPage = page;
+        focusedEntry = 0;
+        dragEntry = -1;
+        rebuildEntries();
     }
 
     if (input.KeyPress(LIGHT_SHAPE_CYCLE_KEY)) {
         cycleShape();
-        refreshActiveRows();
+        lastShape = shape;
+        rebuildEntries();
     }
 
     if (page == 0 && (shape == LightMaskShape::Circle || shape == LightMaskShape::Torch) &&
@@ -823,45 +1216,40 @@ void LightTweakPanel::Update(InputManager& input, float /*dt*/, int windowW, int
         createLightRequested = true;
     }
 
-    const int nSlots = slotCount();
-    if (nSlots < 1) {
+    if (entries.empty()) {
         return;
     }
 
+    // A geometria tem de existir ANTES de responder ao rato: e a mesma que o
+    // `Render` usa, por isso o que se ve e o que se clica nunca discordam.
+    layoutEntries(windowW, windowH);
+
     if (input.KeyPress(PANEL_ROW_PREV_KEY)) {
-        focusedSlot = (focusedSlot + nSlots - 1) % nSlots;
+        moveFocus(-1);
     }
     if (input.KeyPress(PANEL_ROW_NEXT_KEY)) {
-        focusedSlot = (focusedSlot + 1) % nSlots;
+        moveFocus(+1);
     }
-
-    int panelLeft = 0;
-    int panelW = 0;
-    layoutPanel(windowW, panelLeft, panelW);
 
     auto nudgeRowKeyboard = [&](int lr, int dir) {
         if (dir == 0) {
             return;
         }
-        switch (lr) {
-        case 3:
-            params.falloffCurve = (params.falloffCurve == LightFalloffCurve::Power) ? LightFalloffCurve::Smoothstep
-                                                                                      : LightFalloffCurve::Power;
-            return;
-        case 11:
-            params.coneFollowMouse = !params.coneFollowMouse;
-            return;
-        case 32:
-        case 51:
-        case 53:
-        case 54:
+        // TODAS as linhas de liga/desliga passam por aqui. A lista escrita a
+        // mao que aqui estava esquecia-se da durabilidade, e por isso as teclas
+        // +/- nao lhe faziam nada.
+        if (isToggleRow(lr)) {
             flipToggleRow(lr);
             return;
-        case 19:
+        }
+        if (isButtonRow(lr)) {
+            createLightRequested = true;
+            return;
+        }
+        if (lr == 19) {
+            markDirty();
             params.shadowSoftLayers = std::max(1, std::min(4, params.shadowSoftLayers + dir));
             return;
-        default:
-            break;
         }
 
         float step = 0.03f;
@@ -874,193 +1262,210 @@ void LightTweakPanel::Update(InputManager& input, float /*dt*/, int windowW, int
             step = 0.02f;
         } else if (lr == 23) {
             step = 0.03f;
-        } else if (lr == 30 || lr == 31 || lr == 32 || lr == 51 || lr == 53 || lr == 54) {
-            step = 0.0f;
         } else if (lr >= 33) {
             step = 0.02f;
         }
-        if (step > 0.0f) {
-            const float v = getRowNormalized(lr);
-            setRowFromNormalized(lr, v + static_cast<float>(dir) * step);
-        }
+        const float v = getRowNormalized(lr);
+        setRowFromNormalized(lr, v + static_cast<float>(dir) * step);
     };
 
-    if (input.KeyPress(SDLK_EQUALS) || input.KeyPress(SDLK_PLUS) || input.KeyPress(SDLK_KP_PLUS)) {
-        nudgeRowKeyboard(logicalRowAtSlot(focusedSlot), +1);
-    }
-    if (input.KeyPress(SDLK_MINUS) || input.KeyPress(SDLK_KP_MINUS)) {
-        nudgeRowKeyboard(logicalRowAtSlot(focusedSlot), -1);
+    if (entryIsRow(focusedEntry)) {
+        const int lr = entries[static_cast<size_t>(focusedEntry)].row;
+        if (input.KeyPress(SDLK_EQUALS) || input.KeyPress(SDLK_PLUS) || input.KeyPress(SDLK_KP_PLUS)) {
+            nudgeRowKeyboard(lr, +1);
+        }
+        if (input.KeyPress(SDLK_MINUS) || input.KeyPress(SDLK_KP_MINUS)) {
+            nudgeRowKeyboard(lr, -1);
+        }
     }
 
     const int mx = input.GetMouseX();
     const int my = input.GetMouseY();
 
     if (input.MousePress(LEFT_MOUSE_BUTTON)) {
-        float n = 0.0f;
-        for (int s = 0; s < nSlots; s++) {
-            if (rowButtonHit(mx, my, panelLeft, panelW, s)) {
-                const int lr = logicalRowAtSlot(s);
-                if (isButtonRow(lr)) {
-                    createLightRequested = true;
-                } else if (isToggleRow(lr)) {
-                    flipToggleRow(lr);
+        const int hit = entryAtPoint(mx, my);
+        if (hit >= 0) {
+            focusedEntry = hit;
+            const Entry& e = entries[static_cast<size_t>(hit)];
+            dragEntry = -1;
+            if (isButtonRow(e.row)) {
+                createLightRequested = true;
+            } else if (isToggleRow(e.row)) {
+                // Clique em QUALQUER ponto da linha, nao so dentro da caixinha:
+                // a caixa tem 14 px de lado e acertar-lhe era um exercicio.
+                flipToggleRow(e.row);
+            } else {
+                const SDL_Rect bar = barRectOf(e);
+                dragEntry = hit;
+                if (bar.w > 0) {
+                    setRowFromNormalized(e.row, static_cast<float>(mx - bar.x) / static_cast<float>(bar.w));
                 }
-                focusedSlot = s;
-                dragSlot = -1;
-                break;
-            }
-            if (barHit(mx, my, windowW, panelLeft, panelW, s, &n)) {
-                dragSlot = s;
-                setRowFromNormalized(logicalRowAtSlot(s), n);
-                focusedSlot = s;
-                break;
             }
         }
     }
     if (input.MouseRelease(LEFT_MOUSE_BUTTON)) {
-        dragSlot = -1;
+        dragEntry = -1;
     }
-    if (dragSlot >= 0 && input.IsMouseDown(LEFT_MOUSE_BUTTON)) {
-        float n = 0.0f;
-        if (barHit(mx, my, windowW, panelLeft, panelW, dragSlot, &n)) {
-            setRowFromNormalized(logicalRowAtSlot(dragSlot), n);
-        } else {
-            // Keep updating from horizontal position while dragging (cursor often leaves the thin bar vertically).
-            const int bx = panelLeft + kPadX;
-            const int bw = std::max(20, panelW - kPadX * 2);
-            if (!isButtonRow(logicalRowAtSlot(dragSlot)) && !isToggleRow(logicalRowAtSlot(dragSlot)) && mx >= bx &&
-                mx <= bx + bw) {
-                n = static_cast<float>(mx - bx) / static_cast<float>(bw);
-                setRowFromNormalized(logicalRowAtSlot(dragSlot), n);
-            }
+    if (dragEntry >= 0 && entryIsRow(dragEntry) && input.IsMouseDown(LEFT_MOUSE_BUTTON)) {
+        // O cursor sai da barra (que e fina) mal se comeca a arrastar, por isso
+        // so a posicao HORIZONTAL conta enquanto o botao estiver em baixo.
+        const Entry& e = entries[static_cast<size_t>(dragEntry)];
+        const SDL_Rect bar = barRectOf(e);
+        if (bar.w > 0) {
+            setRowFromNormalized(e.row, static_cast<float>(mx - bar.x) / static_cast<float>(bar.w));
         }
     }
 
     SDL_Renderer* r = Game::GetInstance().GetRenderer();
     if (r) {
-        for (int lr : activeRows) {
-            rebuildRowLabel(r, lr);
+        for (const Entry& e : entries) {
+            if (e.row >= 0) {
+                rebuildRowText(r, e.row);
+            }
         }
     }
 }
 
-bool LightTweakPanel::ConsumeCreateLightRequest() {
-    const bool requested = createLightRequested;
-    createLightRequested = false;
-    return requested;
+// ── Desenho ─────────────────────────────────────────────────────────────────
+
+namespace {
+
+void fillRect(SDL_Renderer* r, const SDL_Rect& box, Uint8 cr, Uint8 cg, Uint8 cb, Uint8 ca) {
+    SDL_SetRenderDrawColor(r, cr, cg, cb, ca);
+    SDL_RenderFillRect(r, &box);
 }
 
+void frameRect(SDL_Renderer* r, const SDL_Rect& box, Uint8 cr, Uint8 cg, Uint8 cb, Uint8 ca) {
+    SDL_SetRenderDrawColor(r, cr, cg, cb, ca);
+    SDL_RenderDrawRect(r, &box);
+}
+
+} // namespace
+
 void LightTweakPanel::Render(SDL_Renderer* renderer, int windowW, int windowH) {
-    if (!visible || !renderer) {
+    if (!visible || !renderer || entries.empty()) {
         return;
     }
-    lastWinH = std::max(240, windowH);
-    const int rowH = rowHeight();
-    const int barDy = barOffsetY();
-
-    int panelLeft = 0;
-    int panelW = 0;
-    layoutPanel(windowW, panelLeft, panelW);
-
-    const int ptop = 6;
-    const int nSlots = slotCount();
-    const int pheight = kFirstRowY + std::max(1, nSlots) * rowH + 16;
+    layoutEntries(windowW, windowH);
+    if (headerText.size() != entries.size()) {
+        for (CachedText& t : headerText) {
+            freeText(t);
+        }
+        headerText.assign(entries.size(), CachedText{});
+    }
 
     SDL_BlendMode oldBm;
     SDL_GetRenderDrawBlendMode(renderer, &oldBm);
     Uint8 dr, dg, db, da;
     SDL_GetRenderDrawColor(renderer, &dr, &dg, &db, &da);
-
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, 12, 12, 18, 210);
-    SDL_FRect panelBg{(float)panelLeft, (float)ptop, (float)panelW, (float)pheight};
-    SDL_RenderFillRectF(renderer, &panelBg);
 
-    SDL_SetRenderDrawColor(renderer, 60, 60, 78, 255);
-    SDL_FRect border{(float)panelLeft, (float)ptop, (float)panelW, (float)pheight};
-    SDL_RenderDrawRectF(renderer, &border);
+    fillRect(renderer, panelBox, 14, 15, 21, 232);
+    frameRect(renderer, panelBox, 74, 78, 98, 255);
 
-    char title[112];
+    // ── Barra de titulo ─────────────────────────────────────────────────────
+    const SDL_Rect titleBar{panelBox.x + 1, panelBox.y + 1, panelBox.w - 2, kTitleH - 2};
+    fillRect(renderer, titleBar, 30, 33, 46, 255);
+    char title[128];
     if (page == 1) {
-        std::snprintf(title, sizeof(title), "Campo de visao / PB   \\=luz  P=ocultar");
+        std::snprintf(title, sizeof(title), "Campo de visao");
     } else {
-        std::snprintf(title, sizeof(title), "Afina luz [%s]  K=forma \\=visao", shapeName());
+        std::snprintf(title, sizeof(title), "Luz e sombra  [%s]", shapeName());
     }
-    auto font = Resources::GetFont("Recursos/font/times.ttf", 15);
-    if (font) {
-        SDL_Color tc{255, 240, 200, 255};
-        SDL_Surface* ts = TTF_RenderUTF8_Blended(font.get(), title, tc);
-        if (ts) {
-            SDL_Texture* tt = SDL_CreateTextureFromSurface(renderer, ts);
-            SDL_FreeSurface(ts);
-            if (tt) {
-                int tw = 0;
-                int th = 0;
-                SDL_QueryTexture(tt, nullptr, nullptr, &tw, &th);
-                const int maxTw = panelW - 12;
-                if (tw > maxTw) {
-                    th = (th * maxTw) / tw;
-                    tw = maxTw;
-                }
-                SDL_Rect dst{panelLeft + 6, ptop + 4, tw, th};
-                SDL_RenderCopy(renderer, tt, nullptr, &dst);
-                SDL_DestroyTexture(tt);
-            }
-        }
+    if (ensureText(renderer, titleText, title, 16, SDL_Color{255, 226, 168, 255})) {
+        blit(renderer, titleText, titleBar.x + 10, titleBar.y + (titleBar.h - titleText.h) / 2, titleBar.w - 20);
     }
-
-    for (int s = 0; s < nSlots; s++) {
-        const int lr = logicalRowAtSlot(s);
-        const int y = kFirstRowY + s * rowH;
-        const int bx = panelLeft + kPadX;
-        const int bw = std::max(20, panelW - kPadX * 2);
-        const int by = y + barDy;
-
-        if (s == focusedSlot) {
-            SDL_SetRenderDrawColor(renderer, 70, 90, 120, 120);
-            SDL_FRect hi{(float)(panelLeft + 2), (float)(y - 2), (float)(panelW - 4), (float)(rowH - 4)};
-            SDL_RenderFillRectF(renderer, &hi);
-        }
-
-        if (rowLabelTex[lr]) {
-            SDL_Rect tdst{panelLeft + 4, y, rowLabelW[lr], rowLabelH[lr]};
-            if (tdst.w > panelW - 8) {
-                tdst.w = panelW - 8;
-            }
-            SDL_RenderCopy(renderer, rowLabelTex[lr], nullptr, &tdst);
-        }
-
-        if (isButtonRow(lr)) {
-            SDL_SetRenderDrawColor(renderer, 48, 82, 58, 255);
-            const int btnDy = std::max(2, rowH / 3);
-            SDL_FRect button{(float)bx, (float)(y + btnDy), (float)bw, (float)std::max(12, rowH - btnDy - 3)};
-            SDL_RenderFillRectF(renderer, &button);
-            SDL_SetRenderDrawColor(renderer, 100, 170, 120, 255);
-            SDL_RenderDrawRectF(renderer, &button);
-        } else if (isToggleRow(lr)) {
-            const float cbSize = std::min(18.0f, std::max(10.0f, rowH - 8.0f));
-            const float cbX = (float)bx;
-            const float cbY = (float)(y + rowH / 2.0f - cbSize / 2.0f);
-            SDL_SetRenderDrawColor(renderer, 40, 40, 52, 255);
-            const SDL_FRect cbBg{cbX, cbY, cbSize, cbSize};
-            SDL_RenderFillRectF(renderer, &cbBg);
-            SDL_SetRenderDrawColor(renderer, 130, 130, 160, 255);
-            SDL_RenderDrawRectF(renderer, &cbBg);
-            if (toggleRowValue(lr)) {
-                SDL_SetRenderDrawColor(renderer, 90, 210, 120, 255);
-                const SDL_FRect cbCheck{cbX + 4.0f, cbY + 4.0f, cbSize - 8.0f, cbSize - 8.0f};
-                SDL_RenderFillRectF(renderer, &cbCheck);
-            }
+    // Marcador da pagina activa, encostado a direita do titulo.
+    for (int i = 0; i < kPageCount; i++) {
+        const SDL_Rect dot{titleBar.x + titleBar.w - 12 - (kPageCount - 1 - i) * 14,
+                           titleBar.y + titleBar.h / 2 - 3, 7, 7};
+        if (i == page) {
+            fillRect(renderer, dot, 255, 214, 140, 255);
         } else {
-            const float n = std::max(0.0f, std::min(1.0f, getRowNormalized(lr)));
-            SDL_SetRenderDrawColor(renderer, 40, 40, 52, 255);
-            SDL_FRect track{(float)bx, (float)by, (float)bw, (float)kBarH};
-            SDL_RenderFillRectF(renderer, &track);
-
-            SDL_SetRenderDrawColor(renderer, 120, 200, 255, 255);
-            SDL_FRect fill{(float)bx, (float)by, std::max(1.0f, n * (float)bw), (float)kBarH};
-            SDL_RenderFillRectF(renderer, &fill);
+            frameRect(renderer, dot, 120, 124, 148, 255);
         }
+    }
+
+    // ── Linhas ──────────────────────────────────────────────────────────────
+    for (size_t i = 0; i < entries.size(); i++) {
+        const Entry& e = entries[i];
+
+        if (e.row < 0) {
+            const SDL_Color hc{150, 178, 214, 255};
+            if (ensureText(renderer, headerText[i], e.header ? e.header : "", 13, hc)) {
+                blit(renderer, headerText[i], e.box.x + 2, e.box.y + e.box.h - headerText[i].h - 5, e.box.w - 4);
+            }
+            const SDL_Rect rule{e.box.x + 2, e.box.y + e.box.h - 3, e.box.w - 4, 1};
+            fillRect(renderer, rule, 68, 80, 104, 255);
+            continue;
+        }
+
+        if (static_cast<int>(i) == focusedEntry) {
+            const SDL_Rect hi{e.box.x, e.box.y, e.box.w, e.box.h};
+            fillRect(renderer, hi, 62, 84, 120, 110);
+            const SDL_Rect tick{e.box.x, e.box.y, 3, e.box.h};
+            fillRect(renderer, tick, 255, 214, 140, 255);
+        }
+
+        // Centra o texto no espaco que sobra ACIMA da barra, para o nome e a
+        // barra nunca se tocarem quando a linha encolhe.
+        const int textH = std::max(rowName[e.row].h, rowValue[e.row].h);
+        const int textY = e.box.y + std::max(1, (e.box.h - kBarH - 5 - textH) / 2);
+        int nameX = e.box.x + kPadX;
+        int nameMaxW = e.box.w - kPadX * 2;
+
+        if (isToggleRow(e.row)) {
+            const int cb = std::min(15, std::max(11, rowH - 14));
+            const SDL_Rect boxRect{e.box.x + kPadX, e.box.y + (e.box.h - cb) / 2, cb, cb};
+            fillRect(renderer, boxRect, 26, 28, 38, 255);
+            frameRect(renderer, boxRect, 140, 144, 172, 255);
+            if (toggleRowValue(e.row)) {
+                const SDL_Rect mark{boxRect.x + 3, boxRect.y + 3, cb - 6, cb - 6};
+                fillRect(renderer, mark, 120, 220, 150, 255);
+            }
+            nameX = boxRect.x + cb + 7;
+            nameMaxW = e.box.x + e.box.w - kPadX - nameX;
+            blit(renderer, rowName[e.row], nameX, e.box.y + (e.box.h - rowName[e.row].h) / 2, nameMaxW);
+            continue;
+        }
+
+        if (isButtonRow(e.row)) {
+            const SDL_Rect btn{e.box.x + kPadX, e.box.y + 3, e.box.w - kPadX * 2, e.box.h - 7};
+            fillRect(renderer, btn, 48, 82, 58, 255);
+            frameRect(renderer, btn, 104, 176, 124, 255);
+            blit(renderer, rowName[e.row], btn.x + std::max(6, (btn.w - rowName[e.row].w) / 2),
+                 btn.y + (btn.h - rowName[e.row].h) / 2, btn.w - 12);
+            continue;
+        }
+
+        // Linha normal: nome a esquerda, valor a direita, barra por baixo.
+        const int valueW = rowValue[e.row].w;
+        blit(renderer, rowName[e.row], nameX, textY, std::max(20, nameMaxW - valueW - 8));
+        if (valueW > 0) {
+            blit(renderer, rowValue[e.row], e.box.x + e.box.w - kPadX - valueW, textY, valueW);
+        }
+
+        const SDL_Rect bar = barRectOf(e);
+        if (bar.w > 0) {
+            fillRect(renderer, bar, 34, 36, 48, 255);
+            frameRect(renderer, bar, 58, 62, 80, 255);
+            const float n = std::max(0.0f, std::min(1.0f, getRowNormalized(e.row)));
+            SDL_Rect fill{bar.x, bar.y, std::max(1, static_cast<int>(n * bar.w)), bar.h};
+            fillRect(renderer, fill, 122, 196, 255, 255);
+            // Pega: diz onde agarrar, e onde esta o valor quando a barra esta
+            // quase vazia ou quase cheia.
+            const SDL_Rect grip{bar.x + std::min(bar.w - 3, std::max(0, fill.w - 2)), bar.y - 2, 3, bar.h + 4};
+            fillRect(renderer, grip, 240, 246, 255, 255);
+        }
+    }
+
+    // ── Rodape com as teclas ────────────────────────────────────────────────
+    const SDL_Rect foot{panelBox.x + 1, panelBox.y + panelBox.h - kFootH - 1, panelBox.w - 2, kFootH};
+    fillRect(renderer, foot, 24, 26, 36, 255);
+    const char* footStr = (page == 1) ? "\\ fecha   P muda de pagina   setas escolhem   +/- afinam"
+                                      : "\\ fecha   P muda de pagina   K muda a forma   +/- afinam";
+    if (ensureText(renderer, footText, footStr, 12, SDL_Color{150, 154, 176, 255})) {
+        blit(renderer, footText, foot.x + 10, foot.y + (foot.h - footText.h) / 2, foot.w - 20);
     }
 
     SDL_SetRenderDrawBlendMode(renderer, oldBm);
