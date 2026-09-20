@@ -36,6 +36,7 @@ int Game::sfxVolumePercent = Game::SFX_VOLUME_PERCENT;
 int Game::voiceVolumePercent = Game::VOICE_VOLUME_PERCENT;
 int Game::brightnessPercent = 100;
 bool Game::fullscreen = false;
+bool Game::captureWindowMode = false;
 bool Game::reduceFlashing = false;
 bool Game::debugMode = false;
 int Game::displayMode = 0;        // 0 = sem bordas (padrão seguro)
@@ -236,6 +237,49 @@ void Game::SetFullscreen(bool on) {
     if (instance && instance->window) {
         SDL_SetWindowFullscreen(instance->window, on ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
     }
+}
+
+// ── MODO DE GRAVACAO ────────────────────────────────────────────────────────
+// Ver a nota em Game.h. O tamanho LOGICO de render nao muda (o SDL continua a
+// escalar com SDL_RenderSetLogicalSize), por isso camara, HUD, rato e o filtro
+// do campo de visao trabalham exatamente com os mesmos numeros. So a janela
+// fisica encolhe.
+void Game::SetCaptureWindowMode(bool on) {
+    captureWindowMode = on;
+    if (!instance || !instance->window) {
+        return;
+    }
+    SDL_Window* w = instance->window;
+    if (on) {
+        SDL_SetWindowFullscreen(w, 0);
+
+        // 85% do ecra. O que conta e NAO cobrir o ecra todo: basta isso para o
+        // Windows deixar de a promover a "independent flip".
+        int px = 1280;
+        int py = 720;
+        int display = SDL_GetWindowDisplayIndex(w);
+        if (display < 0) {
+            display = 0;
+        }
+        SDL_DisplayMode dm;
+        SDL_zero(dm);
+        if (SDL_GetDesktopDisplayMode(display, &dm) == 0 && dm.w > 0 && dm.h > 0) {
+            px = static_cast<int>(dm.w * 0.85f);
+            py = static_cast<int>(dm.h * 0.85f);
+        }
+        SDL_SetWindowBordered(w, SDL_TRUE);
+        SDL_SetWindowSize(w, px, py);
+        SDL_SetWindowPosition(w, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+        fullscreen = false;
+    } else {
+        SDL_SetWindowFullscreen(w, SDL_WINDOW_FULLSCREEN_DESKTOP);
+        fullscreen = true;
+    }
+    SDL_ShowCursor(SDL_DISABLE);   // o SDL volta a mostrar o cursor ao trocar de modo
+}
+
+void Game::ToggleCaptureWindowMode() {
+    SetCaptureWindowMode(!captureWindowMode);
 }
 
 int Game::DisplayModeCount() { return kDisplayModeCount; }
@@ -589,6 +633,14 @@ Game::Game(std::string title) {
 
     SDL_ShowCursor(SDL_DISABLE);   // esconde o cursor do mouse (o mouse ainda mira a lanterna)
 
+    // Arranque ja em modo de gravacao: TLL_WINDOW_MODE=windowed. Util para
+    // gravar sem ter de carregar em F11 depois de o jogo abrir.
+    if (const char* wm = SDL_getenv("TLL_WINDOW_MODE")) {
+        if (SDL_strcasecmp(wm, "windowed") == 0) {
+            captureWindowMode = true;
+        }
+    }
+
     // Resolução LÓGICA de render = resolução escolhida. O SDL escala esse alvo
     // para preencher a tela cheia sem bordas (com letterbox se o aspecto diferir).
     SDL_RenderSetLogicalSize(renderer, resW, resH);
@@ -602,6 +654,11 @@ Game::Game(std::string title) {
     windowsHeight = resH;
     frameStart = 0;
     dt = 0.0f;
+
+    // So agora, com `instance` e `window` prontos, a janela pode mudar de modo.
+    if (captureWindowMode) {
+        SetCaptureWindowMode(true);
+    }
 }
 
 // Destrutor
@@ -698,6 +755,12 @@ void Game::Run() {
         CalculateDeltaTime();
         InputManager::GetInstance().Update();
 
+        // F11: janela de gravacao <-> tela cheia sem bordas. Global, funciona em
+        // qualquer estado (ver a nota de `captureWindowMode` em Game.h).
+        if (InputManager::GetInstance().KeyPress(SDLK_F11)) {
+            ToggleCaptureWindowMode();
+        }
+
         // Gerencia Pilha (Pop)
         if (stateStack.top()->PopRequested()) {
             stateStack.pop();
@@ -720,4 +783,4 @@ void Game::Run() {
             SDL_RenderPresent(renderer);
         }
     }
-}
+}

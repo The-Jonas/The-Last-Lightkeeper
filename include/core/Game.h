@@ -57,6 +57,20 @@ public:
     static void SetVoiceVolume(int percent);
     static void SetBrightness(int percent);
     static void SetFullscreen(bool on);
+
+    // ── MODO DE GRAVACAO (OBS) ───────────────────────────────────────────────
+    // Uma janela que cobre o ecra INTEIRO e promovida pelo Windows a
+    // "independent flip": os frames vao direitos para o monitor e o DWM deixa
+    // de ter uma copia da janela. Qualquer captura (Window Capture ou Display
+    // Capture) congela no ultimo frame composto enquanto o jogo tem o foco.
+    // Com o backend OpenGL (preciso para o filtro do campo de visao) isto
+    // acontece sempre; com o antigo direct3d nao acontecia.
+    // Este modo poe a janela mais pequena do que o ecra — deixa de ser
+    // promovida, o DWM volta a compo-la e a captura funciona com o foco no
+    // jogo. Alterna-se com F11 (ou arranca ligado com TLL_WINDOW_MODE=windowed).
+    static bool captureWindowMode;
+    static void SetCaptureWindowMode(bool on);
+    static void ToggleCaptureWindowMode();
     // Volume da música/fundo constante = master × "Fundo" (ambientVolumePercent).
     // 0..MIX_MAX_VOLUME. Toda música de fundo deve usar isto (não o master puro).
     static int MusicVolume();
@@ -115,4 +129,4 @@ private:
     
 };
 
-#endif //GAME_H
+#endif //GAME_H
