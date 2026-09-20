@@ -403,6 +403,11 @@ void WriteReport(EXCEPTION_POINTERS* ep, const char* reason) {
 #ifndef CRASH_HANDLER_NO_DBGHELP
     WriteStackTrace(f, ep ? ep->ContextRecord : nullptr);
 #else
+    // Sem dbghelp nao ha call stack, mas os registadores e a base do modulo NAO
+    // dependem dele — so de windows.h. Sao a parte que torna o relatorio
+    // utilizavel: com "RVA = endereco - base" o addr2line resolve o sitio exato
+    // do crash a partir dos simbolos DWARF que o -g deixa no binario.
+    WriteRegisters(f, ep ? ep->ContextRecord : nullptr);
     std::fputs("\n===== Pilha de chamadas =====\n", f);
     std::fputs("(stack trace indisponivel em build MinGW)\n", f);
 #endif
