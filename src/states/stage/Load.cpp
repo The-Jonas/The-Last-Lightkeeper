@@ -1,5 +1,6 @@
 #include "world/SpawnFactory.h"
 #include "states/stage/StageState.h"
+#include "lighting/LightTweakStore.h"
 #include "states/stage/FirstLoadData.h"
 #include "states/stage/InternalHelpers.h"
 #include "audio/GameSfx.h"
@@ -65,6 +66,11 @@ StageState::StageState(LoadMode mode) : loadMode(mode) {
     fpsUiRefreshTimer = 0.0f;
     radialGeometry = nullptr;
     lightMaskShape = LightMaskShape::Torch;
+    // Valores do painel `\` gravados na sessao anterior. NAO constroi nada de
+    // raiz: escreve por cima dos defaults, e sem ficheiro fica tudo como esta.
+    // Tem de ser aqui, antes de `LoadAssets` construir a fase — cada luz criada
+    // copia `lightMaskParams` no momento em que nasce.
+    LightTweakStore::Load(lightMaskParams, lightMaskShape, visionParams, tweakDurabilityOnLoad);
     lightTweakPanel.reset();
     tileMapComp = nullptr;
     staticShadowEdges.clear();
@@ -199,6 +205,7 @@ void StageState::LoadAssets() {
 
     if (!lightTweakPanel) {
         lightTweakPanel = std::make_unique<LightTweakPanel>(lightMaskParams, lightMaskShape, &visionParams);
+        lightTweakPanel->durabilityEnabled = tweakDurabilityOnLoad;
     }
 
     levelWorldW = cfg.navWorldW;

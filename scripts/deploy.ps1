@@ -107,6 +107,15 @@ if ($settingsSrc) {
     Copy-Item $settingsSrc (Join-Path $distConfig 'settings.json') -Force
 }
 
+# config/lighting.json: valores do painel de afinacao (tecla \). Opcional — sem
+# ele o jogo usa os defaults compilados.
+$lightingSrc = Join-Path $repoRoot 'config\lighting.json'
+if (Test-Path $lightingSrc) {
+    Copy-Item $lightingSrc (Join-Path $distConfig 'lighting.json') -Force
+} else {
+    Write-Host "    (config\lighting.json ausente; o jogo usara os valores de fabrica da luz)"
+}
+
 # readme (tracked template)
 $readme = Join-Path $repoRoot 'deploy\LEIA-ME.txt'
 if (Test-Path $readme) {
