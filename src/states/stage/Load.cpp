@@ -151,6 +151,18 @@ StageState::~StageState(){
     }
 }
 
+// Zoom-base + limites do mundo. Os limites vem da ARTE do nivel: sem eles,
+// afastar a camera deixaria ver o vazio preto para la das bordas pintadas.
+void StageState::ApplyCameraFraming(bool snap) {
+    float worldMinX = 0.0f, worldMinY = 0.0f, worldMaxX = 0.0f, worldMaxY = 0.0f;
+    if (level.GetWorldBounds(worldMinX, worldMinY, worldMaxX, worldMaxY)) {
+        Camera::SetWorldBounds(worldMinX, worldMinY, worldMaxX, worldMaxY);
+    } else {
+        Camera::ClearWorldBounds();
+    }
+    Camera::SetBaseZoom(visionParams.cameraZoom, snap);
+}
+
 void StageState::LoadAssets() {
 
     const StageFirstLoadData cfg = LoadStageFirstLoadData();
@@ -163,6 +175,10 @@ void StageState::LoadAssets() {
     const LevelDef& levelDef = GetLevelDef(cfg, currentLevelIndex);
     level.LoadLevel(levelDef.mapPath, Game::GetInstance().GetRenderer());
     mapOrigin = Vec2(0,0);
+
+    // Enquadramento da fase (zoom afastado + limites do mapa). `snap` porque o
+    // nivel entra ja no zoom final, sem animacao no primeiro frame.
+    ApplyCameraFraming(true);
 
     navTilePx = cfg.navTilePx;
     navGridWidthTiles = static_cast<int>(std::ceil(cfg.navWorldW / static_cast<float>(navTilePx)));

@@ -389,8 +389,8 @@ void RadialLightOverlay::RenderMany(SDL_Renderer* renderer, int windowW, int win
                 const float px = std::min(static_cast<float>(passW), x * stepX);
                 const float py = std::min(static_cast<float>(passH), y * stepY);
                 // Parte do ESCURO AMBIENTE, nao do preto puro: onde nao chega luz
-                // nenhuma a cena fica escura mas ainda legivel (o filtro
-                // preto-e-branco do ScenePostFx trata da cor).
+                // nenhuma a cena fica escura mas ainda legivel (o desfoque do
+                // ScenePostFx trata de a afastar do campo de visao).
                 float alpha = ambientMax;
                 float torchWarm = 0.0f;
                 float torchWarmth = 0.0f;
@@ -433,10 +433,13 @@ void RadialLightOverlay::RenderMany(SDL_Renderer* renderer, int windowW, int win
                         torchWarmth = std::max(torchWarmth, light.tintWarmth);
                     }
                 }
+                // O tom da propria malha. Fica de proposito discreto: e cor
+                // multiplicada pelo alfa da escuridao, portanto so aparece na
+                // ORLA da luz. O amarelo forte vem do disco aditivo abaixo.
                 const float warm = std::max(0.0f, std::min(1.0f, torchWarm));
-                const Uint8 vr = static_cast<Uint8>(std::lround((42.0f + 36.0f * torchWarmth) * warm));
-                const Uint8 vg = static_cast<Uint8>(std::lround((12.0f + 10.0f * torchWarmth) * warm));
-                const Uint8 vb = static_cast<Uint8>(std::lround((2.0f + 4.0f * torchWarmth) * warm));
+                const Uint8 vr = static_cast<Uint8>(std::lround(std::min(255.0f, (52.0f + 44.0f * torchWarmth) * warm)));
+                const Uint8 vg = static_cast<Uint8>(std::lround(std::min(255.0f, (16.0f + 13.0f * torchWarmth) * warm)));
+                const Uint8 vb = static_cast<Uint8>(std::lround(std::min(255.0f, (2.0f + 4.0f * torchWarmth) * warm)));
                 verts.push_back({{px, py}, {vr, vg, vb, static_cast<Uint8>(std::max(0.0f, std::min(255.0f, alpha)))}, {0, 0}});
             }
         }
@@ -452,12 +455,18 @@ void RadialLightOverlay::RenderMany(SDL_Renderer* renderer, int windowW, int win
             const TorchAnimState anim = ComputeTorchAnim(light.params, timeSec, light.seed);
             const float cx = light.x + anim.swayX * 0.25f;
             const float cy = light.y + anim.swayY * 0.18f;
-            const float rr = std::max(20.0f, light.rFalloff * (0.42f + 0.12f * (anim.radialMul - 1.0f)));
+            // `torchGlowStrength` sobe o amarelo; `torchGlowRadiusScale` espalha-o.
+            // Os tectos ficam altos de proposito: sem eles o parametro saturava
+            // logo no principio do curso e o utilizador nao via diferenca.
+            const float glowMul = std::max(0.0f, std::min(4.0f, light.params.torchGlowStrength));
+            const float glowSpan = std::max(0.05f, std::min(1.60f, light.params.torchGlowRadiusScale));
+            const float rr = std::max(20.0f, light.rFalloff * (glowSpan + 0.12f * (anim.radialMul - 1.0f)));
             const float warm = light.tintWarmth;
-            const Uint8 cr = static_cast<Uint8>(std::min(255.0f, (185.0f + 48.0f * warm) * light.tintStrength));
-            const Uint8 cg = static_cast<Uint8>(std::min(235.0f, (95.0f + 30.0f * warm) * light.tintStrength));
-            const Uint8 cb = static_cast<Uint8>(std::min(140.0f, (18.0f + 20.0f * warm) * light.tintStrength));
-            const Uint8 ca = static_cast<Uint8>(std::min(140.0f, 110.0f * light.tintStrength));
+            const float tint = light.tintStrength * glowMul;
+            const Uint8 cr = static_cast<Uint8>(std::min(255.0f, (185.0f + 48.0f * warm) * tint));
+            const Uint8 cg = static_cast<Uint8>(std::min(255.0f, (95.0f + 30.0f * warm) * tint));
+            const Uint8 cb = static_cast<Uint8>(std::min(200.0f, (18.0f + 20.0f * warm) * tint));
+            const Uint8 ca = static_cast<Uint8>(std::min(230.0f, 110.0f * tint));
 
             const int base = static_cast<int>(glowVerts.size());
             glowVerts.push_back({{cx, cy}, {cr, cg, cb, ca}, {0, 0}});

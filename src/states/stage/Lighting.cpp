@@ -184,8 +184,10 @@ void StageState::UpdateInventoryLight() {
 //   • um CONE apontado para onde o personagem olha (visao "para a frente");
 //   • um CIRCULO pequeno colado aos pes (o que ele alcanca sem olhar).
 // A malha de escuridao abre um buraco nestas duas formas (AppendVisionMaskLights)
-// e o ScenePostFx devolve a COR so dentro delas. Tudo o resto do ecra fica em
-// preto-e-branco, mesmo quando esta iluminado.
+// e o ScenePostFx marca-as no ecra: la dentro a imagem fica NITIDA e com um
+// realce de brilho e saturacao. Todo o resto do ecra continua a cores, mas
+// DESFOCADO — e o desfoque, e nao a falta de cor, que aponta para onde o
+// personagem olha.
 
 void StageState::UpdatePlayerVision(float dt) {
     visionFrame = PlayerVisionFrame{};
@@ -244,9 +246,12 @@ void StageState::UpdatePlayerVision(float dt) {
     const float dirX = std::cos(visionAxisRad);
     const float dirY = std::sin(visionAxisRad);
 
-    // Os parametros estao em pixels de MUNDO: multiplica pelo zoom para chegar a
-    // pixels de tela, senao o campo de visao encolhia quando a camera aproxima.
-    const float zoom = std::max(0.05f, Camera::GetZoom());
+    // Os parametros estao em pixels de MUNDO, mas o que se quer manter constante
+    // e o TAMANHO NO ECRA do campo de visao: a zoom-base ele fica exactamente
+    // como sempre foi, e afastar a camera passa a revelar MAIS MUNDO em vez de
+    // encolher o cone. Por isso a escala e zoom/zoom-base (que da 1.0 na
+    // zoom-base) e nao o zoom puro.
+    const float zoom = std::max(0.05f, Camera::GetZoom()) / std::max(0.05f, Camera::GetBaseZoom());
 
     const Rect& b = body->box;
     const Vec2 chestWorld(b.x + 0.5f * b.w, b.y + 0.55f * b.h);
@@ -268,6 +273,17 @@ void StageState::UpdatePlayerVision(float dt) {
         std::max(4.0f, std::min(visionParams.coneLengthFeatherPx, visionParams.coneLengthPx * 0.9f)) * zoom;
     visionFrame.footRadiusPx = std::max(8.0f, visionParams.footRadiusPx) * zoom;
     visionFrame.maskGamma = std::max(0.2f, std::min(12.0f, visionParams.maskFalloffGamma));
+    visionFrame.coneGamma = std::max(0.2f, std::min(16.0f, visionParams.coneEdgeGamma));
+
+    // ── Precisa de luz para ver ──────────────────────────────────────────────
+    // A rampa de proximidade parte dos PES do personagem controlado, nao do
+    // apice do cone: e a distancia a ele que conta, olhe ele para onde olhar.
+    visionFrame.requireLight = visionParams.requireLightToSee;
+    visionFrame.lightGamma = std::max(0.5f, std::min(12.0f, visionParams.lightPerceptionGamma));
+    visionFrame.unlitFadeRadiusPx = std::max(8.0f, visionParams.unlitFadeDistancePx) * zoom;
+    const Vec2 playerFoot = WorldToScreen(Vec2(b.x + 0.5f * b.w, b.y + b.h));
+    visionFrame.playerX = playerFoot.x;
+    visionFrame.playerY = playerFoot.y;
 
     // ── Visao periferica: um circulo nos pes de CADA irmao ───────────────────
     // O companheiro tambem gera luz, mesmo sem estar a ser controlado.
@@ -284,6 +300,117 @@ void StageState::UpdatePlayerVision(float dt) {
     };
     addFoot(bigCharacterObject);
     addFoot(smallCharacterObject);
+}
+
+// ============================================================================
+// LUZ REAL DISPONIVEL: "chega luz a este pixel?"
+// ============================================================================
+// O cone diz para onde o jogador OLHA. Sozinho nao chega: numa sala as escuras
+// ele nao distingue um jornal a dez metros so por estar virado para la. Por isso
+// reduzimos cada fonte de luz da cena a um CIRCULO (centro + alcance) e usamos
+// esses circulos como segundo factor. Um circulo e uma aproximacao grosseira das
+// formas cone/rectangulo, mas aqui so decide "ha claridade nesta zona", nao
+// desenha nada — a malha de escuridao continua a mandar no aspeto.
+void StageState::BuildVisionLights(const std::vector<RadialLightOverlay::ScreenLight>& screenLights) {
+    visionFrame.lightCount = 0;
+    if (!visionFrame.valid) {
+        return;
+    }
+
+    struct Sample {
+        float x;
+        float y;
+        float r;
+        float i;
+        float distSq;
+    };
+    std::vector<Sample> samples;
+    samples.reserve(screenLights.size());
+
+    const float reach = std::max(0.05f, std::min(4.0f, visionParams.lightReachScale));
+
+    for (const RadialLightOverlay::ScreenLight& sl : screenLights) {
+        // Alcance por forma. O circulo/tocha usam o mesmo `rUser` que o
+        // RadialLightOverlay calcula em RenderMany; o cone usa o comprimento; o
+        // rectangulo usa a maior meia-aresta mais a banda suave.
+        float radius = std::max(8.0f, sl.params.falloffRadiusPx) * sl.params.fatorDicaDeRaio;
+        if (sl.shape == LightMaskShape::Cone) {
+            radius = std::max(8.0f, sl.params.coneLengthPx);
+        } else if (sl.shape == LightMaskShape::SoftRect) {
+            radius = std::max(sl.params.rectHalfWidthPx, sl.params.rectHalfHeightPx) + sl.params.rectSoftBandPx;
+        }
+        radius *= reach;
+        if (radius < 1.0f) {
+            continue;
+        }
+
+        // `innerLift` e a fraccao da escuridao que a luz NAO remove no centro:
+        // uma luz com lift alto ilumina pouco e nao deve devolver a cor toda.
+        const float intensity = std::max(0.0f, std::min(1.0f, 1.0f - sl.params.innerLift));
+        if (intensity <= 0.01f) {
+            continue;
+        }
+
+        const float dx = sl.x - visionFrame.playerX;
+        const float dy = sl.y - visionFrame.playerY;
+        samples.push_back({sl.x, sl.y, radius, intensity, dx * dx + dy * dy});
+    }
+
+    // Ha mais luzes do que ranhuras no shader: fica com as MAIS PERTO do
+    // personagem, que sao as que decidem o que ele ve.
+    if (samples.size() > static_cast<size_t>(PlayerVisionFrame::kMaxLightSamples)) {
+        std::partial_sort(samples.begin(), samples.begin() + PlayerVisionFrame::kMaxLightSamples, samples.end(),
+                          [](const Sample& a, const Sample& b) { return a.distSq < b.distSq; });
+        samples.resize(static_cast<size_t>(PlayerVisionFrame::kMaxLightSamples));
+    }
+
+    for (const Sample& sm : samples) {
+        const int i = visionFrame.lightCount;
+        visionFrame.lightX[i] = sm.x;
+        visionFrame.lightY[i] = sm.y;
+        visionFrame.lightR[i] = sm.r;
+        visionFrame.lightI[i] = sm.i;
+        visionFrame.lightCount++;
+    }
+}
+
+// A regra completa e sempre GEOMETRIA x LUZ:
+//   • geometria — `VisionVisibilityAtScreen`: o ponto cai dentro do cone ou do
+//                 circulo dos pes, ou seja, o jogador esta virado para la;
+//   • luz       — o maior entre `LightAmountAtScreen` (chega claridade) e
+//                 `ProximityAtScreen` (esta ao alcance da mao).
+// Fora do campo de visao da zero: nao aparece nada. Dentro do campo de visao mas
+// as escuras e longe tambem tende para zero — e por isso que o FUNDO do cone fica
+// cinzento e os objetos la ao fundo se apagam.
+// SE MUDAR ESTAS CONTAS, MUDE TAMBEM NO SHADER (kFragmentSrc).
+float StageState::LightAmountAtScreen(const Vec2& screenPos) const {
+    // Os circulos dos pes contam como luz a serio: e a claridade que o proprio
+    // personagem traz consigo, e e o que faz um objeto encostado a ele aparecer.
+    float best = 0.0f;
+    const float footR = std::max(1.0f, visionFrame.footRadiusPx);
+    for (int i = 0; i < visionFrame.footCount && i < PlayerVisionFrame::kMaxFeet; i++) {
+        const float dx = screenPos.x - visionFrame.footX[i];
+        const float dy = screenPos.y - visionFrame.footY[i];
+        const float t = std::min(1.0f, std::sqrt(dx * dx + dy * dy) / footR);
+        best = std::max(best, 1.0f - std::pow(t, std::max(0.2f, visionFrame.maskGamma)));
+    }
+
+    const float gamma = std::max(0.5f, visionFrame.lightGamma);
+    for (int i = 0; i < visionFrame.lightCount && i < PlayerVisionFrame::kMaxLightSamples; i++) {
+        const float dx = screenPos.x - visionFrame.lightX[i];
+        const float dy = screenPos.y - visionFrame.lightY[i];
+        const float t = std::min(1.0f, std::sqrt(dx * dx + dy * dy) / std::max(1.0f, visionFrame.lightR[i]));
+        best = std::max(best, visionFrame.lightI[i] * (1.0f - std::pow(t, gamma)));
+    }
+    return std::max(0.0f, std::min(1.0f, best));
+}
+
+// SE MUDAR ESTA CONTA, MUDE TAMBEM NO SHADER (kFragmentSrc).
+float StageState::ProximityAtScreen(const Vec2& screenPos) const {
+    const float dx = screenPos.x - visionFrame.playerX;
+    const float dy = screenPos.y - visionFrame.playerY;
+    const float r = std::max(1.0f, visionFrame.unlitFadeRadiusPx);
+    return std::max(0.0f, std::min(1.0f, 1.0f - std::sqrt(dx * dx + dy * dy) / r));
 }
 
 // Mesma conta que o fragment shader do `ScenePostFx` faz para `vis` — e a mesma
@@ -319,7 +446,10 @@ float StageState::VisionVisibilityAtScreen(const Vec2& screenPos) const {
             const float angFade = std::max(0.0f, std::min(1.0f, (half + feather - angAbs) / feather));
             const float lenFade =
                 std::max(0.0f, std::min(1.0f, (L - fwd) / std::max(1.0f, visionFrame.lengthFeatherPx)));
-            best = std::max(best, (1.0f - std::pow(t, gamma)) * angFade * lenFade);
+            // `coneGamma` e nao `gamma`: o cone quer borda seca, os pes querem
+            // borda macia.
+            const float coneGamma = std::max(0.2f, visionFrame.coneGamma);
+            best = std::max(best, (1.0f - std::pow(t, coneGamma)) * angFade * lenFade);
         }
     }
     return std::max(0.0f, std::min(1.0f, best));
@@ -333,6 +463,13 @@ bool StageState::ShouldHideOutsideVision(GameObject& go) const {
     if (!visionParams.enabled) {
         return false;
     }
+    // Os castiçais sao a excepcao: o sprite fica SEMPRE visivel. Sao a
+    // referencia visual do andar (o jogador usa-os para se orientar e para
+    // saber o que ja acendeu), por isso so o filtro preto-e-branco os apanha
+    // quando estao fora do campo de visao.
+    if (go.GetComponent<Candlestick>() != nullptr) {
+        return false;
+    }
     if (go.GetComponent<ItemPickup>() != nullptr) {
         return visionParams.hideItemsOutsideVision;
     }
@@ -342,7 +479,7 @@ bool StageState::ShouldHideOutsideVision(GameObject& go) const {
     if (!visionParams.hideInteractablesOutsideVision) {
         return false;
     }
-    return go.GetComponent<Jornal>() != nullptr || go.GetComponent<Candlestick>() != nullptr ||
+    return go.GetComponent<Jornal>() != nullptr ||
            go.GetComponent<RadioAsset>() != nullptr || go.GetComponent<Repairable>() != nullptr ||
            go.GetComponent<Window>() != nullptr || go.GetComponent<Closet>() != nullptr;
 }
@@ -378,10 +515,20 @@ void StageState::AppendVisionMaskLights(std::vector<RadialLightOverlay::ScreenLi
     coneParams.innerLift = coneLift;
     coneParams.coneAxisDeg = visionAxisRad * 180.0f / static_cast<float>(M_PI);
     coneParams.coneHalfAngleDeg = visionFrame.halfAngleRad * 180.0f / static_cast<float>(M_PI);
-    coneParams.coneFeatherDeg = visionFrame.featherRad * 180.0f / static_cast<float>(M_PI);
     coneParams.coneLengthPx = visionFrame.lengthPx;
-    coneParams.coneLengthFeatherPx = visionFrame.lengthFeatherPx;
     coneParams.falloffRadiusPx = visionFrame.lengthPx;
+
+    // A BORDA DA MALHA FICA SEMPRE MACIA, mesmo com o cone estrito. A malha de
+    // escuridao e uma grelha grossa (~24 px) com cores interpoladas: um corte
+    // seco nela nao da um risco recto, da uma escada. Quem desenha o risco recto
+    // e o shader, que trabalha pixel a pixel. Aqui so interessa que a escuridao
+    // levante na zona certa; a borda em si fica por conta do filtro.
+    const float minFeatherRad = visionFrame.halfAngleRad * 0.08f;
+    const float minLengthFeatherPx = visionFrame.lengthPx * 0.10f;
+    coneParams.coneFeatherDeg =
+        std::max(visionFrame.featherRad, minFeatherRad) * 180.0f / static_cast<float>(M_PI);
+    coneParams.coneLengthFeatherPx = std::max(visionFrame.lengthFeatherPx, minLengthFeatherPx);
+    coneParams.falloffGamma = std::min(visionFrame.coneGamma, 5.0f);
     out.push_back({visionFrame.coneX, visionFrame.coneY, LightMaskShape::Cone, coneParams, 0.0f});
 
     // ── Circulos dos pes (um por irmao) ─────────────────────────────────────

@@ -336,6 +336,10 @@ private:
     void EnforceMaxDistance();                                           // Limita distância máxima entre os dois
     void SwapControlledCharacter();                                      // Troca personagem controlado
     void RefreshCameraTargets();                                         // Atualiza alvos da câmera (dupla + principal)
+    // Zoom-base + limites do mundo desta fase. Chamado ao carregar o nível
+    // (`snap`) e ao voltar de outro estado, porque o menu/loading devolvem a
+    // câmera ao neutro e é preciso reinstalar o enquadramento da fase.
+    void ApplyCameraFraming(bool snap);
     void UpdateHudInstructions();                                        // Mantém HUD no canto superior esquerdo
     void UpdateControlledCharacterVisuals();                             // Destaca visualmente quem está sob controle
     void CreateLightAtCursor();
@@ -444,14 +448,27 @@ private:
     /// escuridao. Nao sao fontes de luz: nao dao sombras nem contam para a
     /// sanidade.
     void AppendVisionMaskLights(std::vector<RadialLightOverlay::ScreenLight>& out) const;
-    /// Quanto do campo de visao cobre este ponto do ecra (0 = so camada
-    /// monocromatica, 1 = totalmente visivel). Repete a conta do shader.
+    /// Reduz as luzes REAIS deste frame a circulos de tela dentro do
+    /// `visionFrame`. Tem de correr DEPOIS de `screenLights` estar montado e
+    /// ANTES de desenhar os objetos e o `ScenePostFx`.
+    void BuildVisionLights(const std::vector<RadialLightOverlay::ScreenLight>& screenLights);
+    /// GEOMETRIA do campo de visao neste ponto do ecra: 0 = fora, 1 = no meio
+    /// do cone ou dos pes. Diz para onde o jogador olha, nao o que ele ve.
     float VisionVisibilityAtScreen(const Vec2& screenPos) const;
+    /// Quanta LUZ REAL chega a este ponto do ecra (0..1), a partir dos circulos
+    /// de `visionFrame`. Nao inclui o cone: o cone e visao, nao e lanterna.
+    float LightAmountAtScreen(const Vec2& screenPos) const;
+    /// Rampa LINEAR de proximidade ao personagem controlado: 1 colado a ele,
+    /// 0 a `unlitFadeDistancePx`. E o que deixa ver as coisas ao pe sem luz.
+    float ProximityAtScreen(const Vec2& screenPos) const;
     /// True quando este objeto e interagivel E a sua categoria esta marcada para
     /// desaparecer fora do campo de visao.
     bool ShouldHideOutsideVision(GameObject& go) const;
 
     std::unique_ptr<LightTweakPanel> lightTweakPanel;
+    /// `durabilityEnabled` lido de `config/lighting.json` no arranque. Fica
+    /// guardado aqui porque o painel so nasce em `LoadAssets`, muito depois.
+    bool tweakDurabilityOnLoad = true;
     std::vector<LightInstance> lights;
     TileMap* tileMapComp = nullptr;
     /// Quando não há `TileMap`, A* usa esta grade (mundo do estágio ≈ spawn em `LoadAssets`).

@@ -351,6 +351,9 @@ void StageState::Update(float dt){
         Camera::pos.x += nx * kFreeCamPanSpeed * dt;
         Camera::pos.y += ny * kFreeCamPanSpeed * dt;
     } else {
+        // O zoom-base vive nos parametros do painel `\`: empurra-se a cada frame
+        // para a barra do painel se sentir ao vivo. A `Camera` interpola sozinha.
+        Camera::SetBaseZoom(visionParams.cameraZoom);
         Camera::Update(dt);                                                             // Atualizando a camera cada iteração do gameloop
     }
 

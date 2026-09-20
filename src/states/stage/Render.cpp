@@ -215,7 +215,12 @@ void StageState::Render(){
                 const Vec2 midPt((bx.x + 0.5f * bx.w - Camera::pos.x) * z,
                                  (bx.y + 0.5f * bx.h - Camera::pos.y) * z);
                 const float d = std::min(footPt.Distance(lightScreen), midPt.Distance(lightScreen));
-                const float litRadius = std::max(8.0f, params.falloffRadiusPx) * z * kSanityLitRadiusFrac;
+                // `falloffRadiusPx` e o raio da luz EM PIXELS DE ECRA (e assim que
+                // a `RadialLightOverlay` o desenha), por isso a compensacao certa
+                // e zoom/zoom-base — que da 1.0 na zoom-base e mantem a bolha da
+                // sanidade casada com o buraco de luz VISIVEL a qualquer zoom.
+                const float zRatio = z / std::max(0.05f, Camera::GetBaseZoom());
+                const float litRadius = std::max(8.0f, params.falloffRadiusPx) * zRatio * kSanityLitRadiusFrac;
                 return Clamp01(1.0f - d / std::max(1.0f, litRadius));
             };
 
@@ -403,6 +408,11 @@ void StageState::Render(){
         }
     }
 
+    // Reduz as luzes deste frame a circulos de tela. Feito AQUI porque so agora
+    // `screenLights` existe, e antes de qualquer coisa perguntar "chega luz a
+    // este ponto?" — os objetos abaixo e o filtro preto-e-branco no fim.
+    BuildVisionLights(screenLights);
+
     // ===================================================================
     // 5. AGORA DESENHAMOS A LISTA ORDENADA INTEIRA SEM REGRAS
     // ===================================================================
@@ -413,15 +423,22 @@ void StageState::Render(){
         }
 
         // ── OBJETOS INTERAGIVEIS ─────────────────────────────────────────────
-        // Sob a camada monocromatica o objeto nao existe para o jogador: so
-        // aparece quando o campo de visao o alcanca. A transicao e suave para
-        // nao "piscar" quando o cone varre o chao. A interaccao NAO muda — o
-        // objeto continua a poder ser usado se o jogador chegar la.
+        // Olhar para um sitio as escuras nao chega: o objeto so aparece se
+        // houver LUZ ali ou se o personagem estiver mesmo ao pe dele. Longe e
+        // sem luz, a opacidade cai de forma LINEAR com a distancia, em vez de
+        // desaparecer de repente. A interaccao NAO muda — o objeto continua a
+        // poder ser usado se o jogador chegar la.
         SpriteRenderer* fadeSprite = nullptr;
         if (visionFrame.valid && ShouldHideOutsideVision(*go)) {
-            const float visAt = VisionVisibilityAtScreen(WorldToScreen(go->box.Center()));
+            const Vec2 goScreen = WorldToScreen(go->box.Center());
+            // Porta geometrica: o `reveal` faz o interior do campo de visao
+            // contar como 1 e so a borda dar valores intermedios.
             const float reveal = std::max(0.01f, visionParams.itemRevealThreshold);
-            const float shown = Clamp01(visAt / reveal);
+            const float gate = Clamp01(VisionVisibilityAtScreen(goScreen) / reveal);
+            float shown = gate;
+            if (visionParams.requireLightToSee) {
+                shown = gate * Clamp01(std::max(LightAmountAtScreen(goScreen), ProximityAtScreen(goScreen)));
+            }
             if (shown <= 0.01f) {
                 continue;
             }

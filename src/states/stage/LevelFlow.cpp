@@ -472,6 +472,9 @@ void StageState::TransitionToLevel(int targetLevelIndex) {
     const LevelDef& levelDef = GetLevelDef(cfg, currentLevelIndex);
     level.LoadLevel(levelDef.mapPath, Game::GetInstance().GetRenderer());
     level.escadaConsertada = false;
+    // A arte do novo andar tem outro retangulo: reinstala o enquadramento
+    // (zoom-base + limites) antes de o nivel comecar a desenhar.
+    ApplyCameraFraming(true);
 
     BuildLevelWorld(cfg, false);
     StartArray();

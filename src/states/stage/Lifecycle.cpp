@@ -85,6 +85,10 @@ void StageState::Pause() {
 }
 
 void StageState::Resume() {
+    // O menu/loading/cutscene devolvem a camera ao neutro (`Camera::ResetView`),
+    // por isso o enquadramento da fase tem de ser reinstalado ao voltar — senao
+    // a fase continuava sem limites de mundo ate ao proximo carregamento.
+    ApplyCameraFraming(true);
     ambientResumeDelay = 0.85f;
     GameSfx::NotifyLoadingEnd();
     GameVoice::NotifyLoadingEnd();

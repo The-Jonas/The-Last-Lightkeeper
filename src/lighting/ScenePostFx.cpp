@@ -55,6 +55,7 @@ struct GLFns {
     void (TLL_GLAPI* Uniform1f)(GLint_, GLfloat_) = nullptr;
     void (TLL_GLAPI* Uniform2f)(GLint_, GLfloat_, GLfloat_) = nullptr;
     void (TLL_GLAPI* Uniform3f)(GLint_, GLfloat_, GLfloat_, GLfloat_) = nullptr;
+    void (TLL_GLAPI* Uniform4fv)(GLint_, GLsizei_, const GLfloat_*) = nullptr;
     void (TLL_GLAPI* GetIntegerv)(GLenum_, GLint_*) = nullptr;
     GLboolean_ (TLL_GLAPI* IsEnabled)(GLenum_) = nullptr;
     void (TLL_GLAPI* Enable)(GLenum_) = nullptr;
@@ -104,6 +105,7 @@ const char* LoadGLFunctions() {
     TLL_LOAD(Uniform1f, "glUniform1f")
     TLL_LOAD(Uniform2f, "glUniform2f")
     TLL_LOAD(Uniform3f, "glUniform3f")
+    TLL_LOAD(Uniform4fv, "glUniform4fv")
     TLL_LOAD(GetIntegerv, "glGetIntegerv")
     TLL_LOAD(IsEnabled, "glIsEnabled")
     TLL_LOAD(Enable, "glEnable")
@@ -139,7 +141,7 @@ const char* kFragmentSrc =
     "uniform float uMonoLift;\n"
     "uniform vec3  uMonoTint;\n"
     "uniform float uMonoTintStrength;\n"
-    "uniform float uPixelSize;\n"
+    "uniform float uLightSharpen;\n"
     "uniform float uBlurPx;\n"
     "uniform float uVignetteStrength;\n"
     "uniform float uVignetteStart;\n"
@@ -155,7 +157,21 @@ const char* kFragmentSrc =
     "uniform float uFootCount;\n"
     "uniform float uFootRadius;\n"
     "uniform float uMaskGamma;\n"
+    "uniform float uConeGamma;\n"
+    "uniform float uMonoHighlight;\n"
+    "uniform float uMonoLightGlow;\n"
+    "uniform float uLightColor;\n"
+    /* Luzes REAIS da cena, reduzidas a circulos: xy = centro no ecra,
+       z = alcance em px, w = intensidade 0..1. As ranhuras que sobram vem com
+       w = 0 e nao pesam, por isso o ciclo nao precisa de contador nem de break
+       (GLSL 1.10 e esquisito com ciclos de limite variavel). */
+    "uniform vec4  uLights[8];\n"
+    "uniform float uLightGamma;\n"
+    "uniform vec2  uPlayerPos;\n"
+    "uniform float uUnlitFadeR;\n"
+    "uniform float uRequireLight;\n"
     "uniform float uVisionColorGain;\n"
+    "uniform float uVisionSat;\n"
     "uniform float uFlipV;\n"
     "\n"
     "/* Converte uma posicao logica de ecra (y para baixo) de volta para UV da\n"
@@ -163,6 +179,20 @@ const char* kFragmentSrc =
     "vec2 screenToUv(vec2 sp) {\n"
     "    vec2 n = clamp(sp / uResolution, 0.0, 1.0);\n"
     "    return vec2(n.x, uFlipV > 0.5 ? (1.0 - n.y) : n.y) * uTexScale;\n"
+    "}\n"
+    "\n"
+    "/* DESFOQUE. 17 amostras em dois aneis a volta do ponto, com pesos de\n"
+    "   gaussiana. Substitui o antigo mosaico de pixels grandes: a leitura fica\n"
+    "   macia (fora de foco) em vez de grosseira. `r` e o raio em px de ecra. */\n"
+    "vec3 blurAt(vec2 sp, float r) {\n"
+    "    vec3 acc = texture2D(uScene, screenToUv(sp)).rgb * 0.1476;\n"
+    "    for (int i = 0; i < 8; i++) {\n"
+    "        float a = float(i) * 0.7853981634;\n"
+    "        vec2 d = vec2(cos(a), sin(a));\n"
+    "        acc += texture2D(uScene, screenToUv(sp + d * r * 0.55)).rgb * 0.0662;\n"
+    "        acc += texture2D(uScene, screenToUv(sp + d * r)).rgb * 0.0403;\n"
+    "    }\n"
+    "    return acc;\n"
     "}\n"
     "\n"
     "void main() {\n"
@@ -175,11 +205,14 @@ const char* kFragmentSrc =
     "       SDL_RenderSetLogicalSize e com ecras HiDPI. */\n"
     "    vec2 p = vec2(uv.x, uFlipV > 0.5 ? (1.0 - uv.y) : uv.y) * uResolution;\n"
     "\n"
-    "    /* `vis` repete PASSO A PASSO a conta que a malha de escuridao faz para as\n"
-    "       mesmas formas (RadialLightOverlay::AlphaAt, curva Power, innerLift zero).\n"
-    "       Assim a cor volta exatamente onde a escuridao abre — se as duas contas\n"
-    "       divergissem aparecia um anel claro-mas-cinzento na borda. */\n"
+    "    /* `visGeo` repete PASSO A PASSO a conta que a malha de escuridao faz para\n"
+    "       as mesmas formas (RadialLightOverlay::AlphaAt, curva Power, innerLift\n"
+    "       zero). E o CAMPO DE VISAO puro: para onde o personagem esta virado.\n"
+    "       `vis` e o mesmo depois de multiplicado pela luz disponivel. */\n"
+    "    float visGeo = 0.0;\n"
     "    float vis = 0.0;\n"
+    "    float lightAmt = 0.0;\n"
+    "    float sceneLight = 0.0;\n"
     "    if (uVisionEnabled > 0.5) {\n"
     "        float foot = 1.0 - pow(clamp(length(p - uFoot0) / uFootRadius, 0.0, 1.0), uMaskGamma);\n"
     "        if (uFootCount > 1.5) {\n"
@@ -197,44 +230,90 @@ const char* kFragmentSrc =
     "                float t = max(min(1.0, fwd / uConeLen), min(1.0, angAbs / uConeHalf));\n"
     "                float angFade = clamp((uConeHalf + uConeFeather - angAbs) / uConeFeather, 0.0, 1.0);\n"
     "                float lenFade = clamp((uConeLen - fwd) / uConeLenFeather, 0.0, 1.0);\n"
-    "                cone = (1.0 - pow(t, uMaskGamma)) * angFade * lenFade;\n"
+    "                cone = (1.0 - pow(t, uConeGamma)) * angFade * lenFade;\n"
     "            }\n"
     "        }\n"
-    "        vis = clamp(max(foot, cone), 0.0, 1.0);\n"
+    "        visGeo = clamp(max(foot, cone), 0.0, 1.0);\n"
+    "\n"
+    "        /* O cone e VISAO, nao e lanterna: diz para onde o jogador olha, nao\n"
+    "           acende nada. `lightAmt` e a claridade que chega a este pixel — os\n"
+    "           circulos dos pes mais qualquer fonte da cena.\n"
+    "           MESMA CONTA que StageState::LightAmountAtScreen. */\n"
+    "        lightAmt = foot;\n"
+    "        /* `sceneLight` conta SO as fontes de verdade (sem os pes). E ele que\n"
+    "           devolve a COR fora do campo de visao: onde ha luz, ha cor. */\n"
+    "        for (int i = 0; i < 8; i++) {\n"
+    "            vec4 L = uLights[i];\n"
+    "            float lt = clamp(length(p - L.xy) / max(1.0, L.z), 0.0, 1.0);\n"
+    "            float w = L.w * (1.0 - pow(lt, uLightGamma));\n"
+    "            lightAmt = max(lightAmt, w);\n"
+    "            sceneLight = max(sceneLight, w);\n"
+    "        }\n"
+    "        vis = visGeo;\n"
+    "        if (uRequireLight > 0.5) {\n"
+    "            float prox = clamp(1.0 - length(p - uPlayerPos) / max(1.0, uUnlitFadeR), 0.0, 1.0);\n"
+    "            vis = clamp(visGeo * clamp(max(lightAmt, prox), 0.0, 1.0), 0.0, 1.0);\n"
+    "        }\n"
     "    }\n"
     "\n"
     "    /* Os dois irmaos ficam marcados com alfa ZERO no alvo da cena (ver\n"
-    "       NoGrayStampBlendMode). Onde ha marca, a cor fica, mesmo fora do cone. */\n"
-    "    float keepColor = clamp(max(vis, 1.0 - src.a), 0.0, 1.0);\n"
+    "       NoGrayStampBlendMode). Onde ha marca a imagem fica sempre nitida. */\n"
+    "    float stamp = clamp(1.0 - src.a, 0.0, 1.0);\n"
     "\n"
-    "    /* Camada monocromatica: mosaico grosseiro + desfoque em cruz. Ambos so\n"
-    "       existem aqui — dentro do campo de visao usa-se a amostra nitida. */\n"
-    "    vec2 cell = vec2(max(1.0, uPixelSize));\n"
-    "    vec2 pPix = (floor(p / cell) + 0.5) * cell;\n"
-    "    float o = max(0.0, uBlurPx);\n"
-    "    vec3 acc = texture2D(uScene, screenToUv(pPix)).rgb;\n"
-    "    if (o > 0.01) {\n"
-    "        acc += texture2D(uScene, screenToUv(pPix + vec2( o, 0.0))).rgb;\n"
-    "        acc += texture2D(uScene, screenToUv(pPix + vec2(-o, 0.0))).rgb;\n"
-    "        acc += texture2D(uScene, screenToUv(pPix + vec2(0.0,  o))).rgb;\n"
-    "        acc += texture2D(uScene, screenToUv(pPix + vec2(0.0, -o))).rgb;\n"
-    "        acc *= 0.2;\n"
+    "    /* FOCO: so o campo de visao fica nitido; todo o resto do ecra leva\n"
+    "       desfoque, esteja iluminado ou nao. E este o sinal principal de para\n"
+    "       onde o personagem esta a olhar. A luz devolve a nitidez apenas se\n"
+    "       `uLightSharpen` estiver acima de zero (vem desligado). */\n"
+    "    float sharpAmt = clamp(max(max(visGeo, sceneLight * uLightSharpen), stamp), 0.0, 1.0);\n"
+    "\n"
+    "    /* O ramo depende de um UNIFORME (fluxo uniforme), por isso e seguro ter\n"
+    "       amostras de textura la dentro. */\n"
+    "    vec3 base = src.rgb;\n"
+    "    if (uBlurPx > 0.01) {\n"
+    "        base = mix(blurAt(p, uBlurPx), src.rgb, sharpAmt);\n"
     "    }\n"
     "\n"
-    "    float luma = dot(acc, vec3(0.299, 0.587, 0.114));\n"
-    "    vec3 mono = mix(vec3(luma), uMonoTint * luma, uMonoTintStrength) * uMonoGain;\n"
-    "    mono = clamp(mono + vec3(uMonoLift), 0.0, 1.0);\n"
+    "    /* CINZENTO — DESLIGADO POR OMISSAO (`uGrayStrength` = 0). O ecra inteiro\n"
+    "       fica a cores, tal como o campo de visao. O que separa o dentro do fora\n"
+    "       passou a ser o FOCO e o REALCE, nao a falta de cor. Suba a barra\n"
+    "       (PB: forca do cinzento) para ter o preto-e-branco de volta: nessa\n"
+    "       altura a cor sobrevive dentro do campo de visao e onde chega luz. */\n"
+    "    vec3 col = base;\n"
+    "    if (uGrayStrength > 0.001) {\n"
+    "        /* COR: volta dentro do campo de visao E onde chega luz de uma fonte\n"
+    "           da cena, para o cinzento querer dizer so uma coisa: nao ha luz. */\n"
+    "        float keepColor = clamp(max(max(vis, sceneLight * uLightColor), stamp), 0.0, 1.0);\n"
     "\n"
-    "    /* Vinheta: quanto mais perto da borda do ecra, mais escura a camada. */\n"
-    "    vec2 c = (p / uResolution - 0.5) * 2.0;\n"
-    "    float aspect = uResolution.x / max(1.0, uResolution.y);\n"
-    "    c.x *= aspect;\n"
-    "    float r = length(c) / length(vec2(aspect, 1.0));\n"
-    "    mono *= 1.0 - uVignetteStrength * smoothstep(uVignetteStart, 1.0, r);\n"
+    "        float luma = dot(base, vec3(0.299, 0.587, 0.114));\n"
+    "        vec3 mono = mix(vec3(luma), uMonoTint * luma, uMonoTintStrength) * uMonoGain;\n"
+    "        mono = clamp(mono + vec3(uMonoLift), 0.0, 1.0);\n"
     "\n"
-    "    vec3 lit = clamp(src.rgb * uVisionColorGain, 0.0, 1.0);\n"
-    "    vec3 outRgb = mix(mix(src.rgb, mono, clamp(uGrayStrength, 0.0, 1.0)), lit, keepColor);\n"
-    "    gl_FragColor = vec4(outRgb, 1.0);\n"
+    "        /* Vinheta: quanto mais perto da borda do ecra, mais escura a camada. */\n"
+    "        vec2 c = (p / uResolution - 0.5) * 2.0;\n"
+    "        float aspect = uResolution.x / max(1.0, uResolution.y);\n"
+    "        c.x *= aspect;\n"
+    "        float r = length(c) / length(vec2(aspect, 1.0));\n"
+    "        mono *= 1.0 - uVignetteStrength * smoothstep(uVignetteStart, 1.0, r);\n"
+    "\n"
+    "        /* AS LUZES VISTAS ATRAVES DO CINZENTO. `uMonoGain` baixa a camada\n"
+    "           toda por igual, e por isso uma vela ao longe quase desaparecia.\n"
+    "           Estes dois termos SOMAM-SE depois da vinheta e so levantam o que ja\n"
+    "           e claro — o escuro fica escuro. */\n"
+    "        float hi = pow(clamp(luma, 0.0, 1.0), 2.2);\n"
+    "        mono = clamp(mono + vec3(uMonoHighlight * hi + uMonoLightGlow * lightAmt * hi), 0.0, 1.0);\n"
+    "\n"
+    "        col = mix(mix(base, mono, clamp(uGrayStrength, 0.0, 1.0)), base, keepColor);\n"
+    "    }\n"
+    "\n"
+    "    /* REALCE DO CAMPO DE VISAO. Nao e uma lanterna: e so um levantar de\n"
+    "       brilho e de saturacao dentro do cone e dos circulos dos pes, para o\n"
+    "       jogador saber para onde esta a olhar. MULTIPLICA o que ja la esta, por\n"
+    "       isso um canto sem luz nenhuma continua escuro — o realce nao revela\n"
+    "       nada, so aponta. Com `uVisionSat` acima de 1 as cores dentro da visao\n"
+    "       ficam mais cheias (a mistura extrapola a partir do cinzento). */\n"
+    "    float lum = dot(col, vec3(0.299, 0.587, 0.114));\n"
+    "    vec3 hl = clamp(mix(vec3(lum), col, uVisionSat) * uVisionColorGain, 0.0, 1.0);\n"
+    "    gl_FragColor = vec4(mix(col, hl, clamp(visGeo, 0.0, 1.0)), 1.0);\n"
     "}\n";
 
 GLuint_ CompileStage(GLenum_ kind, const char* src, char* err, size_t errSize) {
@@ -362,11 +441,13 @@ bool ScenePostFx::Init(SDL_Renderer* renderer) {
     static const char* kNames[U_COUNT] = {
         "uScene",           "uTexScale",       "uResolution",      "uGrayStrength",
         "uMonoGain",        "uMonoLift",       "uMonoTint",        "uMonoTintStrength",
-        "uPixelSize",       "uBlurPx",         "uVignetteStrength","uVignetteStart",
+        "uLightSharpen",    "uBlurPx",         "uVignetteStrength","uVignetteStart",
         "uVisionEnabled",   "uConeOrigin",     "uConeDir",         "uConeHalf",
         "uConeFeather",     "uConeLen",        "uConeLenFeather",  "uFoot0",
         "uFoot1",           "uFootCount",      "uFootRadius",      "uMaskGamma",
-        "uVisionColorGain", "uFlipV"};
+        "uVisionColorGain", "uFlipV",       "uLights[0]",       "uLightGamma",
+        "uPlayerPos",       "uUnlitFadeR",     "uRequireLight",    "uConeGamma",
+        "uMonoHighlight",   "uMonoLightGlow",  "uLightColor",      "uVisionSat"};
     for (int i = 0; i < U_COUNT; i++) {
         uniforms[i] = g_gl.GetUniformLocation(program, kNames[i]);
     }
@@ -411,20 +492,28 @@ bool ScenePostFx::Render(SDL_Renderer* renderer, SDL_Texture* sceneTex, int wind
     set2f(U_TEX_SCALE, texW, texH);
     set2f(U_RESOLUTION, static_cast<float>(windowW), static_cast<float>(windowH));
 
-    const float gray = params.enabled ? std::max(0.0f, std::min(1.0f, params.grayStrength)) : 0.0f;
+    // `visionOn` manda em TUDO o que a passagem faz. Sem um campo de visao
+    // valido (cutscene, primeiro frame, jogador ainda por criar) o desfoque e o
+    // cinzento tem de ficar a zero, senao o ecra inteiro borrava-se ou ficava
+    // cinzento — as duas mascaras dariam zero em todo o lado.
+    const bool visionOn = params.enabled && vision.valid;
+    const float gray = visionOn ? std::max(0.0f, std::min(1.0f, params.grayStrength)) : 0.0f;
     set1f(U_GRAY_STRENGTH, gray);
     set1f(U_MONO_GAIN, std::max(0.0f, std::min(2.0f, params.monoGain)));
     set1f(U_MONO_LIFT, std::max(0.0f, std::min(0.35f, params.monoLift)));
     set3f(U_MONO_TINT, params.monoTintR, params.monoTintG, params.monoTintB);
     set1f(U_MONO_TINT_STRENGTH, std::max(0.0f, std::min(1.0f, params.monoTintStrength)));
-    set1f(U_PIXEL_SIZE, std::max(1.0f, std::min(64.0f, params.monoPixelSizePx)));
-    set1f(U_BLUR_PX, std::max(0.0f, std::min(48.0f, params.monoBlurPx)));
+    set1f(U_BLUR_PX, visionOn ? std::max(0.0f, std::min(48.0f, params.outsideBlurPx)) : 0.0f);
     set1f(U_VIGNETTE_STRENGTH, std::max(0.0f, std::min(1.0f, params.vignetteStrength)));
     set1f(U_VIGNETTE_START, std::max(0.0f, std::min(0.98f, params.vignetteStart)));
-    set1f(U_VISION_COLOR_GAIN, std::max(0.2f, std::min(3.0f, params.visionColorGain)));
+    set1f(U_VISION_COLOR_GAIN, visionOn ? std::max(0.2f, std::min(3.0f, params.visionColorGain)) : 1.0f);
+    set1f(U_VISION_SAT, visionOn ? std::max(0.0f, std::min(3.0f, params.visionSaturation)) : 1.0f);
+    set1f(U_MONO_HIGHLIGHT, std::max(0.0f, std::min(2.0f, params.monoHighlightGain)));
+    set1f(U_MONO_LIGHT_GLOW, std::max(0.0f, std::min(2.0f, params.monoLightGlow)));
+    set1f(U_LIGHT_COLOR, std::max(0.0f, std::min(1.0f, params.lightColorStrength)));
+    set1f(U_LIGHT_SHARPEN, std::max(0.0f, std::min(1.0f, params.lightSharpenStrength)));
     set1f(U_FLIP_V, flipV ? 1.0f : 0.0f);
 
-    const bool visionOn = params.enabled && vision.valid;
     set1f(U_VISION_ENABLED, visionOn ? 1.0f : 0.0f);
     if (visionOn) {
         set2f(U_CONE_ORIGIN, vision.coneX, vision.coneY);
@@ -442,6 +531,29 @@ bool ScenePostFx::Render(SDL_Renderer* renderer, SDL_Texture* sceneTex, int wind
         set1f(U_FOOT_COUNT, static_cast<float>(feet));
         set1f(U_FOOT_RADIUS, std::max(1.0f, vision.footRadiusPx));
         set1f(U_MASK_GAMMA, std::max(0.2f, std::min(12.0f, vision.maskGamma)));
+        set1f(U_CONE_GAMMA, std::max(0.2f, std::min(16.0f, vision.coneGamma)));
+
+        // Luzes reais: um vec4 por ranhura. As que sobram levam intensidade 0 e
+        // um centro fora do ecra, para o ciclo do shader as ignorar sozinho.
+        const bool requireLight = params.requireLightToSee && vision.requireLight;
+        set1f(U_REQUIRE_LIGHT, requireLight ? 1.0f : 0.0f);
+        // Sempre enviadas, mesmo com a regra desligada: o halo das luzes na
+        // camada monocromatica tambem as usa.
+        if (uniforms[U_LIGHTS] >= 0) {
+            float packed[PlayerVisionFrame::kMaxLightSamples * 4];
+            const int used = std::max(0, std::min(PlayerVisionFrame::kMaxLightSamples, vision.lightCount));
+            for (int i = 0; i < PlayerVisionFrame::kMaxLightSamples; i++) {
+                const bool on = i < used;
+                packed[i * 4 + 0] = on ? vision.lightX[i] : -1.0e6f;
+                packed[i * 4 + 1] = on ? vision.lightY[i] : -1.0e6f;
+                packed[i * 4 + 2] = on ? std::max(1.0f, vision.lightR[i]) : 1.0f;
+                packed[i * 4 + 3] = on ? std::max(0.0f, std::min(1.0f, vision.lightI[i])) : 0.0f;
+            }
+            g_gl.Uniform4fv(uniforms[U_LIGHTS], PlayerVisionFrame::kMaxLightSamples, packed);
+        }
+        set1f(U_LIGHT_GAMMA, std::max(0.5f, std::min(12.0f, vision.lightGamma)));
+        set2f(U_PLAYER_POS, vision.playerX, vision.playerY);
+        set1f(U_UNLIT_FADE_R, std::max(1.0f, vision.unlitFadeRadiusPx));
     }
 
     // Quad em espaco de clip: preenche exatamente o viewport que o SDL deixou
