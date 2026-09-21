@@ -52,6 +52,16 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+// Duas caixas "podem se sobrepor na tela" com uma folga generosa por cima —
+// sprites costumam desenhar bem mais alto que a própria caixa de colisão
+// (barril, tábua na parede). Isso é só heurística visual, não colisão de jogo.
+static bool BoxesMayOverlapOnScreen(const Rect& a, const Rect& b, float padPx) {
+    SDL_Rect ra{ static_cast<int>(a.x - padPx), static_cast<int>(a.y - padPx * 2.0f),
+                 static_cast<int>(a.w + padPx * 2.0f), static_cast<int>(a.h + padPx * 3.0f) };
+    SDL_Rect rb{ static_cast<int>(b.x), static_cast<int>(b.y), static_cast<int>(b.w), static_cast<int>(b.h) };
+    return SDL_HasIntersection(&ra, &rb) == SDL_TRUE;
+}
+
 using namespace stage_internal;
 void StageState::Render(){
     SDL_Renderer* renderer = Game::GetInstance().GetRenderer();
@@ -437,9 +447,11 @@ void StageState::Render(){
     // redesenhados por cima dela (para se verem) e carimbados com a luz que os
     // apanha (para ficarem CINZENTOS sem luz e a cores dentro de uma).
     struct StampedObject {
+        GameObject* go;
         SpriteRenderer* sprite;
         float shown;
         float light;
+        bool core;
     };
     std::vector<StampedObject> stampedObjects;
     stampedObjects.reserve(8);
@@ -475,7 +487,7 @@ void StageState::Render(){
             }
             if (SpriteRenderer* sr = go->GetComponent<SpriteRenderer>()) {
                 const float light = Clamp01(LightAmountAtScreen(WorldToScreen(go->box.Center())));
-                stampedObjects.push_back({sr, shown, light});
+                stampedObjects.push_back({go.get(), sr, shown, light, true});
             }
         }
         // Os IRMAOS entram na mesma lista, e entram AQUI — dentro do ciclo que
@@ -489,7 +501,7 @@ void StageState::Render(){
                 const Vec2 chest = WorldToScreen(Vec2(go->box.x + 0.5f * go->box.w,
                                                       go->box.y + 0.45f * go->box.h));
                 const float light = Clamp01(LightAmountAtScreen(chest, /*includeCarriedLight=*/false));
-                stampedObjects.push_back({sr, 1.0f, light});
+                stampedObjects.push_back({go.get(), sr, 1.0f, light, true});
             }
         }
 
@@ -500,6 +512,37 @@ void StageState::Render(){
             fadeSprite->SetTint(255, 255, 255, 255);
         }
     }
+
+    // Expande a lista: qualquer objeto que se sobrepõe na tela a um carimbado  
+    // "de verdade" também precisa ser redesenhado depois da escuridão, na ordem
+    // certa — senão ele fica sempre atrás do carimbado, mesmo devendo estar na
+    // frente (era exatamente o bug do jogador com o barril e da tábua com o armário).
+    std::vector<GameObject*> coreGos;
+    coreGos.reserve(stampedObjects.size());
+    for (const StampedObject& so : stampedObjects) coreGos.push_back(so.go);
+
+    std::vector<StampedObject> expandedStamped;
+    expandedStamped.reserve(stampedObjects.size() + 8);
+    for (const auto& go : objectArray) {
+        if (go->z >= kHudZ) continue;
+
+        bool already = false;
+        for (const StampedObject& so : stampedObjects) {
+            if (so.go == go.get()) { expandedStamped.push_back(so); already = true; break; }
+        }
+        if (already) continue;
+
+        for (GameObject* core : coreGos) {
+            if (BoxesMayOverlapOnScreen(go->box, core->box, 24.0f)) {
+                if (SpriteRenderer* sr = go->GetComponent<SpriteRenderer>()) {
+                    const float light = Clamp01(LightAmountAtScreen(WorldToScreen(go->box.Center())));
+                    expandedStamped.push_back({go.get(), sr, 1.0f, light, false});
+                }
+                break;
+            }
+        }
+    }
+    stampedObjects = std::move(expandedStamped);    
 
     // ===================================================================
     // 6. MÁSCARA DE ESCURIDÃO GERAL E SOMBRAS DE PAREDE
@@ -644,9 +687,20 @@ void StageState::Render(){
             // pequeno por cima do grande quisesse o Y o que quisesse.
             for (const StampedObject& so : stampedObjects) {
                 if (!so.sprite) continue;
-                so.sprite->SetTint(255, 255, 255, static_cast<Uint8>(so.shown * 255.0f));
-                so.sprite->Render();
-                so.sprite->SetTint(255, 255, 255, 255);
+                if (so.core) {
+                    so.sprite->SetTint(255, 255, 255, static_cast<Uint8>(so.shown * 255.0f));
+                    so.sprite->Render();
+                    so.sprite->SetTint(255, 255, 255, 255);
+                } else {
+                    // Escurece a COR (não a transparência) conforme a luz local — assim ele
+                    // continua OPACO o suficiente pra realmente bloquear o que vier depois
+                    // dele na lista (o jogador), só ficando mais escuro/acinzentado sem luz
+                    // em vez de sumir e deixar o jogador aparecer "através" dele.
+                    const Uint8 tone = static_cast<Uint8>(40 + 215 * Clamp01(so.light));
+                    so.sprite->SetTint(tone, tone, tone, 255);
+                    so.sprite->Render();
+                    so.sprite->SetTint(255, 255, 255, 255);
+                }
             }
 
             // Passo 2: o carimbo leva a luz. A mistura do carimbo faz
@@ -659,7 +713,7 @@ void StageState::Render(){
             // apagado nessa linha — o carimbo saia sempre a 255 e o shader lia
             // "luz total", que e porque os irmaos ficavam a cores no escuro.
             for (const StampedObject& so : stampedObjects) {
-                if (!so.sprite) continue;
+                if (!so.sprite || !so.core) continue;   // <- filtro novo
                 SDL_Texture* tex = so.sprite->GetTexturePtr();
                 if (tex == nullptr) continue;
                 const Uint8 stampAlpha = static_cast<Uint8>(1.0f + 254.0f * Clamp01(so.light));
