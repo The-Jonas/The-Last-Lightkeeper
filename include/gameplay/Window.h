@@ -19,7 +19,11 @@ public:
     void Update(float dt) override;
     void Render() override;
 
-    void Toggle(); // Chamado pelo StageState/Monstro para interagir
+    void Toggle();
+private:
+    /// Toca o som de abrir/fechar posicionado nesta janela (ver Window.cpp).
+    void PlayToggleSoundFromHere(bool opening);
+public: // Chamado pelo StageState/Monstro para interagir
     WindowState GetState() const { return state; }
     float GetWindRadius() const { return windRadius; }
 

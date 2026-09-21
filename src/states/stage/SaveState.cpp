@@ -1,4 +1,5 @@
 #include "states/stage/StageState.h"
+#include "ui/KeyGlyphs.h"
 #include "core/Telemetry.h"
 #include "states/stage/FirstLoadData.h"
 #include "states/LoadingState.h"
@@ -1594,14 +1595,14 @@ void StageState::RenderTutorials(SDL_Renderer* renderer) {
                                    std::max(12, static_cast<int>(std::lround(24.0f * u))));
     if (!font) return;
     SDL_Color col{245, 232, 200, 255};
-    SDL_Surface* sf = TTF_RenderUTF8_Blended(font.get(), activeTutText.c_str(), col);
-    if (!sf) return;
-    SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, sf);
-    const int tw = sf->w;
-    const int th = sf->h;
-    SDL_FreeSurface(sf);
-    if (!t) return;
-    SDL_SetTextureAlphaMod(t, static_cast<Uint8>(255.0f * a01));
+    const Uint8 alpha = static_cast<Uint8>(255.0f * a01);
+
+    // As TECLAS da dica saem em imagem, nao escritas: "[F]" vira a arte da
+    // tecla F (ver ui/KeyGlyphs.h). A medida vem da mesma funcao que desenha,
+    // por isso a caixa de fundo nunca fica torta em relacao ao conteudo.
+    int tw = 0, th = 0;
+    KeyGlyphs::Measure(font.get(), activeTutText, KeyGlyphs::kDefaultKeyScale, tw, th);
+    if (tw <= 0 || th <= 0) return;
 
     const int winW = Game::GetInstance().GetWindowsWidth();
     const int padX = static_cast<int>(std::lround(22 * u));
@@ -1615,9 +1616,7 @@ void StageState::RenderTutorials(SDL_Renderer* renderer) {
     SDL_RenderFillRect(renderer, &bg);
     SDL_SetRenderDrawColor(renderer, 200, 180, 110, static_cast<Uint8>(220.0f * a01));
     SDL_RenderDrawRect(renderer, &bg);
-    const SDL_Rect d{x, y, tw, th};
-    SDL_RenderCopy(renderer, t, nullptr, &d);
-    SDL_DestroyTexture(t);
+    KeyGlyphs::Draw(renderer, font.get(), activeTutText, x, y, col, alpha, KeyGlyphs::kDefaultKeyScale);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }
 

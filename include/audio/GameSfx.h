@@ -69,13 +69,18 @@ void StopMonsterFootsteps();
 void UpdateHeartbeat(float intensity01);
 
 // FUNÇÕES DA JANELA E DO VENTO
-void PlayWindowToggle(bool opening);
+/// Abrir/fechar janela. Com uma POSICAO no mundo o som passa a vir do lado
+/// certo e a baixar com a distancia — e o que diz ao jogador QUAL das janelas
+/// do andar se acabou de mexer, sem ter de a ver.
+void PlayWindowToggle(bool opening, float srcX, float srcY, float listenerX, float listenerY);
+void PlayWindowToggle(bool opening);   // sem posicao: fica ao centro, como antes
 void StartWindLoop();
 void StopWindLoop();
 void PlayCandleBlowOut();
 
 // No começo do segundo andar toca
-void PlayWindowBreak(); 
+void PlayWindowBreak();
+void PlayWindowBreak(float srcX, float srcY, float listenerX, float listenerY);
 
 /// Volume atual do barramento de VFX (master × efeitos), 0..MIX_MAX_VOLUME.
 /// Usado por sons de efeito tocados fora do GameSfx (ex.: pegar item).

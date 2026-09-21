@@ -46,6 +46,22 @@ void ApplyTiledBox(GameObject* obj, const EntitySpawn& spawn) {
     obj->box.y = spawn.y - obj->box.h;
     obj->angleDeg = spawn.rotation;
     obj->rotateAroundBottomLeft = true;   // objetos-tile do Tiled giram pelo rodapé-esquerdo
+
+    // ── Ancora de profundidade, vinda do Tiled ──────────────────────────────
+    // A ordem de desenho e pela BASE da caixa (box.y + box.h). Isso funciona
+    // para um barril, cuja base e onde ele toca o chao — e mente para arte
+    // ALTA como uma escada inteira, cuja base fica muitos pixeis abaixo do
+    // sitio onde as coisas se encostam a ela. Dai os barris que "atravessam" a
+    // escada do 2o andar: a escada ganha a comparacao e passa-lhes a frente.
+    //
+    // `depthOffset` corrige isso por objecto, sem recompilar: um valor
+    // NEGATIVO puxa a ancora para cima (a escada passa a desenhar-se ATRAS de
+    // quem esta mais abaixo no ecra), um positivo empurra-a para baixo. Antes
+    // so alguns tipos liam a propriedade; agora TODOS os que passam por aqui
+    // leem, que sao praticamente todos os objectos do mapa.
+    if (spawn.properties.count("depthOffset")) {
+        obj->depthOffset = spawn.properties.at("depthOffset").get<float>();
+    }
 }
 
 std::vector<DialogueBox::Line> ParseDialogueLinesProperty(const EntitySpawn& spawn, const char* key) {

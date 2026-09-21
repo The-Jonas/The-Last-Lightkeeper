@@ -52,7 +52,7 @@ StageFirstLoadData EmbeddedDefaults() {
     d.navWorldW = 4358.0f;
     d.navWorldH = 3276.0f;
     d.navTilePx = 64;
-    d.startingFlashlightDurability = 20;
+    d.startingFlashlightDurability = 16;   // 20% dos 80 de maxDurability
 
     ItemDef apple{"Apple", "Recursos/img/items/apple.png", -1, false, 1, {}};
     ItemDef brokenFlashlight{"Broken Flashlight",

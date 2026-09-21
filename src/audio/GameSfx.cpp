@@ -349,6 +349,10 @@ void TriggerThunderStrikeInternal() {
 
 namespace GameSfx {
 
+// Alcance audivel de uma janela. Generoso de proposito: o objectivo e o jogador
+// perceber que o monstro abriu ALGUMA janela do andar, mesmo longe.
+constexpr float kWindowAudibleDist = 2600.0f;
+
 // ── Spatial audio ─────────────────────────────────────────────────────────
 void SetChannelSpatial(int channel, float srcX, float srcY, float listX, float listY, float maxDist) {
     float dx   = srcX - listX;
@@ -525,6 +529,20 @@ void PlayWindowToggle(bool opening) {
     PlaySound(opening ? gWindowOpenSound : gWindowCloseSound);
 }
 
+// ── Versoes POSICIONADAS ────────────────────────────────────────────────────
+// O `SetChannelSpatial` ja existia e so o monstro o usava. Uma janela a abrir
+// do outro lado do andar soava exactamente como uma ao lado; agora vem do lado
+// certo e mais baixa com a distancia.
+void PlayWindowToggle(bool opening, float srcX, float srcY, float listenerX, float listenerY) {
+    if (gGameplayMuted) return;
+    Sound& s = opening ? gWindowOpenSound : gWindowCloseSound;
+    PlaySound(s);
+    const int ch = s.GetChannel();
+    if (ch >= 0) {
+        SetChannelSpatial(ch, srcX, srcY, listenerX, listenerY, kWindowAudibleDist);
+    }
+}
+
 void StartWindLoop() {
     if (gGameplayMuted || gWindLoopActive) return;
     EnsureLoaded();
@@ -584,6 +602,15 @@ void PlayMonsterSpot() {
     if (!Mix_Playing(kChannelMonsterSpot) && gMonsterSpotSound.IsOpen()) {
         gMonsterSpotSound.Play();
         ApplySfxVolume(gMonsterSpotSound);     // toca no volume cheio do barramento de VFX
+    }
+}
+
+void PlayWindowBreak(float srcX, float srcY, float listenerX, float listenerY) {
+    if (gGameplayMuted) return;
+    PlayWindowBreak();
+    const int ch = gWindowBreakSound.GetChannel();
+    if (ch >= 0) {
+        SetChannelSpatial(ch, srcX, srcY, listenerX, listenerY, kWindowAudibleDist);
     }
 }
 

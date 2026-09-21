@@ -122,15 +122,28 @@ void Window::Render() {
 #endif
 }
 
+// O som de abrir/fechar sai DESTA janela: com a posicao, o jogador percebe
+// qual das janelas do andar se mexeu sem ter de a ver. Sem jogador (transicoes,
+// teardown) cai na versao antiga, ao centro.
+void Window::PlayToggleSoundFromHere(bool opening) {
+    if (Character::player) {
+        const Vec2 here = associated.box.Center();
+        const Vec2 ear = Character::player->GetAssociated().box.Center();
+        GameSfx::PlayWindowToggle(opening, here.x, here.y, ear.x, ear.y);
+    } else {
+        GameSfx::PlayWindowToggle(opening);
+    }
+}
+
 void Window::Toggle() {
     if (state == WindowState::OPENING || state == WindowState::CLOSING) return; // Ignora se já estiver animando
 
     if (state == WindowState::CLOSED) {
         state = WindowState::OPENING;
-        GameSfx::PlayWindowToggle(true);
+        PlayToggleSoundFromHere(true);
     } else if (state == WindowState::OPEN) {
         state = WindowState::CLOSING;
-        GameSfx::PlayWindowToggle(false);
+        PlayToggleSoundFromHere(false);
         windTimer = 0.0f; // Reseta o vento
     }
     

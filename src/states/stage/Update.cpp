@@ -118,7 +118,17 @@ void StageState::Update(float dt){
         pendingWindowBreakDialogueTimer -= dt;
         if (pendingWindowBreakDialogueTimer <= 0.0f) {
             pendingWindowBreakDialogueTimer = -1.0f;
-            GameSfx::PlayWindowBreak();
+            // O estrondo sai de onde o monstro esta — foi ele que partiu o
+            // vidro. Assim o som aponta o lado do andar, em vez de vir do
+            // centro do ecra como qualquer outro efeito.
+            Monster* breaker = FindMonster();
+            if (breaker && controlledCharacterObject) {
+                const Vec2 src = breaker->GetAssociated().box.Center();
+                const Vec2 ear = controlledCharacterObject->box.Center();
+                GameSfx::PlayWindowBreak(src.x, src.y, ear.x, ear.y);
+            } else {
+                GameSfx::PlayWindowBreak();
+            }
             pendingWindowBreakLineTimer = 1.0f;   
         }
     }
