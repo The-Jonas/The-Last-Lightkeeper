@@ -350,7 +350,10 @@ void StageState::RenderFinalEscape(SDL_Renderer* renderer) {
                            static_cast<Uint8>(std::min(255.0f, 255.0f * intensity)));
     SDL_RenderFillRect(renderer, &full);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    // PRETO, nao branco: o `SDL_RenderClear` do inicio do frame seguinte usa a
+    // ultima cor de desenho. Deixa-la branca fazia o ecra comecar branco, e
+    // qualquer buraco no quadro congelado virava um clarao.
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
 }
 
 // ── Transição de cena "zoom-blur" estilo RE4 ────────────────────────────────
@@ -407,6 +410,28 @@ void StageState::CaptureSceneFrame(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
     SDL_RenderCopy(renderer, renderTarget, nullptr, nullptr);
+
+    // ── O ALFA DO QUADRO CONGELADO TEM DE SER OPACO ─────────────────────────
+    // O alvo da cena traz um CARIMBO no canal alfa por cima dos irmaos: e o
+    // sinal que diz ao shader "isto e um personagem, mantem-no nitido e
+    // devolve-lhe a cor". Nao e transparencia — mas o quadro congelado e
+    // desenhado com BLEND, e ali o alfa passa a valer como transparencia: os
+    // irmaos ficavam buracos no quadro e via-se o fundo atraves deles (branco,
+    // porque a cor de limpeza ficava branca do frame anterior). Era o clarao
+    // que aparecia ao chegar ao fim da escada.
+    //
+    // Aqui forca-se o alfa a 255 em todo o quadro, deixando o RGB intacto.
+    static SDL_BlendMode opaqueAlpha = SDL_ComposeCustomBlendMode(
+        SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD,   // RGB: fica o que la esta
+        SDL_BLENDFACTOR_ONE, SDL_BLENDFACTOR_ZERO, SDL_BLENDOPERATION_ADD);  // alfa: passa a ser o da cor
+    if (opaqueAlpha != SDL_BLENDMODE_INVALID) {
+        SDL_SetRenderDrawBlendMode(renderer, opaqueAlpha);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        const SDL_Rect full{0, 0, winW, winH};
+        SDL_RenderFillRect(renderer, &full);
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    }
+
     SDL_SetRenderTarget(renderer, prev);
     SDL_SetTextureBlendMode(sceneTransitionFrame, SDL_BLENDMODE_BLEND);
 }
@@ -449,7 +474,12 @@ void StageState::RenderSceneTransition(SDL_Renderer* renderer) {
     const SDL_Rect full{0, 0, winW, winH};
     SDL_RenderFillRect(renderer, &full);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    // PRETO, nao branco: o `SDL_RenderClear` do inicio do frame seguinte usa a
+    // ultima cor de desenho. Deixa-la branca fazia o ecra comecar BRANCO, e
+    // entao qualquer buraco no quadro congelado (o carimbo dos irmaos) virava
+    // um clarao com a forma deles. Era o "os dois ficam brancos" ao chegar ao
+    // fim da escada.
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
 }
 
 void StageState::UpdateSceneTransition(float dt) {
