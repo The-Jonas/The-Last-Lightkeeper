@@ -34,7 +34,10 @@ struct LightMaskParams {
     /// Balanced defaults; set Custom to use only the raw fields below without preset clamps.
     LightQualityPreset lightQualityPreset = LightQualityPreset::Balanced;
 
-    Uint8 darknessMax = 236;
+    /// Escuridao na BORDA de cada luz. Baixou de 255: com o tecto igual ao do
+    /// escuro ambiente, o disco de luz fica mais claro em todo o seu raio e
+    /// encosta ao ambiente sem degrau nenhum.
+    Uint8 darknessMax = 225;
 
     /// Escuridao do fundo, onde NAO chega luz nenhuma. E o tecto da malha: nunca
     /// fica mais escuro do que isto. Mais BAIXO = camada escura mais clara, e o
@@ -44,8 +47,8 @@ struct LightMaskParams {
     /// 228 de 255: onde nao chega luz nenhuma fica quase preto. A equipa pediu
     /// escuro depois de jogar (ninguem percebia que era a ESCURIDAO que estava
     /// a matar), e depois pediu um pouco de volta — 238 era escuro de mais.
-    Uint8 ambientDarknessMax = 228;
-    float falloffRadiusPx = 430.0f;   // alcance de cada luz (subiu de 400)
+    Uint8 ambientDarknessMax = 218;
+    float falloffRadiusPx = 470.0f;   // alcance de cada luz (400 -> 430 -> 470)
     float fatorDicaDeRaio = 1.2f;
     LightFalloffCurve falloffCurve = LightFalloffCurve::Smoothstep;
     float falloffGamma = 2.0f;
@@ -102,7 +105,7 @@ struct LightMaskParams {
     // problema: soma cor onde a luz e mais forte.
     /// Multiplica o brilho e a opacidade desse disco. Subir = amarelo mais
     /// obvio e diferenca maior entre aceso e apagado.
-    float torchGlowStrength = 1.8f;
+    float torchGlowStrength = 2.1f;
     /// Raio do disco, em fraccao do raio da luz.
     float torchGlowRadiusScale = 0.62f;
 };
@@ -179,7 +182,12 @@ struct PlayerVisionParams {
     /// Sem nenhuma luz, um objeto ainda aparece por estar PERTO. A opacidade
     /// cai LINEARMENTE de 1 (colado ao personagem) ate 0 a esta distancia
     /// (px de MUNDO). E a mesma rampa que devolve a cor no inicio do cone.
-    float unlitFadeDistancePx = 300.0f;
+    ///
+    /// PEQUENO de proposito. Com 300 (e com os 573 que o config chegou a ter)
+    /// bastava OLHAR para um item no escuro para ele aparecer: o cone dava a
+    /// geometria e esta rampa dava o resto, sem uma vela em lado nenhum. Assim
+    /// e o alcance de um braco — no escuro so se encontra o que se tropeça.
+    float unlitFadeDistancePx = 170.0f;
 
     // ── Pos-processamento monocromatico (fora do campo de visao) ────────────
     /// DESLIGADO POR OMISSAO. O ecra inteiro fica a cores; o que aponta o campo

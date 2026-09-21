@@ -44,10 +44,12 @@ namespace {
 /// Quanto tempo um circulo demora a crescer e apagar.
 constexpr float kEchoLifeSec = 1.35f;
 /// Raio inicial e final, em pixeis de MUNDO (o zoom trata da conversao).
-/// O raio final tem de ser GRANDE o bastante para a onda alcancar um irmao que
-/// esteja a uma distancia normal: e nesse toque que o monstro se revela.
-constexpr float kEchoStartRadiusPx = 16.0f;
-constexpr float kEchoEndRadiusPx = 560.0f;
+/// 560 tomava meio ecra — a onda lia-se como um efeito, nao como um passo.
+/// O raio final anda de maos dadas com `Monster::kEchoMinDistancePx`: a onda so
+/// pode tocar num irmao que esteja MAIS PERTO do que este raio, e e nesse toque
+/// que o monstro se revela. Encolher um sem o outro mata o toque.
+constexpr float kEchoStartRadiusPx = 12.0f;
+constexpr float kEchoEndRadiusPx = 340.0f;
 /// Espessura do traco, em pixeis de ECRA. Um anel de um pixel desaparecia
 /// contra o ruido da imagem; desenha-se como varios aneis encostados.
 constexpr float kEchoStrokePx = 3.0f;

@@ -61,8 +61,10 @@ public:
     /// pecas que decidem quantos aneis o jogador ve por segundo.
     static constexpr float kEchoStepPx = 190.0f;
     static constexpr float kEchoStepFarPx = 420.0f;
-    /// Mais perto do que isto nao ha onda nenhuma.
-    static constexpr float kEchoMinDistancePx = 300.0f;
+    /// Mais perto do que isto nao ha onda nenhuma. Fica ABAIXO do raio final
+    /// da onda (`kEchoEndRadiusPx`, 340) de proposito: e na faixa entre os dois
+    /// que a onda chega a um irmao e revela o monstro por um instante.
+    static constexpr float kEchoMinDistancePx = 190.0f;
     /// Quanto a origem da onda sobe acima dos pes.
     static constexpr float kEchoLiftPx = 34.0f;
 

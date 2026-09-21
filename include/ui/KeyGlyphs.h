@@ -36,9 +36,10 @@ void Draw(SDL_Renderer* renderer, TTF_Font* font, const std::string& text,
 
 /// Altura de uma tecla em relacao a altura da fonte. 1.0 = do tamanho da
 /// linha; acima disso a tecla sobressai, que e o que a faz ler como tecla.
-/// A 1.45 a moldura lia-se mas a LETRA la dentro ficava pequena de mais — a
-/// arte tem muita margem a volta do caractere.
-constexpr float kDefaultKeyScale = 2.15f;
+/// A arte tem MUITA margem a volta do caractere: a moldura ja se lia a 1.45 e
+/// a 2.15, mas a letra la dentro continuava pequena. A 3.0 a tecla fica bem
+/// maior do que a linha de texto, que e o que a torna legivel de relance.
+constexpr float kDefaultKeyScale = 3.0f;
 
 }  // namespace KeyGlyphs
 
