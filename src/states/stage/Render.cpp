@@ -433,16 +433,30 @@ void StageState::Render(){
     }
 
     // Objectos que seguem a regra do campo de visao e que ficaram visiveis
-    // neste frame. Levam o mesmo tratamento dos irmaos depois da escuridao:
-    // redesenhados por cima dela (para se verem) e carimbados com a luz que os
-    // apanha (para ficarem CINZENTOS sem luz e a cores dentro de uma).
+    // neste frame, MAIS os dois irmaos. Todos sao redesenhados por cima da
+    // escuridao (para se verem) e carimbados no canal alfa. O numero do carimbo
+    // e a LUZ: um item sem luz fica cinzento e ganha a cor dentro de uma luz.
+    // Os irmaos entram com luz 1.0 fixa, por isso nunca ficam cinzentos.
     struct StampedObject {
+        GameObject* obj;
         SpriteRenderer* sprite;
         float shown;
         float light;
     };
     std::vector<StampedObject> stampedObjects;
     stampedObjects.reserve(8);
+
+    // A ORDEM POR QUE A CENA FOI DESENHADA. O acto 6.9 precisa dela para saber
+    // quem ficou A FRENTE de quem: redesenhar um irmao por cima da escuridao e
+    // redesenha-lo por cima de TUDO, e sem esta lista nao havia como voltar a
+    // tapa-lo com o barril que o Y-sort tinha posto a frente dele.
+    struct DrawnSprite {
+        GameObject* obj;
+        SpriteRenderer* sprite;
+        bool stamped;
+    };
+    std::vector<DrawnSprite> drawOrder;
+    drawOrder.reserve(objectArray.size());
 
     // ===================================================================
     // 5. AGORA DESENHAMOS A LISTA ORDENADA INTEIRA SEM REGRAS
@@ -460,6 +474,7 @@ void StageState::Render(){
         // desaparecer de repente. A interaccao NAO muda — o objeto continua a
         // poder ser usado se o jogador chegar la.
         SpriteRenderer* fadeSprite = nullptr;
+        bool stampedThis = false;
         if (visionFrame.valid && ShouldHideOutsideVision(*go)) {
             // A MESMA conta que a sombra deste objeto usou mais acima. Estar num
             // sitio so e o que garante que sprite e sombra nunca discordam.
@@ -475,26 +490,37 @@ void StageState::Render(){
             }
             if (SpriteRenderer* sr = go->GetComponent<SpriteRenderer>()) {
                 const float light = Clamp01(LightAmountAtScreen(WorldToScreen(go->box.Center())));
-                stampedObjects.push_back({sr, shown, light});
+                stampedObjects.push_back({go.get(), sr, shown, light});
+                stampedThis = true;
             }
         }
         // Os IRMAOS entram na mesma lista, e entram AQUI — dentro do ciclo que
         // percorre o `objectArray` JA ORDENADO. E isso que lhes da a ordem
         // certa: antes eram redesenhados com uma chamada fixa (o grande e
         // depois o pequeno), por isso o pequeno aparecia sempre por cima,
-        // estivesse a frente ou atras. A luz deles mede-se no PEITO e so conta
-        // luz REAL da cena (`includeCarriedLight = false`).
+        // estivesse a frente ou atras.
+        //
+        // O CINZENTO NOS IRMAOS ESTA DESLIGADO, DE PROPOSITO. O carimbo deles
+        // levava a luz medida no PEITO, e era isso que os pintava de cinzento
+        // numa sala as escuras. Dava problemas no desenho, por isso voltam a
+        // ir com 1.0: carimbados como "totalmente iluminados", ou seja sempre
+        // nitidos e sempre a cores, esteja a sala como estiver. Para os por
+        // outra vez a obedecer a luz, troca-se este 1.0 pela medida no peito
+        // (`LightAmountAtScreen(chest, /*includeCarriedLight=*/false)`).
+        // Os ITENS nao mudam — continuam cinzentos sem luz.
         if ((go.get() == bigCharacterObject || go.get() == smallCharacterObject) && visionFrame.valid) {
             if (SpriteRenderer* sr = go->GetComponent<SpriteRenderer>()) {
-                const Vec2 chest = WorldToScreen(Vec2(go->box.x + 0.5f * go->box.w,
-                                                      go->box.y + 0.45f * go->box.h));
-                const float light = Clamp01(LightAmountAtScreen(chest, /*includeCarriedLight=*/false));
-                stampedObjects.push_back({sr, 1.0f, light});
+                stampedObjects.push_back({go.get(), sr, 1.0f, 1.0f});
+                stampedThis = true;
             }
         }
 
         RenderInteractionGlowIfNeeded(*go);
         go->Render();
+
+        if (SpriteRenderer* sr = go->GetComponent<SpriteRenderer>()) {
+            drawOrder.push_back({go.get(), sr, stampedThis});
+        }
 
         if (fadeSprite) {
             fadeSprite->SetTint(255, 255, 255, 255);
@@ -621,8 +647,8 @@ void StageState::Render(){
     //
     //   1. REDESENHAR o sprite por cima da malha. Volta a ficar com o brilho
     //      cheio, aconteca o que acontecer a luz da sala — nunca escurece.
-    //      E seguro por cima do que ja la esta: o cenario que fica a frente
-    //      deles ja se apaga sozinho (`FadeEffect`) quando eles passam atras.
+    //      Isto passa por cima de TUDO, inclusive do cenario que estava a
+    //      frente deles; o passo 3 volta a por esse cenario no lugar.
     //
     //   2. CARIMBAR a silhueta no canal ALFA, com um valor que E a luz que os
     //      apanha. O shader le esse alfa: mantem-nos sempre nitidos e devolve
@@ -671,6 +697,80 @@ void StageState::Render(){
                     so.sprite->SetTint(255, 255, 255, 255);
                 }
                 SDL_SetTextureBlendMode(tex, prev);
+            }
+
+            // Passo 3: QUEM ESTAVA A FRENTE VOLTA A TAPAR.
+            //
+            // A escuridao e um veu de ecra inteiro, por isso o passo 1 nao
+            // desenha "por cima da escuridao": desenha por cima de TUDO — do
+            // barril e da mesa que o Y-sort tinha posto A FRENTE do irmao. Era
+            // isto que punha os irmaos colados por cima dos barris, mesmo
+            // estando atras deles. Aqui percorremos a ordem real em que a cena
+            // foi desenhada e mandamos passar outra vez, por cima, tudo o que
+            // veio DEPOIS de um irmao (logo, a frente dele) e lhe toca.
+            //
+            // Dois cuidados:
+            //   • ESCURECIDOS pela luz que os apanha. Fora da escuridao eles
+            //     sairiam acesos, e um barril aceso num quarto preto salta a
+            //     vista mais do que o erro que viemos corrigir. O `ambient` e
+            //     o que a malha deixa passar onde nao chega luz nenhuma.
+            //   • RECORTADOS as caixas dos irmaos e dos itens. So a zona que o
+            //     passo 1 estragou e repintada; no resto do sprite fica a malha
+            //     verdadeira, com o seu degrade.
+            //
+            // Quem tem `FadeEffect` fica de fora: esse cenario ja se apaga
+            // sozinho quando um irmao passa por tras, e tapa-lo outra vez
+            // desfazia exactamente o efeito que ele existe para fazer.
+            const float zoom = Camera::GetZoom();
+            const float ambient = Clamp01(1.0f - lightMaskParams.ambientDarknessMax / 255.0f);
+            auto screenRectOf = [&](const GameObject* o) {
+                const Vec2 tl = WorldToScreen(Vec2(o->box.x, o->box.y));
+                return SDL_Rect{ static_cast<int>(std::floor(tl.x)),
+                                 static_cast<int>(std::floor(tl.y)),
+                                 static_cast<int>(std::ceil(o->box.w * zoom)) + 1,
+                                 static_cast<int>(std::ceil(o->box.h * zoom)) + 1 };
+            };
+
+            for (size_t i = 0; i < drawOrder.size(); i++) {
+                const DrawnSprite& d = drawOrder[i];
+                if (d.stamped || !d.sprite || !d.obj) continue;
+                if (d.obj->GetComponent<FadeEffect>()) continue;
+                // Alfa abaixo de 255 = alguem o esta a esbater ou a esconder de
+                // proposito (a porta do armario onde o irmao se escondeu, por
+                // exemplo). Passar por cima disso trazia-o de volta a vista.
+                const SDL_Color prevTint = d.sprite->GetTint();
+                if (prevTint.a < 255) continue;
+
+                // O recorte e a soma das caixas dos carimbados que ESTE objecto
+                // tapa, e so deles: fora dessa zona o sprite fica com a malha
+                // verdadeira, degrade e tudo.
+                SDL_Rect cover{0, 0, 0, 0};
+                bool covers = false;
+                for (size_t j = 0; j < i; j++) {
+                    if (!drawOrder[j].stamped || !drawOrder[j].obj) continue;
+                    const Rect& a = d.obj->box;
+                    const Rect& b = drawOrder[j].obj->box;
+                    const bool touches = (a.x < b.x + b.w) && (b.x < a.x + a.w) &&
+                                         (a.y < b.y + b.h) && (b.y < a.y + a.h);
+                    if (!touches) continue;
+                    const SDL_Rect r = screenRectOf(drawOrder[j].obj);
+                    if (!covers) {
+                        cover = r;
+                        covers = true;
+                    } else {
+                        SDL_UnionRect(&cover, &r, &cover);
+                    }
+                }
+                if (!covers) continue;
+
+                const float light = Clamp01(LightAmountAtScreen(WorldToScreen(d.obj->box.Center())));
+                const Uint8 v = static_cast<Uint8>(
+                    255.0f * Clamp01(ambient + (1.0f - ambient) * light));
+                SDL_RenderSetClipRect(renderer, &cover);
+                d.sprite->SetTint(v, v, v, prevTint.a);
+                d.sprite->Render();
+                d.sprite->SetTint(prevTint.r, prevTint.g, prevTint.b, prevTint.a);
+                SDL_RenderSetClipRect(renderer, nullptr);
             }
         }
     }

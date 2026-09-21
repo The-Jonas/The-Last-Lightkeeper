@@ -31,6 +31,11 @@ public:
     Vec2 GetScale();                                        // Retorna o valor de scale
     void SetFlip(SDL_RendererFlip flip);                    // Setar se o objeto vai ser espelhado
     void SetTint(Uint8 r, Uint8 g, Uint8 b, Uint8 a = 255); // Aplica modulação de cor/alpha na textura
+    /// Cor e alfa que estao aplicados neste momento. Serve a quem precisa de
+    /// redesenhar um sprite sem lhe estragar o tom que outro componente ja
+    /// escolheu — e para saber que NAO o deve tocar (um alfa abaixo de 255 quer
+    /// dizer que alguem o esta a esbater ou a esconder de proposito).
+    SDL_Color GetTint() const { return SDL_Color{ tintR, tintG, tintB, tintA }; }
 
     void SetCameraFollower(bool follow);                    // O CameraFollower vai escolher se o objeto fica fixo no mapa (false)
     bool cameraFollower;                                    // ou se ele segue a câmera (true), como por exemplo ser usado em elementos de fundo
