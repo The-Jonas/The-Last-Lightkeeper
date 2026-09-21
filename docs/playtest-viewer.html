@@ -1,0 +1,932 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A Luz do Farol — playtest viewer</title>
+<style>
+  :root{
+    --bg:#0d0f14; --panel:#151922; --panel2:#1b2130; --line:#242b38; --ink:#dfe4ee; --dim:#96a0b4;
+    --warm:#e8b45c; --cold:#8fb6e8; --good:#7fc08a; --bad:#e0796f; --violet:#b294e0;
+    --mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.55 -apple-system,Segoe UI,Roboto,sans-serif;padding:28px 20px 90px}
+  .wrap{max-width:1180px;margin:0 auto}
+  h1{font-size:25px;margin:0 0 4px;letter-spacing:.2px}
+  .sub{color:var(--dim);margin:0 0 22px}
+  h2{font-size:18px;margin:34px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+  h2 .key{font:12px var(--mono);color:var(--warm);margin-left:8px;letter-spacing:0}
+  code{font:13px var(--mono);background:#0a0c11;border:1px solid var(--line);
+       border-radius:4px;padding:1px 5px;color:var(--warm)}
+  a{color:var(--cold)}
+
+  /* ── Zona de carregamento ────────────────────────────────────────────── */
+  #drop{border:2px dashed var(--line);border-radius:12px;padding:28px 20px;text-align:center;
+        background:var(--panel);transition:border-color .15s,background .15s}
+  #drop.over{border-color:var(--warm);background:#1d2029}
+  #drop p{margin:6px 0;color:var(--dim)}
+  .btn{display:inline-block;background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+       border-radius:7px;padding:7px 14px;cursor:pointer;font-size:14px}
+  .btn:hover{border-color:var(--warm);color:var(--warm)}
+  input[type=file]{display:none}
+
+  /* ── Cartoes de numeros ──────────────────────────────────────────────── */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:12px 14px}
+  .kpi .v{font:22px/1.2 var(--mono);color:var(--warm)}
+  .kpi .l{color:var(--dim);font-size:12px;text-transform:uppercase;letter-spacing:.6px;margin-top:3px}
+
+  /* ── Tabelas ─────────────────────────────────────────────────────────── */
+  table{border-collapse:collapse;width:100%;font-size:13.5px;margin-top:8px}
+  th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}
+  th{background:var(--panel2);color:var(--warm);font-weight:600;white-space:nowrap;cursor:default}
+  tbody tr:nth-child(odd){background:#12151d}
+  td.num{font-family:var(--mono);text-align:right;white-space:nowrap}
+  .tag{display:inline-block;border-radius:4px;padding:1px 6px;font:11.5px var(--mono);border:1px solid var(--line)}
+  .tag.win{color:var(--good);border-color:#2f5c3c}
+  .tag.lose{color:var(--bad);border-color:#5e3430}
+  .tag.none{color:var(--dim)}
+  .scroll{max-height:460px;overflow:auto;border:1px solid var(--line);border-radius:9px}
+  .scroll table{margin:0}
+  .scroll th{position:sticky;top:0;z-index:1}
+
+  /* ── Graficos ────────────────────────────────────────────────────────── */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;margin-top:12px}
+  .card h3{margin:0 0 8px;font-size:14px;color:var(--dim);font-weight:600;
+           text-transform:uppercase;letter-spacing:.6px}
+  canvas{display:block;width:100%;border-radius:6px;background:#0a0c11}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:8px;font-size:12.5px;color:var(--dim)}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+
+  .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0}
+  select,input[type=search]{background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+       border-radius:7px;padding:6px 10px;font-size:13.5px;font-family:inherit}
+  label.chk{display:inline-flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);
+       border-radius:7px;padding:5px 10px;font-size:13px;cursor:pointer}
+  label.chk input{accent-color:var(--warm)}
+  .hint{color:var(--dim);font-size:13px;margin:6px 0 0}
+
+  /* ── Achados ─────────────────────────────────────────────────────────── */
+  .finding{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--dim);
+           border-radius:9px;padding:11px 14px;margin-top:9px}
+  .finding.high{border-left-color:var(--bad)}
+  .finding.med{border-left-color:var(--warm)}
+  .finding.low{border-left-color:var(--cold)}
+  .finding .t{font-weight:600}
+  .finding .n{font:12px var(--mono);color:var(--dim);float:right}
+  .finding .d{color:var(--dim);font-size:13.5px;margin-top:3px}
+  .finding .w{font:12px var(--mono);color:var(--warm);margin-top:5px}
+  .hide{display:none}
+  .empty{color:var(--dim);padding:22px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Playtest viewer</h1>
+<p class="sub">Reads the <code>.jsonl</code> files the game writes to <code>logs/playtest/</code>. Everything runs in this page — no server, nothing uploaded.</p>
+
+<div id="drop">
+  <p><b>Drop the session files here</b> (<code>.jsonl</code>, one per run — several at a time is fine)</p>
+  <p>or</p>
+  <label class="btn" for="picker">Choose files</label>
+  <input id="picker" type="file" multiple accept=".jsonl,.json,.txt">
+  <p id="loadState" class="hint"></p>
+</div>
+
+<div id="app" class="hide">
+
+  <h2>Sessions <span class="key">one run of the game = one file</span></h2>
+  <div class="row" id="sessionToggles"></div>
+  <div class="kpis" id="kpis"></div>
+  <div class="scroll"><table id="sessionTable"></table></div>
+
+  <h2>Findings <span class="key">what the data is complaining about</span></h2>
+  <div id="findings"></div>
+
+  <h2>Run of play <span class="key">levels and what happened in them</span></h2>
+  <div class="card">
+    <h3>Timeline</h3>
+    <canvas id="timeline" height="260"></canvas>
+    <div class="legend" id="timelineLegend"></div>
+    <p class="hint">One lane per session. The bands are the levels; the marks are events. Hover a mark to read it.</p>
+  </div>
+
+  <h2>Curves <span class="key">from the one-per-second samples</span></h2>
+  <div class="row">
+    <select id="curveSession"></select>
+  </div>
+  <div class="card">
+    <h3>Sanity</h3>
+    <canvas id="chartSanity" height="180"></canvas>
+    <div class="legend">
+      <span><i style="background:#e8b45c"></i>big brother</span>
+      <span><i style="background:#8fb6e8"></i>little brother</span>
+      <span><i style="background:#e0796f"></i>monster chasing</span>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Frames per second</h3>
+    <canvas id="chartFps" height="150"></canvas>
+    <div class="legend">
+      <span><i style="background:#7fc08a"></i>average in the second</span>
+      <span><i style="background:#e0796f"></i>worst frame (ms)</span>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Distance to the monster</h3>
+    <canvas id="chartMonster" height="150"></canvas>
+    <div class="legend"><span><i style="background:#b294e0"></i>pixels between the monster and the controlled brother</span></div>
+  </div>
+
+  <h2>Where they walked <span class="key">heat map and markers</span></h2>
+  <div class="row">
+    <select id="mapLevel"></select>
+    <label class="chk"><input type="checkbox" id="mapAllSessions" checked> all selected sessions</label>
+    <label class="chk"><input type="checkbox" id="mapDeaths" checked> deaths</label>
+    <label class="chk"><input type="checkbox" id="mapStuck" checked> stuck</label>
+    <label class="chk"><input type="checkbox" id="mapHits" checked> monster hits</label>
+    <label class="chk"><input type="checkbox" id="mapPickups"> items taken</label>
+  </div>
+  <div class="card">
+    <canvas id="heat" height="560"></canvas>
+    <p class="hint">Brighter = more seconds spent there. World coordinates, Y downwards, same as the game.</p>
+  </div>
+
+  <h2>What is in a file <span class="key">o que cada linha guarda</span></h2>
+  <div class="card">
+    <p class="hint" style="margin-top:0">One file = one run of the game. One line = one JSON object. A run that crashes stays readable: only the last line is lost. Three kinds of line, told apart by <code>k</code>:</p>
+    <table>
+      <tr><th>k</th><th>When</th><th>What it carries</th></tr>
+      <tr><td><code>meta</code></td><td>first line</td><td>tester, build hash, start time, platform</td></tr>
+      <tr><td><code>sample</code></td><td>once a second — <b>four times a second</b> while the monster chases or sanity is under 40 (<code>hot</code> says which)</td><td>level, both brothers' position and sanity, who is controlled, party mode, light on and fuel, items carried, distance walked, monster state and distance, FPS and worst frame</td></tr>
+      <tr><td><code>event</code></td><td>when it happens</td><td>the <code>type</code> below, plus <code>x</code>/<code>y</code> and <code>level</code> where they make sense</td></tr>
+    </table>
+    <p class="hint">Every line carries <code>t</code>: seconds since the game started.</p>
+    <table style="margin-top:14px">
+      <tr><th>Event</th><th>Means</th></tr>
+      <tr><td><code>env</code></td><td>machine and settings: renderer, resolution, cores, RAM, volumes, brightness</td></tr>
+      <tr><td><code>menu</code> · <code>state_push</code></td><td>what they picked in the main menu; every screen change</td></tr>
+      <tr><td><code>level_start</code> · <code>level_end</code></td><td>floor entered and left, with time, distance walked and seconds with the light on</td></tr>
+      <tr><td><code>death</code> · <code>victory</code> · <code>checkpoint_restart</code></td><td>how the run ended, where, and by what (monster or darkness)</td></tr>
+      <tr><td><code>monster_state</code> · <code>monster_flap</code></td><td>every state change of the monster, with the distance to the player. A state that bounces back and forth in under 0.4 s is not written one by one: it becomes a single <code>monster_flap</code> with the pair and the count — the line is itself the symptom of a defect</td></tr>
+      <tr><td><code>monster_hit</code></td><td>a touch: who took it, whether they were lit, how much sanity it cost and what was left</td></tr>
+      <tr><td><code>sanity_drop</code> · <code>sanity_tier</code></td><td>a fall of 20 or more inside about a second (with the monster state and the light), and each crossing below 75, 50 and 25</td></tr>
+      <tr><td><code>idle</code></td><td>twenty seconds without leaving the same 48 px: the player does not know what to do</td></tr>
+      <tr><td><code>stuck</code></td><td>the player held a direction for 2 s and the body did not move — a place where the map traps people</td></tr>
+      <tr><td><code>item_pickup</code> · <code>item_blocked</code></td><td>what was taken, and what they tried to take with a full bag</td></tr>
+      <tr><td><code>candle_lit</code> · <code>candle_blown</code> · <code>window_closed</code> · <code>window_opened</code> · <code>repair_done</code> · <code>radio_used</code></td><td>the world changing: the player lighting and closing, the monster opening</td></tr>
+      <tr><td><code>hide_start</code> · <code>hide_end</code></td><td>the closet, with how long they stayed in it</td></tr>
+      <tr><td><code>journal_open</code> · <code>journal_close</code></td><td>which document, and how long it stayed on screen</td></tr>
+      <tr><td><code>tutorial</code></td><td>which hint the game had to show — one that fires for everybody means the game does not explain itself</td></tr>
+      <tr><td><code>swap_brother</code> · <code>pause_menu</code> · <code>quit_confirm</code></td><td>control habits, and whether they really meant to leave</td></tr>
+      <tr><td><code>hitch</code></td><td>a frame over 200 ms: a freeze the player can see</td></tr>
+      <tr><td><code>session_end</code></td><td>clean exit, with the total duration and how it ended: <code>window_close</code>, <code>quit_menu</code>, <code>quit_stage</code></td></tr>
+      <tr><td><code>crash</code></td><td>the session ended in a crash — written from inside the crash handler, so a crashed run no longer looks like an abandoned one</td></tr>
+    </table>
+  </div>
+
+  <h2>Events <span class="key">every discrete thing that happened</span></h2>
+  <div class="row">
+    <select id="evType"><option value="">all types</option></select>
+    <input type="search" id="evSearch" placeholder="filter text…">
+    <span class="btn" id="exportCsv">Export CSV</span>
+    <span class="hint" id="evCount"></span>
+  </div>
+  <div class="scroll"><table id="eventTable"></table></div>
+
+</div>
+</div>
+
+<script>
+"use strict";
+// ─────────────────────────────────────────────────────────────────────────────
+//  Leitor das sessoes de playtest.
+//
+//  Um ficheiro = uma sessao = uma execucao do jogo. Cada LINHA e um objecto
+//  JSON independente (JSON Lines), por isso uma sessao que rebentou a meio le-se
+//  na mesma: descarta-se a ultima linha e o resto continua valido.
+//
+//  As linhas tem um campo "k": "meta" (cabecalho), "event" (aconteceu algo) e
+//  "sample" (fotografia do estado, uma por segundo). Ver include/core/Telemetry.h.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const $ = (id) => document.getElementById(id);
+const sessions = [];           // todas as sessoes carregadas
+let mapBackground = null;      // imagem opcional por baixo do mapa de calor
+
+// ── Carregamento ────────────────────────────────────────────────────────────
+
+function parseSession(name, text) {
+  const s = {name, meta:{}, env:{}, events:[], samples:[], bad:0, on:true};
+  const lines = text.split(/\r?\n/);
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    let o;
+    try { o = JSON.parse(line); }
+    catch (err) { s.bad++; continue; }   // linha cortada por um crash: ignora
+    if (o.k === "meta") { s.meta = o; continue; }
+    if (o.k === "sample") { s.samples.push(o); continue; }
+    if (o.k === "event") {
+      s.events.push(o);
+      if (o.type === "env") s.env = o;
+    }
+  }
+  s.duration = sessionDuration(s);
+  s.label = (s.meta.tester || "?") + " · " + (s.meta.startedAt || name);
+  return s;
+}
+
+function sessionDuration(s) {
+  const end = s.events.find(e => e.type === "session_end");
+  if (end && typeof end.duration === "number") return end.duration;
+  let last = 0;
+  if (s.samples.length) last = Math.max(last, s.samples[s.samples.length-1].t);
+  if (s.events.length) last = Math.max(last, s.events[s.events.length-1].t);
+  return last;
+}
+
+function loadFiles(fileList) {
+  const files = Array.from(fileList);
+  const images = files.filter(f => /\.(png|jpe?g|webp)$/i.test(f.name));
+  const logs = files.filter(f => !images.includes(f));
+
+  if (images.length) {
+    const img = new Image();
+    img.onload = () => { mapBackground = img; drawHeat(); };
+    img.src = URL.createObjectURL(images[0]);
+  }
+  if (!logs.length) { render(); return; }
+
+  let pending = logs.length;
+  for (const f of logs) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const s = parseSession(f.name, String(reader.result || ""));
+      if (s.samples.length || s.events.length || s.meta.session) sessions.push(s);
+      if (--pending === 0) { sessions.sort((a,b)=> String(a.meta.startedAt||"").localeCompare(String(b.meta.startedAt||""))); render(); }
+    };
+    reader.onerror = () => { if (--pending === 0) render(); };
+    reader.readAsText(f);
+  }
+}
+
+$("picker").addEventListener("change", e => loadFiles(e.target.files));
+const drop = $("drop");
+["dragenter","dragover"].forEach(t => drop.addEventListener(t, e => {
+  e.preventDefault(); drop.classList.add("over");
+}));
+["dragleave","drop"].forEach(t => drop.addEventListener(t, e => {
+  e.preventDefault(); drop.classList.remove("over");
+}));
+drop.addEventListener("drop", e => { if (e.dataTransfer) loadFiles(e.dataTransfer.files); });
+
+// ── Ajudas ──────────────────────────────────────────────────────────────────
+
+const fmtTime = (sec) => {
+  if (!isFinite(sec)) return "—";
+  const s = Math.max(0, Math.round(sec));
+  const m = Math.floor(s/60), r = s%60;
+  return m + "m " + String(r).padStart(2,"0") + "s";
+};
+const fmtNum = (v, dec=0) => (typeof v === "number" && isFinite(v)) ? v.toFixed(dec) : "—";
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const selected = () => sessions.filter(s => s.on);
+
+/// Cor de cada especie de evento. O que nao esta aqui sai cinzento — um evento
+/// novo no jogo aparece no visualizador sem ser preciso mexer aqui.
+const EVENT_COLORS = {
+  death:"#e0796f", victory:"#7fc08a", monster_hit:"#e0796f", monster_state:"#b294e0",
+  stuck:"#e8b45c", item_pickup:"#8fb6e8", item_blocked:"#c76a5a", candle_lit:"#e8b45c",
+  candle_blown:"#6b7486", window_opened:"#c76a5a", window_closed:"#7fc08a",
+  hide_start:"#b294e0", hide_end:"#8f7fb0", journal_open:"#8fb6e8", tutorial:"#e8b45c",
+  level_start:"#4f6b8f", level_end:"#4f6b8f", checkpoint_restart:"#e0796f",
+  hitch:"#c76a5a", repair_done:"#7fc08a", swap_brother:"#6b7486", radio_used:"#8fb6e8",
+  monster_flap:"#e0796f", sanity_drop:"#e0796f", sanity_tier:"#c99a52", idle:"#8f7fb0", crash:"#ff5f5f"
+};
+const eventColor = (t) => EVENT_COLORS[t] || "#6b7486";
+
+/// Densidade de pixeis do ecra, para o canvas nao sair borrado.
+function fitCanvas(cv) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth || 900;
+  const h = Number(cv.getAttribute("height")) || 200;
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  return {ctx, w, h};
+}
+
+// ── Desenho geral ───────────────────────────────────────────────────────────
+
+function render() {
+  $("loadState").textContent = sessions.length
+    ? sessions.length + " session(s) loaded" + (sessions.some(s=>s.bad) ? " · some truncated lines were skipped" : "")
+    : "Nothing loaded yet.";
+  if (!sessions.length) return;
+  $("app").classList.remove("hide");
+  renderToggles();
+  renderKpis();
+  renderFindings();
+  renderSessionTable();
+  renderCurveSelector();
+  renderMapLevels();
+  renderEventTypes();
+  drawTimeline();
+  drawCurves();
+  drawHeat();
+  renderEventTable();
+}
+
+function renderToggles() {
+  $("sessionToggles").innerHTML = sessions.map((s,i) =>
+    `<label class="chk"><input type="checkbox" data-i="${i}" ${s.on?"checked":""}> ${esc(s.label)}</label>`
+  ).join("");
+  $("sessionToggles").querySelectorAll("input").forEach(el => {
+    el.addEventListener("change", () => {
+      sessions[Number(el.dataset.i)].on = el.checked;
+      renderKpis(); renderFindings(); drawTimeline(); drawHeat(); renderEventTable(); renderCurveSelector(); drawCurves();
+    });
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  ACHADOS
+//
+//  Le as sessoes escolhidas e devolve os problemas ja ordenados. E o passo que
+//  transforma o visualizador numa lista de coisas para arranjar: ninguem quer
+//  descobrir a olho, em 98 amostras, que o monstro trocou de estado 17 vezes
+//  num segundo.
+//
+//  Cada achado: {sev, title, detail, count, where}. `sev` e "high" (defeito),
+//  "med" (vale a pena olhar) ou "low" (informacao).
+// ─────────────────────────────────────────────────────────────────────────────
+function computeFindings(pool) {
+  const out = [];
+  const add = (sev, title, detail, count, where) => out.push({sev, title, detail, count, where: where || ""});
+  const nameOf = (s) => s.meta.tester || s.name;
+
+  // ── Monstro a oscilar de estado ─────────────────────────────────────────
+  // Duas fontes: o evento "monster_flap" (builds novas, ja agregado) e, nas
+  // gravacoes antigas, as transicoes cruas separadas por menos de 0,4 s.
+  let flapCount = 0, flapWorst = 0, flapWhere = "";
+  pool.forEach(s => {
+    s.events.filter(e => e.type === "monster_flap").forEach(e => {
+      flapCount++;
+      if ((e.count || 0) > flapWorst) { flapWorst = e.count; flapWhere = `${nameOf(s)} · ${fmtTime(e.t)} · ${e.a}↔${e.b}`; }
+    });
+    const st = s.events.filter(e => e.type === "monster_state");
+    let run = 0;
+    for (let i = 1; i < st.length; i++) {
+      const quick = (st[i].t - st[i-1].t) < 0.4 && st[i].to === st[i-1].from;
+      if (quick) { run++; }
+      else {
+        if (run >= 3) { flapCount++; if (run+1 > flapWorst) { flapWorst = run+1; flapWhere = `${nameOf(s)} · ${fmtTime(st[i-1].t)} · ${st[i-1].from}↔${st[i-1].to}`; } }
+        run = 0;
+      }
+    }
+    if (run >= 3) { flapCount++; if (run+1 > flapWorst) flapWorst = run+1; }
+  });
+  if (flapCount) {
+    add("high", "The monster's state machine flaps",
+        `A state changes back and forth in milliseconds, so the condition that decides it has no hysteresis. Worst burst: ${flapWorst} changes.`,
+        flapCount, flapWhere);
+  }
+
+  // ── Quedas de sanidade ──────────────────────────────────────────────────
+  const cliffs = [];
+  pool.forEach(s => {
+    s.events.filter(e => e.type === "sanity_drop").forEach(e => cliffs.push({s, t:e.t, drop:e.dropped, extra:e.monster || ""}));
+    // Gravacoes antigas: procura a queda entre amostras consecutivas.
+    for (let i = 1; i < s.samples.length; i++) {
+      const a = s.samples[i-1], b = s.samples[i];
+      const d = (a.sanityBig || 0) - (b.sanityBig || 0);
+      if (d >= 20 && (b.t - a.t) <= 1.5) cliffs.push({s, t:b.t, drop:d, extra:b.monster || ""});
+    }
+  });
+  if (cliffs.length) {
+    const worst = cliffs.reduce((m,c) => c.drop > m.drop ? c : m, cliffs[0]);
+    add("med", "Sanity falls off a cliff",
+        `A single second costs up to ${Math.round(worst.drop)} of 100 sanity. Check whether one touch is meant to be survivable.`,
+        cliffs.length, `${nameOf(worst.s)} · ${fmtTime(worst.t)}${worst.extra ? " · monster " + worst.extra : ""}`);
+  }
+
+  // ── Sitios onde se morre ────────────────────────────────────────────────
+  const deaths = [];
+  pool.forEach(s => s.events.filter(e => e.type === "death").forEach(e => deaths.push({s, e})));
+  const clusters = cluster(deaths.map(d => ({x:d.e.x, y:d.e.y, level:d.e.level, ref:d})), 320);
+  clusters.filter(c => c.items.length >= 2).forEach(c => {
+    add("high", `Deaths pile up in one spot on level ${(c.items[0].level ?? 0)+1}`,
+        `${c.items.length} deaths within ${Math.round(c.radius)} px of each other. Either the place is unfair or it is the only place people reach.`,
+        c.items.length, `world ${Math.round(c.x)}, ${Math.round(c.y)}`);
+  });
+  if (deaths.length && clusters.every(c => c.items.length < 2)) {
+    add("low", "Deaths", `${deaths.length} death(s), spread out — no single spot stands out yet.`, deaths.length, "");
+  }
+
+  // ── Preso e parado ──────────────────────────────────────────────────────
+  const stucks = [];
+  pool.forEach(s => s.events.filter(e => e.type === "stuck").forEach(e => stucks.push({x:e.x, y:e.y, level:e.level, s, t:e.t})));
+  cluster(stucks, 220).forEach(c => {
+    add(c.items.length >= 2 ? "high" : "med", `Geometry traps the player on level ${(c.items[0].level ?? 0)+1}`,
+        "The player held a direction and the body did not move. A wall corner, a collider or a door frame.",
+        c.items.length, `world ${Math.round(c.x)}, ${Math.round(c.y)}`);
+  });
+
+  const idles = [];
+  pool.forEach(s => s.events.filter(e => e.type === "idle").forEach(e => idles.push({x:e.x, y:e.y, level:e.level, s, t:e.t})));
+  cluster(idles, 320).filter(c => c.items.length >= 2).forEach(c => {
+    add("med", `Players stand still on level ${(c.items[0].level ?? 0)+1}`,
+        "Twenty seconds without moving, more than once in the same place: they do not know where to go or what to use.",
+        c.items.length, `world ${Math.round(c.x)}, ${Math.round(c.y)}`);
+  });
+
+  // ── Desempenho ──────────────────────────────────────────────────────────
+  let hitches = 0, worstMs = 0, worstWhen = "";
+  pool.forEach(s => s.events.filter(e => e.type === "hitch").forEach(e => {
+    hitches++;
+    if (e.ms > worstMs) { worstMs = e.ms; worstWhen = `${nameOf(s)} · ${fmtTime(e.t)}`; }
+  }));
+  if (hitches) {
+    add(worstMs >= 1000 ? "high" : "med", "The picture freezes",
+        `${hitches} frame(s) over 200 ms. The worst took ${(worstMs/1000).toFixed(1)} s — that is a visible stall, usually a level load doing its work on the main thread.`,
+        hitches, worstWhen);
+  }
+  const slow = [];
+  pool.forEach(s => s.samples.forEach(p => { if (p.fps > 0 && p.fps < 30) slow.push(p); }));
+  if (slow.length) {
+    const total = pool.reduce((a,s)=>a+s.samples.length, 0) || 1;
+    add("med", "Frame rate drops below 30",
+        `${(100*slow.length/total).toFixed(1)}% of the recorded seconds ran under 30 FPS.`, slow.length, "");
+  }
+
+  // ── Leitura e atrito ────────────────────────────────────────────────────
+  const quickReads = [];
+  pool.forEach(s => s.events.filter(e => e.type === "journal_close" && (e.readSeconds || 0) < 2).forEach(e => quickReads.push({s, e})));
+  if (quickReads.length) {
+    add("med", "Documents are opened and dismissed",
+        `${quickReads.length} document(s) closed in under 2 seconds. The story text is being skipped, not read.`,
+        quickReads.length, quickReads.map(q => (q.e.image||"").split(/[\\/]/).pop()).slice(0,3).join(", "));
+  }
+  let blocked = 0;
+  pool.forEach(s => blocked += s.events.filter(e => e.type === "item_blocked").length);
+  if (blocked) {
+    add("med", "The bag is full when they try to take something",
+        "Every one of these is a player reaching for an item and being refused.", blocked, "");
+  }
+
+  // ── Sessao que rebentou ─────────────────────────────────────────────────
+  pool.forEach(s => {
+    const crash = s.events.find(e => e.type === "crash");
+    if (crash) add("high", "The game crashed", `Session "${nameOf(s)}" ended in a crash: ${crash.reason || "?"}. The crash report is in crash-reports/.`, 1, fmtTime(crash.t));
+  });
+
+  // ── Sessoes que ninguem acabou ──────────────────────────────────────────
+  const unfinished = pool.filter(s => !s.events.some(e => e.type === "victory") && !s.events.some(e => e.type === "death"));
+  if (unfinished.length) {
+    add("low", "Sessions that just stopped",
+        "No death and no victory: the player closed the game in the middle. Worth asking them why.",
+        unfinished.length, unfinished.map(nameOf).slice(0,3).join(", "));
+  }
+
+  const rank = {high:0, med:1, low:2};
+  out.sort((a,b) => rank[a.sev] - rank[b.sev] || b.count - a.count);
+  return out;
+}
+
+/// Junta pontos proximos. Simples de proposito: um passe, primeiro a chegar
+/// forma o grupo. Chega para dizer "morre-se sempre aqui".
+function cluster(points, radius) {
+  const groups = [];
+  for (const p of points) {
+    if (typeof p.x !== "number") continue;
+    let g = groups.find(q => q.level === p.level && Math.hypot(q.x-p.x, q.y-p.y) <= radius);
+    if (!g) { g = {x:p.x, y:p.y, level:p.level, items:[], radius:0}; groups.push(g); }
+    g.items.push(p);
+    g.x = g.items.reduce((a,i)=>a+i.x,0)/g.items.length;
+    g.y = g.items.reduce((a,i)=>a+i.y,0)/g.items.length;
+    g.radius = Math.max(...g.items.map(i => Math.hypot(i.x-g.x, i.y-g.y)));
+  }
+  return groups;
+}
+
+function renderFindings() {
+  const pool = selected();
+  const list = pool.length ? computeFindings(pool) : [];
+  if (!list.length) {
+    $("findings").innerHTML = '<div class="finding low"><span class="t">Nothing stands out</span>'
+      + '<div class="d">No flapping, no death clusters, no freezes in what is loaded.</div></div>';
+    return;
+  }
+  $("findings").innerHTML = list.map(f => `<div class="finding ${f.sev}">
+      <span class="n">${f.count}&times;</span>
+      <span class="t">${esc(f.title)}</span>
+      <div class="d">${esc(f.detail)}</div>
+      ${f.where ? `<div class="w">${esc(f.where)}</div>` : ""}
+    </div>`).join("");
+}
+
+function renderKpis() {
+  const sel = selected();
+  const total = sel.reduce((a,s)=>a+s.duration, 0);
+  const deaths = sel.reduce((a,s)=>a+s.events.filter(e=>e.type==="death").length, 0);
+  const wins = sel.filter(s => s.events.some(e=>e.type==="victory")).length;
+  const stuck = sel.reduce((a,s)=>a+s.events.filter(e=>e.type==="stuck").length, 0);
+  const picks = sel.reduce((a,s)=>a+s.events.filter(e=>e.type==="item_pickup").length, 0);
+  const allFps = sel.flatMap(s => s.samples.map(x=>x.fps).filter(v=>typeof v==="number" && v>0));
+  const avgFps = allFps.length ? allFps.reduce((a,b)=>a+b,0)/allFps.length : NaN;
+  const maxLevel = sel.reduce((a,s)=> Math.max(a, ...s.samples.map(x=>x.level||0), 0), 0);
+
+  const cards = [
+    ["sessions", sel.length],
+    ["total playtime", fmtTime(total)],
+    ["deaths", deaths],
+    ["sessions won", wins + " / " + sel.length],
+    ["stuck reports", stuck],
+    ["items taken", picks],
+    ["average fps", fmtNum(avgFps,1)],
+    ["highest level", maxLevel + 1],
+  ];
+  $("kpis").innerHTML = cards.map(([l,v]) => `<div class="kpi"><div class="v">${esc(v)}</div><div class="l">${l}</div></div>`).join("");
+}
+
+function outcomeOf(s) {
+  if (s.events.some(e=>e.type==="victory")) return '<span class="tag win">won</span>';
+  const d = s.events.filter(e=>e.type==="death");
+  if (d.length) return `<span class="tag lose">died (${esc(d[d.length-1].cause||"?")})</span>`;
+  return '<span class="tag none">stopped</span>';
+}
+
+function renderSessionTable() {
+  const head = `<thead><tr><th>Tester</th><th>Started</th><th>Build</th><th>Machine</th>
+    <th>Duration</th><th>Outcome</th><th>Levels</th><th>Deaths</th><th>Items</th><th>Avg FPS</th><th>Worst frame</th></tr></thead>`;
+  const rows = sessions.map(s => {
+    const fps = s.samples.map(x=>x.fps).filter(v=>v>0);
+    const worst = s.samples.map(x=>x.worstMs).filter(v=>typeof v==="number");
+    const levels = new Set(s.samples.map(x=>x.level).filter(v=>typeof v==="number"));
+    const machine = s.env.cpuCores ? `${s.env.cpuCores} cores · ${s.env.ramMB||"?"} MB · ${esc(s.env.renderer||"?")}` : "—";
+    return `<tr>
+      <td>${esc(s.meta.tester||"?")}</td>
+      <td>${esc(s.meta.startedAt||"?")}</td>
+      <td><code>${esc(s.meta.build||"?")}</code></td>
+      <td>${machine}</td>
+      <td class="num">${fmtTime(s.duration)}</td>
+      <td>${outcomeOf(s)}</td>
+      <td class="num">${levels.size ? [...levels].map(v=>v+1).join(", ") : "—"}</td>
+      <td class="num">${s.events.filter(e=>e.type==="death").length}</td>
+      <td class="num">${s.events.filter(e=>e.type==="item_pickup").length}</td>
+      <td class="num">${fps.length ? fmtNum(fps.reduce((a,b)=>a+b,0)/fps.length,1) : "—"}</td>
+      <td class="num">${worst.length ? fmtNum(Math.max(...worst),0)+" ms" : "—"}</td>
+    </tr>`;
+  }).join("");
+  $("sessionTable").innerHTML = head + "<tbody>" + rows + "</tbody>";
+}
+
+// ── Linha do tempo ──────────────────────────────────────────────────────────
+
+const TIMELINE_EVENTS = ["death","victory","monster_hit","stuck","idle","item_pickup","candle_lit",
+                         "window_opened","hide_start","journal_open","tutorial","checkpoint_restart","hitch",
+                         "monster_flap","sanity_drop","crash"];
+let timelineMarks = [];
+
+function drawTimeline() {
+  const cv = $("timeline");
+  const sel = selected();
+  const laneH = 44;
+  cv.setAttribute("height", String(Math.max(120, 30 + sel.length * laneH)));
+  const {ctx, w, h} = fitCanvas(cv);
+  timelineMarks = [];
+  if (!sel.length) return;
+
+  const maxT = Math.max(1, ...sel.map(s => s.duration));
+  const padL = 130, padR = 14, padT = 18;
+  const plotW = Math.max(10, w - padL - padR);
+  const x = (t) => padL + (t/maxT) * plotW;
+
+  // Escala de tempo
+  ctx.strokeStyle = "#242b38"; ctx.fillStyle = "#96a0b4"; ctx.font = "11px ui-monospace,monospace";
+  const step = niceStep(maxT, 8);
+  for (let t = 0; t <= maxT; t += step) {
+    ctx.beginPath(); ctx.moveTo(x(t), padT-6); ctx.lineTo(x(t), h-6); ctx.stroke();
+    ctx.fillText(fmtTime(t), x(t)+3, padT-8);
+  }
+
+  sel.forEach((s, i) => {
+    const y = padT + i*laneH + 6;
+    ctx.fillStyle = "#dfe4ee"; ctx.font = "12px -apple-system,Segoe UI,sans-serif";
+    ctx.fillText(trim(s.meta.tester || s.name, 18), 6, y + 14);
+
+    // Faixas de nivel: do level_start ao seguinte.
+    const starts = s.events.filter(e => e.type === "level_start");
+    const bandTop = y + 4, bandH = 18;
+    const bounds = starts.map((e, k) => ({
+      level: e.level || 0, from: e.t,
+      to: (k+1 < starts.length) ? starts[k+1].t : s.duration
+    }));
+    if (!bounds.length) bounds.push({level:0, from:0, to:s.duration});
+    bounds.forEach(b => {
+      ctx.fillStyle = ["#233047","#2b3a2c","#3a2b35","#332b47"][b.level % 4];
+      ctx.fillRect(x(b.from), bandTop, Math.max(2, x(b.to)-x(b.from)), bandH);
+      ctx.fillStyle = "#96a0b4"; ctx.font = "10px ui-monospace,monospace";
+      if (x(b.to)-x(b.from) > 40) ctx.fillText("nivel " + (b.level+1), x(b.from)+5, bandTop+13);
+    });
+
+    // Marcas de evento
+    s.events.forEach(e => {
+      if (!TIMELINE_EVENTS.includes(e.type)) return;
+      const px = x(e.t), py = bandTop + bandH + 9;
+      ctx.fillStyle = eventColor(e.type);
+      ctx.beginPath(); ctx.arc(px, py, e.type === "death" ? 5 : 3.2, 0, Math.PI*2); ctx.fill();
+      timelineMarks.push({x:px, y:py, e, s});
+    });
+  });
+}
+
+function niceStep(range, targetTicks) {
+  const raw = range / Math.max(1,targetTicks);
+  const pow = Math.pow(10, Math.floor(Math.log10(Math.max(1e-6, raw))));
+  const candidates = [1,2,5,10].map(m => m*pow);
+  return candidates.find(c => c >= raw) || candidates[candidates.length-1];
+}
+const trim = (s, n) => String(s).length > n ? String(s).slice(0,n-1)+"…" : String(s);
+
+$("timeline").addEventListener("mousemove", ev => {
+  const r = ev.target.getBoundingClientRect();
+  const mx = ev.clientX - r.left, my = ev.clientY - r.top;
+  let best = null, bestD = 12;
+  for (const m of timelineMarks) {
+    const d = Math.hypot(m.x-mx, m.y-my);
+    if (d < bestD) { bestD = d; best = m; }
+  }
+  ev.target.title = best ? `${fmtTime(best.e.t)} · ${best.e.type}\n${describe(best.e)}` : "";
+});
+
+function describe(e) {
+  const skip = new Set(["t","k","type"]);
+  return Object.keys(e).filter(k => !skip.has(k))
+    .map(k => `${k}=${typeof e[k]==="number" ? Number(e[k]).toFixed(1) : e[k]}`).join("  ");
+}
+
+// ── Curvas ──────────────────────────────────────────────────────────────────
+
+function renderCurveSelector() {
+  const sel = selected();
+  const cur = $("curveSession").value;
+  $("curveSession").innerHTML = sel.map((s,i) => `<option value="${i}">${esc(s.label)}</option>`).join("");
+  if (cur && Number(cur) < sel.length) $("curveSession").value = cur;
+}
+$("curveSession").addEventListener("change", drawCurves);
+
+function curveSession() {
+  const sel = selected();
+  const i = Number($("curveSession").value || 0);
+  return sel[i] || sel[0] || null;
+}
+
+/// Grafico de linhas simples. `series` = [{key, color, scale}].
+function lineChart(cv, s, series, yMax, opts) {
+  const {ctx, w, h} = fitCanvas(cv);
+  const padL = 44, padR = 12, padT = 10, padB = 20;
+  const plotW = Math.max(10, w-padL-padR), plotH = Math.max(10, h-padT-padB);
+  if (!s || !s.samples.length) {
+    ctx.fillStyle = "#6b7486"; ctx.font = "13px sans-serif";
+    ctx.fillText("no samples in this session", padL, h/2);
+    return;
+  }
+  const maxT = Math.max(1, s.duration);
+  const x = (t) => padL + (t/maxT)*plotW;
+  const y = (v) => padT + plotH - (Math.min(v,yMax)/yMax)*plotH;
+
+  // Faixas de perseguicao por tras das curvas
+  if (opts && opts.chaseBands) {
+    ctx.fillStyle = "rgba(224,121,111,0.16)";
+    s.samples.forEach((p, i) => {
+      if (p.monster === "CHASE" || p.monster === "HUNT") {
+        const next = s.samples[i+1];
+        ctx.fillRect(x(p.t), padT, Math.max(1, x(next ? next.t : p.t+1) - x(p.t)), plotH);
+      }
+    });
+  }
+
+  // Eixos
+  ctx.strokeStyle = "#242b38"; ctx.fillStyle = "#6b7486"; ctx.font = "10px ui-monospace,monospace";
+  for (let k = 0; k <= 4; k++) {
+    const v = yMax*k/4, py = y(v);
+    ctx.beginPath(); ctx.moveTo(padL, py); ctx.lineTo(w-padR, py); ctx.stroke();
+    ctx.fillText(String(Math.round(v)), 6, py+3);
+  }
+  const step = niceStep(maxT, 7);
+  for (let t = 0; t <= maxT; t += step) ctx.fillText(fmtTime(t), x(t)+2, h-6);
+
+  for (const ser of series) {
+    ctx.strokeStyle = ser.color; ctx.lineWidth = 1.6; ctx.beginPath();
+    let started = false;
+    for (const p of s.samples) {
+      const v = p[ser.key];
+      if (typeof v !== "number" || !isFinite(v) || v < 0) { started = false; continue; }
+      const px = x(p.t), py = y(v * (ser.scale || 1));
+      if (started) ctx.lineTo(px, py); else { ctx.moveTo(px, py); started = true; }
+    }
+    ctx.stroke();
+  }
+}
+
+function drawCurves() {
+  const s = curveSession();
+  lineChart($("chartSanity"), s, [
+    {key:"sanityBig", color:"#e8b45c"},
+    {key:"sanitySmall", color:"#8fb6e8"},
+  ], 100, {chaseBands:true});
+
+  lineChart($("chartFps"), s, [
+    {key:"fps", color:"#7fc08a"},
+    {key:"worstMs", color:"#e0796f"},
+  ], 120);
+
+  const maxDist = s ? Math.max(200, ...s.samples.map(p => p.monsterDist || 0)) : 1000;
+  lineChart($("chartMonster"), s, [{key:"monsterDist", color:"#b294e0"}], maxDist);
+}
+
+// ── Mapa de calor ───────────────────────────────────────────────────────────
+
+function renderMapLevels() {
+  const levels = new Set();
+  sessions.forEach(s => s.samples.forEach(p => { if (typeof p.level === "number") levels.add(p.level); }));
+  const list = [...levels].sort((a,b)=>a-b);
+  const cur = $("mapLevel").value;
+  $("mapLevel").innerHTML = list.map(l => `<option value="${l}">level ${l+1}</option>`).join("")
+    || `<option value="0">level 1</option>`;
+  if (cur && list.includes(Number(cur))) $("mapLevel").value = cur;
+}
+["mapLevel","mapAllSessions","mapDeaths","mapStuck","mapHits","mapPickups"].forEach(id =>
+  $(id).addEventListener("change", drawHeat));
+
+function drawHeat() {
+  const cv = $("heat");
+  const {ctx, w, h} = fitCanvas(cv);
+  const level = Number($("mapLevel").value || 0);
+  const all = $("mapAllSessions").checked;
+  const pool = all ? selected() : [curveSession()].filter(Boolean);
+  if (!pool.length) return;
+
+  // Pontos do nivel escolhido: os dois irmaos contam.
+  const pts = [];
+  pool.forEach(s => s.samples.forEach(p => {
+    if (p.level !== level) return;
+    if (typeof p.bigX === "number") pts.push([p.bigX, p.bigY]);
+    if (typeof p.smallX === "number") pts.push([p.smallX, p.smallY]);
+  }));
+  const marks = [];
+  const wanted = {death:$("mapDeaths").checked, stuck:$("mapStuck").checked,
+                  monster_hit:$("mapHits").checked, item_pickup:$("mapPickups").checked};
+  pool.forEach(s => s.events.forEach(e => {
+    if (!wanted[e.type]) return;
+    if (typeof e.level === "number" && e.level !== level) return;
+    if (typeof e.x !== "number") return;
+    marks.push(e);
+  }));
+
+  if (!pts.length && !marks.length) {
+    ctx.fillStyle = "#6b7486"; ctx.font = "13px sans-serif";
+    ctx.fillText("no positions recorded for this level", 16, h/2);
+    return;
+  }
+
+  // Limites do mundo a partir do que foi gravado, com uma margem.
+  const xs = pts.map(p=>p[0]).concat(marks.map(m=>m.x));
+  const ys = pts.map(p=>p[1]).concat(marks.map(m=>m.y));
+  let minX = Math.min(...xs), maxX = Math.max(...xs);
+  let minY = Math.min(...ys), maxY = Math.max(...ys);
+  const padWorld = Math.max(80, (maxX-minX)*0.05, (maxY-minY)*0.05);
+  minX -= padWorld; maxX += padWorld; minY -= padWorld; maxY += padWorld;
+
+  // Mesma escala nos dois eixos: o mapa nao pode sair esticado.
+  const scale = Math.min(w/(maxX-minX), h/(maxY-minY));
+  const offX = (w - (maxX-minX)*scale)/2, offY = (h - (maxY-minY)*scale)/2;
+  const sx = (wx) => offX + (wx-minX)*scale;
+  const sy = (wy) => offY + (wy-minY)*scale;
+
+  if (mapBackground) {
+    ctx.globalAlpha = 0.45;
+    ctx.drawImage(mapBackground, sx(minX+padWorld), sy(minY+padWorld),
+                  (maxX-minX-2*padWorld)*scale, (maxY-minY-2*padWorld)*scale);
+    ctx.globalAlpha = 1;
+  }
+
+  // Grelha de contagem: cada amostra = um segundo naquele quadrado.
+  const cell = 14;
+  const cols = Math.ceil(w/cell), rows = Math.ceil(h/cell);
+  const grid = new Float32Array(cols*rows);
+  let peak = 0;
+  for (const [wx,wy] of pts) {
+    const cx = Math.floor(sx(wx)/cell), cy = Math.floor(sy(wy)/cell);
+    if (cx < 0 || cy < 0 || cx >= cols || cy >= rows) continue;
+    const v = ++grid[cy*cols+cx];
+    if (v > peak) peak = v;
+  }
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const v = grid[r*cols+c];
+      if (!v) continue;
+      const t = Math.pow(v/peak, 0.6);
+      ctx.fillStyle = heatColor(t);
+      ctx.fillRect(c*cell, r*cell, cell, cell);
+    }
+  }
+
+  for (const m of marks) {
+    const px = sx(m.x), py = sy(m.y);
+    ctx.strokeStyle = eventColor(m.type); ctx.lineWidth = 2;
+    if (m.type === "death") {
+      ctx.beginPath();
+      ctx.moveTo(px-6,py-6); ctx.lineTo(px+6,py+6);
+      ctx.moveTo(px+6,py-6); ctx.lineTo(px-6,py+6);
+      ctx.stroke();
+    } else {
+      ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI*2); ctx.stroke();
+    }
+  }
+
+  ctx.fillStyle = "#96a0b4"; ctx.font = "11px ui-monospace,monospace";
+  ctx.fillText(`${pts.length} samples · peak ${peak}s in one cell · world ${Math.round(minX)},${Math.round(minY)} → ${Math.round(maxX)},${Math.round(maxY)}`, 8, h-8);
+}
+
+/// Azul frio (pouco tempo) para amarelo quente (muito tempo).
+function heatColor(t) {
+  const stops = [[13,22,40],[31,78,120],[110,150,120],[232,180,92],[255,236,180]];
+  const f = Math.max(0, Math.min(0.999, t)) * (stops.length-1);
+  const i = Math.floor(f), k = f-i;
+  const a = stops[i], b = stops[i+1] || stops[i];
+  const c = a.map((v,j) => Math.round(v + (b[j]-v)*k));
+  return `rgba(${c[0]},${c[1]},${c[2]},0.88)`;
+}
+
+// ── Tabela de eventos ───────────────────────────────────────────────────────
+
+function renderEventTypes() {
+  const types = new Set();
+  sessions.forEach(s => s.events.forEach(e => types.add(e.type)));
+  const cur = $("evType").value;
+  $("evType").innerHTML = '<option value="">all types</option>' +
+    [...types].sort().map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join("");
+  $("evType").value = cur;
+}
+$("evType").addEventListener("change", renderEventTable);
+$("evSearch").addEventListener("input", renderEventTable);
+
+function filteredEvents() {
+  const type = $("evType").value;
+  const q = $("evSearch").value.trim().toLowerCase();
+  const rows = [];
+  selected().forEach(s => s.events.forEach(e => {
+    if (type && e.type !== type) return;
+    const text = describe(e).toLowerCase();
+    if (q && !text.includes(q) && !e.type.toLowerCase().includes(q)) return;
+    rows.push({s, e, text: describe(e)});
+  }));
+  rows.sort((a,b) => a.e.t - b.e.t);
+  return rows;
+}
+
+function renderEventTable() {
+  const rows = filteredEvents();
+  $("evCount").textContent = rows.length + " event(s)";
+  const head = `<thead><tr><th>Time</th><th>Session</th><th>Type</th><th>Level</th><th>Details</th></tr></thead>`;
+  const body = rows.slice(0, 4000).map(r => `<tr>
+      <td class="num">${fmtTime(r.e.t)}</td>
+      <td>${esc(trim(r.s.meta.tester || r.s.name, 16))}</td>
+      <td><span class="tag" style="color:${eventColor(r.e.type)}">${esc(r.e.type)}</span></td>
+      <td class="num">${typeof r.e.level === "number" ? r.e.level+1 : "—"}</td>
+      <td>${esc(r.text)}</td>
+    </tr>`).join("");
+  $("eventTable").innerHTML = head + "<tbody>" + body + "</tbody>";
+}
+
+$("exportCsv").addEventListener("click", () => {
+  const rows = filteredEvents();
+  const lines = ["session,tester,time_s,type,level,details"];
+  for (const r of rows) {
+    const cells = [r.s.name, r.s.meta.tester || "", r.e.t.toFixed(3), r.e.type,
+                   typeof r.e.level === "number" ? r.e.level : "", r.text];
+    lines.push(cells.map(c => '"' + String(c).replace(/"/g,'""') + '"').join(","));
+  }
+  const blob = new Blob([lines.join("\n")], {type:"text/csv"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "playtest-events.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+window.addEventListener("resize", () => {
+  if (!sessions.length) return;
+  drawTimeline(); drawCurves(); drawHeat();
+});
+</script>
+</body>
+</html>

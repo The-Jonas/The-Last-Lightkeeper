@@ -89,6 +89,32 @@ abaixo na mesma pasta do JOGO.exe:
     }
 
 
+PLAYTEST: COMO NOS DEVOLVER O QUE ACONTECEU
+----------------------------------------------------------------------
+Esta versao guarda, na propria pasta do jogo, um registo do que
+acontece em cada partida: por onde andou, onde morreu, que itens
+apanhou, quantos quadros por segundo o jogo deu. Serve para sabermos
+o que melhorar. NADA e enviado pela internet pelo jogo, e o registo
+nao guarda nada pessoal.
+
+1. ANTES de jogar, escreva o seu nome em:
+
+     config\playtest.json
+       { "tester": "o seu nome" }
+
+   Se deixar vazio, a sessao fica como "anon" e nos nao sabemos de
+   quem foi.
+
+2. Jogue normalmente. Cada execucao do jogo cria um ficheiro novo em
+   logs\playtest\.
+
+3. NO FIM, clique duas vezes em "ENVIAR-LOGS.bat". Ele cria um .zip
+   na pasta do jogo. Envie esse .zip para a equipa.
+
+Para desligar o registo, arranque o jogo com a variavel de ambiente
+TLL_TELEMETRY=0.
+
+
 CREDITOS
 ----------------------------------------------------------------------
 Projeto desenvolvido como trabalho da disciplina de Introducao

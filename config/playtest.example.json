@@ -1,0 +1,4 @@
+{
+  "_leia_me": "Copie este ficheiro para config/playtest.json e ponha o nome do tester. O jogo grava uma sessao por execucao em logs/playtest/*.jsonl. Nome vazio = 'anon'. A variavel de ambiente TLL_TESTER manda sobre este ficheiro; TLL_TELEMETRY=0 desliga o registo.",
+  "tester": ""
+}

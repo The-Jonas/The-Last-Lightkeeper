@@ -116,12 +116,34 @@ if (Test-Path $lightingSrc) {
     Write-Host "    (config\lighting.json ausente; o jogo usara os valores de fabrica da luz)"
 }
 
+# config/playtest.json: nome do tester para o registo de playtest. Vai SEMPRE
+# um ficheiro no pacote (com o nome vazio quando nao ha nenhum na raiz), para o
+# tester poder escrever o nome dele sem ter de criar o ficheiro a mao.
+$playtestSrc = Join-Path $repoRoot 'config\playtest.json'
+if (-not (Test-Path $playtestSrc)) {
+    $playtestSrc = Join-Path $repoRoot 'config\playtest.example.json'
+}
+if (Test-Path $playtestSrc) {
+    Copy-Item $playtestSrc (Join-Path $distConfig 'playtest.json') -Force
+} else {
+    Write-Host "    (config\playtest.json ausente; as sessoes ficam com o tester 'anon')"
+}
+
 # readme (tracked template)
 $readme = Join-Path $repoRoot 'deploy\LEIA-ME.txt'
 if (Test-Path $readme) {
     Copy-Item $readme (Join-Path $dist 'LEIA-ME.txt') -Force
 } else {
     Write-Host "    AVISO: deploy\LEIA-ME.txt nao encontrado; bundle sem readme." -ForegroundColor Yellow
+}
+
+# ENVIAR-LOGS.bat: o tester clica nisto no fim e fica com um .zip dos registos
+# de playtest para nos devolver.
+$sendLogs = Join-Path $repoRoot 'deploy\ENVIAR-LOGS.bat'
+if (Test-Path $sendLogs) {
+    Copy-Item $sendLogs (Join-Path $dist 'ENVIAR-LOGS.bat') -Force
+} else {
+    Write-Host "    AVISO: deploy\ENVIAR-LOGS.bat nao encontrado; o tester tera de zipar a pasta logs a mao." -ForegroundColor Yellow
 }
 
 # debug marker: make it obvious (inside the bundle, not just in the zip name)
