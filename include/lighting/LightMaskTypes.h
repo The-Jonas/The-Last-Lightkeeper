@@ -41,8 +41,11 @@ struct LightMaskParams {
     /// jogador continua a distinguir as formas fora do campo de visao — elas
     /// aparecem a cores mas DESFOCADAS por causa do `ScenePostFx`.
     /// (`darknessMax` acima continua a ser a escuridao na BORDA de cada luz.)
-    Uint8 ambientDarknessMax = 200;
-    float falloffRadiusPx = 400.0f;
+    /// 228 de 255: onde nao chega luz nenhuma fica quase preto. A equipa pediu
+    /// escuro depois de jogar (ninguem percebia que era a ESCURIDAO que estava
+    /// a matar), e depois pediu um pouco de volta — 238 era escuro de mais.
+    Uint8 ambientDarknessMax = 228;
+    float falloffRadiusPx = 430.0f;   // alcance de cada luz (subiu de 400)
     float fatorDicaDeRaio = 1.2f;
     LightFalloffCurve falloffCurve = LightFalloffCurve::Smoothstep;
     float falloffGamma = 2.0f;
@@ -68,10 +71,14 @@ struct LightMaskParams {
     float rectSoftBandPx = 72.0f;
 
     float shadowCastDistanceMul = 1.62f;
-    float shadowMaxLengthPx = 600.0f;
+    /// Comprimento maximo da sombra projectada. Encurtado de 600: as sombras
+    /// esticavam-se meio ecra e liam-se como manchas, nao como sombras.
+    float shadowMaxLengthPx = 460.0f;
     float shadowLengthByLightMul = 1.40f;
     float spriteShadowMinScale = 1.00f;
-    float spriteShadowMaxScale = 2.40f;
+    /// Quanto a silhueta cresce no extremo do alcance. Baixado de 2.40 pela
+    /// mesma razao: uma sombra do dobro do objecto e um borrao.
+    float spriteShadowMaxScale = 1.90f;
     float shadowSoftness = 0.0f;
     int shadowSoftLayers = 1;
     float lightTemporalSmoothing = 0.20f;
@@ -116,13 +123,15 @@ struct PlayerVisionParams {
     float cameraZoom = 0.75f;
 
     // ── Cone (valores em pixels de MUNDO; a camera multiplica pelo zoom) ─────
-    /// 80 graus de MEIO-angulo = 160 graus de abertura total.
-    float coneHalfAngleDeg = 80.0f;
+    /// 45 graus de MEIO-angulo = 90 graus de abertura total. Comecou em 160 e
+    /// era largo de mais: via-se quase o andar inteiro de uma vez.
+    float coneHalfAngleDeg = 45.0f;
     /// Largura da borda difusa nos LADOS do cone. Baixo = risco recto e seco.
     /// Nao poe a zero: 1 a 2 graus servem de anti-serrilhado.
     float coneFeatherDeg = 1.5f;
-    /// Longo o bastante para varrer a largura toda do ecra a zoom normal.
-    float coneLengthPx = 1250.0f;
+    /// Alcance do cone. Encurtado de 1250: com o cone estreito, um alcance
+    /// enorme dava um corredor de luz ate ao outro lado do mapa.
+    float coneLengthPx = 850.0f;
     /// Largura da borda difusa na PONTA do cone.
     float coneLengthFeatherPx = 60.0f;
     /// Dureza do cone POR DENTRO. O peso de um ponto e 1 - t^gamma, com t a
@@ -239,7 +248,10 @@ struct PlayerVisionParams {
     /// Jornais, castiçais, radio, reparaveis, janelas e armarios.
     bool hideInteractablesOutsideVision = true;
     /// Barris e caixas que se empurram (`Box`).
-    bool hidePushablesOutsideVision = true;
+    /// Os BARRIS ficam sempre a vista, como o resto do cenario. Sumirem e
+    /// voltarem conforme o cone passava fazia o andar parecer instavel — e um
+    /// barril e mobilia, nao uma pista escondida.
+    bool hidePushablesOutsideVision = false;
     /// O MONSTRO. Ao contrario de tudo o resto, ele nao aparece so por estar
     /// perto: tem de estar ao mesmo tempo DENTRO do campo de visao e DENTRO de
     /// luz a serio (uma vela, a lanterna na mao). A rampa de proximidade nao

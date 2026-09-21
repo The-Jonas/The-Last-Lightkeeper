@@ -208,9 +208,25 @@ void ApplyVoiceChannelVolume(int scalePercent = 100) {
 // Toca a fala se: não estiver mudo, o cooldown global já passou e nenhuma outra
 // fala estiver tocando. extraCooldownMs estende a pausa para falas que poderiam
 // repetir muito (arrastar, esconder).
+// ── DUBLAGEM DESLIGADA ──────────────────────────────────────────────────────
+// A equipa pediu para tirar as falas depois de as ouvir bugadas no playtest.
+// Nada foi apagado: os ficheiros, as legendas e os gatilhos continuam todos no
+// sitio, e so esta porta fechou. Para as ter de volta, arranque o jogo com
+// TLL_VOICE=1 (ou troque o `true` abaixo por `false`) — nao e preciso mexer em
+// mais nada.
+bool VoiceDisabled() {
+    static const bool disabled = []() {
+        if (const char* v = SDL_getenv("TLL_VOICE")) {
+            return std::string(v) != "1";
+        }
+        return true;   // por omissao: sem dublagem
+    }();
+    return disabled;
+}
+
 bool Play(Sound& sound, const char* subtitle, Uint32 extraCooldownMs = 0,
           int volScalePercent = 100) {
-    if (gMuted) {
+    if (gMuted || VoiceDisabled()) {
         return false;
     }
     EnsureLoaded();

@@ -96,11 +96,11 @@ of popping into view.
 <table>
 <tr><th>Row</th><th>What it does</th><th>Default</th></tr>
 <tr><td class="n">Campo de visao: ligado</td><td>Master switch. Off = no cone, no monochrome layer, no object hiding. Use it to compare.</td><td class="v">ligado</td></tr>
-<tr><td class="n">Cone: abertura (meio-ang.)</td><td>HALF of the opening angle, in degrees. 80 gives a 160° cone. Lower values give a narrow beam that you must aim.</td><td class="v">80</td></tr>
+<tr><td class="n">Cone: abertura (meio-ang.)</td><td>HALF of the opening angle, in degrees. 45 gives a 90° cone — the value the team settled on after playing. It started at 80 (a 160° cone), which showed almost the whole floor at once.</td><td class="v">45</td></tr>
 <tr><td class="n">Cone: dureza da borda</td><td>How flat the cone is inside. High = the whole inside has one value and the edge cuts clean (a stencil look). Low = the cone dims from the middle outward (a soft beam look). This is the row that makes the edge a straight line.</td><td class="v">12.0</td></tr>
 <tr><td class="n">Cone: borda lateral (graus)</td><td>Width of the soft band on the two SIDES of the cone. Keep 1 to 2 degrees: that is only anti-aliasing. Raise it for a hazy edge.</td><td class="v">1.5</td></tr>
 <tr><td class="n">Cone: borda da ponta (px)</td><td>Width of the soft band at the FAR END of the cone. 0 gives a hard cut across the view.</td><td class="v">60</td></tr>
-<tr><td class="n">Cone: alcance (px mundo)</td><td>How far the cone reaches. 1250 crosses the whole screen at normal zoom.</td><td class="v">1250</td></tr>
+<tr><td class="n">Cone: alcance (px mundo)</td><td>How far the cone reaches. Shortened from 1250: with a narrow cone, a long reach became a corridor of light running to the far side of the map.</td><td class="v">850</td></tr>
 <tr><td class="n">Cone: apice a frente (px)</td><td>Pushes the tip of the cone forward, away from the chest. It stops the character from seeing behind its own back. Negative values pull it back.</td><td class="v">4</td></tr>
 <tr><td class="n">Cone: velocidade de giro</td><td>Degrees per second the cone axis turns when the character changes direction. High = it snaps. Low = it sweeps.</td><td class="v">720</td></tr>
 </table>
@@ -184,14 +184,14 @@ silhouette is drawn by its own object.
 <table>
 <tr><td class="n">Itens so no campo de visao</td><td>Pickups on the floor (<code>ItemPickup</code>).</td><td class="v">sim</td></tr>
 <tr><td class="n">Interagiveis so na visao</td><td>Newspapers, radio, repairables, windows, closets. (Candlesticks and stairs are exempt — see above.)</td><td class="v">sim</td></tr>
-<tr><td class="n">Barris so na visao</td><td>Barrels and crates you push (<code>Box</code>).</td><td class="v">sim</td></tr>
+<tr><td class="n">Barris so na visao</td><td>Barrels and crates you push (<code>Box</code>). <b>Off</b>: a barrel is furniture, not a hidden clue, and having them blink in and out as the cone swept past made the floor feel unstable.</td><td class="v">nao</td></tr>
 <tr><td class="n">Monstro so onde ha luz</td><td>The monster needs the cone AND real light on it. Turn it off and the monster is visible whenever it is on screen, as it was before.</td><td class="v">sim</td></tr>
 <tr><td class="n">Itens: limiar de revelar</td><td>From which fraction of the cone an object counts as fully inside it. Low = the object appears as soon as the cone edge touches it. This sharpens the GEOMETRY half only; the LIGHT half still fades the object.</td><td class="v">0.35</td></tr>
 </table>
 
 <h2>7 · Darkness <span class="key">shared with page 1</span></h2>
 <table>
-<tr><td class="n">Escuro ambiente (sem luz)</td><td>Darkness where NO light arrives. It is the ceiling of the whole mesh: nothing ever gets darker. Lower it and the player still makes out shapes outside the field of view, in black and white.</td><td class="v">200</td></tr>
+<tr><td class="n">Escuro ambiente (sem luz)</td><td>Darkness where NO light arrives. It is the ceiling of the whole mesh: nothing ever gets darker. Raised to 238 after a playtest — at 200 the unlit floor stayed readable and nobody understood that the DARKNESS was what killed them.</td><td class="v">238</td></tr>
 <tr><td class="n">Escuro max (overlay)</td><td>Darkness at the EDGE of each real light. Page 1 uses the same row.</td><td class="v">250</td></tr>
 </table>
 

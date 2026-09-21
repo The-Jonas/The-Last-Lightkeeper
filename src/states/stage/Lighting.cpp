@@ -190,6 +190,18 @@ void StageState::UpdateInventoryLight() {
 // DESFOCADO — e o desfoque, e nao a falta de cor, que aponta para onde o
 // personagem olha.
 
+namespace {
+/// Piso do raio do circulo de visao de cada irmao, em fraccao da ALTURA do
+/// sprite. 0.62 chega para o corpo todo com uma margem de chao a volta.
+constexpr float kBodyVisionRadiusFrac = 0.85f;
+/// A que altura do corpo o circulo se centra (0 = pes, 1 = topo da cabeca).
+/// A 0.42 o topo da cabeca fica a cerca de 68% do raio e os pes a 50% — os dois
+/// bem dentro da zona plana da curva abaixo.
+constexpr float kBodyVisionAnchorFrac = 0.42f;
+/// Dureza da borda deste circulo. Alto = interior todo aberto, queda so na orla.
+constexpr float kBodyVisionGamma = 4.0f;
+}  // namespace
+
 void StageState::UpdatePlayerVision(float dt) {
     visionFrame = PlayerVisionFrame{};
 
@@ -272,8 +284,21 @@ void StageState::UpdatePlayerVision(float dt) {
     visionFrame.lengthPx = std::max(24.0f, visionParams.coneLengthPx) * zoom;
     visionFrame.lengthFeatherPx =
         std::max(4.0f, std::min(visionParams.coneLengthFeatherPx, visionParams.coneLengthPx * 0.9f)) * zoom;
-    visionFrame.footRadiusPx = std::max(8.0f, visionParams.footRadiusPx) * zoom;
-    visionFrame.maskGamma = std::max(0.2f, std::min(12.0f, visionParams.maskFalloffGamma));
+    // ── O CIRCULO DOS IRMAOS TEM DE COBRIR O CORPO INTEIRO ──────────────────
+    // Era um circulo aos PES com raio fixo. Com o mundo mais escuro isso
+    // deixava as pernas iluminadas e o tronco e a cabeca a desaparecer no
+    // preto — o irmao mais velho ficava meio jogador, meio sombra. O raio
+    // passa a ter um piso ligado a ALTURA do sprite, e o circulo sobe para o
+    // meio do corpo (ver `addFoot`), por isso o personagem cabe todo dentro.
+    const float bodyRadiusWorld = std::max(visionParams.footRadiusPx, b.h * kBodyVisionRadiusFrac);
+    visionFrame.footRadiusPx = std::max(8.0f, bodyRadiusWorld) * zoom;
+    // Curva do circulo do corpo. PLANA por dentro e a cair so na orla: com a
+    // curva macia que estava (gamma ~1.1) o brilho ja tinha caido a 7% no topo
+    // da cabeca, e o tronco sumia no escuro enquanto as pernas se viam. Este
+    // numero vai no FRAME, por isso a malha de escuridao, o shader e as contas
+    // em C++ ficam todos a usar a mesma curva.
+    visionFrame.maskGamma =
+        std::max(kBodyVisionGamma, std::max(0.2f, std::min(12.0f, visionParams.maskFalloffGamma)));
     visionFrame.coneGamma = std::max(0.2f, std::min(16.0f, visionParams.coneEdgeGamma));
 
     // ── Precisa de luz para ver ──────────────────────────────────────────────
@@ -293,8 +318,11 @@ void StageState::UpdatePlayerVision(float dt) {
         if (obj == nullptr || visionFrame.footCount >= PlayerVisionFrame::kMaxFeet) {
             return;
         }
+        // Ancora no MEIO do corpo, nao nos pes: com o circulo centrado em
+        // baixo, metade dele gastava-se no chao e a cabeca ficava de fora.
+        // A 58% da altura o corpo inteiro entra e os pes continuam dentro.
         const Rect& fb = obj->box;
-        const Vec2 foot = WorldToScreen(Vec2(fb.x + 0.5f * fb.w, fb.y + fb.h));
+        const Vec2 foot = WorldToScreen(Vec2(fb.x + 0.5f * fb.w, fb.y + fb.h * (1.0f - kBodyVisionAnchorFrac)));
         visionFrame.footX[visionFrame.footCount] = foot.x;
         visionFrame.footY[visionFrame.footCount] = foot.y;
         visionFrame.footCount++;
@@ -574,7 +602,12 @@ void StageState::AppendVisionMaskLights(std::vector<RadialLightOverlay::ScreenLi
     coneParams.falloffGamma = std::min(visionFrame.coneGamma, 5.0f);
     out.push_back({visionFrame.coneX, visionFrame.coneY, LightMaskShape::Cone, coneParams, 0.0f});
 
-    // ── Circulos dos pes (um por irmao) ─────────────────────────────────────
+    // ── Circulo do CORPO (um por irmao) ─────────────────────────────────────
+    // Curva propria, mais dura do que a da malha: `1 - t^gamma` com gamma alto
+    // fica quase a 1 por dentro e so cai junto a borda. Com a curva macia da
+    // mascara (gamma ~1.1) o brilho ja tinha caido a meio no peito, e por isso
+    // o tronco e a cabeca sumiam no escuro enquanto as pernas se viam. Isto e o
+    // que garante o corpo INTEIRO visivel, luz acesa ou nao.
     LightMaskParams footParams = base;
     footParams.falloffRadiusPx = visionFrame.footRadiusPx;
     for (int i = 0; i < visionFrame.footCount && i < PlayerVisionFrame::kMaxFeet; i++) {
