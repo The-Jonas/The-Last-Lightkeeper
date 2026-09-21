@@ -205,6 +205,13 @@ void StageState::OpenJournalViewer(Jornal* jornal) {
         journalTargetScreenRect.x  = cx - journalTargetScreenRect.w * 0.5f;
         journalTargetScreenRect.y  = cy - journalTargetScreenRect.h * 0.5f;
     }
+    if (jornal->HasPendingDialogue()) {
+        for (const DialogueBox::Line& l : jornal->GetDialogueLines()) {
+            dialogueBox.Queue(l.speaker, l.listener, l.emotion, l.listenerEmotion, l.text);
+        }
+        jornal->MarkDialogueFired();
+    }
+
 }
 
 void StageState::TryOpenJournalOnKeyPress() {

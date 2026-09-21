@@ -23,6 +23,7 @@ constexpr int kChannelMonsterSpot    = 7;  // som de ver o player
 constexpr int kChannelMonsterSteps   = 8;  // passos do monstro
 constexpr int kChannelMonsterCreak   = 9;  // rangidos de madeira (esporádicos)
 constexpr int kChannelHeartbeat      = 10; // batimento cardíaco (sanidade baixa)
+constexpr int kChannelWindowBreak = 11;
 constexpr int kChannelMonsterStep0   = 32; // passos por-frame: pool rotativo GRANDE (32..47),
 constexpr int kMonsterStepPoolCount  = 16; // separado da voz/one-shots p/ os passos se SOBREPOREM sem se cortar
 //9+ → one-shots livres (Mix_PlayChannel(-1, ...) usa a partir daqui)
@@ -44,6 +45,8 @@ constexpr const char* kThunderPaths[] = {
     "Recursos/audio/SFX/TROVAO/trovao_3.mp3",
     "Recursos/audio/SFX/TROVAO/trovao_4.mp3",
 };
+
+constexpr const char* kWindowBreakPath = "Recursos/audio/SFX/JANELA/JANELA_QUEBRANDO.mp3";
 
 constexpr const char* kCandleLoopPath = "Recursos/audio/SFX/VELA/FOGO_VELA.mp3";
 constexpr const char* kCandleLightUpPath = "Recursos/audio/SFX/VELA/VELA_ACENDENDO.mp3";
@@ -105,6 +108,7 @@ Sound gCandleBlowOutSound;
 Sound gCandleLightUpSound;
 Sound gCandleBlowPlayerSound;
 Sound gRepairSound;
+Sound gWindowBreakSound;
 Sound gClosetOpenSound;
 Sound gClosetCloseSound;
 Sound gMonsterScreamSound;
@@ -159,6 +163,7 @@ void EnsureLoaded() {
         gCandleBlowOutSound.Open(kCandleBlowPath);
     }
     if (FileExists(kRepairPath)) gRepairSound.Open(kRepairPath);
+    if (FileExists(kWindowBreakPath)) gWindowBreakSound.Open(kWindowBreakPath);
     if (FileExists(kCandleLightUpPath)) gCandleLightUpSound.Open(kCandleLightUpPath);
     if (FileExists(kCandleBlowPlayerPath)) gCandleBlowPlayerSound.Open(kCandleBlowPlayerPath);
     if (FileExists(kClosetOpenPath))  gClosetOpenSound.Open(kClosetOpenPath);
@@ -579,6 +584,15 @@ void PlayMonsterSpot() {
     if (!Mix_Playing(kChannelMonsterSpot) && gMonsterSpotSound.IsOpen()) {
         gMonsterSpotSound.Play();
         ApplySfxVolume(gMonsterSpotSound);     // toca no volume cheio do barramento de VFX
+    }
+}
+
+void PlayWindowBreak() {
+    if (gGameplayMuted) return;
+    EnsureLoaded();
+    if (!Mix_Playing(kChannelWindowBreak) && gWindowBreakSound.IsOpen()) {
+        gWindowBreakSound.Play();
+        ApplySfxVolume(gWindowBreakSound);
     }
 }
  

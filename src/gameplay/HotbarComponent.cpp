@@ -95,14 +95,25 @@ void VoiceForPickup(PickupOutcome outcome, const std::string& itemName, bool oil
         else          GameVoice::OnActionBlocked();
         break;
     case PickupOutcome::PickedUpAndFilled:
-        // Pegou (e encheu a bolsa): a tábua sempre solta "Isso vai servir.".
-        if (woodPlank) GameVoice::OnPickupWoodPlank();
-        else           GameVoice::OnBagFull();
+        if (woodPlank) {
+            GameVoice::OnPickupWoodPlank();
+            if (StageState* stage = Game::TryGetStageState()) {
+                stage->QueueDialogue(DialogueBox::Speaker::LittleBrother, DialogueBox::Speaker::BigBrother,
+                                     DialogueBox::Emotion::Normal, DialogueBox::Emotion::Doubt, "Isso pode ajudar a consertar a escada!");
+            }
+        }
+        else GameVoice::OnBagFull();
         break;
     case PickupOutcome::PickedUp:
         // Tábua de madeira → SEMPRE "Isso vai servir."; demais itens → comentário ocasional.
-        if (woodPlank) GameVoice::OnPickupWoodPlank();
-        else           GameVoice::OnItemPickup();
+        if (woodPlank) {
+            GameVoice::OnPickupWoodPlank();
+            if (StageState* stage = Game::TryGetStageState()) {
+                stage->QueueDialogue(DialogueBox::Speaker::BigBrother, DialogueBox::Speaker::None,
+                                     DialogueBox::Emotion::Normal, DialogueBox::Emotion::Normal, "Isso pode ajudar a consertar a escada!");
+            }
+        }
+        else GameVoice::OnItemPickup();
         break;
     }
 }

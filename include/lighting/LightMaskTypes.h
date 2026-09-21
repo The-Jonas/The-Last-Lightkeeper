@@ -34,7 +34,7 @@ struct LightMaskParams {
     /// Balanced defaults; set Custom to use only the raw fields below without preset clamps.
     LightQualityPreset lightQualityPreset = LightQualityPreset::Balanced;
 
-    Uint8 darknessMax = 250;
+    Uint8 darknessMax = 236;
 
     /// Escuridao do fundo, onde NAO chega luz nenhuma. E o tecto da malha: nunca
     /// fica mais escuro do que isto. Mais BAIXO = camada escura mais clara, e o

@@ -20,6 +20,8 @@
 #include "gameplay/CurtainTrigger.h"
 #include "gameplay/Monster.h"
 #include "ui/MonsterSilhouette.h"
+#include "gameplay/DialogueTrigger.h"
+#include "ui/DialogueBox.h"
 #include <iostream>
 #include <cstdlib> 
 
@@ -44,6 +46,62 @@ void ApplyTiledBox(GameObject* obj, const EntitySpawn& spawn) {
     obj->box.y = spawn.y - obj->box.h;
     obj->angleDeg = spawn.rotation;
     obj->rotateAroundBottomLeft = true;   // objetos-tile do Tiled giram pelo rodapé-esquerdo
+}
+
+std::vector<DialogueBox::Line> ParseDialogueLinesProperty(const EntitySpawn& spawn, const char* key) {
+    std::vector<DialogueBox::Line> lines;
+
+    auto parseSpeaker = [](const std::string& s) {
+        return (s == "Martin") ? DialogueBox::Speaker::BigBrother
+             : (s == "Luke")   ? DialogueBox::Speaker::LittleBrother
+                                : DialogueBox::Speaker::None;
+    };
+    auto parseEmotion = [](const std::string& s) {
+        return (s == "Fear")  ? DialogueBox::Emotion::Fear
+             : (s == "Doubt") ? DialogueBox::Emotion::Doubt
+                               : DialogueBox::Emotion::Normal;
+    };
+
+    // Formato 1: propriedade "dialogue" com um JSON de várias falas.
+    if (spawn.properties.count(key)) {
+        try {
+            json arr = json::parse(spawn.properties.at(key).get<std::string>());
+            for (const auto& item : arr) {
+                DialogueBox::Line line;
+                line.speaker         = parseSpeaker(item.value("speaker", "Martin"));
+                line.listener        = parseSpeaker(item.value("listener", ""));
+                line.emotion         = parseEmotion(item.value("emotion", "Normal"));
+                line.listenerEmotion = parseEmotion(item.value("listener_emotion", "Normal"));
+                line.text            = item.value("text", "");
+                lines.push_back(line);
+            }
+            return lines;
+        } catch (const std::exception& ex) {
+            std::cerr << "Dialogo invalido em '" << key << "' (tiledId "
+                      << spawn.tiledId << "): " << ex.what() << std::endl;
+            return lines;
+        }
+    }
+
+    // Formato 2 : campos soltos direto no objeto —
+    // só dá pra descrever UMA fala assim, mas é bem mais rápido de preencher.
+    if (spawn.properties.count("speaker") && spawn.properties.count("text")) {
+        DialogueBox::Line line;
+        line.speaker  = parseSpeaker(spawn.properties.at("speaker").get<std::string>());
+        line.listener = spawn.properties.count("listener")
+                       ? parseSpeaker(spawn.properties.at("listener").get<std::string>())
+                       : DialogueBox::Speaker::None;
+        line.emotion  = spawn.properties.count("emotion")
+                       ? parseEmotion(spawn.properties.at("emotion").get<std::string>())
+                       : DialogueBox::Emotion::Normal;
+        line.listenerEmotion = spawn.properties.count("listener_emotion")
+                       ? parseEmotion(spawn.properties.at("listener_emotion").get<std::string>())
+                       : DialogueBox::Emotion::Normal;
+        line.text     = spawn.properties.at("text").get<std::string>();
+        lines.push_back(line);
+    }
+
+    return lines;
 }
 
 } // namespace
@@ -337,6 +395,14 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
             ApplyTiledBox(&jornalObj, spawn);
             ApplyTiledFlip(&jornalObj, spawn);
             stage.AddObject(&jornalObj);
+
+            // Diálogo específico deste papel (opcional) — mesmo formato do DialogueTrigger.
+            std::vector<DialogueBox::Line> lines = ParseDialogueLinesProperty(spawn, "dialogue");
+            if (!lines.empty()) {
+                bool once = spawn.properties.count("dialogue_once")
+                          ? spawn.properties.at("dialogue_once").get<bool>() : true;
+                jornal->SetDialogueLines(lines, once);
+            }
         }
     }
     else if (spawn.type == "Castical") {
@@ -622,5 +688,20 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         obj->box.h   = spawn.h;
         obj->AddComponent(new CurtainTrigger(*obj, curtainId, CurtainTriggerAction::CLOSE));
         stage.AddObject(obj);
+    }
+
+    else if (spawn.type == "DialogueTrigger") {
+        GameObject* triggerObj = new GameObject();
+        triggerObj->tiledId = spawn.tiledId;
+    
+        std::vector<DialogueBox::Line> lines = ParseDialogueLinesProperty(spawn, "dialogue");
+        bool once = spawn.properties.count("once") ? spawn.properties.at("once").get<bool>() : true;
+    
+        triggerObj->AddComponent(new DialogueTrigger(*triggerObj, lines, once));
+        triggerObj->box.x = spawn.x;
+        triggerObj->box.y = spawn.y;
+        triggerObj->box.w = spawn.w;
+        triggerObj->box.h = spawn.h;
+        stage.AddObject(triggerObj);
     }
 }

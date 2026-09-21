@@ -20,6 +20,16 @@ private:
     int lastKnownActive = -1;
     float bobTimer = 0.0f;
 
+    static constexpr float kTopSlotOffsetX    = -25.0f;  // um pouco pra esquerda
+    static constexpr float kTopSlotOffsetY    =  55.0f;  // mais pra baixo
+    static constexpr float kBottomSlotOffsetX =  26.0f;  // mais pra direita (mais perto do centro)
+    static constexpr float kBottomSlotOffsetY =  -28.0f;  // sem ajuste vertical por enquanto
+
+    float idleTimer = 0.0f;                                 // tempo desde a última troca/interação de item
+    float hideAlpha = 1.0f;                                 // 1 = totalmente visível, 0 = totalmente escondida
+    static constexpr float kIdleHideDelay = 5.0f;           // segundos parado até começar a sumir
+    static constexpr float kHideFadeDuration = 0.4f;        // duração do fade (suave, não corta seco)
+
     // Roda VERTICAL (itens sobem/descem): ativo no centro, anterior acima,
     // próximo abaixo; o arco abre para a esquerda. Slots circulares + anel de
     // durabilidade radial.
@@ -40,10 +50,10 @@ private:
     void DrawSlot(SDL_Renderer* renderer, int stackIndex, float x, float y,
                   float alpha, float scale, bool isActive) const;
     void DrawRefuelSelector(SDL_Renderer* renderer);
-    void DrawUseHint(SDL_Renderer* renderer, float activeX, float activeY);
+    void DrawUseHint(SDL_Renderer* renderer, float activeX, float activeY, float fadeAlpha);
     // Desenha as teclas de trocar item (1/3) nos lados corretos da roda:
     // "anterior" à esquerda, "próximo" à direita.
-    void DrawCycleKeyHints(SDL_Renderer* renderer);
+    void DrawCycleKeyHints(SDL_Renderer* renderer, float fadeAlpha);
 };
 
 #endif

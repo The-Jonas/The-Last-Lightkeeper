@@ -4,6 +4,8 @@
 #include "core/Telemetry.h"
 #include "states/stage/StageState.h"
 #include "core/InputManager.h"
+#include "ui/DialogueTuning.h"
+#include "ui/FuelHudTuning.h"
 #include <cstdlib>
 #include <ctime>
 #include <fstream>
@@ -513,6 +515,8 @@ Game::Game(std::string title) {
     // Só APÓS SDL_Init(VIDEO) a resolução nativa pode ser consultada
     // (EnsureResolutionList usa SDL_GetDesktopDisplayMode).
     LoadSettings();                   // config/settings.json (fonte unificada)
+    DialogueTuning::Load();
+    FuelHudTuning::Load();
     if (IsDebugBuild()) {
         debugMode = true;             // builds de debug sempre habilitam ferramentas de dev
     }

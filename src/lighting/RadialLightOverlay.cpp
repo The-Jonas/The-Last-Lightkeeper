@@ -391,6 +391,8 @@ void RadialLightOverlay::RenderMany(SDL_Renderer* renderer, int windowW, int win
                 // Parte do ESCURO AMBIENTE, nao do preto puro: onde nao chega luz
                 // nenhuma a cena fica escura mas ainda legivel (o desfoque do
                 // ScenePostFx trata de a afastar do campo de visao).
+                // `ambientMax` sai de `gridRef.ambientDarknessMax`, logo acima;
+                // `gridRef.darknessMax` continua a mandar na BORDA de cada luz.
                 float alpha = ambientMax;
                 float torchWarm = 0.0f;
                 float torchWarmth = 0.0f;

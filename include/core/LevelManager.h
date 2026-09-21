@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include "SDL_include.h"
 #include "nlohmann/json.hpp"
+#include "math/Vec2.h"
 #include "audio/GameSfx.h"
 
 using json = nlohmann::json;
@@ -18,8 +19,8 @@ struct Polygon {
 
 // Estrutura para Círculos (paineis, pilastras redondas)
 struct Circle {
-    SDL_Point center;
-    int radius;
+    Vec2 center;
+    float radius;
 };
 
 // Ler as camadas das imagens
@@ -93,6 +94,8 @@ public:
     // Caminho da imagem do tileset (o que o Tiled MOSTRA) para um gid; nullptr se
     // desconhecido. Usado p/ renderizar exatamente a arte do Tiled (ex.: ItemSpawn).
     const std::string* GetTileImagePath(int gid) const;
+
+    Vec2 GetCirclePushVector(const Circle& entityCircle, bool isElevated = false);
 
 private:
     // Constrói o mapa gid→imagem lendo os tilesets do mapa (inclui .tsx externos).

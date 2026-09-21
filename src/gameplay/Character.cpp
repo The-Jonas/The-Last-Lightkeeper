@@ -8,6 +8,7 @@
 #include "core/Game.h"
 #include "core/Resources.h"
 #include "states/stage/StageState.h"
+#include "core/LevelManager.h"
 #include "gameplay/StairTrigger.h"
 #include "core/InputManager.h"
 #include "gameplay/Monster.h"
@@ -20,44 +21,6 @@
 namespace {
 constexpr int kFootCollisionSkinPx = 1;
 constexpr float kCollisionWidthBoost = 1.15f; // Aumento horizontal (+15%) na hitbox dos pés
-
-void TryNudgeOutOfStaticGeometry(StageState* stage, Character* character, Collider* collider, bool isElevated) {
-    if (!stage || !collider || !character) return;
-
-    auto footBoxWithMargin = [&]() {
-        SDL_Rect r = character->GetFootRect();
-        const int m = kFootCollisionSkinPx + 2;
-        r.x += m; r.y += m; r.w -= 2 * m; r.h -= 2 * m;
-        if (r.w < 1) r.w = 1;
-        if (r.h < 1) r.h = 1;
-        return r;
-    };
-
-    if (!stage->level.CheckCollision(footBoxWithMargin(), isElevated)) return;
-
-    GameObject& go = character->GetAssociated();
-    const float dists[] = {4.0f, 16.0f, 32.0f};
-    const int dirs[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
-    
-    for (float d : dists) {
-        for (const auto& dir : dirs) {
-            float mx = static_cast<float>(dir[0]);
-            float my = static_cast<float>(dir[1]);
-            const float len = std::sqrt(mx * mx + my * my);
-            if (len > 1e-3f) { mx /= len; my /= len; }
-
-            go.box.x += mx * d;
-            go.box.y += my * d;
-            collider->Update(0);
-
-            if (!stage->level.CheckCollision(footBoxWithMargin(), isElevated)) return;
-
-            go.box.x -= mx * d;
-            go.box.y -= my * d;
-            collider->Update(0);
-        }
-    }
-}
 
 constexpr const char* kIrmaozaoIdleRoot = "Recursos/img/personagens/irmaozao_idle/";
 constexpr const char* kIrmaozaoWalkRoot = "Recursos/img/personagens/irmaozao_walk/";
@@ -334,30 +297,20 @@ void Character::Update(float dt) {
             associated.box.y += speed.y * dt;
             collider->Update(0);
         } else {
-            // Eixo X
-            float oldX = associated.box.x;
+            // Movemos livremente nos dois eixos
             associated.box.x += speed.x * dt;
-            collider->Update(0);
+            associated.box.y += speed.y * dt;
+            collider->Update(0);    
 
-            if (stage->level.CheckCollision(GetFootCollisionRect(), isElevated)) {
-                associated.box.x = oldX;
-                speed.x = 0;
+            // Perguntamos pra física qual é o empurrão necessário para sair das paredes
+            Vec2 pushVector = stage->level.GetCirclePushVector(GetFootCollisionCircle(), isElevated);
+
+            // Se for maior que 0, significa que batemos em algo e precisamos deslizar
+            if (pushVector.Magnitude() > 0.001f) {
+                associated.box.x += pushVector.x;
+                associated.box.y += pushVector.y;
                 collider->Update(0);
             }
-
-            // Eixo Y
-            float oldY = associated.box.y;
-            associated.box.y += speed.y * dt;
-            collider->Update(0);
-
-            if (stage->level.CheckCollision(GetFootCollisionRect(), isElevated)) {
-                associated.box.y = oldY;
-                speed.y = 0;
-            }
-
-            collider->Update(0);
-            TryNudgeOutOfStaticGeometry(stage, this, collider, isElevated);
-            collider->Update(0);
         }
     } else {
         associated.box.x += speed.x * dt;
@@ -368,8 +321,17 @@ void Character::Update(float dt) {
     if (currentState != ActionState::PUSHING_BOX) {
         Direction newDirection = currentDirection;
 
-        if (std::abs(targetSpeed.x) > 0.1f) newDirection = (targetSpeed.x > 0.0f) ? Direction::RIGHT : Direction::LEFT;
-        else if (std::abs(targetSpeed.y) > 0.1f) newDirection = (targetSpeed.y > 0.0f) ? Direction::DOWN : Direction::UP;
+        constexpr float kVerticalDominanceBias = 1.5f;
+
+        if (std::abs(targetSpeed.x) * kVerticalDominanceBias > std::abs(targetSpeed.y)) {
+            if (std::abs(targetSpeed.x) > 0.1f) {
+                newDirection = (targetSpeed.x > 0.0f) ? Direction::RIGHT : Direction::LEFT;
+            }
+        } else {
+            if (std::abs(targetSpeed.y) > 0.1f) {
+                newDirection = (targetSpeed.y > 0.0f) ? Direction::DOWN : Direction::UP;
+            }
+        }       
 
         const bool moving = speed.Magnitude() > kIrmaozaoMovingSpeedThreshold;
 
@@ -528,22 +490,30 @@ void Character::Render() {
 
     SDL_Renderer* renderer = Game::GetInstance().GetRenderer();
 
-    // Mundo → tela COM zoom (igual ao sprite). Sem o zoom estas caixas ficavam
-    // deslocadas do personagem e pareciam uma segunda copia dele.
+    // --- DESENHA O CÍRCULO DE COLISÃO ---
+    // A colisao dos pes passou a ser um CIRCULO; as caixas dos pes e a hurtbox
+    // ja sao desenhadas por `StageState::RenderGameplayCollisionDebug`, por isso
+    // aqui fica so o circulo, sem duplicar nada.
+    //
+    // Mundo → tela COM zoom (igual ao sprite): so subtrair `Camera::pos` esquece
+    // o zoom, e entao o circulo aparecia deslocado do personagem e o raio mentia
+    // sobre o alcance real assim que a camera se afastava.
     const float z = Camera::GetZoom();
-    auto toScreen = [z](const SDL_Rect& worldRect) {
-        const Vec2 p = Camera::WorldToScreen(Vec2(static_cast<float>(worldRect.x), static_cast<float>(worldRect.y)));
-        return SDL_Rect{ static_cast<int>(p.x), static_cast<int>(p.y),
-                         static_cast<int>(worldRect.w * z), static_cast<int>(worldRect.h * z) };
-    };
+    Circle footCircle = GetFootCollisionCircle();
+    const Vec2 centerScreen = Camera::WorldToScreen(footCircle.center);
+    const float cx = centerScreen.x;
+    const float cy = centerScreen.y;
+    const float rad = footCircle.radius * z;
 
-    SDL_Rect foot = toScreen(GetFootRect());
-    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
-    SDL_RenderDrawRect(renderer, &foot);
-
-    SDL_Rect hit = toScreen(GetHitRect());
-    SDL_SetRenderDrawColor(renderer, 255, 60, 60, 255);
-    SDL_RenderDrawRect(renderer, &hit);
+    SDL_SetRenderDrawColor(renderer, 0, 255, 255, 255); // Ciano para o círculo
+    const int kSeg = 36;
+    for (int i = 0; i < kSeg; i++) {
+        float a0 = ((float)i / kSeg) * 2.0f * 3.14159f;
+        float a1 = ((float)(i + 1) / kSeg) * 2.0f * 3.14159f;
+        SDL_RenderDrawLineF(renderer, 
+            cx + std::cos(a0) * rad, cy + std::sin(a0) * rad, 
+            cx + std::cos(a1) * rad, cy + std::sin(a1) * rad);
+    }
 #endif
 }
 
@@ -565,6 +535,13 @@ float Character::GetFootCircleRadius() const {
 Vec2 Character::GetFootCircleCenter() const {
     const float r = GetFootCircleRadius();
     return Vec2(associated.box.x + associated.box.w * 0.5f, associated.box.y + associated.box.h - r);
+}
+
+Circle Character::GetFootCollisionCircle() const {
+    Circle c;
+    c.center = GetFootCircleCenter();
+    c.radius = GetFootCircleRadius() * 0.85f;
+    return c;
 }
 
 SDL_Rect Character::GetFootRect() const {

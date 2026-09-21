@@ -3,6 +3,7 @@
 
 #include "engine/Component.h"
 #include "gameplay/Inventory.h"
+#include "core/LevelManager.h"
 #include "core/Timer.h"
 #include "math/Vec2.h"
 #include "audio/Sound.h"
@@ -78,6 +79,7 @@ public:
     
     Vec2 GetFootCircleCenter() const;
     float GetFootCircleRadius() const;
+    Circle GetFootCollisionCircle() const;
 
     // ── Sistema de Sanidade ───────────────────────────────────────────────────
     float sanity = 100.0f;

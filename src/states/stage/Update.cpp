@@ -114,6 +114,25 @@ void StageState::Update(float dt){
     //     return;
     // }
 
+    if (pendingWindowBreakDialogueTimer > 0.0f) {
+        pendingWindowBreakDialogueTimer -= dt;
+        if (pendingWindowBreakDialogueTimer <= 0.0f) {
+            pendingWindowBreakDialogueTimer = -1.0f;
+            GameSfx::PlayWindowBreak();
+            pendingWindowBreakLineTimer = 1.0f;   
+        }
+    }
+
+    if (pendingWindowBreakLineTimer > 0.0f) {
+        pendingWindowBreakLineTimer -= dt;
+        if (pendingWindowBreakLineTimer <= 0.0f) {
+            pendingWindowBreakLineTimer = -1.0f;
+            dialogueBox.Queue(DialogueBox::Speaker::LittleBrother, DialogueBox::Speaker::BigBrother,
+                              DialogueBox::Emotion::Doubt, DialogueBox::Emotion::Fear,
+                              "Que barulho foi esse?");
+        }
+    }     
+
     if (oceanWavesChunk) {
         if (ambientResumeDelay > 0.0f) {
             ambientResumeDelay -= dt;
@@ -143,6 +162,7 @@ void StageState::Update(float dt){
     }
 
     if (journalViewerOpen || journalViewerClosing) {
+        dialogueBox.Update(dt);
         UpdateJournalViewer(dt);
         return;
     }
@@ -308,9 +328,10 @@ void StageState::Update(float dt){
         TryInteractWindowOnKeyPress();
         TryInteractRadioOnKeyPress();
         UpdateTutorials(dt);
-        UpdateMonsterScare(dt);
     }
     UpdateInventoryLight();
+    dialogueBox.Update(dt);
+    fuelFlameHud.Update(dt);
 
     
 

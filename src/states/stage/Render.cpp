@@ -986,7 +986,6 @@ void StageState::Render(){
 
     RenderInteractionPrompt(renderer);
     RenderTutorials(renderer);
-    RenderMonsterScare(renderer);
     RenderVoiceSubtitle(renderer);
     RenderLevelTitleBanner(renderer);
     RenderPauseMenu(renderer);
@@ -995,6 +994,8 @@ void StageState::Render(){
     RenderQuitConfirmModal(renderer);
     RenderJournalViewer(renderer);
     RenderSaveToast(renderer);
+    dialogueBox.Render(renderer, Game::GetInstance().GetWindowsWidth(), Game::GetInstance().GetWindowsHeight());
+    fuelFlameHud.Render(renderer, inventory, Game::GetInstance().GetWindowsWidth(), Game::GetInstance().GetWindowsHeight());
 
     // Status dos toggles de debug (canto superior direito) — verde=ON, cinza=OFF.
     if (Game::debugMode) {

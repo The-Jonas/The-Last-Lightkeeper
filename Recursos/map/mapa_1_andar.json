@@ -1254,6 +1254,75 @@
                  "width":120,
                  "x":718,
                  "y":2171
+                }, 
+                {
+                 "height":250,
+                 "id":954,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"dialogue",
+                         "type":"string",
+                         "value":"[{\"speaker\":\"Luke\",\"listener\":\"Martin\",\"emotion\":\"Fear\",\"listener_emotion\":\"Fear\",\"text\":\"Voc\u00ea ouviu aquele barulho? E ainda perdemos a nossa lanterna, e agora?\"},{\"speaker\":\"Martin\",\"listener\":\"Luke\",\"emotion\":\"Normal\",\"listener_emotion\":\"Fear\",\"text\":\"Calma, vai ficar tudo bem, conseguimos nos virar at\u00e9 agora.\"}]"
+                        }, 
+                        {
+                         "name":"once",
+                         "type":"bool",
+                         "value":true
+                        }],
+                 "rotation":0,
+                 "type":"DialogueTrigger",
+                 "visible":true,
+                 "width":398,
+                 "x":1661.81818181818,
+                 "y":1906.06060606061
+                }, 
+                {
+                 "height":250,
+                 "id":955,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"dialogue",
+                         "type":"string",
+                         "value":"[{\"speaker\":\"Luke\",\"listener\":\"Martin\",\"emotion\":\"Fear\",\"listener_emotion\":\"Normal\",\"text\":\"Esse lugar me d\u00e1 arrepios, s\u00f3 quero ir embora!\"}]"
+                        }, 
+                        {
+                         "name":"once",
+                         "type":"bool",
+                         "value":true
+                        }],
+                 "rotation":0,
+                 "type":"DialogueTrigger",
+                 "visible":true,
+                 "width":398,
+                 "x":3219.39393939394,
+                 "y":957.575757575758
+                }, 
+                {
+                 "height":283.333333333333,
+                 "id":956,
+                 "name":"",
+                 "opacity":1,
+                 "properties":[
+                        {
+                         "name":"dialogue",
+                         "type":"string",
+                         "value":"[{\"speaker\":\"Martin\",\"listener\":\"Luke\",\"emotion\":\"Doubt\",\"listener_emotion\":\"Normal\",\"text\":\"Ser\u00e1 que tem algo por perto que pode nos ajudar a prosseguir?\"}, {\"speaker\":\"Luke\",\"listener\":\"Martin\",\"emotion\":\"Doubt\",\"listener_emotion\":\"Doubt\",\"text\":\"Pois\u00e9, talvez algo para passar daquela escada perigosa...\"}]"
+                        }, 
+                        {
+                         "name":"once",
+                         "type":"bool",
+                         "value":true
+                        }],
+                 "rotation":0,
+                 "type":"DialogueTrigger",
+                 "visible":true,
+                 "width":558.606060606061,
+                 "x":1280,
+                 "y":739.39393939394
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -4548,7 +4617,7 @@
          "y":0
         }],
  "nextlayerid":29,
- "nextobjectid":953,
+ "nextobjectid":957,
  "orientation":"orthogonal",
  "properties":[
         {

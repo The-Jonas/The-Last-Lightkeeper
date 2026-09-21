@@ -23,6 +23,8 @@
 #include "states/stage/OceanAmbientController.h"
 #include "math/Vec2.h"
 #include "gameplay/RadioAsset.h"
+#include "ui/FuelFlameHud.h"
+#include "ui/DialogueBox.h"
 
 #include <memory>
 #include <unordered_set>
@@ -322,7 +324,19 @@ public:
     bool IsMonsterBlindDebug() const { return debugMonsterBlind; }
     bool IsPhysicsDebugOn() const { return showMapPhysicsDebug; }   // tecla [B]: overlays de colisão (inclui boxes do monstro)
 
+    void QueueDialogue(DialogueBox::Speaker speaker, DialogueBox::Speaker listener,
+                        DialogueBox::Emotion emotion, DialogueBox::Emotion listenerEmotion,
+                        const std::string& text) {
+        dialogueBox.Queue(speaker, listener, emotion, listenerEmotion, text);
+    }
+
+    float pendingWindowBreakDialogueTimer = -1.0f;
+    float pendingWindowBreakLineTimer = -1.0f;
+
 private:
+
+    DialogueBox dialogueBox;
+    FuelFlameHud fuelFlameHud;
 
     enum class PartyMode {
         TOGETHER,      // Personagens andam juntos (seguidor ativo)
