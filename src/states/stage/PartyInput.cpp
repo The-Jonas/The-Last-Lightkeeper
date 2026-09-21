@@ -1,4 +1,5 @@
 #include "states/stage/StageState.h"
+#include "core/Telemetry.h"
 #include "states/stage/InternalHelpers.h"
 #include "core/Game.h"
 #include "engine/GameObject.h"
@@ -55,6 +56,12 @@ void StageState::SwapControlledCharacter() {
 
     std::swap(controlledCharacter, companionCharacter);
     std::swap(controlledCharacterObject, companionCharacterObject);
+
+    // Telemetria: com que frequencia o jogador troca de irmao — e se chega a
+    // usar o irmao pequeno de todo.
+    Telemetry::Event("swap_brother", Telemetry::Fields()
+        .Int("level", currentLevelIndex)
+        .Str("to", controlledCharacter == smallCharacter ? "small" : "big"));
 
     TriggerControlIndicator();   // mostra/anima o indicador no novo personagem
 }

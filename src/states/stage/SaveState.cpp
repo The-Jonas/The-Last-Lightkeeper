@@ -1,4 +1,5 @@
 #include "states/stage/StageState.h"
+#include "core/Telemetry.h"
 #include "states/stage/FirstLoadData.h"
 #include "states/LoadingState.h"
 #include "core/SaveManager.h"
@@ -311,6 +312,10 @@ bool StageState::HandleQuitConfirmInput() {
     }
 
     if (input.KeyPress(SDLK_ESCAPE) || input.KeyPress(SDLK_n) || input.KeyPress(SDLK_2)) {
+        // Desistiu de sair. Sem isto so se via o "Sair" do menu de pausa e
+        // parecia que a sessao tinha acabado ali.
+        Telemetry::Event("quit_confirm", Telemetry::Fields()
+            .Int("level", currentLevelIndex).Str("choice", "cancelou"));
         quitConfirmOpen = false;
         return true;
     }
@@ -330,7 +335,12 @@ bool StageState::HandleQuitConfirmInput() {
             }
         }
 
+        Telemetry::Event("quit_confirm", Telemetry::Fields()
+            .Int("level", currentLevelIndex)
+            .Str("choice", quitConfirmSelection == 0 ? "salvou_e_saiu" : "cancelou")
+            .Num("levelTime", telemetryLevelElapsed));
         if (quitConfirmSelection == 0) {
+            Telemetry::SetEndReason("quit_stage");
             SaveCurrentProgress();
             popRequested = true;
         }
@@ -564,6 +574,9 @@ const char* kPauseMenuLabels[] = {"Continuar", "Salvar", "Configuracoes", "Reini
 }
 
 void StageState::RestartLevelFromCheckpoint() {
+    Telemetry::Event("checkpoint_restart", Telemetry::Fields()
+        .Int("level", currentLevelIndex)
+        .Num("levelTime", telemetryLevelElapsed));
     // Volta o estado "current" para o início do nível e recarrega via Continue.
     SaveManager::RevertCurrentToCheckpoint();
     popRequested = true;
@@ -606,6 +619,10 @@ void StageState::HandlePauseMenuInput() {
     if (!activate) {
         return;
     }
+
+    Telemetry::Event("pause_menu", Telemetry::Fields()
+        .Int("level", currentLevelIndex)
+        .Str("choice", kPauseMenuLabels[pauseMenuSelection]));
 
     switch (pauseMenuSelection) {
     case 0:  // Continuar
@@ -1307,6 +1324,9 @@ bool sFarVoiceArmed = true;   // fala de medo do irmãozinho (sem limite de 3x)
 void StageState::RequestTutorial(const std::string& text) {
     if (text.empty()) return;
     if (activeTutText == text || pendingTutText == text) return;
+    // Telemetria: que tutoriais chegaram a aparecer. Um tutorial que dispara em
+    // toda a gente e um sinal de que o jogo nao se explica sozinho.
+    Telemetry::Event("tutorial", Telemetry::Fields().Int("level", currentLevelIndex).Str("text", text));
     if (activeTutTimer > 0.0f) {
         pendingTutText = text;
         if (activeTutTimer > kTutorialFadeOut) activeTutTimer = kTutorialFadeOut;

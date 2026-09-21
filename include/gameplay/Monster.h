@@ -38,6 +38,8 @@ public:
     float GetVisionRevealTimer() const { return visionRevealTimer; }
     bool isVisibleToLittleBrother() const { return visionRevealTimer > 0.0f; }
     MonsterState GetState() const { return state; } 
+    /// Nome do estado para texto (rotulo de debug e telemetria de playtest).
+    static const char* StateName(MonsterState s);
 
     void ActivateVision(float duration) { visionRevealTimer = duration; }
     GameObject& GetAssociated() { return associated; }
@@ -48,6 +50,20 @@ private:
     void CheckDamageCollision();
     void ApplyAnimFrame();
     void TransitionTo(MonsterState next);
+
+    // ── Telemetria: deteccao de oscilacao de estado ──────────────────────────
+    // O estado do monstro pode entrar a trocar A->B->A->B em milissegundos
+    // quando a condicao que o decide fica na fronteira. Registar cada troca
+    // enchia o ficheiro e escondia o que interessa; em vez disso contamos a
+    // oscilacao e gravamos UMA linha a dizer entre que estados e quantas vezes.
+    // Essa linha e o proprio sintoma do defeito.
+    void FlushStateFlap();
+    MonsterState telemetryPrevState = MonsterState::PATROL;
+    double telemetryLastTransitionAt = -1.0;
+    int telemetryFlapCount = 0;
+    double telemetryFlapStartedAt = 0.0;
+    MonsterState telemetryFlapA = MonsterState::PATROL;
+    MonsterState telemetryFlapB = MonsterState::PATROL;
 
     // ── Updates de Estado ─────────────────────────────────────────────────────
     void UpdatePatrol(float dt);

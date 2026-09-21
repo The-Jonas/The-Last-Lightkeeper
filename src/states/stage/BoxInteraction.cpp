@@ -1,4 +1,5 @@
 #include "states/stage/StageState.h"
+#include "core/Telemetry.h"
 #include "core/InputManager.h"
 #include "engine/GameObject.h"
 #include "gameplay/Box.h"
@@ -212,6 +213,10 @@ void StageState::TryInteractRadioOnKeyPress() {
     InputManager& input = InputManager::GetInstance();
     if (!input.ActionPress(GameAction::Interact) || !reachableRadio) return;
     reachableRadio->Toggle();
+    {
+        const Vec2 c = reachableRadio->GetAssociated().box.Center();
+        Telemetry::Event("radio_used", Telemetry::Fields().Int("level", currentLevelIndex).Pos("", c.x, c.y));
+    }
 }
 
 Candlestick* StageState::FindClosestReachableCandle() const {
@@ -318,8 +323,11 @@ void StageState::TryInteractCandleOnKeyPress() {
         return;
     }
 
+    const Vec2 candleCenter = reachableCandle->GetAssociated().box.Center();
     if (reachableCandle->IsLit()) {
         reachableCandle->SetLit(false);
+        Telemetry::Event("candle_blown", Telemetry::Fields()
+            .Int("level", currentLevelIndex).Pos("", candleCenter.x, candleCenter.y));
         GameSfx::PlayCandleBlow();   
         SaveCurrentProgress();
         return;
@@ -334,6 +342,8 @@ void StageState::TryInteractCandleOnKeyPress() {
             bigCharacter->NotifyInventoryLightChanged();
         }
         reachableCandle->SetLit(true);
+        Telemetry::Event("candle_lit", Telemetry::Fields()
+            .Int("level", currentLevelIndex).Pos("", candleCenter.x, candleCenter.y));
         GameSfx::PlayCandleLightUp();   
         SaveCurrentProgress();
     }
@@ -396,6 +406,10 @@ void StageState::TryInteractWindowOnKeyPress() {
 
     // Chama a função da janela para abrir/fechar
     reachableWindow->Toggle();
+    {
+        const Vec2 c = reachableWindow->GetAssociated().box.Center();
+        Telemetry::Event("window_closed", Telemetry::Fields().Int("level", currentLevelIndex).Pos("", c.x, c.y));
+    }
     
     // Salva o jogo toda vez que interage com a janela (igual a vela)
     SaveCurrentProgress(); 

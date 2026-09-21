@@ -1,4 +1,5 @@
 #include "states/stage/StageState.h"
+#include "core/Telemetry.h"
 #include "core/Game.h"
 #include "core/InputManager.h"
 #include "core/Resources.h"
@@ -177,6 +178,13 @@ void StageState::OpenJournalViewer(Jornal* jornal) {
     journalViewerClosing = false;
     journalViewerOpen    = true;
 
+    // Telemetria: que documentos o jogador abriu — e, com o par de eventos,
+    // quanto tempo os leu de facto (ou se fechou logo a seguir).
+    telemetryJournalOpenedAt = static_cast<float>(Telemetry::Now());
+    Telemetry::Event("journal_open", Telemetry::Fields()
+        .Int("level", currentLevelIndex)
+        .Str("image", journalViewImagePath));
+
     const int winW = Game::GetInstance().GetWindowsWidth();
     const int winH = Game::GetInstance().GetWindowsHeight();
     int texW = 1, texH = 1;
@@ -236,6 +244,9 @@ void StageState::UpdateJournalViewer(float dt) {
     journalAnimTimer += dt;
 
     if (input.ActionPress(GameAction::Interact) || input.KeyPress(SDLK_ESCAPE)) {
+        Telemetry::Event("journal_close", Telemetry::Fields()
+            .Str("image", journalViewImagePath)
+            .Num("readSeconds", Telemetry::Now() - telemetryJournalOpenedAt));
         journalViewerClosing = true;
         journalCloseTimer = 0.0f;
         jornalInteractSound.FadeOut(600);           // fade suave (não corta seco) ao fechar o documento

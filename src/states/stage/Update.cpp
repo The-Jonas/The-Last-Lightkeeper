@@ -16,6 +16,7 @@
 #include "core/GameData.h"
 #include "core/SaveManager.h"
 #include "states/EndState.h"
+#include "core/Telemetry.h"
 #include "ui/Text.h"
 #include "lighting/TopDownLightShadows.h"
 #include "lighting/LightShadowProfile.h"
@@ -65,6 +66,7 @@ void StageState::TriggerMonsterHitFeedback() {
         gMonsterHitSfxLoaded = true;
     }
     gMonsterHitSfx[rand() % 2].Play();
+    // (o evento "monster_hit" e gravado pelo Monster, que sabe o dano exacto)
     Camera::AddTrauma(0.65f);          // tremor seco de impacto
     damageFlashTimer = kDamageFlashDuration; // clarão vermelho
     lastMonsterHitTimer = kMonsterHitDeathWindow; // p/ atribuir a causa da morte (6.5)
@@ -73,6 +75,7 @@ void StageState::TriggerMonsterHitFeedback() {
 void StageState::Update(float dt){
 
     lastFrameDt = dt;
+    UpdateTelemetry(dt);   // amostra de playtest (1/s) + deteccao de "preso"
     dynamicColliderCacheDirty = true;
     if (rebindInvalidTimer > 0.0f) rebindInvalidTimer -= dt;
 
@@ -625,6 +628,23 @@ void StageState::Update(float dt){
         SaveManager::RevertCurrentToCheckpoint();
         GameData::playerVictory = false;
         GameData::deathByMonster = (lastMonsterHitTimer > 0.0f); // causa da morte (6.5)
+
+        // O evento mais importante do playtest: ONDE e PORQUE se perde.
+        {
+            Telemetry::Fields f;
+            f.Int("level", currentLevelIndex)
+             .Str("cause", GameData::deathByMonster ? "monster" : "darkness")
+             .Num("levelTime", telemetryLevelElapsed)
+             .Num("walkedPx", telemetryWalkedPx)
+             .Bool("lightOn", inventory.IsUsableLightActive());
+            if (controlledCharacterObject) {
+                const Vec2 c = controlledCharacterObject->box.Center();
+                f.Pos("", c.x, c.y);
+            }
+            if (bigCharacter) f.Num("sanityBig", bigCharacter->sanity);
+            if (smallCharacter) f.Num("sanitySmall", smallCharacter->sanity);
+            Telemetry::Event("death", f);
+        }
 
         popRequested = true;
         Game::GetInstance().Push(new EndState());

@@ -1,4 +1,5 @@
 #include "gameplay/Monster.h"
+#include "core/Telemetry.h"
 #include "gameplay/Character.h"
 #include "engine/SpriteRenderer.h"
 #include "states/stage/StageState.h"
@@ -32,6 +33,8 @@ Monster::Monster(GameObject& associated): Component(associated) {}
 
 Monster::~Monster() {
     GameSfx::StopMonsterFootsteps();
+    FlushStateFlap();          // nao perde a ultima oscilacao do nivel
+    Telemetry::SetIntense(false);
 }
 
 void Monster::LoadTuning() {
@@ -312,18 +315,7 @@ void Monster::Render() {
     }
  
     // Rótulo de status 
-    const char* stName = "?";
-    switch (state) {
-        case MonsterState::PATROL:          stName = "PATROL"; break;
-        case MonsterState::INVESTIGATE:     stName = "INVESTIGATE"; break;
-        case MonsterState::CHASE:           stName = "CHASE"; break;
-        case MonsterState::HUNT:            stName = "HUNT"; break;
-        case MonsterState::FLEE_LIGHT:      stName = "FLEE_LIGHT"; break;
-        case MonsterState::SABOTAGE_WINDOW: stName = "SABOTAGE_WINDOW"; break;
-        case MonsterState::UNSTUCK:         stName = "UNSTUCK"; break;
-    }
-    
-    std::string label = std::string("STATE: ") + stName;
+    std::string label = std::string("STATE: ") + StateName(state);
     if (strategicMode) label += " [STRAT]";
     auto font = Resources::GetFont("Recursos/font/times.ttf", 18);
     
@@ -361,9 +353,75 @@ void Monster::Render() {
 // ─────────────────────────────────────────────────────────────────────────────
 //  TRANSIÇÃO DE ESTADO
 // ─────────────────────────────────────────────────────────────────────────────
+// Fecha uma oscilacao em curso com UMA linha. Chamada na proxima transicao a
+// serio e quando o monstro morre (fim de nivel) — senao a ultima oscilacao de
+// um nivel nunca chegava ao ficheiro.
+void Monster::FlushStateFlap() {
+    if (telemetryFlapCount <= 0) {
+        return;
+    }
+    const double seconds = Telemetry::Now() - telemetryFlapStartedAt;
+    Telemetry::Event("monster_flap", Telemetry::Fields()
+        .Str("a", StateName(telemetryFlapA))
+        .Str("b", StateName(telemetryFlapB))
+        .Int("count", telemetryFlapCount + 1)   // +1: a troca que abriu a serie
+        .Num("seconds", seconds));
+    telemetryFlapCount = 0;
+}
+
+const char* Monster::StateName(MonsterState s) {
+    switch (s) {
+        case MonsterState::PATROL:          return "PATROL";
+        case MonsterState::INVESTIGATE:     return "INVESTIGATE";
+        case MonsterState::CHASE:           return "CHASE";
+        case MonsterState::HUNT:            return "HUNT";
+        case MonsterState::FLEE_LIGHT:      return "FLEE_LIGHT";
+        case MonsterState::SABOTAGE_WINDOW: return "SABOTAGE_WINDOW";
+        case MonsterState::UNSTUCK:         return "UNSTUCK";
+    }
+    return "?";
+}
+
 void Monster::TransitionTo(MonsterState next) {
     bool isActualTransition = (state != next);
  
+    // Telemetria: a curva de tensao da sessao sai daqui. Quantas perseguicoes
+    // houve, quanto tempo durou cada uma, a que distancia comecaram.
+    if (isActualTransition) {
+        const double now = Telemetry::Now();
+        // Voltar ao estado anterior em menos de `kFlapWindowSec` nao e uma
+        // decisao: e a condicao a tremer na fronteira. Conta-se, nao se grava.
+        constexpr double kFlapWindowSec = 0.4;
+        const bool quick = (telemetryLastTransitionAt >= 0.0) && (now - telemetryLastTransitionAt) < kFlapWindowSec;
+        const bool backAndForth = quick && (next == telemetryPrevState);
+
+        if (backAndForth) {
+            if (telemetryFlapCount == 0) {
+                telemetryFlapStartedAt = telemetryLastTransitionAt;
+                telemetryFlapA = telemetryPrevState;
+                telemetryFlapB = state;
+            }
+            telemetryFlapCount++;
+        } else {
+            FlushStateFlap();
+            const Vec2 mc = associated.box.Center();
+            Telemetry::Fields f;
+            f.Str("from", StateName(state)).Str("to", StateName(next)).Pos("", mc.x, mc.y);
+            if (Character::player) {
+                const Vec2 pc = Character::player->GetAssociated().box.Center();
+                f.Num("distToPlayer", mc.Distance(pc));
+            }
+            Telemetry::Event("monster_state", f);
+        }
+
+        telemetryPrevState = state;
+        telemetryLastTransitionAt = now;
+
+        // Perseguicao = momento quente: a telemetria passa a amostrar mais
+        // depressa enquanto durar (ver Telemetry::SetIntense).
+        Telemetry::SetIntense(next == MonsterState::CHASE || next == MonsterState::HUNT);
+    }
+
     state = next;
     stateTimer = 0.0f;
     currentPath.clear();
@@ -484,19 +542,36 @@ void Monster::CheckDamageCollision() {
         return SDL_HasIntersection(&hb, &dmgBox) == SDL_TRUE;
     };
 
+    // Telemetria do toque: quem levou, se estava iluminado, quanto custou e com
+    // quanto ficou. E aqui que os numeros existem — no StageState so chega o
+    // pedido de tremor de ecra.
+    auto logHit = [&](const char* who, Character* c, bool lit, float damage) {
+        const Vec2 p = c->GetAssociated().box.Center();
+        Telemetry::Event("monster_hit", Telemetry::Fields()
+            .Str("victim", who)
+            .Bool("lit", lit)
+            .Num("damage", damage)
+            .Num("sanityAfter", c->sanity)
+            .Pos("", p.x, p.y));
+    };
+
     bool hit = false;
     if (CheckPlayerHit(Character::player)) {
         bool lit = s && s->bigIlluminationLevel >= kIlluminationThreshold;
-        Character::player->sanity -= lit ? kSanityDamageLit : kSanityDamageDark;
+        const float damage = lit ? kSanityDamageLit : kSanityDamageDark;
+        Character::player->sanity -= damage;
         if (Character::player->sanity < 0.0f) Character::player->sanity = 0.0f;
         lastKnownPlayerPos = Character::player->GetAssociated().box.Center();
+        logHit("big", Character::player, lit, damage);
         hit = true;
     }
     else if (CheckPlayerHit(Character::littleBrother)) {
         bool lit = s && s->smallIlluminationLevel >= kIlluminationThreshold;
-        Character::littleBrother->sanity -= lit ? kSanityDamageLit : kSanityDamageDark;
+        const float damage = lit ? kSanityDamageLit : kSanityDamageDark;
+        Character::littleBrother->sanity -= damage;
         if (Character::littleBrother->sanity < 0.0f) Character::littleBrother->sanity = 0.0f;
         lastKnownPlayerPos = Character::littleBrother->GetAssociated().box.Center();
+        logHit("small", Character::littleBrother, lit, damage);
         hit = true;
     }
 
@@ -925,6 +1000,10 @@ void Monster::UpdateSabotageWindow(float dt) {
 
     if (dist <= 480.0f) {
         targetWindow->Toggle();
+        {
+            const Vec2 wc = targetWindow->GetAssociated().box.Center();
+            Telemetry::Event("window_opened", Telemetry::Fields().Pos("", wc.x, wc.y));
+        }
         targetWindow = nullptr;
         windowRadarTimer = -kSabotageDelay;
         postSabotageIdleTimer = kPostSabotageIdle;

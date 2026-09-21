@@ -1,4 +1,5 @@
 #include "core/CrashHandler.h"
+#include "core/Telemetry.h"
 
 // Hash do commit embutido pelo makefile (-DBUILD_GITHASH). Torna o relatorio
 // AUTO-IDENTIFICAVEL: sabemos EXATAMENTE de qual fonte o build veio, para
@@ -430,6 +431,10 @@ void WriteReport(EXCEPTION_POINTERS* ep, const char* reason) {
 }
 
 LONG WINAPI TopLevelFilter(EXCEPTION_POINTERS* ep) {
+    // Marca o crash TAMBEM no registo de playtest: sem isto a sessao que
+    // rebentou fica igual a uma que o jogador simplesmente abandonou, e e a
+    // que mais interessa distinguir.
+    Telemetry::NoteCrash("excecao nao tratada");
     WriteReport(ep, nullptr);
     return EXCEPTION_EXECUTE_HANDLER;   // encerra o processo
 }
@@ -468,6 +473,7 @@ void SignalHandler(int sig) {
         case SIGFPE:  name = "SIGFPE (erro aritmetico)"; break;
         case SIGILL:  name = "SIGILL (instrucao ilegal)"; break;
     }
+    Telemetry::NoteCrash(name);
     WriteReportPosix(name);
     std::signal(sig, SIG_DFL);
     std::raise(sig);
@@ -486,6 +492,7 @@ void TerminateHandler() {
             what += ": (tipo desconhecido)";
         }
     }
+    Telemetry::NoteCrash(what.c_str());
 #ifdef _WIN32
     WriteReport(nullptr, what.c_str());
 #else

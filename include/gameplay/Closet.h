@@ -25,6 +25,10 @@ private:
     Vec2 playerEntryPos;
     Vec2 brotherEntryPos;
 
+    /// `Telemetry::Now()` do momento em que a dupla se escondeu. So serve para
+    /// medir quanto tempo ficaram la dentro (evento "hide_end").
+    float hiddenSinceSeconds = 0.0f;
+
     // Latch p/ a fala de medo do irmãozinho: dispara UMA vez por aproximação do
     // monstro (rearma só quando ele se afasta), em vez de repetir a cada ~4s.
     bool hideVoiceArmed = true;

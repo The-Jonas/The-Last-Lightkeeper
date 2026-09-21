@@ -7,6 +7,7 @@
 #include "core/Resources.h"
 #include "engine/GameObject.h"
 #include "engine/Camera.h"
+#include "core/Telemetry.h"
 #include "ui/Text.h"
 #include "states/TitleState.h"
 
@@ -159,6 +160,7 @@ void EndState::Update(float dt) {
 // topo, então o loop do jogo nunca encerra — funciona mesmo que não haja um
 // TitleState válido embaixo.
 void EndState::ReturnToMainMenu() {
+    Telemetry::Event("end_screen_left", Telemetry::Fields().Bool("creditsOnly", creditsOnly));
     popRequested = true;
     // Aberto pelo menu: o TitleState já está embaixo — só volta a ele (sem
     // duplicar). Vitória/derrota: empilha um TitleState novo (a pilha pode estar
@@ -192,6 +194,13 @@ void EndState::Render() {
 }
 
 void EndState::Start() {
+    // Telemetria: o ecra de fim fecha a corrida. Diz como acabou e, na derrota,
+    // quem a causou.
+    Telemetry::Event("end_screen", Telemetry::Fields()
+        .Bool("creditsOnly", creditsOnly)
+        .Bool("victory", GameData::playerVictory)
+        .Str("cause", GameData::deathByMonster ? "monster" : "darkness"));
+
     // Este estado desenha tudo em coordenadas de TELA, mas o `Text` renderiza em
     // coordenadas de mundo (subtrai `Camera::pos`). Como ele é empilhado direto
     // da fase, sem zerar a câmera o texto sai deslocado — e com a câmera afastada

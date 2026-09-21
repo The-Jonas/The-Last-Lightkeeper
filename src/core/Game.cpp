@@ -1,6 +1,7 @@
 #include "core/Game.h"
 #include "core/State.h"
 #include "core/CrashHandler.h"
+#include "core/Telemetry.h"
 #include "states/stage/StageState.h"
 #include "core/InputManager.h"
 #include <cstdlib>
@@ -659,6 +660,34 @@ Game::Game(std::string title) {
     if (captureWindowMode) {
         SetCaptureWindowMode(true);
     }
+
+    // Maquina e definicoes do tester. So aqui: antes disto o SDL ainda nao
+    // sabia responder sobre ecra, CPU nem memoria.
+    {
+        SDL_RendererInfo info;
+        SDL_zero(info);
+        const char* backend = (SDL_GetRendererInfo(renderer, &info) == 0 && info.name) ? info.name : "?";
+        SDL_DisplayMode dm;
+        SDL_zero(dm);
+        SDL_GetDesktopDisplayMode(0, &dm);
+        Telemetry::Event("env", Telemetry::Fields()
+            .Str("renderer", backend)
+            .Int("logicalW", windowsWidth)
+            .Int("logicalH", windowsHeight)
+            .Int("desktopW", dm.w)
+            .Int("desktopH", dm.h)
+            .Int("refreshHz", dm.refresh_rate)
+            .Int("cpuCores", SDL_GetCPUCount())
+            .Int("ramMB", SDL_GetSystemRAM())
+            .Str("displayMode", CurrentDisplayModeLabel())
+            .Str("resolution", CurrentResolutionLabel())
+            .Int("volMaster", masterVolumePercent)
+            .Int("volAmbient", ambientVolumePercent)
+            .Int("volSfx", sfxVolumePercent)
+            .Int("volVoice", voiceVolumePercent)
+            .Int("brightness", brightnessPercent)
+            .Bool("reduceFlashing", reduceFlashing));
+    }
 }
 
 // Destrutor
@@ -702,7 +731,12 @@ SDL_Window* Game::GetWindow() {                     // Retorna a Janela
 }
 
 void Game::Push(State* state) {
-    if (state) CrashHandler::Log("Push estado: %s", typeid(*state).name());
+    if (state) {
+        CrashHandler::Log("Push estado: %s", typeid(*state).name());
+        // Por onde o jogador andou no jogo (menu -> carregar -> fase -> fim).
+        // O nome vem do typeid, o mesmo que ja vai para o log de sessao.
+        Telemetry::Event("state_push", Telemetry::Fields().Str("state", typeid(*state).name()));
+    }
     storedState = state;                            // Guarda para empilhar no início do frame
 }
 
@@ -753,7 +787,14 @@ void Game::Run() {
 
     while (!stateStack.empty() && !stateStack.top()->QuitRequested()) {
         CalculateDeltaTime();
+        Telemetry::FrameTick(dt);   // FPS das amostras + engasgos
         InputManager::GetInstance().Update();
+
+        // Fechou a janela (X / alt-F4). Registado aqui porque e o unico sitio
+        // por onde passa qualquer estado, e distingue-se de sair pelo menu.
+        if (InputManager::GetInstance().QuitRequested()) {
+            Telemetry::SetEndReason("window_close");
+        }
 
         // F11: janela de gravacao <-> tela cheia sem bordas. Global, funciona em
         // qualquer estado (ver a nota de `captureWindowMode` em Game.h).

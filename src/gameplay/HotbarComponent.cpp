@@ -1,5 +1,6 @@
 #include "gameplay/HotbarComponent.h"
 #include "core/CrashHandler.h"
+#include "core/Telemetry.h"
 #include "core/Game.h"
 #include "core/InputManager.h"
 #include "gameplay/Box.h"
@@ -51,7 +52,14 @@ void PlayRandomPickupSound() {
 PickupOutcome PerformPickup(Inventory& inventory, ItemPickup* closest, std::vector<ItemPickup*>& itemPickups,
                             Character* bigChar) {
     const ItemDef& def = *closest->GetDef();
+    const Vec2 pickupPos = closest->GetAssociated().box.Center();
+    const int pickupDurability = closest->GetDurability();
     if (!inventory.AddItem(def, closest->GetDurability())) {
+        // Tentou apanhar e NAO conseguiu. Vale tanto como o sucesso: diz que o
+        // jogador quis aquele item e a bolsa estava cheia.
+        Telemetry::Event("item_blocked", Telemetry::Fields()
+            .Str("item", def.name)
+            .Pos("", pickupPos.x, pickupPos.y));
         return PickupOutcome::Blocked;   // bolsa cheia
     }
     for (auto& p : itemPickups) {
@@ -63,6 +71,10 @@ PickupOutcome PerformPickup(Inventory& inventory, ItemPickup* closest, std::vect
     closest->Destroy();
     PlayRandomPickupSound();
     CrashHandler::Log("pegou item: %s", def.name.c_str());
+    Telemetry::Event("item_pickup", Telemetry::Fields()
+        .Str("item", def.name)
+        .Int("durability", pickupDurability)
+        .Pos("", pickupPos.x, pickupPos.y));
     if (StageState* stage = Game::TryGetStageState()) {
         stage->NotifyItemPickupCollected(closest);
         stage->SaveCurrentProgress();

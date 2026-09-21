@@ -12,6 +12,7 @@
 #include "gameplay/HotbarComponent.h"
 #include "gameplay/Item.h"
 #include "states/EndState.h"
+#include "core/Telemetry.h"
 #include "states/LevelTransitionLoadingState.h"
 #include "ui/Text.h"
 #include "ui/InventoryWheel.h"
@@ -236,6 +237,30 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
 
     RefreshCameraTargets();
     UpdateControlledCharacterVisuals();
+
+    // ── Telemetria: comeco de andar ──────────────────────────────────────────
+    // Os contadores do andar zeram aqui, e nao no fim do anterior: este ponto
+    // e o unico por onde passam TODOS os arranques (jogo novo, continuar,
+    // escada e reinicio no checkpoint).
+    telemetryLevelElapsed = 0.0f;
+    telemetryWalkedPx = 0.0f;
+    telemetryLitSeconds = 0.0f;
+    telemetryHasLastPos = false;
+    telemetryStuckAccum = 0.0f;
+    telemetrySampleTimer = 0.0f;
+    telemetryPrevSanityBig = -1.0f;
+    telemetryPrevSanitySmall = -1.0f;
+    telemetryCliffAccum = 0.0f;
+    telemetryCliffCooldown = 0.0f;
+    telemetrySanityTier = 0;
+    telemetryIdleAccum = 0.0f;
+    telemetryIdleAnchor = Vec2(0.0f, 0.0f);
+    Telemetry::SetIntense(false);   // o monstro do andar anterior ja nao conta
+    Telemetry::Event("level_start", Telemetry::Fields()
+        .Int("level", currentLevelIndex)
+        .Str("map", GetLevelDef(cfg, currentLevelIndex).mapPath)
+        .Str("loadMode", loadMode == LoadMode::Continue ? "continue" : "new")
+        .Bool("resetInventory", resetInventory));
 }
 
 void StageState::BeginLevelTransition(int targetLevelIndex) {
@@ -437,6 +462,9 @@ void StageState::UpdateSceneTransition(float dt) {
     if (sceneTransitionToEnd) {
         GameSfx::StopAllGameplay();
         GameVoice::StopAll();
+        Telemetry::Event("victory", Telemetry::Fields()
+            .Int("level", currentLevelIndex)
+            .Num("levelTime", telemetryLevelElapsed));
         GameData::playerVictory = true;
         GameData::deathByMonster = false;
         popRequested = true;
@@ -449,12 +477,20 @@ void StageState::UpdateSceneTransition(float dt) {
 void StageState::TransitionToLevel(int targetLevelIndex) {
     const StageFirstLoadData cfg = LoadStageFirstLoadData();
     if (targetLevelIndex >= GetLevelCount(cfg)) {
+        Telemetry::Event("victory", Telemetry::Fields().Int("level", currentLevelIndex));
         GameData::playerVictory = true;
         SaveCurrentProgress();
         popRequested = true;
         Game::GetInstance().Push(new EndState());
         return;
     }
+
+    Telemetry::Event("level_end", Telemetry::Fields()
+        .Int("level", currentLevelIndex)
+        .Int("nextLevel", targetLevelIndex)
+        .Num("levelTime", telemetryLevelElapsed)
+        .Num("walkedPx", telemetryWalkedPx)
+        .Num("litSeconds", telemetryLitSeconds));
 
     MarkMissedUniquePickupsOnLevelLeave();
     SaveGameState preserved = CaptureSaveState();

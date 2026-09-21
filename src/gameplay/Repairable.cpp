@@ -3,6 +3,7 @@
 #include "engine/SpriteRenderer.h"
 #include "states/stage/StageState.h"
 #include "core/Game.h"
+#include "core/Telemetry.h"
 #include "engine/Camera.h"
 #include "gameplay/Character.h"
 #include <iostream>
@@ -53,6 +54,8 @@ void Repairable::Update(float dt) {
             SpriteRenderer* sprite = associated.GetComponent<SpriteRenderer>();
             if (sprite) sprite->Open(fixedSpritePath);
             isRepaired = true;
+            Telemetry::Event("repair_done", Telemetry::Fields()
+                .Pos("", associated.box.Center().x, associated.box.Center().y));
             if (stage) {
                 stage->level.escadaConsertada = true;
                 stage->SaveCurrentProgress();

@@ -9,6 +9,7 @@
 #include "gameplay/Monster.h"
 #include "ui/Text.h"
 #include "core/Game.h"
+#include "core/Telemetry.h"
 #include "audio/GameVoice.h"
 #include <iostream>
 
@@ -189,6 +190,11 @@ void Closet::ArmWhisperTimer() {
 
 void Closet::EnterCloset() {
     GameSfx::PlayClosetOpen();
+    // Telemetria: esconder-se e a defesa central do jogo. Interessa saber se o
+    // jogador a descobre, quantas vezes a usa e quanto tempo la fica.
+    hiddenSinceSeconds = static_cast<float>(Telemetry::Now());
+    Telemetry::Event("hide_start", Telemetry::Fields()
+        .Pos("", associated.box.Center().x, associated.box.Center().y));
     isOccupied = true;
     hideVoiceArmed = true;   // cada esconderijo começa podendo avisar do monstro uma vez
     ArmWhisperTimer();       // #4 primeiro sussurro só depois de alguns segundos escondido
@@ -219,6 +225,9 @@ void Closet::EnterCloset() {
 
 void Closet::ExitCloset() {
     GameSfx::PlayClosetClose();
+    Telemetry::Event("hide_end", Telemetry::Fields()
+        .Num("seconds", Telemetry::Now() - hiddenSinceSeconds)
+        .Pos("", associated.box.Center().x, associated.box.Center().y));
     isOccupied = false;
 
     StageState* stage = Game::TryGetStageState();

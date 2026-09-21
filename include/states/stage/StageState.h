@@ -465,6 +465,34 @@ private:
     /// desaparecer fora do campo de visao.
     bool ShouldHideOutsideVision(GameObject& go) const;
 
+    // ── TELEMETRIA DE PLAYTEST ───────────────────────────────────────────────
+    // Uma fotografia por segundo (posicoes, sanidade, luz, monstro, FPS) mais a
+    // deteccao de "preso": o jogador manda andar e o personagem nao sai do
+    // sitio. E o que apanha os cantos do mapa onde a colisao prende alguem.
+    void UpdateTelemetry(float dt);
+    /// Estado do monstro neste frame, "" quando nao ha monstro no andar.
+    const char* TelemetryMonsterState(float& outDistToPlayer) const;
+    float telemetrySampleTimer = 0.0f;
+    float telemetryLevelElapsed = 0.0f;      ///< segundos dentro do andar actual
+    float telemetryWalkedPx = 0.0f;          ///< distancia andada no andar
+    float telemetryLitSeconds = 0.0f;        ///< tempo com a luz pessoal acesa
+    Vec2  telemetryLastPos{0.0f, 0.0f};
+    bool  telemetryHasLastPos = false;
+    float telemetryStuckAccum = 0.0f;        ///< tempo a empurrar contra a parede
+    float telemetryStuckCooldown = 0.0f;
+    float telemetryJournalOpenedAt = 0.0f;   ///< `Telemetry::Now()` da abertura
+    /// Sanidade do frame anterior, para apanhar as QUEDAS entre amostras: uma
+    /// morte inteira cabe dentro de um segundo, e a amostra nao a via.
+    float telemetryPrevSanityBig = -1.0f;
+    float telemetryPrevSanitySmall = -1.0f;
+    float telemetryCliffAccum = 0.0f;        ///< queda somada na ultima ~1 s
+    float telemetryCliffCooldown = 0.0f;
+    /// Patamar mais baixo ja anunciado (75/50/25/0), para nao repetir o aviso.
+    int telemetrySanityTier = 0;
+    /// Quieto = nem anda nem interage. E onde o jogador esta perdido.
+    Vec2  telemetryIdleAnchor{0.0f, 0.0f};
+    float telemetryIdleAccum = 0.0f;
+
     std::unique_ptr<LightTweakPanel> lightTweakPanel;
     /// `durabilityEnabled` lido de `config/lighting.json` no arranque. Fica
     /// guardado aqui porque o painel so nasce em `LoadAssets`, muito depois.

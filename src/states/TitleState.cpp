@@ -1,5 +1,6 @@
 #include "states/TitleState.h"
 #include "states/LoadingState.h"
+#include "core/Telemetry.h"
 #include "states/EndState.h"
 #include "audio/GameSfx.h"
 #include "audio/GameVoice.h"
@@ -605,7 +606,10 @@ void TitleState::Update(float dt) {
         return;
     }
 
-    if(input.QuitRequested()||input.KeyPress(ESCAPE_KEY)) quitRequested=true;
+    if(input.QuitRequested()||input.KeyPress(ESCAPE_KEY)) {
+        Telemetry::SetEndReason(input.QuitRequested() ? "window_close" : "escape_menu");
+        quitRequested=true;
+    }
 
     auto isDisabled=[&](int idx){ return idx==1&&!hasContinueSave; };
     if(input.KeyPress(SDLK_w)||input.KeyPress(SDLK_UP)) {
@@ -657,12 +661,19 @@ void TitleState::StartContinue() {
     Game::GetInstance().Push(new LoadingState(StageState::LoadMode::Continue));
 }
 void TitleState::ActivateMenuSelection() {
+    // Telemetria: por onde o tester entrou no jogo, e quantas vezes voltou ao
+    // menu. `hasSave` diz se "Continuar" estava sequer disponivel.
+    {
+        static const char* kLabels[] = {"novo_jogo", "continuar", "opcoes", "creditos", "sair"};
+        const int idx = (menuSelection >= 0 && menuSelection < 5) ? menuSelection : 0;
+        Telemetry::Event("menu", Telemetry::Fields().Str("choice", kLabels[idx]).Bool("hasSave", hasContinueSave));
+    }
     switch(menuSelection) {
     case 0: StartNewGame(); break;
     case 1: if(hasContinueSave) StartContinue(); break;
     case 2: OpenConfig(); break;
     case 3: Game::GetInstance().Push(new EndState(/*creditsOnly=*/true)); break;
-    case 4: quitRequested=true; break;
+    case 4: Telemetry::SetEndReason("quit_menu"); quitRequested=true; break;
     }
 }
 
