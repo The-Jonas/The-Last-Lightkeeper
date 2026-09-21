@@ -583,17 +583,29 @@ void StageState::Render(){
     }
 
     // ===================================================================
-    // 6.9 CARIMBO "NAO FICAR CINZENTO" NOS DOIS IRMAOS
+    // 6.9 OS IRMAOS: NUNCA ESCUROS, CINZENTOS SEM LUZ, A CORES NA LUZ
     // ===================================================================
-    // Os irmaos mantem a cor mesmo fora do cone. O shader nao sabe distinguir
-    // que pixeis sao deles, por isso carimbamos a silhueta no canal ALFA do alvo
-    // da cena: o modo de mistura deixa o RGB intacto e poe o alfa a zero onde o
-    // sprite e opaco. Tem de ser DEPOIS da malha de escuridao — ela desenha com
-    // BLEND e voltaria a subir o alfa.
+    // Eles deixaram de ter luz propria (ver `UpdatePlayerVision`), por isso a
+    // malha de escuridao acabou de os pintar de preto como a tudo o resto.
+    // Aqui desfazemos isso em dois passos:
+    //
+    //   1. REDESENHAR o sprite por cima da malha. Volta a ficar com o brilho
+    //      cheio, aconteca o que acontecer a luz da sala — nunca escurece.
+    //      E seguro por cima do que ja la esta: o cenario que fica a frente
+    //      deles ja se apaga sozinho (`FadeEffect`) quando eles passam atras.
+    //
+    //   2. CARIMBAR a silhueta no canal ALFA, com um valor que E a luz que os
+    //      apanha. O shader le esse alfa: mantem-nos sempre nitidos e devolve
+    //      a COR na medida da luz — sem luz ficam cinzentos como o mapa,
+    //      dentro de uma luz ficam a cores por inteiro.
+    //
+    // A luz e medida so nas fontes REAIS da cena (velas, isqueiro, lamparina):
+    // `includeCarriedLight = false`, senao contariam o circulo que acabamos de
+    // lhes tirar.
     if (scenePostFx && scenePostFx->IsAvailable()) {
         const SDL_BlendMode stampBlend = ScenePostFx::NoGrayStampBlendMode();
         if (stampBlend != SDL_BLENDMODE_INVALID) {
-            auto stampNoGray = [&](GameObject* obj) {
+            auto stampNoGray = [&](GameObject* obj, float light01) {
                 if (obj == nullptr) {
                     return;
                 }
@@ -605,15 +617,47 @@ void StageState::Render(){
                 if (tex == nullptr) {
                     return;
                 }
+                const Uint8 stampAlpha =
+                    static_cast<Uint8>(1.0f + 254.0f * Clamp01(light01));
                 SDL_BlendMode prev = SDL_BLENDMODE_BLEND;
                 SDL_GetTextureBlendMode(tex, &prev);
+                Uint8 prevAlpha = 255;
+                SDL_GetTextureAlphaMod(tex, &prevAlpha);
                 if (SDL_SetTextureBlendMode(tex, stampBlend) == 0) {
+                    SDL_SetTextureAlphaMod(tex, stampAlpha);
                     sr->Render();
                 }
+                SDL_SetTextureAlphaMod(tex, prevAlpha);
                 SDL_SetTextureBlendMode(tex, prev);
             };
-            stampNoGray(bigCharacterObject);
-            stampNoGray(smallCharacterObject);
+            // Luz que apanha cada irmao, medida no PEITO (o centro do corpo e
+            // o que decide se ele "esta na luz", nao a ponta dos pes).
+            auto lightOnBrother = [&](GameObject* obj) -> float {
+                if (obj == nullptr || !visionFrame.valid) {
+                    return 0.0f;
+                }
+                const Vec2 chest = WorldToScreen(Vec2(obj->box.x + 0.5f * obj->box.w,
+                                                      obj->box.y + 0.45f * obj->box.h));
+                return Clamp01(LightAmountAtScreen(chest, /*includeCarriedLight=*/false));
+            };
+
+            // Passo 1: de volta ao brilho cheio, por cima da escuridao.
+            auto redrawLit = [&](GameObject* obj) {
+                if (obj == nullptr) {
+                    return;
+                }
+                if (SpriteRenderer* sr = obj->GetComponent<SpriteRenderer>()) {
+                    sr->Render();
+                }
+            };
+            redrawLit(bigCharacterObject);
+            redrawLit(smallCharacterObject);
+
+            // Passo 2: o carimbo leva a luz. A mistura do carimbo faz
+            // `dstA = dstA * (1 - srcA)`, logo para deixar no alvo um alfa de
+            // 254*(1-luz) o sprite tem de entrar com 1 + 254*luz.
+            stampNoGray(bigCharacterObject, lightOnBrother(bigCharacterObject));
+            stampNoGray(smallCharacterObject, lightOnBrother(smallCharacterObject));
         }
     }
 
