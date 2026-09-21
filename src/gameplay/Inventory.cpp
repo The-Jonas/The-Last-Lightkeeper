@@ -87,7 +87,21 @@ int Inventory::GetVisibleStackIndex(int visibleOffset, int visibleCount) const {
 }
 
 int Inventory::GetVisibleSlotCount() const {
-    return (GetStackCount() >= 4) ? 5 : 3;
+    // SEMPRE 3, independentemente de quantos itens a bolsa tenha.
+    //
+    // Com 5 slots a roda desfazia-se: os slots vizinhos do centro sobrepunham-
+    // se-lhe cerca de 20 px cada. A razao esta em `GetSlotScreenPos` — os
+    // acertos manuais `kTopSlotOffset*`/`kBottomSlotOffset*` foram medidos para
+    // a roda de 3, onde os vizinhos ficam a ±46 graus. Com 5 slots eles passam
+    // para ±34 graus (ja mais perto do centro) e ainda levam o MESMO acerto por
+    // inteiro, porque o `t` satura em 1 — o de cima desce 55 px, o de baixo
+    // sobe 28, e os tres colapsam uns sobre os outros.
+    //
+    // Este numero e partilhado pela roda (desenho) e pelo `GetRingSize`
+    // (qual e o item na mao). Se os dois lados discordarem, o item mostrado ao
+    // centro deixa de ser o item que o [F] usa — por isso fica aqui, num sitio
+    // so, e a roda pergunta por ele em vez de recalcular.
+    return 3;
 }
 
 int Inventory::GetRingSize() const {
@@ -332,7 +346,10 @@ HeldPropVisual Inventory::GetHeldPropVisual() const {
         return isLightToggledOn ? HeldPropVisual::Lighter : HeldPropVisual::None;
     }
     if (name == "Lamp") {
-        return HeldPropVisual::Lamp;
+        // Mesma regra do isqueiro: APAGADA nao aparece na mao. Sem isto o
+        // jogador nao tinha como saber, olhando para o personagem, se a luz
+        // estava ligada ou nao — a lamparina ficava na mao de qualquer forma.
+        return isLightToggledOn ? HeldPropVisual::Lamp : HeldPropVisual::None;
     }
     return HeldPropVisual::None;
 }

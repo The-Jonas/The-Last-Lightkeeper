@@ -387,8 +387,7 @@ void InventoryWheel::DrawRefuelSelector(SDL_Renderer* renderer) {
 
 void InventoryWheel::DrawCycleKeyHints(SDL_Renderer* renderer, float fadeAlpha) {
     // As teclas ficam SEMPRE visíveis junto da roda (mesmo com um item só).
-    const int count = inventory.GetStackCount();
-    const int visibleCount = (count >= 4) ? 5 : 3;
+    const int visibleCount = inventory.GetVisibleSlotCount();
 
     // Roda VERTICAL: i=0 é o slot de CIMA; i=visibleCount-1 é o de BAIXO
     // (ver GetSlotScreenPos). CyclePrev (↑) traz o item de cima; CycleNext (↓) o de baixo.
@@ -468,9 +467,10 @@ void InventoryWheel::Render() {
     if (!renderer) return;
 
     int count = inventory.GetStackCount();
-    // <=3 items -> 3 slots (empty slots fill the gaps).
-    // >=4 items -> 5 slots (4 items still leave one empty slot).
-    int visibleCount = (count >= 4) ? 5 : 3;
+    // Quantos slots a roda mostra — decidido em `Inventory::GetVisibleSlotCount`,
+    // que e a MESMA funcao que o `GetRingSize` usa para saber qual e o item na
+    // mao. Recalcular aqui por fora foi o que fez os dois lados discordarem.
+    int visibleCount = inventory.GetVisibleSlotCount();
     // The circular ring spans every logical position: when there are fewer
     // items than slots the ring matches the slot count (so empty slots appear);
     // once there are more items than slots the extra ones live off-screen and
