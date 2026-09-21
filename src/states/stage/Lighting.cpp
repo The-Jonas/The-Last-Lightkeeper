@@ -479,8 +479,16 @@ float StageState::VisibilityOfObject(GameObject& go) const {
         return std::max(0.0f, std::min(1.0f, std::max(lit, monster->EchoRevealAmount())));
     }
     if (visionParams.requireLightToSee) {
-        const float lit = std::max(LightAmountAtScreen(screen), ProximityAtScreen(screen));
-        return std::max(0.0f, std::min(1.0f, gate * lit));
+        // Duas maneiras de ver uma coisa, e sao INDEPENDENTES:
+        //   • olhar para ela COM luz la — passa pela porta do cone;
+        //   • estar mesmo ao pe dela — nao passa por porta nenhuma.
+        // A segunda tem de ficar de fora do cone: o cone aponta para a FRENTE,
+        // e um item caido aos pes do personagem fica muitas vezes atras do
+        // apice. Com o `gate` a multiplicar tudo, esse item ficava invisivel a
+        // um passo de distancia — via-se o contorno de "interagir" e mais nada.
+        const float lit = gate * LightAmountAtScreen(screen);
+        const float near = ProximityAtScreen(screen);
+        return std::max(0.0f, std::min(1.0f, std::max(lit, near)));
     }
     return gate;
 }

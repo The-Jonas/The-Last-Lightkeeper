@@ -432,6 +432,18 @@ void StageState::Render(){
         }
     }
 
+    // Objectos que seguem a regra do campo de visao e que ficaram visiveis
+    // neste frame. Levam o mesmo tratamento dos irmaos depois da escuridao:
+    // redesenhados por cima dela (para se verem) e carimbados com a luz que os
+    // apanha (para ficarem CINZENTOS sem luz e a cores dentro de uma).
+    struct StampedObject {
+        SpriteRenderer* sprite;
+        float shown;
+        float light;
+    };
+    std::vector<StampedObject> stampedObjects;
+    stampedObjects.reserve(8);
+
     // ===================================================================
     // 5. AGORA DESENHAMOS A LISTA ORDENADA INTEIRA SEM REGRAS
     // ===================================================================
@@ -460,6 +472,24 @@ void StageState::Render(){
                 if (fadeSprite) {
                     fadeSprite->SetTint(255, 255, 255, static_cast<Uint8>(shown * 255.0f));
                 }
+            }
+            if (SpriteRenderer* sr = go->GetComponent<SpriteRenderer>()) {
+                const float light = Clamp01(LightAmountAtScreen(WorldToScreen(go->box.Center())));
+                stampedObjects.push_back({sr, shown, light});
+            }
+        }
+        // Os IRMAOS entram na mesma lista, e entram AQUI — dentro do ciclo que
+        // percorre o `objectArray` JA ORDENADO. E isso que lhes da a ordem
+        // certa: antes eram redesenhados com uma chamada fixa (o grande e
+        // depois o pequeno), por isso o pequeno aparecia sempre por cima,
+        // estivesse a frente ou atras. A luz deles mede-se no PEITO e so conta
+        // luz REAL da cena (`includeCarriedLight = false`).
+        if ((go.get() == bigCharacterObject || go.get() == smallCharacterObject) && visionFrame.valid) {
+            if (SpriteRenderer* sr = go->GetComponent<SpriteRenderer>()) {
+                const Vec2 chest = WorldToScreen(Vec2(go->box.x + 0.5f * go->box.w,
+                                                      go->box.y + 0.45f * go->box.h));
+                const float light = Clamp01(LightAmountAtScreen(chest, /*includeCarriedLight=*/false));
+                stampedObjects.push_back({sr, 1.0f, light});
             }
         }
 
@@ -605,59 +635,43 @@ void StageState::Render(){
     if (scenePostFx && scenePostFx->IsAvailable()) {
         const SDL_BlendMode stampBlend = ScenePostFx::NoGrayStampBlendMode();
         if (stampBlend != SDL_BLENDMODE_INVALID) {
-            auto stampNoGray = [&](GameObject* obj, float light01) {
-                if (obj == nullptr) {
-                    return;
-                }
-                SpriteRenderer* sr = obj->GetComponent<SpriteRenderer>();
-                if (sr == nullptr) {
-                    return;
-                }
-                SDL_Texture* tex = sr->GetTexturePtr();
-                if (tex == nullptr) {
-                    return;
-                }
-                const Uint8 stampAlpha =
-                    static_cast<Uint8>(1.0f + 254.0f * Clamp01(light01));
-                SDL_BlendMode prev = SDL_BLENDMODE_BLEND;
-                SDL_GetTextureBlendMode(tex, &prev);
-                Uint8 prevAlpha = 255;
-                SDL_GetTextureAlphaMod(tex, &prevAlpha);
-                if (SDL_SetTextureBlendMode(tex, stampBlend) == 0) {
-                    SDL_SetTextureAlphaMod(tex, stampAlpha);
-                    sr->Render();
-                }
-                SDL_SetTextureAlphaMod(tex, prevAlpha);
-                SDL_SetTextureBlendMode(tex, prev);
-            };
-            // Luz que apanha cada irmao, medida no PEITO (o centro do corpo e
-            // o que decide se ele "esta na luz", nao a ponta dos pes).
-            auto lightOnBrother = [&](GameObject* obj) -> float {
-                if (obj == nullptr || !visionFrame.valid) {
-                    return 0.0f;
-                }
-                const Vec2 chest = WorldToScreen(Vec2(obj->box.x + 0.5f * obj->box.w,
-                                                      obj->box.y + 0.45f * obj->box.h));
-                return Clamp01(LightAmountAtScreen(chest, /*includeCarriedLight=*/false));
-            };
-
             // Passo 1: de volta ao brilho cheio, por cima da escuridao.
-            auto redrawLit = [&](GameObject* obj) {
-                if (obj == nullptr) {
-                    return;
-                }
-                if (SpriteRenderer* sr = obj->GetComponent<SpriteRenderer>()) {
-                    sr->Render();
-                }
-            };
-            redrawLit(bigCharacterObject);
-            redrawLit(smallCharacterObject);
+            // Irmaos E itens, na MESMA ORDEM em que a cena os desenhou (a lista
+            // foi enchida dentro do ciclo do `objectArray` ja ordenado). Sem
+            // isto um item ao pe do jogador estava la mas ficava preto por
+            // baixo da escuridao — via-se o contorno de "interagir" e nao se
+            // via o icone — e os irmaos saiam sempre na mesma ordem fixa, com o
+            // pequeno por cima do grande quisesse o Y o que quisesse.
+            for (const StampedObject& so : stampedObjects) {
+                if (!so.sprite) continue;
+                so.sprite->SetTint(255, 255, 255, static_cast<Uint8>(so.shown * 255.0f));
+                so.sprite->Render();
+                so.sprite->SetTint(255, 255, 255, 255);
+            }
 
             // Passo 2: o carimbo leva a luz. A mistura do carimbo faz
             // `dstA = dstA * (1 - srcA)`, logo para deixar no alvo um alfa de
             // 254*(1-luz) o sprite tem de entrar com 1 + 254*luz.
-            stampNoGray(bigCharacterObject, lightOnBrother(bigCharacterObject));
-            stampNoGray(smallCharacterObject, lightOnBrother(smallCharacterObject));
+            //
+            // O alfa TEM de ir pelo tint do proprio SpriteRenderer: por baixo,
+            // `Sprite::Render` chama SDL_SetTextureAlphaMod(tintA) a cada
+            // desenho, por isso um alpha mod posto na textura aqui seria
+            // apagado nessa linha — o carimbo saia sempre a 255 e o shader lia
+            // "luz total", que e porque os irmaos ficavam a cores no escuro.
+            for (const StampedObject& so : stampedObjects) {
+                if (!so.sprite) continue;
+                SDL_Texture* tex = so.sprite->GetTexturePtr();
+                if (tex == nullptr) continue;
+                const Uint8 stampAlpha = static_cast<Uint8>(1.0f + 254.0f * Clamp01(so.light));
+                SDL_BlendMode prev = SDL_BLENDMODE_BLEND;
+                SDL_GetTextureBlendMode(tex, &prev);
+                if (SDL_SetTextureBlendMode(tex, stampBlend) == 0) {
+                    so.sprite->SetTint(255, 255, 255, stampAlpha);
+                    so.sprite->Render();
+                    so.sprite->SetTint(255, 255, 255, 255);
+                }
+                SDL_SetTextureBlendMode(tex, prev);
+            }
         }
     }
 
