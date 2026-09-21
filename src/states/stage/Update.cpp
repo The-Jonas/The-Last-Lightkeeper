@@ -330,6 +330,7 @@ void StageState::Update(float dt){
         UpdateTutorials(dt);
     }
     UpdateInventoryLight();
+    UpdateMonsterEchoes(dt);   // ondas dos passos do monstro (ver MonsterEcho.cpp)
     dialogueBox.Update(dt);
     fuelFlameHud.Update(dt);
 

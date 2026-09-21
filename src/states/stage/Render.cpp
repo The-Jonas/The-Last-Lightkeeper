@@ -229,14 +229,20 @@ void StageState::Render(){
             bigMaxTouch = std::max(bigMaxTouch, std::max(touchBig, sanityIllum(bigCharacterObject)));
             smallMaxTouch = std::max(smallMaxTouch, std::max(touchSmall, sanityIllum(smallCharacterObject)));
 
-            if (touchBig > 0.0f) {
+            // So ha sombra se a luz CHEGAR mesmo ao personagem (ver
+            // `ShadowTouchWeight`). O peso tambem manda na opacidade, por isso
+            // a sombra nasce a desvanecer na borda do alcance em vez de saltar
+            // para o ecra de uma vez.
+            const float weightBig = ShadowTouchWeight(touchBig);
+            if (weightBig > 0.0f) {
                 const float shadowLengthPx = params.shadowMaxLengthPx * distBig;
-                const Uint8 shadowAlpha = static_cast<Uint8>(std::max(0.0f, std::min(255.0f, params.darknessMax * touchBig)));
+                const Uint8 shadowAlpha = static_cast<Uint8>(std::max(0.0f, std::min(255.0f, params.darknessMax * weightBig)));
                 bigShadowCasts.push_back({lightScreen, touchBig, shadowLengthPx, shadowAlpha, bigContact});
             }
-            if (touchSmall > 0.0f) {
+            const float weightSmall = ShadowTouchWeight(touchSmall);
+            if (weightSmall > 0.0f) {
                 const float shadowLengthPx = params.shadowMaxLengthPx * distSmall;
-                const Uint8 shadowAlpha = static_cast<Uint8>(std::max(0.0f, std::min(255.0f, params.darknessMax * touchSmall)));
+                const Uint8 shadowAlpha = static_cast<Uint8>(std::max(0.0f, std::min(255.0f, params.darknessMax * weightSmall)));
                 smallShadowCasts.push_back({lightScreen, touchSmall, shadowLengthPx, shadowAlpha, smallContact});
             }
         };
@@ -381,9 +387,23 @@ void StageState::Render(){
             screenLights.push_back({lightScreen.x, lightScreen.y, light.shape, light.params, light.animationSeed});
             renderedLights++;
         }
+        // Reduz as luzes deste frame a circulos de tela. Tem de ser AQUI: as
+        // sombras logo abaixo ja perguntam "chega luz a este ponto?", e com a
+        // conta feita depois delas responderiam com os dados do frame anterior.
+        // `screenLights` esta completo (as luzes da mascara do campo de visao
+        // vao para uma COPIA, mais abaixo, e nunca entram nesta lista).
+        BuildVisionLights(screenLights);
+
         for (GameObject* obj : testShadowObjects) {
             if (!obj) continue;
             if (obj == bigCharacterObject || obj == smallCharacterObject) continue;
+            // Uma sombra e uma pista tao boa como o proprio objeto: se o barril
+            // esta escondido fora do campo de visao, a sombra dele nao pode
+            // ficar no chao a denuncia-lo. Mesma conta do sprite, por isso as
+            // duas coisas aparecem e desaparecem juntas, com a mesma suavidade.
+            const float objVisibility = VisibilityOfObject(*obj);
+            if (objVisibility <= 0.01f) continue;
+
             Vec2 bestLightScreen;
             float bestTouch = 0.0f;
             float bestLengthPx = 0.0f;
@@ -393,25 +413,24 @@ void StageState::Render(){
                 Vec2 lightScreen(sl.x, sl.y);
                 float touch = 0.0f;
                 IsFootLit(obj, lightScreen, sl.params, &touch);
-                if (touch > bestTouch) {
+                // Mesma regra dos irmaos: a luz tem de chegar ao objecto. Uma
+                // vela do outro lado da sala deixava sombra sem iluminar nada.
+                const float weight = ShadowTouchWeight(touch);
+                if (weight > 0.0f && touch > bestTouch) {
                     bestTouch = touch;
                     bestLightScreen = lightScreen;
                     const float distance01 = Clamp01(1.0f - touch);
                     bestLengthPx = sl.params.shadowMaxLengthPx * distance01;
-                    bestAlpha = static_cast<Uint8>(std::max(0.0f, std::min(255.0f, sl.params.darknessMax * touch)));
+                    bestAlpha = static_cast<Uint8>(std::max(0.0f, std::min(255.0f, sl.params.darknessMax * weight)));
                 }
             }
 
             if (bestTouch > 0.0f) {
-                RenderSingleLightSpriteShadow(obj, bestLightScreen, bestTouch, bestLengthPx, bestAlpha, lastFrameDt);
+                const Uint8 fadedAlpha = static_cast<Uint8>(bestAlpha * objVisibility);
+                RenderSingleLightSpriteShadow(obj, bestLightScreen, bestTouch, bestLengthPx, fadedAlpha, lastFrameDt);
             }
         }
     }
-
-    // Reduz as luzes deste frame a circulos de tela. Feito AQUI porque so agora
-    // `screenLights` existe, e antes de qualquer coisa perguntar "chega luz a
-    // este ponto?" — os objetos abaixo e o filtro preto-e-branco no fim.
-    BuildVisionLights(screenLights);
 
     // ===================================================================
     // 5. AGORA DESENHAMOS A LISTA ORDENADA INTEIRA SEM REGRAS
@@ -430,22 +449,9 @@ void StageState::Render(){
         // poder ser usado se o jogador chegar la.
         SpriteRenderer* fadeSprite = nullptr;
         if (visionFrame.valid && ShouldHideOutsideVision(*go)) {
-            const Vec2 goScreen = WorldToScreen(go->box.Center());
-            // Porta geometrica: o `reveal` faz o interior do campo de visao
-            // contar como 1 e so a borda dar valores intermedios.
-            const float reveal = std::max(0.01f, visionParams.itemRevealThreshold);
-            const float gate = Clamp01(VisionVisibilityAtScreen(goScreen) / reveal);
-            float shown = gate;
-            if (go->GetComponent<Monster>() != nullptr) {
-                // O MONSTRO tem regra propria: olhar para ele nao chega, e estar
-                // ao pe dele tambem nao. Tem de lhe CHEGAR LUZ — de uma vela, da
-                // lanterna na mao. Sem a rampa de proximidade e sem os circulos
-                // dos pes, senao ele reaparecia no escuro so por estar colado ao
-                // jogador, que e exactamente o susto que queremos guardar.
-                shown = gate * Clamp01(LightAmountAtScreen(goScreen, /*includeCarriedLight=*/false));
-            } else if (visionParams.requireLightToSee) {
-                shown = gate * Clamp01(std::max(LightAmountAtScreen(goScreen), ProximityAtScreen(goScreen)));
-            }
+            // A MESMA conta que a sombra deste objeto usou mais acima. Estar num
+            // sitio so e o que garante que sprite e sombra nunca discordam.
+            const float shown = VisibilityOfObject(*go);
             if (shown <= 0.01f) {
                 continue;
             }
@@ -635,6 +641,12 @@ void StageState::Render(){
     if (scenePostFx->IsAvailable()) {
         scenePostFx->Render(renderer, renderTarget, winW, winH, visionFrame, visionParams);
     }
+
+    // ── ECO DOS PASSOS DO MONSTRO ───────────────────────────────────────────
+    // Tem de ser AQUI, depois do pos-processamento: a malha de escuridao
+    // apagava os aneis e o desfoque borrava-os fora do cone — e e exactamente
+    // fora do cone e no escuro que eles servem para alguma coisa.
+    RenderMonsterEchoes(renderer);
 
     // Brilho do jogador (overlay): <100 escurece, >100 clareia (lift de sombras).
     const int brightness = Game::brightnessPercent;

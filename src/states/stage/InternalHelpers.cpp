@@ -160,6 +160,16 @@ float ComputeShadowDistanceRate(const Vec2& pointScreen, const Vec2& lightScreen
     return Clamp01(1.0f - (d / maxShadowDist));
 }
 
+float ShadowTouchWeight(float rawTouch) {
+    // Fraccao do raio dentro da qual a luz "toca" mesmo. 0.32 = so os dois
+    // tercos interiores do circulo lancam sombra; a orla, que mal se ve, nao.
+    constexpr float kShadowMinTouch = 0.32f;
+    if (rawTouch <= kShadowMinTouch) {
+        return 0.0f;
+    }
+    return Clamp01((rawTouch - kShadowMinTouch) / (1.0f - kShadowMinTouch));
+}
+
 bool IsFootLit(GameObject* go, const Vec2& lightScreenPos, const LightMaskParams& params, float* outIntensity) {
     if (!go) {
         return false;

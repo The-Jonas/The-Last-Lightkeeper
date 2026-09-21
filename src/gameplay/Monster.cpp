@@ -113,6 +113,7 @@ void Monster::Update(float dt) {
     if (noiseCooldownTimer > 0.0f) noiseCooldownTimer -= dt;
     if (damageCooldown > 0.0f) damageCooldown -= dt;
     if (visionRevealTimer > 0.0f) visionRevealTimer -= dt;
+    if (echoRevealTimer > 0.0f) echoRevealTimer -= dt;
     if (fleeLightAvoidTimer > 0.0f) fleeLightAvoidTimer -= dt;
 
     // Debugging Output
@@ -255,6 +256,46 @@ void Monster::Update(float dt) {
             GameSfx::PlayMonsterStep(animFrame, myPos.x, myPos.y, plPos.x, plPos.y, stepsMaxDist);
         }
         if (changed) ApplyAnimFrame();
+
+        // ── ECO VISIVEL DA PASSADA ──────────────────────────────────────────
+        // O monstro so se ve onde ha luz; isto e o que o jogador tem no escuro
+        // para o situar. NAO acompanha o som passo a passo: uma onda por cada
+        // passada enchia o ecra e dizia de mais. Tem cadencia propria, medida
+        // em distancia andada, e mais espacada ainda quando ele corre — a
+        // perseguicao ja se percebe pelo som e pela musica.
+        echoDistAccum += realSpeed * dt;
+        const bool running = (state == MonsterState::CHASE || state == MonsterState::HUNT ||
+                              state == MonsterState::FLEE_LIGHT);
+        const float echoIntervalPx = running ? kEchoStepFarPx : kEchoStepPx;
+        if (echoDistAccum >= echoIntervalPx) {
+            echoDistAccum = 0.0f;
+            if (StageState* stage = Game::TryGetStageState()) {
+                // Distancia ao irmao MAIS PROXIMO: e a ele que a onda chega
+                // primeiro, e e ele que decide se vale a pena mostrar alguma.
+                float nearest = 1e30f;
+                if (Character::player) {
+                    nearest = std::min(nearest, myPos.Distance(Character::player->GetAssociated().box.Center()));
+                }
+                if (Character::littleBrother) {
+                    nearest = std::min(nearest, myPos.Distance(Character::littleBrother->GetAssociated().box.Center()));
+                }
+                // Colado aos irmaos nao ha eco: a essa distancia ele ja se ouve
+                // e ja se sente, e um anel por cima deles so atrapalhava a
+                // leitura do que esta a acontecer.
+                if (nearest < 1e29f && nearest >= kEchoMinDistancePx) {
+                    // Sai dos PES (a base da caixa) e sobe um pouco: colado ao
+                    // chao a onda ficava escondida por baixo do proprio corpo.
+                    const Vec2 origin(associated.box.x + associated.box.w * 0.5f,
+                                      associated.box.y + associated.box.h - kEchoLiftPx);
+                    const float maxAud = std::max(1.0f, stepsMaxDist);
+                    float loudness = 1.0f - std::min(1.0f, nearest / maxAud);
+                    loudness *= loudness;   // mesma curva do som da passada
+                    stage->SpawnMonsterEcho(origin, loudness);
+                }
+            }
+        }
+    } else {
+        echoDistAccum = 0.0f;
     }
 
     GameSfx::UpdateMonsterFootsteps(dt, realSpeed, myPos.x, myPos.y, plPos.x, plPos.y, fleeing);

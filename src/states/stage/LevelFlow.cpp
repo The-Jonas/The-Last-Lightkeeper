@@ -47,6 +47,8 @@ void StageState::ClearGameplayWorld() {
     // faz dynamic_cast em memória liberada → crash (use-after-free) após a
     // transição de fase. Limpar aqui junto com objectArray mantém o invariante.
     testShadowObjects.clear();
+    monsterEchoes.clear();   // ondas dos passos do monstro do andar anterior
+    monsterCache.reset();    // o objecto do monstro morreu com o objectArray
     bigCharacterObject = nullptr;
     smallCharacterObject = nullptr;
     bigCharacter = nullptr;

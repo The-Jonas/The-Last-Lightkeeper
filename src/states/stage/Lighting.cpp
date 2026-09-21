@@ -463,6 +463,32 @@ float StageState::VisionVisibilityAtScreen(const Vec2& screenPos) const {
 // equilibrio entre estetica e jogabilidade e diferente em cada uma: um jornal a
 // aparecer so quando olhas para ele e bom; um barril grande a sumir enquanto o
 // empurras nao e.
+float StageState::VisibilityOfObject(GameObject& go) const {
+    if (!visionFrame.valid || !ShouldHideOutsideVision(go)) {
+        return 1.0f;
+    }
+    const Vec2 screen = WorldToScreen(go.box.Center());
+    // Porta geometrica: o `reveal` faz o interior do campo de visao contar como
+    // 1 e so a borda dar valores intermedios.
+    const float reveal = std::max(0.01f, visionParams.itemRevealThreshold);
+    const float gate = std::max(0.0f, std::min(1.0f, VisionVisibilityAtScreen(screen) / reveal));
+
+    if (Monster* monster = go.GetComponent<Monster>()) {
+        // O monstro precisa de LUZ A SERIO: sem a rampa de proximidade e sem os
+        // circulos dos pes (ver `LightAmountAtScreen`).
+        const float lit = gate * LightAmountAtScreen(screen, false);
+        // ... EXCEPTO quando a onda de uma passada dele acabou de passar por um
+        // dos irmaos. Aí eles sabem onde ele esta sem precisarem de olhar, e o
+        // ecra mostra-o durante esse instante (ver Monster::TriggerEchoReveal).
+        return std::max(0.0f, std::min(1.0f, std::max(lit, monster->EchoRevealAmount())));
+    }
+    if (visionParams.requireLightToSee) {
+        const float lit = std::max(LightAmountAtScreen(screen), ProximityAtScreen(screen));
+        return std::max(0.0f, std::min(1.0f, gate * lit));
+    }
+    return gate;
+}
+
 bool StageState::ShouldHideOutsideVision(GameObject& go) const {
     if (!visionParams.enabled) {
         return false;

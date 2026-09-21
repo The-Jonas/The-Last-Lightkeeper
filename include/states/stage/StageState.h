@@ -39,6 +39,7 @@ class Candlestick;
 class Window;
 class Closet;
 class Repairable;
+class Monster;
 
 class StageState : public State {
 friend class SpawnFactory;
@@ -317,6 +318,19 @@ public:
     Character* GetBigCharacterComponent()   const { return bigCharacter; }
     Character* GetSmallCharacterComponent() const { return smallCharacter; }
 
+    // ── ECO DOS PASSOS DO MONSTRO ────────────────────────────────────────────
+    // O monstro so aparece onde ha luz. Sem nada em troca, o jogador as escuras
+    // nao faz ideia de onde ele esta — e uma ameaca que nao se consegue situar
+    // nao gera tensao, gera frustracao. Cada PASSADA dele abre um circulo
+    // branco no chao, que cresce e apaga: o jogador ouve com os olhos.
+    //
+    // O circulo nasce do mesmo sitio e com a mesma regra de distancia do SOM da
+    // passada (`GameSfx::PlayMonsterStep`), por isso ve-se exactamente aquilo
+    // que se ouviria: perto = forte, longe = quase nada, fora de alcance = nada.
+    /// Chamado pelo `Monster` a cada passada. `strength01` e 1 colado ao
+    /// jogador e 0 no limite do alcance.
+    void SpawnMonsterEcho(const Vec2& worldFootPos, float strength01);
+
     // Debug (só em Game::debugMode): jogador invisível para o monstro (observar
     // comportamento) e câmera livre seguindo o mouse.
     bool debugMonsterBlind = false;
@@ -480,6 +494,12 @@ private:
     /// True quando este objeto e interagivel E a sua categoria esta marcada para
     /// desaparecer fora do campo de visao.
     bool ShouldHideOutsideVision(GameObject& go) const;
+    /// QUANTO deste objeto o jogador ve neste frame (0 = nada, 1 = por inteiro).
+    /// E a regra completa, num sitio so: a porta geometrica do cone, a luz que
+    /// la chega, a excepcao do monstro. Devolve 1 para tudo o que nao se
+    /// esconde. O sprite E A SOMBRA passam os dois por aqui — uma sombra que
+    /// sobrevive ao objeto que a lanca denuncia o que esta escondido.
+    float VisibilityOfObject(GameObject& go) const;
 
     // ── TELEMETRIA DE PLAYTEST ───────────────────────────────────────────────
     // Uma fotografia por segundo (posicoes, sanidade, luz, monstro, FPS) mais a
@@ -539,6 +559,23 @@ private:
     
     // Tentar criar o shader olho de peixe
     SDL_Texture* renderTarget = nullptr;
+
+    /// Uma passada do monstro que ainda esta a ecoar no ecra.
+    struct MonsterEcho {
+        Vec2 worldPos;          ///< onde o pe tocou o chao
+        float age = 0.0f;       ///< segundos desde a passada
+        float strength = 1.0f;  ///< 0..1 pela distancia ao jogador
+        bool touched = false;   ///< a frente ja passou por um irmao (revela uma vez)
+    };
+    std::vector<MonsterEcho> monsterEchoes;
+    void UpdateMonsterEchoes(float dt);
+    void RenderMonsterEchoes(SDL_Renderer* renderer) const;
+    /// O monstro deste andar (nullptr quando o andar nao tem nenhum). Procurado
+    /// uma vez e guardado: as ondas perguntam por ele duas vezes por frame.
+    /// A cache e um `weak_ptr` de proposito — um ponteiro cru ficaria pendurado
+    /// no dia em que o objecto do monstro for destruido a meio de um nivel.
+    Monster* FindMonster() const;
+    mutable std::weak_ptr<GameObject> monsterCache;
 
     /// B: map collision / collider debug + caminho A* ou linha reta do parceiro que segue até o outro (modo dupla junto).
     bool showMapPhysicsDebug = false;

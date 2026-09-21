@@ -46,6 +46,26 @@ public:
 
     static constexpr float kVisionRevealDuration = 0.3f;
 
+    // ── ECO DOS PASSOS ───────────────────────────────────────────────────────
+    // Quando a onda de uma passada CHEGA A UM DOS IRMAOS, o monstro aparece por
+    // um instante mesmo que ninguem esteja a olhar para ele: a onda tocou-lhes,
+    // e isso conta como saber onde ele esta. E o que fecha o ciclo do eco — ate
+    // aqui o jogador via ondas mas nunca o que as fazia.
+    void TriggerEchoReveal() { echoRevealTimer = kEchoRevealDuration; }
+    /// 0..1, a desvanecer. Entra em `StageState::VisibilityOfObject`.
+    float EchoRevealAmount() const {
+        return (echoRevealTimer > 0.0f) ? (echoRevealTimer / kEchoRevealDuration) : 0.0f;
+    }
+    static constexpr float kEchoRevealDuration = 0.55f;
+    /// Distancia andada entre ondas, a passo normal e a correr. Sao as duas
+    /// pecas que decidem quantos aneis o jogador ve por segundo.
+    static constexpr float kEchoStepPx = 190.0f;
+    static constexpr float kEchoStepFarPx = 420.0f;
+    /// Mais perto do que isto nao ha onda nenhuma.
+    static constexpr float kEchoMinDistancePx = 300.0f;
+    /// Quanto a origem da onda sobe acima dos pes.
+    static constexpr float kEchoLiftPx = 34.0f;
+
 private:
     void CheckDamageCollision();
     void ApplyAnimFrame();
@@ -163,6 +183,10 @@ private:
     // ── Timers e Flags de Controle ────────────────────────────────────────────
     float campTimer = 0.0f;
     float visionRevealTimer = 0.0f;
+    float echoRevealTimer = 0.0f;   ///< ver TriggerEchoReveal
+    /// Distancia andada desde a ultima onda. O eco tem cadencia PROPRIA, mais
+    /// lenta do que a do som das passadas: uma onda por passo enchia o ecra.
+    float echoDistAccum = 0.0f;
     float damageCooldown = 0.0f;
     float windowRadarTimer = 0.0f;
     float postSabotageIdleTimer = 0.0f;

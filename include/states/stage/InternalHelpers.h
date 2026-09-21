@@ -16,6 +16,15 @@ extern float gStageOstSilenceRecover;
 
 void SetMouseConfinedToWindow(bool shouldConfine);
 float Clamp01(float v);
+
+/// Quanto e que esta luz conta PARA A SOMBRA deste objecto.
+///
+/// O `touch` cru (1 - distancia/raio) passa a ser maior que zero mal o objecto
+/// entra no raio da luz — inclusive na orla, onde a luz ja nao se ve. Dai as
+/// sombras de luzes que visivelmente nao tocam no objecto. Aqui exige-se que a
+/// luz chegue de facto: abaixo de um limiar nao ha sombra nenhuma e, a partir
+/// dele, a sombra ENTRA A DESVANECER em vez de aparecer de repente.
+float ShadowTouchWeight(float rawTouch);
 void DrawDebugCircle(SDL_Renderer* renderer, float cx, float cy, float r, Uint8 red, Uint8 green, Uint8 blue, Uint8 alpha);
 void DrawDebugRect(SDL_Renderer* renderer, const Rect& rect, Uint8 red, Uint8 green, Uint8 blue, Uint8 alpha);
 void DrawColliderDebugWire(SDL_Renderer* renderer, const Rect& box, float angleDeg, Uint8 cr, Uint8 cg, Uint8 cb, Uint8 ca);
