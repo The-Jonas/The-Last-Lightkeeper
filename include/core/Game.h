@@ -105,6 +105,12 @@ public:
     // tamanhos em pixels multiplicam por isto para caberem em resoluções baixas
     // e ficarem consistentes nas altas. Clampado para evitar extremos.
     static float UiScale();
+    /// Escala de UI que cabe SEMPRE no ecra: a MENOR das duas razoes contra
+    /// 1920x1080. A `UiScale` olha so para a altura, o que chega para texto
+    /// solto mas nao para uma peca LARGA (a caixa de dialogo tem 2.54:1): num
+    /// ecra 21:9 ou num monitor alto, a altura cresce, a peca cresce com ela e
+    /// passa a largura do ecra. Quem desenha caixas largas usa esta.
+    static float UiFitScale();
 
     // true quando compilado com alvo `mingw32-make debug` (-DDEBUG)
     static bool IsDebugBuild();

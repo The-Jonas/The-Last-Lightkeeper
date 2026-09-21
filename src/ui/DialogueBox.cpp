@@ -151,7 +151,26 @@ void DialogueBox::Render(SDL_Renderer* renderer, int windowW, int windowH) {
     int boxTexW = 400, boxTexH = 140;   
     if (boxTex) SDL_QueryTexture(boxTex.get(), nullptr, nullptr, &boxTexW, &boxTexH);
 
-    const float scale = Game::UiScale() * DialogueTuning::boxScaleMul; 
+    // ── TAMANHO DA CAIXA ────────────────────────────────────────────────────
+    // A escala vem da MENOR das razoes do ecra contra 1920x1080, nao so da
+    // altura. A `UiScale` (so altura) rebentava em monitores grandes e em ecras
+    // 21:9: a caixa tem 2.54:1, por isso crescer com a altura punha-a mais
+    // larga do que o ecra, com os retratos a sair pela borda.
+    float scale = Game::UiFitScale() * DialogueTuning::boxScaleMul;
+
+    // Tecto duro: aconteca o que acontecer — config estranha, arte trocada por
+    // uma maior — a caixa NUNCA passa destas fatias do ecra. Reduz-se a escala,
+    // o que encolhe a caixa E tudo o que e medido em pixeis da arte (fontes,
+    // margens, area de texto), por isso a composicao nao se desfaz.
+    constexpr float kMaxBoxWidthFrac = 0.86f;
+    constexpr float kMaxBoxHeightFrac = 0.34f;
+    if (boxTexW > 0 && boxTexW * scale > windowW * kMaxBoxWidthFrac) {
+        scale = (windowW * kMaxBoxWidthFrac) / static_cast<float>(boxTexW);
+    }
+    if (boxTexH > 0 && boxTexH * scale > windowH * kMaxBoxHeightFrac) {
+        scale = (windowH * kMaxBoxHeightFrac) / static_cast<float>(boxTexH);
+    }
+
     const int boxW = static_cast<int>(boxTexW * scale);
     const int boxH = static_cast<int>(boxTexH * scale);
     const int margin = static_cast<int>(DialogueTuning::margin * scale);

@@ -48,7 +48,9 @@ void FuelFlameHud::Render(SDL_Renderer* renderer, Inventory& inventory, int wind
     auto tex = Resources::GetImage(FramePath(LevelForRatio(ratio), currentFrame));
     if (!tex) return;
 
-    const float scale = Game::UiScale() * FuelHudTuning::iconScaleMul;
+    // Mesma escala da caixa de dialogo: a MENOR das razoes contra 1920x1080.
+    // Num ecra largo a altura sozinha inchava o icone sem necessidade.
+    const float scale = Game::UiFitScale() * FuelHudTuning::iconScaleMul;
     int texW = 0, texH = 0;
     SDL_QueryTexture(tex.get(), nullptr, nullptr, &texW, &texH);
     const int iconW = static_cast<int>(texW * scale);

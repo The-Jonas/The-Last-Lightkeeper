@@ -129,6 +129,19 @@ if (Test-Path $playtestSrc) {
     Write-Host "    (config\playtest.json ausente; as sessoes ficam com o tester 'anon')"
 }
 
+# config/dialogue_ui.json e config/fuel_hud.json: medidas da caixa de dialogo e
+# do HUD do combustivel. SEM eles o jogo usa os defaults compilados — que agora
+# valem o mesmo, mas manda-se o ficheiro na mesma para o pacote poder ser
+# afinado sem recompilar.
+foreach ($uiCfg in @('dialogue_ui.json', 'fuel_hud.json')) {
+    $uiSrc = Join-Path $repoRoot "config\$uiCfg"
+    if (Test-Path $uiSrc) {
+        Copy-Item $uiSrc (Join-Path $distConfig $uiCfg) -Force
+    } else {
+        Write-Host "    (config\$uiCfg ausente; o jogo usara os valores compilados)"
+    }
+}
+
 # readme (tracked template)
 $readme = Join-Path $repoRoot 'deploy\LEIA-ME.txt'
 if (Test-Path $readme) {

@@ -773,6 +773,18 @@ float Game::UiScale() {
     return s;
 }
 
+float Game::UiFitScale() {
+    if (!instance || instance->windowsHeight <= 0 || instance->windowsWidth <= 0) {
+        return 1.0f;
+    }
+    const float byW = static_cast<float>(instance->windowsWidth) / 1920.0f;
+    const float byH = static_cast<float>(instance->windowsHeight) / 1080.0f;
+    float s = (byW < byH) ? byW : byH;
+    if (s < 0.55f) s = 0.55f;
+    if (s > 2.50f) s = 2.50f;
+    return s;
+}
+
 bool Game::IsDebugBuild() {
 #ifdef DEBUG
     return true;
