@@ -74,6 +74,9 @@ void StartWindLoop();
 void StopWindLoop();
 void PlayCandleBlowOut();
 
+// No começo do segundo andar toca
+void PlayWindowBreak(); 
+
 /// Volume atual do barramento de VFX (master × efeitos), 0..MIX_MAX_VOLUME.
 /// Usado por sons de efeito tocados fora do GameSfx (ex.: pegar item).
 int CurrentSfxVolume();

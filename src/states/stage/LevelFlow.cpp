@@ -169,6 +169,10 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
 
     TriggerControlIndicator();   // anima o indicador ao iniciar/entrar no nível
 
+    if (GetCurrentLevelIndex() == 1) {
+        pendingWindowBreakDialogueTimer = 1.0f;
+    }
+
     inventory.ClearAll();
     if (resetInventory) {
         inventory.ClearAll();

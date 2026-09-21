@@ -386,7 +386,7 @@ void Monster::TransitionTo(MonsterState next) {
         case MonsterState::HUNT:
             moveSpeed = kSpeedHunt;
             chaseGraceTimer = kChaseGraceDuration;
-            if (isActualTransition) {
+            if (isActualTransition && huntScreamTimer <= 0.0f) {
                 GameSfx::PlayMonsterScream();
                 huntScreamTimer = kHuntScreamInterval;
             }

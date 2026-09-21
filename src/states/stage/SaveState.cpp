@@ -1547,7 +1547,7 @@ void StageState::UpdateTutorials(float dt) {
     if (repairableInReachNoItem && controlledCharacter == bigCharacter) {
         if (repairWarnArmed) {
             repairWarnArmed = false;
-            RequestTutorial("Preciso de uma tabua de madeira para consertar este buraco...");
+            RequestTutorial("Preciso de algo para consertar esse buraco...");
         }
     } else {
         repairWarnArmed = true;   // re-arma ao sair de perto (ou trocar de personagem)
@@ -1586,7 +1586,7 @@ void StageState::RenderTutorials(SDL_Renderer* renderer) {
     const int winW = Game::GetInstance().GetWindowsWidth();
     const int padX = static_cast<int>(std::lround(22 * u));
     const int padY = static_cast<int>(std::lround(12 * u));
-    const int y = static_cast<int>(std::lround(70 * u));
+    const int y = static_cast<int>(std::lround(140 * u));
     const int x = (winW - tw) / 2;
     const SDL_Rect bg{x - padX, y - padY, tw + padX * 2, th + padY * 2};
 

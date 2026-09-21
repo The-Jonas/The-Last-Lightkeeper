@@ -122,10 +122,23 @@ void InventoryWheel::Start() {
 void InventoryWheel::Update(float dt) {
     int currentActive = inventory.GetActiveIndex();
 
+    if (currentActive != lastKnownActive || inventory.IsOilPrimed()) {
+        idleTimer = 0.0f;
+    } else {
+        idleTimer += dt;
+    }
+
+    if (idleTimer > kIdleHideDelay) {
+        const float fadeProgress = (idleTimer - kIdleHideDelay) / kHideFadeDuration;
+        hideAlpha = std::max(0.0f, 1.0f - fadeProgress);
+    } else {
+        hideAlpha = 1.0f;
+    }
+
     float target = static_cast<float>(currentActive);
     float diff = target - displayActiveIndex;
-
     float step = kSlideSpeed * dt;
+
     if (std::abs(diff) > step) {
         displayActiveIndex += (diff > 0 ? step : -step);
     } else {
@@ -152,20 +165,31 @@ void InventoryWheel::GetSlotScreenPos(int visibleOffset, int visibleCount, float
     float shiftedOffset = baseOffset + scrollOffset;
 
     float angleStep = (visibleCount <= 3) ? 46.0f : 34.0f;
-    // Roda VERTICAL: 0° = slot ATIVO no vértice DIREITO do arco; offsets negativos
-    // sobem, positivos descem. O arco abre para a ESQUERDA (centro à esquerda do
-    // ativo), então os vizinhos ficam acima-esquerda e abaixo-esquerda.
     float angleDeg = shiftedOffset * angleStep;
     float angleRad = angleDeg * static_cast<float>(M_PI) / 180.0f;
 
     const float arcRadius = kArcRadius * Game::UiScale();
     const float activeX = GetAnchorX();
     const float activeY = GetAnchorY();
-    const float ccx = activeX - arcRadius;   // centro do arco à esquerda do ativo
+    const float ccx = activeX - arcRadius;
     const float ccy = activeY;
 
     outX = ccx + arcRadius * std::cos(angleRad);
     outY = ccy + arcRadius * std::sin(angleRad);
+
+    // Ajuste fino manual só do slot de cima/baixo — cresce suavemente conforme
+    // ele se afasta do centro (shiftedOffset vai de 0 no ativo até ±1 na posição
+    // de descanso), assim não quebra a transição deslizante que já está boa.
+    const float u = Game::UiScale();
+    if (shiftedOffset < 0.0f) {
+        float t = std::min(1.0f, -shiftedOffset);
+        outX += kTopSlotOffsetX * t * u;
+        outY += kTopSlotOffsetY * t * u;
+    } else if (shiftedOffset > 0.0f) {
+        float t = std::min(1.0f, shiftedOffset);
+        outX += kBottomSlotOffsetX * t * u;
+        outY += kBottomSlotOffsetY * t * u;
+    }
 }
 
 float InventoryWheel::GetSlotAlpha(int distanceFromCenter, int) const {
@@ -182,7 +206,7 @@ float InventoryWheel::GetSlotScale(int distanceFromCenter, int) const {
 
 void InventoryWheel::DrawSlot(SDL_Renderer* renderer, int stackIndex, float x, float y,
                                float alpha, float scale, bool isActive) const {
-    scale *= Game::UiScale();   // escala p/ a resolução (além da perspectiva do slot)
+    scale *= Game::UiScale();
     const float scaledSize = kSlotSize * scale;
     const float halfSize = scaledSize * 0.5f;
     const float slotX = x - halfSize;
@@ -190,36 +214,23 @@ void InventoryWheel::DrawSlot(SDL_Renderer* renderer, int stackIndex, float x, f
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
-    const float slotRadius = halfSize;
-
-    // Brilho suave atrás do slot ATIVO (halo quente) — dá destaque sem poluir.
-    if (isActive) {
-        const Uint8 glowA = static_cast<Uint8>(std::min(255.0f, alpha * 0.16f));
-        FillCircle(renderer, x, y, slotRadius * 1.35f, 235, 200, 110, glowA);
-        FillCircle(renderer, x, y, slotRadius * 1.18f, 235, 200, 110, glowA);
+    
+    
+    auto frameTex = Resources::GetImage(isActive
+    ? "Recursos/img/ui/hud_items/bola_maior.png"
+    : "Recursos/img/ui/hud_items/bola_menor.png");
+    if (frameTex) {
+        const SDL_FRect frameDst{slotX, slotY, scaledSize, scaledSize};
+        SDL_SetTextureAlphaMod(frameTex.get(), static_cast<Uint8>(std::min(255.0f, alpha)));
+        SDL_RenderCopyF(renderer, frameTex.get(), nullptr, &frameDst);
     }
-
-    // Fundo do slot: disco circular escuro.
-    FillCircle(renderer, x, y, slotRadius, 26, 26, 33,
-               static_cast<Uint8>(std::min(255.0f, alpha * 0.88f)));
-
-    Uint8 borderR, borderG, borderB;
-    if (isActive && inventory.IsOilPrimed()) {
-        borderR = 230; borderG = 190; borderB = 40;
-    } else if (isActive) {
-        borderR = 210; borderG = 190; borderB = 80;
-    } else {
-        borderR = 60; borderG = 60; borderB = 75;
-    }
-    Uint8 borderA = static_cast<Uint8>(std::min(255.0f, alpha));
-    StrokeCircle(renderer, x, y, slotRadius, borderR, borderG, borderB, borderA);
 
     if (stackIndex < 0) return;
 
     const Inventory::ItemStack* stack = inventory.GetStack(stackIndex);
     if (!stack) return;
 
-    const float iconSize = kIconSize * scale;   // +50% (só a imagem do item)
+    const float iconSize = kIconSize * scale;
     const float iconX = slotX + (scaledSize - iconSize) * 0.5f;
     const float iconY = slotY + (scaledSize - iconSize) * 0.5f - 4.0f * scale;
 
@@ -229,31 +240,6 @@ void InventoryWheel::DrawSlot(SDL_Renderer* renderer, int stackIndex, float x, f
         SDL_SetTextureAlphaMod(tex.get(), static_cast<Uint8>(std::min(255.0f, alpha)));
         SDL_SetTextureColorMod(tex.get(), 255, 255, 255);
         SDL_RenderCopyExF(renderer, tex.get(), nullptr, &dst, 0.0, nullptr, SDL_FLIP_NONE);
-    }
-
-    bool showGauge = stack->def.HasProperty(ItemProperty::LIGHT_SOURCE) && stack->def.maxDurability > 0;
-    bool isFuel = stack->def.HasProperty(ItemProperty::FUEL);
-
-    if (showGauge || isFuel) {
-        int durability = stack->durabilities.empty() ? 0 : stack->durabilities.front();
-        float ratio = 0.0f;
-        if (stack->def.maxDurability > 0) {
-            ratio = static_cast<float>(durability) / static_cast<float>(stack->def.maxDurability);
-        } else if (isFuel && durability > 0) {
-            ratio = 1.0f;
-        }
-        ratio = std::max(0.0f, std::min(1.0f, ratio));
-
-        // #7 Durabilidade agora é um ANEL radial ao redor do slot (verde/âmbar/
-        // vermelho), drenando no sentido horário a partir do topo.
-        Uint8 gR, gG, gB;
-        if (ratio > 0.6f) { gR = 70; gG = 180; gB = 80; }
-        else if (ratio > 0.25f) { gR = 210; gG = 170; gB = 50; }
-        else { gR = 200; gG = 55; gB = 55; }
-
-        const float ringOuter = slotRadius + kRingThickness * scale + 2.0f * scale;
-        DrawDurabilityRing(renderer, x, y, ringOuter, kRingThickness * scale, ratio,
-                           gR, gG, gB, static_cast<Uint8>(std::min(255.0f, alpha * 0.95f)));
     }
 }
 
@@ -399,7 +385,7 @@ void InventoryWheel::DrawRefuelSelector(SDL_Renderer* renderer) {
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }
 
-void InventoryWheel::DrawCycleKeyHints(SDL_Renderer* renderer) {
+void InventoryWheel::DrawCycleKeyHints(SDL_Renderer* renderer, float fadeAlpha) {
     // As teclas ficam SEMPRE visíveis junto da roda (mesmo com um item só).
     const int count = inventory.GetStackCount();
     const int visibleCount = (count >= 4) ? 5 : 3;
@@ -429,6 +415,7 @@ void InventoryWheel::DrawCycleKeyHints(SDL_Renderer* renderer) {
     auto keyTex = Resources::GetImage("Recursos/img/hud/key_arrow.png");
     auto font   = Resources::GetFont("Recursos/font/times.ttf",
                                      std::max(13, static_cast<int>(std::lround(20.0f * u))));
+    const Uint8 a = static_cast<Uint8>(255.0f * fadeAlpha);
 
     // dir = -1 (acima do slot de cima) / +1 (abaixo do de baixo).
     // leftArrow=true → espelha a imagem (seta apontando p/ a esquerda).
@@ -438,7 +425,7 @@ void InventoryWheel::DrawCycleKeyHints(SDL_Renderer* renderer) {
 
         SDL_Texture* txt = nullptr; int tw = 0, th = 0;
         if (font) {
-            SDL_Color col{235, 225, 195, 255};
+            SDL_Color col{235, 225, 195, a};
             if (SDL_Surface* sf = TTF_RenderUTF8_Blended(font.get(), label.c_str(), col)) {
                 txt = SDL_CreateTextureFromSurface(renderer, sf);
                 tw = sf->w; th = sf->h;
@@ -450,6 +437,7 @@ void InventoryWheel::DrawCycleKeyHints(SDL_Renderer* renderer) {
         const float top  = (dir < 0.0f) ? (edge - slotGap - totalH) : (edge + slotGap);
 
         if (keyTex) {
+            SDL_SetTextureAlphaMod(keyTex.get(), a);
             const SDL_FRect imgDst{ slotCX - imgSize * 0.5f, top, imgSize, imgSize };
             SDL_RenderCopyExF(renderer, keyTex.get(), nullptr, &imgDst, 0.0, nullptr,
                               leftArrow ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
@@ -473,6 +461,8 @@ void InventoryWheel::Render() {
             return;
         }
     }
+
+    if (hideAlpha <= 0.0f) return;
 
     SDL_Renderer* renderer = Game::GetInstance().GetRenderer();
     if (!renderer) return;
@@ -515,10 +505,9 @@ void InventoryWheel::Render() {
         }
 
         int distFromCenter = std::abs(offsetFromCenter);
-        float alpha = GetSlotAlpha(distFromCenter, visibleCount);
+        float alpha = GetSlotAlpha(distFromCenter, visibleCount) * hideAlpha;;
         float scale = GetSlotScale(distFromCenter, visibleCount);
         bool isActive = (offsetFromCenter == 0);
-
         DrawSlot(renderer, stackIndex, slotX, slotY, alpha, scale, isActive);
     }
 
@@ -526,24 +515,22 @@ void InventoryWheel::Render() {
         // Modal central "Escolha qual item quer abastecer" — substitui as dicas
         // da roda enquanto o reabastecimento está ativo.
         DrawRefuelSelector(renderer);
-    } else {
-        DrawUseHint(renderer, activeSlotX, activeSlotY);
-        DrawCycleKeyHints(renderer);
+    } else if (hideAlpha > 0.01f) {
+        DrawUseHint(renderer, activeSlotX, activeSlotY, hideAlpha);
+        DrawCycleKeyHints(renderer, hideAlpha);
     }
 }
 
 // "[F] Usar" logo ao lado do slot ativo quando o item tem uso
 // (isqueiro/lâmpada = LIGHT_SOURCE, ou óleo = FUEL).
-void InventoryWheel::DrawUseHint(SDL_Renderer* renderer, float activeX, float activeY) {
+void InventoryWheel::DrawUseHint(SDL_Renderer* renderer, float activeX, float activeY, float fadeAlpha) {
     const Inventory::ItemStack* active = inventory.GetActiveStack();
     if (!active) return;
     const bool usable = active->def.HasProperty(ItemProperty::LIGHT_SOURCE) ||
                         active->def.HasProperty(ItemProperty::FUEL);
     if (!usable) return;
 
-    // Mesmo tamanho/estilo das dicas de seta (DrawCycleKeyHints): ícone da tecla
-    // (~30px) + rótulo pequeno logo abaixo. Aqui o ícone é a tecla [F] e o texto
-    // é "Usar".
+    const Uint8 a = static_cast<Uint8>(255.0f * fadeAlpha);
     const float u = Game::UiScale();
     auto keyTex = Resources::GetImage("Recursos/img/hud/key_f.png");
     auto font = Resources::GetFont("Recursos/font/times.ttf",
@@ -553,7 +540,7 @@ void InventoryWheel::DrawUseHint(SDL_Renderer* renderer, float activeX, float ac
 
     SDL_Texture* txt = nullptr; int tw = 0, th = 0;
     if (font) {
-        SDL_Color col{235, 225, 195, 255};
+        SDL_Color col{235, 225, 195, a};
         if (SDL_Surface* s = TTF_RenderUTF8_Blended(font.get(), "Usar", col)) {
             txt = SDL_CreateTextureFromSurface(renderer, s);
             tw = s->w; th = s->h;
@@ -568,6 +555,7 @@ void InventoryWheel::DrawUseHint(SDL_Renderer* renderer, float activeX, float ac
     const float top = activeY - totalH * 0.5f;
 
     if (keyTex) {
+        SDL_SetTextureAlphaMod(keyTex.get(), a);
         const SDL_FRect imgDst{ cx - imgSize * 0.5f, top, imgSize, imgSize };
         SDL_RenderCopyExF(renderer, keyTex.get(), nullptr, &imgDst, 0.0, nullptr, SDL_FLIP_NONE);
     }

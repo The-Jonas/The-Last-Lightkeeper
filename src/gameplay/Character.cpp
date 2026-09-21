@@ -22,35 +22,6 @@ namespace {
 constexpr int kFootCollisionSkinPx = 1;
 constexpr float kCollisionWidthBoost = 1.15f; // Aumento horizontal (+15%) na hitbox dos pés
 
-void TryNudgeOutOfStaticGeometry(StageState* stage, Character* character, Collider* collider, bool isElevated) {
-    if (!stage || !collider || !character) return;
-
-    if (!stage->level.CheckCollision(character->GetFootCollisionCircle(), isElevated)) return;
-
-    GameObject& go = character->GetAssociated();
-    const float dists[] = {4.0f, 16.0f, 32.0f};
-    const int dirs[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
-    
-    for (float d : dists) {
-        for (const auto& dir : dirs) {
-            float mx = static_cast<float>(dir[0]);
-            float my = static_cast<float>(dir[1]);
-            const float len = std::sqrt(mx * mx + my * my);
-            if (len > 1e-3f) { mx /= len; my /= len; }
-
-            go.box.x += mx * d;
-            go.box.y += my * d;
-            collider->Update(0);
-
-            if (!stage->level.CheckCollision(character->GetFootCollisionCircle(), isElevated)) return;
-
-            go.box.x -= mx * d;
-            go.box.y -= my * d;
-            collider->Update(0);
-        }
-    }
-}
-
 constexpr const char* kIrmaozaoIdleRoot = "Recursos/img/personagens/irmaozao_idle/";
 constexpr const char* kIrmaozaoWalkRoot = "Recursos/img/personagens/irmaozao_walk/";
 constexpr const char* kIrmaozaoIdleLighterRoot = "Recursos/img/personagens/irmaozao_idle_lighter/";
@@ -350,8 +321,17 @@ void Character::Update(float dt) {
     if (currentState != ActionState::PUSHING_BOX) {
         Direction newDirection = currentDirection;
 
-        if (std::abs(targetSpeed.x) > 0.1f) newDirection = (targetSpeed.x > 0.0f) ? Direction::RIGHT : Direction::LEFT;
-        else if (std::abs(targetSpeed.y) > 0.1f) newDirection = (targetSpeed.y > 0.0f) ? Direction::DOWN : Direction::UP;
+        constexpr float kVerticalDominanceBias = 1.5f;
+
+        if (std::abs(targetSpeed.x) * kVerticalDominanceBias > std::abs(targetSpeed.y)) {
+            if (std::abs(targetSpeed.x) > 0.1f) {
+                newDirection = (targetSpeed.x > 0.0f) ? Direction::RIGHT : Direction::LEFT;
+            }
+        } else {
+            if (std::abs(targetSpeed.y) > 0.1f) {
+                newDirection = (targetSpeed.y > 0.0f) ? Direction::DOWN : Direction::UP;
+            }
+        }       
 
         const bool moving = speed.Magnitude() > kIrmaozaoMovingSpeedThreshold;
 

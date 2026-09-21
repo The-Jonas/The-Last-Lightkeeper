@@ -625,8 +625,8 @@
                  "type":"Monstro",
                  "visible":true,
                  "width":574,
-                 "x":1933.90909090909,
-                 "y":1140.63636363637
+                 "x":2341.90909090909,
+                 "y":1872.63636363637
                 }, 
                 {
                  "gid":57,
@@ -1676,6 +1676,16 @@
                          "name":"depthOffset",
                          "type":"float",
                          "value":0
+                        }, 
+                        {
+                         "name":"dialogue",
+                         "type":"string",
+                         "value":"[{\"speaker\":\"Luke\",\"listener\":\"Martin\",\"emotion\":\"Doubt\",\"listener_emotion\":\"Doubt\",\"text\":\"Acho que esse papel pode nos ajudar a achar o caminho!\"}]"
+                        }, 
+                        {
+                         "name":"dialogue_once",
+                         "type":"bool",
+                         "value":false
                         }, 
                         {
                          "name":"heightLevel",
@@ -5140,7 +5150,7 @@
          "y":0
         }],
  "nextlayerid":30,
- "nextobjectid":911,
+ "nextobjectid":912,
  "orientation":"orthogonal",
  "properties":[
         {
@@ -5149,7 +5159,7 @@
          "value":"level_2"
         }],
  "renderorder":"right-down",
- "tiledversion":"1.12.2",
+ "tiledversion":"1.12.1",
  "tileheight":64,
  "tilesets":[
         {
