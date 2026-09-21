@@ -52,7 +52,7 @@ void RememberPath(const char* p) {
 
 #define TLL_VISION_BOOLS(X)                                                                                            \
     X(enabled) X(requireLightToSee) X(hideItemsOutsideVision) X(hideInteractablesOutsideVision)                        \
-    X(hidePushablesOutsideVision)
+    X(hidePushablesOutsideVision) X(hideMonsterOutsideLight)
 
 // ── Leitura defensiva ───────────────────────────────────────────────────────
 // Um valor so entra se existir, for do tipo certo e for FINITO. Um NaN gravado

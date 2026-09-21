@@ -34,7 +34,7 @@ public:
     int page = 0;
     static constexpr int kPageCount = 2;
 
-    static constexpr int kLogicalRows = 68;
+    static constexpr int kLogicalRows = 69;
 
 private:
     // ── Medidas ─────────────────────────────────────────────────────────────

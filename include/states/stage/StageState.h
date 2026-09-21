@@ -457,7 +457,9 @@ private:
     float VisionVisibilityAtScreen(const Vec2& screenPos) const;
     /// Quanta LUZ REAL chega a este ponto do ecra (0..1), a partir dos circulos
     /// de `visionFrame`. Nao inclui o cone: o cone e visao, nao e lanterna.
-    float LightAmountAtScreen(const Vec2& screenPos) const;
+    /// `includeCarriedLight` a false deixa de fora os circulos dos pes (que
+    /// existem mesmo com a luz apagada) — e o que o monstro usa.
+    float LightAmountAtScreen(const Vec2& screenPos, bool includeCarriedLight = true) const;
     /// Rampa LINEAR de proximidade ao personagem controlado: 1 colado a ele,
     /// 0 a `unlitFadeDistancePx`. E o que deixa ver as coisas ao pe sem luz.
     float ProximityAtScreen(const Vec2& screenPos) const;

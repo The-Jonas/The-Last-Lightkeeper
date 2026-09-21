@@ -29,6 +29,7 @@
 #include "gameplay/RadioAsset.h"
 #include "gameplay/Closet.h"
 #include "gameplay/Window.h"
+#include "gameplay/Monster.h"
 #include "core/Resources.h"
 #include <iostream>
 #include <fstream>
@@ -383,12 +384,15 @@ void StageState::BuildVisionLights(const std::vector<RadialLightOverlay::ScreenL
 // as escuras e longe tambem tende para zero — e por isso que o FUNDO do cone fica
 // cinzento e os objetos la ao fundo se apagam.
 // SE MUDAR ESTAS CONTAS, MUDE TAMBEM NO SHADER (kFragmentSrc).
-float StageState::LightAmountAtScreen(const Vec2& screenPos) const {
+float StageState::LightAmountAtScreen(const Vec2& screenPos, bool includeCarriedLight) const {
     // Os circulos dos pes contam como luz a serio: e a claridade que o proprio
     // personagem traz consigo, e e o que faz um objeto encostado a ele aparecer.
+    // O monstro e a excepcao (`includeCarriedLight` a false): esses circulos
+    // existem mesmo com a luz apagada — sao visao periferica, nao sao chama — e
+    // com eles o monstro voltaria a aparecer colado ao jogador no escuro.
     float best = 0.0f;
     const float footR = std::max(1.0f, visionFrame.footRadiusPx);
-    for (int i = 0; i < visionFrame.footCount && i < PlayerVisionFrame::kMaxFeet; i++) {
+    for (int i = 0; includeCarriedLight && i < visionFrame.footCount && i < PlayerVisionFrame::kMaxFeet; i++) {
         const float dx = screenPos.x - visionFrame.footX[i];
         const float dy = screenPos.y - visionFrame.footY[i];
         const float t = std::min(1.0f, std::sqrt(dx * dx + dy * dy) / footR);
@@ -469,6 +473,19 @@ bool StageState::ShouldHideOutsideVision(GameObject& go) const {
     // quando estao fora do campo de visao.
     if (go.GetComponent<Candlestick>() != nullptr) {
         return false;
+    }
+    // As ESCADAS seguem a mesma regra dos castiçais, e por um motivo mais forte:
+    // sao o objectivo do andar. Um jogador que nao ve a escada nao sabe para
+    // onde ir. O sprite fica sempre desenhado; o que muda com o campo de visao
+    // e so o filtro (desfoque/cinzento) que o ScenePostFx aplica por cima.
+    if (go.isStairs) {
+        return false;
+    }
+    // O MONSTRO e o caso contrario: em vez de estar sempre a vista, so aparece
+    // onde ha LUZ A SERIO e para onde o jogador esta mesmo a olhar. Ver
+    // `Render`, que lhe da uma conta propria (sem a rampa de proximidade).
+    if (go.GetComponent<Monster>() != nullptr) {
+        return visionParams.hideMonsterOutsideLight;
     }
     if (go.GetComponent<ItemPickup>() != nullptr) {
         return visionParams.hideItemsOutsideVision;

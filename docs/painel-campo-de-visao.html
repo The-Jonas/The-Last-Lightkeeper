@@ -163,11 +163,29 @@ which has no such problem.
 </table>
 
 <h2>6 · Objects <span class="key">what disappears in the dark</span></h2>
-<p class="lead">Three separate switches, because the trade-off is not the same for each. A newspaper that shows only when you look at it is good; a barrel that vanishes while you push it is not. Hiding an object never blocks the interaction — the character can still use it.</p>
+<p class="lead">Four separate switches, because the trade-off is not the same for each. A newspaper that shows only when you look at it is good; a barrel that vanishes while you push it is not. Hiding an object never blocks the interaction — the character can still use it.</p>
+
+<div class="box">
+<b>Two things never follow these switches.</b><br><br>
+<b>Candlesticks and stairs are always drawn.</b> They are how the player reads the
+floor: the candlestick says what is already lit, the staircase says where the level
+ends. Someone who cannot see the stairs does not know where to go. They still get
+the blur and the grey from the post-processing when they are outside the field of
+view — they just never fade out.<br><br>
+<b>The monster is the opposite.</b> It is the only thing in the game that is not
+revealed by being near you. It appears when it is inside the field of view AND
+real light reaches it — a candle, the lighter in your hand. The proximity ramp
+does not count for it, and neither do the vision circles at the brothers' feet
+(those exist with the light off, so they would give it away in the dark). The
+little brother's power still reveals it through everything, because that
+silhouette is drawn by its own object.
+</div>
+
 <table>
 <tr><td class="n">Itens so no campo de visao</td><td>Pickups on the floor (<code>ItemPickup</code>).</td><td class="v">sim</td></tr>
-<tr><td class="n">Interagiveis so na visao</td><td>Newspapers, candlesticks, radio, repairables, windows, closets.</td><td class="v">sim</td></tr>
+<tr><td class="n">Interagiveis so na visao</td><td>Newspapers, radio, repairables, windows, closets. (Candlesticks and stairs are exempt — see above.)</td><td class="v">sim</td></tr>
 <tr><td class="n">Barris so na visao</td><td>Barrels and crates you push (<code>Box</code>).</td><td class="v">sim</td></tr>
+<tr><td class="n">Monstro so onde ha luz</td><td>The monster needs the cone AND real light on it. Turn it off and the monster is visible whenever it is on screen, as it was before.</td><td class="v">sim</td></tr>
 <tr><td class="n">Itens: limiar de revelar</td><td>From which fraction of the cone an object counts as fully inside it. Low = the object appears as soon as the cone edge touches it. This sharpens the GEOMETRY half only; the LIGHT half still fades the object.</td><td class="v">0.35</td></tr>
 </table>
 

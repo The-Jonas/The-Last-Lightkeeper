@@ -240,6 +240,12 @@ struct PlayerVisionParams {
     bool hideInteractablesOutsideVision = true;
     /// Barris e caixas que se empurram (`Box`).
     bool hidePushablesOutsideVision = true;
+    /// O MONSTRO. Ao contrario de tudo o resto, ele nao aparece so por estar
+    /// perto: tem de estar ao mesmo tempo DENTRO do campo de visao e DENTRO de
+    /// luz a serio (uma vela, a lanterna na mao). A rampa de proximidade nao
+    /// conta — na escuridao ele pode estar colado ao jogador e continuar
+    /// invisivel. Desligar isto devolve o comportamento antigo (sempre a vista).
+    bool hideMonsterOutsideLight = true;
     /// A partir de que fraccao do campo de visao o objeto ja aparece por completo.
     float itemRevealThreshold = 0.35f;
 };

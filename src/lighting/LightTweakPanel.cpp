@@ -82,6 +82,7 @@ const char* kRowLabels[LightTweakPanel::kLogicalRows] = {
     "Luz: tambem foca (nitidez)",
     "Camera: afastar (zoom)",
     "Visao: realce (saturacao)",
+    "Monstro so onde ha luz",
 };
 
 // Intervalo da barra do zoom-base. O minimo casa com o limite da propria
@@ -150,7 +151,7 @@ const std::vector<RowGroup>& visionGroups() {
         {"Marca da visao: foco e realce", {48, 44, 67, 65}},
         {"Luz para ver", {56, 57, 58, 59, 55, 47}},
         {"Escuridao", {45, 0}},
-        {"Objectos fora da visao", {51, 53, 54, 52}},
+        {"Objectos fora da visao", {51, 53, 54, 68, 52}},
         {"Chama", {63, 64}},
         {"Preto-e-branco (opcional)", {41, 46, 61, 62, 42, 43, 49, 50}},
     };
@@ -201,6 +202,7 @@ bool LightTweakPanel::isToggleRow(int logicalRow) {
     case 53:   // interagiveis so no campo de visao
     case 54:   // barris so no campo de visao
     case 56:   // ver so onde ha luz
+    case 68:   // monstro so onde ha luz
         return true;
     default:
         return false;
@@ -225,6 +227,8 @@ bool LightTweakPanel::toggleRowValue(int logicalRow) const {
         return vision != nullptr && vision->hidePushablesOutsideVision;
     case 56:
         return vision != nullptr && vision->requireLightToSee;
+    case 68:
+        return vision != nullptr && vision->hideMonsterOutsideLight;
     default:
         return false;
     }
@@ -617,6 +621,8 @@ float LightTweakPanel::getRowNormalized(int logicalRow) const {
         return (vision->cameraZoom - kCameraZoomMin) / (kCameraZoomMax - kCameraZoomMin);
     case 67:
         return (vision->visionSaturation - 0.00f) / (2.00f - 0.00f);
+    case 68:
+        return vision->hideMonsterOutsideLight ? 1.0f : 0.0f;
     default:
         return 0.0f;
     }
@@ -841,6 +847,9 @@ void LightTweakPanel::setRowFromNormalized(int logicalRow, float n01) {
         break;
     case 67:
         vision->visionSaturation = u * 2.00f;
+        break;
+    case 68:
+        vision->hideMonsterOutsideLight = (u >= 0.5f);
         break;
     default:
         break;
@@ -1135,6 +1144,10 @@ void LightTweakPanel::rebuildRowText(SDL_Renderer* renderer, int logicalRow) {
         break;
     case 67:
         std::snprintf(buf, sizeof(buf), "%s: %.2f", kRowLabels[logicalRow], vision ? vision->visionSaturation : 1.0f);
+        break;
+    case 68:
+        std::snprintf(buf, sizeof(buf), "%s: %s", kRowLabels[logicalRow],
+                      (vision && vision->hideMonsterOutsideLight) ? "sim" : "nao");
         break;
     default:
         buf[0] = 0;

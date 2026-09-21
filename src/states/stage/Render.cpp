@@ -436,7 +436,14 @@ void StageState::Render(){
             const float reveal = std::max(0.01f, visionParams.itemRevealThreshold);
             const float gate = Clamp01(VisionVisibilityAtScreen(goScreen) / reveal);
             float shown = gate;
-            if (visionParams.requireLightToSee) {
+            if (go->GetComponent<Monster>() != nullptr) {
+                // O MONSTRO tem regra propria: olhar para ele nao chega, e estar
+                // ao pe dele tambem nao. Tem de lhe CHEGAR LUZ — de uma vela, da
+                // lanterna na mao. Sem a rampa de proximidade e sem os circulos
+                // dos pes, senao ele reaparecia no escuro so por estar colado ao
+                // jogador, que e exactamente o susto que queremos guardar.
+                shown = gate * Clamp01(LightAmountAtScreen(goScreen, /*includeCarriedLight=*/false));
+            } else if (visionParams.requireLightToSee) {
                 shown = gate * Clamp01(std::max(LightAmountAtScreen(goScreen), ProximityAtScreen(goScreen)));
             }
             if (shown <= 0.01f) {
