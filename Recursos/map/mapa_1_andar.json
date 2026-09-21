@@ -1320,9 +1320,9 @@
                  "rotation":0,
                  "type":"DialogueTrigger",
                  "visible":true,
-                 "width":558.606060606061,
-                 "x":1280,
-                 "y":739.39393939394
+                 "width":1244.60606060606,
+                 "x":570,
+                 "y":629.39393939394
                 }],
          "opacity":1,
          "type":"objectgroup",
