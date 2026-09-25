@@ -58,6 +58,13 @@ public:
     
     Vec2 GetSpeed() const { return speed; }
     Vec2 GetCenter();
+    void SetFacingDirection(Direction d) {
+    if (currentDirection == d) return;   
+        currentDirection = d;
+        stripFrameIndex = 0;
+        stripAnimTimer = 0.0f;
+        RefreshAnimSprite();
+    }
     Direction GetFacingDirection() const { return currentDirection; }
     Direction GetCurrentDirection() const { return currentDirection; }
 
@@ -84,6 +91,7 @@ public:
     // ── Sistema de Sanidade ───────────────────────────────────────────────────
     float sanity = 100.0f;
     constexpr static float kMaxSanity = 100.0f;
+    void UpdateSanity(float dt);                    
 
     // ── Poderes (Irmãozinho) ──────────────────────────────────────────────────
     float visionPowerTimer = 0.0f;

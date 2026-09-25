@@ -119,21 +119,17 @@ void InventoryWheel::Start() {
     displayActiveIndex = static_cast<float>(lastKnownActive >= 0 ? lastKnownActive : 0);
 }
 
+// Atualiza a roda: fade das dicas de tecla e o deslizar suave até o item ativo.
 void InventoryWheel::Update(float dt) {
     int currentActive = inventory.GetActiveIndex();
 
-    if (currentActive != lastKnownActive || inventory.IsOilPrimed()) {
-        idleTimer = 0.0f;
-    } else {
-        idleTimer += dt;
-    }
-
-    if (idleTimer > kIdleHideDelay) {
-        const float fadeProgress = (idleTimer - kIdleHideDelay) / kHideFadeDuration;
-        hideAlpha = std::max(0.0f, 1.0f - fadeProgress);
-    } else {
-        hideAlpha = 1.0f;
-    }
+    // As teclas da roda só aparecem junto com um tutorial de inventário/combustível
+    // (ver StageState::IsInventoryTutorialActive). Fade suave nos dois sentidos.
+    StageState* stage = Game::TryGetStageState();
+    const float hintTarget = (stage && stage->IsInventoryTutorialActive()) ? 1.0f : 0.0f;
+    const float hintStep = dt / kKeyHintFadeDuration;
+    if (keyHintAlpha < hintTarget) keyHintAlpha = std::min(hintTarget, keyHintAlpha + hintStep);
+    else                           keyHintAlpha = std::max(hintTarget, keyHintAlpha - hintStep);
 
     float target = static_cast<float>(currentActive);
     float diff = target - displayActiveIndex;
@@ -461,8 +457,6 @@ void InventoryWheel::Render() {
         }
     }
 
-    if (hideAlpha <= 0.0f) return;
-
     SDL_Renderer* renderer = Game::GetInstance().GetRenderer();
     if (!renderer) return;
 
@@ -505,7 +499,7 @@ void InventoryWheel::Render() {
         }
 
         int distFromCenter = std::abs(offsetFromCenter);
-        float alpha = GetSlotAlpha(distFromCenter, visibleCount) * hideAlpha;;
+        float alpha = GetSlotAlpha(distFromCenter, visibleCount);
         float scale = GetSlotScale(distFromCenter, visibleCount);
         bool isActive = (offsetFromCenter == 0);
         DrawSlot(renderer, stackIndex, slotX, slotY, alpha, scale, isActive);
@@ -515,9 +509,9 @@ void InventoryWheel::Render() {
         // Modal central "Escolha qual item quer abastecer" — substitui as dicas
         // da roda enquanto o reabastecimento está ativo.
         DrawRefuelSelector(renderer);
-    } else if (hideAlpha > 0.01f) {
-        DrawUseHint(renderer, activeSlotX, activeSlotY, hideAlpha);
-        DrawCycleKeyHints(renderer, hideAlpha);
+    } else if (keyHintAlpha > 0.01f) {
+        DrawUseHint(renderer, activeSlotX, activeSlotY, keyHintAlpha);
+        DrawCycleKeyHints(renderer, keyHintAlpha);
     }
 }
 

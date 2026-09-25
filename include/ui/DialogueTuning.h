@@ -19,6 +19,10 @@ struct DialogueTuning {
     static inline float autoAdvanceDelay = 3.0f;        // segundos parado c/ texto completo até avançar sozinho
     static inline size_t maxCharsPerPage = 220;         // tamanho máx de cada "página" de texto
 
+    static inline int hintFontSize = 40;                // tamanho do "[Espaço] continuar"
+    static inline int hintPadX     = 60;                // distância da borda DIREITA da caixa
+    static inline int hintPadY     = 35;                // distância da borda de BAIXO da caixa
+
     static inline int   margin = 40;                    // distância da borda da tela até a caixa
 
     static inline float portraitHeightMul  = 1.0f;      // 1.0 = retrato do tamanho exato da caixa; >1.0 = "espia" por cima

@@ -25,10 +25,8 @@ private:
     static constexpr float kBottomSlotOffsetX =  26.0f;  // mais pra direita (mais perto do centro)
     static constexpr float kBottomSlotOffsetY =  -28.0f;  // sem ajuste vertical por enquanto
 
-    float idleTimer = 0.0f;                                 // tempo desde a última troca/interação de item
-    float hideAlpha = 1.0f;                                 // 1 = totalmente visível, 0 = totalmente escondida
-    static constexpr float kIdleHideDelay = 5.0f;           // segundos parado até começar a sumir
-    static constexpr float kHideFadeDuration = 0.4f;        // duração do fade (suave, não corta seco)
+    float keyHintAlpha = 0.0f;                        // 0 = teclas escondidas, 1 = visíveis
+    static constexpr float kKeyHintFadeDuration = 0.4f;
 
     // Roda VERTICAL (itens sobem/descem): ativo no centro, anterior acima,
     // próximo abaixo; o arco abre para a esquerda. Slots circulares + anel de

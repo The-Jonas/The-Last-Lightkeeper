@@ -83,9 +83,13 @@ void Closet::Update(float dt) {
         // Mantém os personagens presos (sanidade será drenada pelo Character.cpp se a luz apagar)
         auto PinChar = [&](Character* c) {
             if (!c) return;
-            c->GetAssociated().box.x = associated.box.Center().x - c->GetAssociated().box.w / 2.0f;
-            c->GetAssociated().box.y = associated.box.Center().y - c->GetAssociated().box.h / 2.0f;
+            GameObject& go = c->GetAssociated();
+            go.box.x = associated.box.Center().x - go.box.w / 2.0f;
+            go.box.y = associated.box.Center().y - go.box.h / 2.0f;
+            c->currentState  = Character::ActionState::INTERACTING;   // volta se algo soltou
             c->interactTimer = 99999.0f;
+            c->ClearMovement();                                       // descarta WASD acumulado
+            c->SetFacingDirection(Character::Direction::DOWN);        // sempre olhando a porta
         };
         PinChar(Character::player);
         PinChar(Character::littleBrother);
@@ -211,8 +215,10 @@ void Closet::EnterCloset() {
         if (!c) return;
         c->ClearMovement();
         c->currentState = Character::ActionState::INTERACTING;
+        c->interactTimer = 99999.0f;
         c->isHidden = true;                                                                 // Fonte de verdade de "escondido" p/ o monstro (visão/perseguição/dano)
         c->hidePersonalLight = true;                                                        // Serve pra apagar o circulo de luz dos personagens
+        c->SetFacingDirection(Character::Direction::DOWN);
         SpriteRenderer* sprite = c->GetAssociated().GetComponent<SpriteRenderer>();
         if (sprite) sprite->SetTint(255, 255, 255, 0); // Fica invisível
     };

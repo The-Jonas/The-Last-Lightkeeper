@@ -1,6 +1,6 @@
 {
   "_leia_me": "Valores do painel de afinacao (tecla \\). Apague este ficheiro para voltar aos defaults do jogo.",
-  "durability": false,
+  "durability": true,
   "mask": {
     "ambientDarknessMax": 218,
     "coneAxisDeg": -90.0,

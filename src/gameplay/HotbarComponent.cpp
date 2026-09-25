@@ -233,8 +233,9 @@ void HotbarComponent::TryUseActiveItemOnKeyPress() {
     if (!active) return;
 
     if (active->def.HasProperty(ItemProperty::FUEL)) {
-        if (inventory.TryPrimeOil()) {
-            return;
+        // Sem nenhuma fonte de luz com espaço (tudo cheio), avisa em vez de ignorar o F.
+        if (!inventory.TryPrimeOil()) {
+            GameVoice::OnActionBlocked();
         }
         return;
     }

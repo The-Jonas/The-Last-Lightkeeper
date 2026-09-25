@@ -190,6 +190,11 @@ void StageState::UpdateInventoryLight() {
 // DESFOCADO — e o desfoque, e nao a falta de cor, que aponta para onde o
 // personagem olha.
 
+// Cone de visão enquanto escondido no armário (pixels de mundo). Deve bater
+// com a luz da fresta em Closet.cpp.
+static constexpr float kClosetConeLengthPx     = 200.0f;
+static constexpr float kClosetConeHalfAngleDeg =  18.0f;
+
 void StageState::UpdatePlayerVision(float dt) {
     visionFrame = PlayerVisionFrame{};
 
@@ -200,6 +205,9 @@ void StageState::UpdatePlayerVision(float dt) {
     if (body == nullptr) {
         return;
     }
+
+    // Escondido no armário: só se vê pela fresta da porta, sempre para baixo.
+    const bool hiddenInCloset = controlledCharacter->isHidden;
 
     // ── Eixo alvo a partir da direcao de 4 vias (y da TELA cresce para baixo) ─
     float targetX = 0.0f;
@@ -223,7 +231,12 @@ void StageState::UpdatePlayerVision(float dt) {
         targetY = 0.0f;
         break;
     }
-    const float targetRad = std::atan2(targetY, targetX);
+    float targetRad = std::atan2(targetY, targetX);
+    if (hiddenInCloset) {
+        targetRad = static_cast<float>(M_PI) * 0.5f;   
+        visionAxisRad = targetRad;                      
+        visionAxisInitialized = true;
+    }
 
     // ── Suavizacao: o cone VARRE ate a nova direcao em vez de saltar ─────────
     if (!visionAxisInitialized) {
@@ -258,20 +271,27 @@ void StageState::UpdatePlayerVision(float dt) {
     const Vec2 chestWorld(b.x + 0.5f * b.w, b.y + 0.55f * b.h);
     const Vec2 chestScreen = WorldToScreen(chestWorld);
 
-    const float apexForward = visionParams.coneOriginForwardPx * zoom;
+    // Tamanho do cone: o normal, ou o da fresta quando escondido.
+    const float coneHalfDeg = hiddenInCloset ? kClosetConeHalfAngleDeg : visionParams.coneHalfAngleDeg;
+    const float coneLenPx   = hiddenInCloset ? kClosetConeLengthPx     : visionParams.coneLengthPx;
+
+    // Escondido, o cone sai da BASE do personagem (a porta fica embaixo), não do peito.
+    const Vec2 apexBase = hiddenInCloset ? WorldToScreen(Vec2(b.x + 0.5f * b.w, b.y + b.h))
+                                        : chestScreen;
+    const float apexForward = hiddenInCloset ? 0.0f : visionParams.coneOriginForwardPx * zoom;
 
     visionFrame.valid = true;
-    visionFrame.coneX = chestScreen.x + dirX * apexForward;
-    visionFrame.coneY = chestScreen.y + dirY * apexForward;
+    visionFrame.coneX = apexBase.x + dirX * apexForward;
+    visionFrame.coneY = apexBase.y + dirY * apexForward;
     visionFrame.dirX = dirX;
     visionFrame.dirY = dirY;
     visionFrame.halfAngleRad =
-        std::max(2.0f, std::min(88.0f, visionParams.coneHalfAngleDeg)) * static_cast<float>(M_PI) / 180.0f;
+        std::max(2.0f, std::min(88.0f, coneHalfDeg)) * static_cast<float>(M_PI) / 180.0f;
     visionFrame.featherRad =
         std::max(0.5f, std::min(45.0f, visionParams.coneFeatherDeg)) * static_cast<float>(M_PI) / 180.0f;
-    visionFrame.lengthPx = std::max(24.0f, visionParams.coneLengthPx) * zoom;
+    visionFrame.lengthPx = std::max(24.0f, coneLenPx) * zoom;
     visionFrame.lengthFeatherPx =
-        std::max(4.0f, std::min(visionParams.coneLengthFeatherPx, visionParams.coneLengthPx * 0.9f)) * zoom;
+        std::max(4.0f, std::min(visionParams.coneLengthFeatherPx, coneLenPx * 0.9f)) * zoom;
     visionFrame.footRadiusPx = std::max(8.0f, visionParams.footRadiusPx) * zoom;
     visionFrame.maskGamma = std::max(0.2f, std::min(12.0f, visionParams.maskFalloffGamma));
     visionFrame.coneGamma = std::max(0.2f, std::min(16.0f, visionParams.coneEdgeGamma));

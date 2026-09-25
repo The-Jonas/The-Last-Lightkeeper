@@ -1575,6 +1575,11 @@
                          "name":"unique",
                          "type":"bool",
                          "value":true
+                        }, 
+                        {
+                         "name":"zoomable",
+                         "type":"bool",
+                         "value":true
                         }],
                  "rotation":0,
                  "type":"JornalSpawn",
@@ -1619,6 +1624,11 @@
                          "name":"zoomFactor",
                          "type":"float",
                          "value":1
+                        }, 
+                        {
+                         "name":"zoomable",
+                         "type":"bool",
+                         "value":true
                         }],
                  "rotation":0,
                  "type":"JornalSpawn",
@@ -1706,6 +1716,11 @@
                          "name":"unique",
                          "type":"bool",
                          "value":true
+                        }, 
+                        {
+                         "name":"zoomable",
+                         "type":"bool",
+                         "value":true
                         }],
                  "rotation":0,
                  "type":"JornalSpawn",
@@ -1743,6 +1758,11 @@
                         }, 
                         {
                          "name":"unique",
+                         "type":"bool",
+                         "value":true
+                        }, 
+                        {
+                         "name":"zoomable",
                          "type":"bool",
                          "value":true
                         }],
@@ -1790,6 +1810,11 @@
                          "name":"zoomFactor",
                          "type":"float",
                          "value":1
+                        }, 
+                        {
+                         "name":"zoomable",
+                         "type":"bool",
+                         "value":true
                         }],
                  "rotation":0,
                  "type":"JornalSpawn",

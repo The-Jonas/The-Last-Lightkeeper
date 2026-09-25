@@ -40,6 +40,9 @@ public:
                          const std::string& soundPath = "",  
                          float zoomFactor = 1.0f);
 
+    void SetZoomable(bool z) { zoomable = z; }   // marcado no Tiled: aceita zoom com F
+    bool IsZoomable() const { return zoomable; }
+
     void Start() override;
     void Update(float dt) override;
     void Render() override;
@@ -53,6 +56,7 @@ private:
     std::vector<DialogueBox::Line> dialogueLines;
     bool dialogueOnce  = true;
     bool dialogueFired = false;
+    bool zoomable = false;
 };
 
 #endif

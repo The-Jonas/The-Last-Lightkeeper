@@ -1,0 +1,43 @@
+{
+  "_leia_me": "Tuning do monstro. Chave apagada = volta ao default do Monster.h. Tempos em segundos, distancias em px, chances de 0 a 1.",
+
+  "speed_patrol": 85.0,
+  "speed_investigate": 120.0,
+  "speed_chase": 170.0,
+  "speed_hunt": 185.0,
+  "speed_flee": 220.0,
+
+  "sight_radius": 800.0,
+  "illumination_threshold": 0.20,
+  "memory_decay_time": 10.0,
+
+  "camp_max_time": 18.0,
+  "strategic_radar_interval": 4.0,
+  "strategic_sabotage_rest": 8.0,
+
+  "bored_time": 8.0,
+  "bored_radius": 320.0,
+  "bored_avoid_time": 10.0,
+
+  "window_radar_interval": 6.0,
+  "window_radar_range": 2900.0,
+  "sabotage_delay": 4.0,
+  "post_sabotage_idle": 8.0,
+
+  "noise_hear_radius": 950.0,
+  "noise_cooldown": 1.5,
+
+  "flee_distance": 500.0,
+  "flee_light_avoid_time": 12.0,
+  "flee_light_avoid_radius": 520.0,
+  "flee_light_radius_fraction": 0.85,
+
+  "chase_grace_duration": 1.5,
+  "first_chase_grace_duration": 5.0,
+  "chase_ignore_light_chance": 0.50,
+  "hunt_ignore_light_chance": 0.85,
+
+  "sanity_damage_dark": 80.0,
+  "sanity_damage_lit": 50.0,
+  "damage_cooldown_time": 1.5
+}

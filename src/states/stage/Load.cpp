@@ -155,6 +155,8 @@ StageState::~StageState(){
         SDL_DestroyTexture(pauseBlurTex);
         pauseBlurTex = nullptr;
     }
+    if (sceneSnapshot)   SDL_DestroyTexture(sceneSnapshot);
+    if (occluderScratch) SDL_DestroyTexture(occluderScratch);
 }
 
 // Zoom-base + limites do mundo. Os limites vem da ARTE do nivel: sem eles,

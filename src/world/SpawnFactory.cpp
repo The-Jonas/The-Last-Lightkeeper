@@ -412,6 +412,11 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
             ApplyTiledFlip(&jornalObj, spawn);
             stage.AddObject(&jornalObj);
 
+            // Zoom com F no visualizador (só documentos de texto; marque no Tiled).
+            if (spawn.properties.count("zoomable")) {
+                jornal->SetZoomable(spawn.properties.at("zoomable").get<bool>());
+            }
+
             // Diálogo específico deste papel (opcional) — mesmo formato do DialogueTrigger.
             std::vector<DialogueBox::Line> lines = ParseDialogueLinesProperty(spawn, "dialogue");
             if (!lines.empty()) {

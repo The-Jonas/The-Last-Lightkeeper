@@ -41,6 +41,10 @@ void DialogueTuning::Load(const std::string& path) {
         readInt("text_box_w", textBoxW);
         readInt("text_box_h", textBoxH);
 
+        readInt("hint_font_size", hintFontSize);
+        readInt("hint_pad_x", hintPadX);
+        readInt("hint_pad_y", hintPadY);
+
         readInt("blip_every_n_chars", blipEveryNChars);
     } catch (const std::exception& ex) {
         std::cerr << path << " ignorado (parse): " << ex.what() << std::endl;

@@ -95,6 +95,7 @@ private:
     void UpdateFleeLigth(float dt);
     void UpdateUnstuck(float dt);
     void UpdateSabotageWindow(float dt);
+    void UpdateBoredom(float dt, bool sawBrother);
 
     // ── Sensores ──────────────────────────────────────────────────────────────
     bool CanSeeLitBrother(Vec2& outPos) const;
@@ -166,6 +167,12 @@ private:
     float kSanityDamageDark = 80.0f;
     float kSanityDamageLit = 50.0f;
 
+    Vec2  boredAnchor{0.0f, 0.0f};                  // centro do lugar onde ele está rondando
+    float boredTimer = 0.0f;                        // quanto tempo seguido rondando esse lugar
+    float kBoredTime      = 10.0f;                  // segundos no mesmo lugar sem ver ninguém até desistir
+    float kBoredRadius    = 320.0f;                 // "mesmo lugar" = dentro deste raio (px de mundo)
+    float kBoredAvoidTime = 8.0f;                  // por quanto tempo evita voltar para lá
+
     // ── Constantes Estáticas ──────────────────────────────────────────────────
     static constexpr float kDamageBoxScale = 0.595f;
     static constexpr float kDamageBoxInset = (1.0f - kDamageBoxScale) * 0.5f;
@@ -180,7 +187,8 @@ private:
     static constexpr float kSpeedUnstuck = 130.0f;
     static constexpr float kUnstuckMinTime = 1.0f;
     static constexpr float kUnstuckMaxTime = 3.5f;
-    static constexpr float kStrategicRadarInterval = 1.0f;
+    float kStrategicRadarInterval = 4.0f;
+    float kStrategicSabotageRest = 8.0f;
 
     // ── Timers e Flags de Controle ────────────────────────────────────────────
     float campTimer = 0.0f;

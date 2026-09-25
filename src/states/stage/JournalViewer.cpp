@@ -16,6 +16,39 @@
 #include <cstdlib>
 #include <string>
 
+// Retângulo do papel na tela com o zoom e a rolagem atuais. Com zoom 1 e foco
+// no meio, é exatamente o retângulo normal. Com zoom, o ponto (journalFocusX,
+// journalFocusY) do papel fica no centro de onde o papel estaria.
+SDL_FRect StageState::GetJournalZoomedRect() const {
+    const SDL_FRect& base = journalTargetScreenRect;
+    const float w  = base.w * journalZoomCurrent;
+    const float h  = base.h * journalZoomCurrent;
+    const float cx = base.x + base.w * 0.5f;
+    const float cy = base.y + base.h * 0.5f;
+    return SDL_FRect{ cx - journalFocusX * w, cy - journalFocusY * h, w, h };
+}
+
+// Mantém a rolagem dentro do papel. Com zoom, a borda do documento nunca entra
+// na tela. Se num eixo o papel ainda cabe, esse eixo fica centralizado.
+void StageState::ClampJournalFocus(int winW, int winH) {
+    const SDL_FRect& base = journalTargetScreenRect;
+    const float w  = base.w * journalZoomCurrent;
+    const float h  = base.h * journalZoomCurrent;
+    const float cx = base.x + base.w * 0.5f;
+    const float cy = base.y + base.h * 0.5f;
+
+    // Limita o foco de UM eixo: `center` é onde fica o meio do papel na tela,
+    // `size` o tamanho do papel com zoom, `screen` o tamanho da tela.
+    auto clampAxis = [](float focus, float center, float size, float screen) {
+        if (size <= screen) return 0.5f;
+        const float lo = center / size;                    
+        const float hi = 1.0f - (screen - center) / size;  
+        return std::max(lo, std::min(hi, focus));
+    };
+    journalFocusX = clampAxis(journalFocusX, cx, w, static_cast<float>(winW));
+    journalFocusY = clampAxis(journalFocusY, cy, h, static_cast<float>(winH));
+}
+
 namespace {
 
 float SmoothStep(float t) {
@@ -177,6 +210,10 @@ void StageState::OpenJournalViewer(Jornal* jornal) {
     journalCloseTimer  = 0.0f;
     journalViewerClosing = false;
     journalViewerOpen    = true;
+    journalViewZoomable = jornal->IsZoomable();
+    journalZoomLevel    = 0;
+    journalZoomCurrent  = 1.0f;
+    journalFocusX = journalFocusY = 0.5f;
 
     // Telemetria: que documentos o jogador abriu — e, com o par de eventos,
     // quanto tempo os leu de facto (ou se fechou logo a seguir).
@@ -250,6 +287,38 @@ void StageState::UpdateJournalViewer(float dt) {
 
     journalAnimTimer += dt;
 
+    // ── Zoom (F) e rolagem (WASD/setas) — só documento marcado no Tiled ──────
+    if (journalViewZoomable) {
+        const int winW = Game::GetInstance().GetWindowsWidth();
+        const int winH = Game::GetInstance().GetWindowsHeight();
+
+        if (input.ActionPress(GameAction::UseItem)) {
+            journalZoomLevel = (journalZoomLevel + 1) % 3;   // normal → perto → bem perto → normal
+            if (journalZoomLevel == 0) {
+                journalFocusX = journalFocusY = 0.5f;        // saiu do zoom: volta ao meio
+            }
+        }
+
+        const float target = kJournalZoomLevels[journalZoomLevel];
+        journalZoomCurrent += (target - journalZoomCurrent) * std::min(1.0f, kJournalZoomSmoothing * dt);
+
+        if (journalZoomLevel > 0) {
+            float dx = 0.0f, dy = 0.0f;
+            if (input.ActionDown(GameAction::MoveLeft)  || input.IsKeyDown(SDLK_LEFT))  dx -= 1.0f;
+            if (input.ActionDown(GameAction::MoveRight) || input.IsKeyDown(SDLK_RIGHT)) dx += 1.0f;
+            if (input.ActionDown(GameAction::MoveUp)    || input.IsKeyDown(SDLK_UP))    dy -= 1.0f;
+            if (input.ActionDown(GameAction::MoveDown)  || input.IsKeyDown(SDLK_DOWN))  dy += 1.0f;
+
+            // Velocidade fixa na TELA: com mais zoom o papel é maior, então o
+            // passo em fração do papel diminui (sensação igual nos dois níveis).
+            const float w = journalTargetScreenRect.w * journalZoomCurrent;
+            const float h = journalTargetScreenRect.h * journalZoomCurrent;
+            if (w > 1.0f) journalFocusX += dx * kJournalPanSpeedPx * dt / w;
+            if (h > 1.0f) journalFocusY += dy * kJournalPanSpeedPx * dt / h;
+        }
+        ClampJournalFocus(winW, winH);
+    }
+
     if (input.ActionPress(GameAction::Interact) || input.KeyPress(SDLK_ESCAPE)) {
         Telemetry::Event("journal_close", Telemetry::Fields()
             .Str("image", journalViewImagePath)
@@ -284,7 +353,7 @@ void StageState::RenderJournalViewer(SDL_Renderer* renderer) {
 
     auto tex = Resources::GetImage(journalViewImagePath);
     if (tex) {
-        const SDL_FRect dst = LerpRect(journalSourceScreenRect, journalTargetScreenRect, openT);
+        const SDL_FRect dst = LerpRect(journalSourceScreenRect, GetJournalZoomedRect(), openT);
         SDL_SetTextureAlphaMod(tex.get(), static_cast<Uint8>(255.0f * alphaMul));
         SDL_SetTextureColorMod(tex.get(), 255, 255, 255);
         SDL_SetTextureBlendMode(tex.get(), SDL_BLENDMODE_BLEND);
@@ -298,7 +367,13 @@ void StageState::RenderJournalViewer(SDL_Renderer* renderer) {
             if (keyName.empty()) {
                 keyName = "E";
             }
-            const std::string hintStr = keyName + " / ESC — fechar";
+            std::string hintStr = keyName + " / ESC — fechar";
+            if (journalViewZoomable) {
+                std::string zoomKey = SDL_GetKeyName(InputManager::GetInstance().GetBinding(GameAction::UseItem));
+                if (zoomKey.empty()) zoomKey = "F";
+                hintStr += "    " + zoomKey + " — zoom";
+                if (journalZoomLevel > 0) hintStr += "    WASD / setas — mover";
+            }
             SDL_Color hc{230, 225, 200, static_cast<Uint8>(240.0f * alphaMul)};
             SDL_Surface* surf = TTF_RenderUTF8_Blended(hintFont.get(), hintStr.c_str(), hc);
             if (surf) {

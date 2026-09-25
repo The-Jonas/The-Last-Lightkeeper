@@ -17,6 +17,8 @@
 #include "gameplay/ItemPickup.h"
 #include "gameplay/Item.h"
 #include "audio/GameVoice.h"
+#include "gameplay/Jornal.h"
+#include "gameplay/RadioAsset.h"
 
 #define INCLUDE_SDL_TTF
 #include "SDL_include.h"
@@ -461,29 +463,25 @@ void StageState::RenderInteractionPrompt(SDL_Renderer* renderer) {
         // Irmão maior fora do esconderijo: todas as interações do rodapé.
         const char* action = nullptr;
         if (activePushBox) {
-            // Já está segurando uma caixa/barril → apertar E de novo SOLTA. Fica
-            // visível o tempo todo enquanto segura, para o jogador saber que pode
-            // soltar (par com o "[E] Empurrar" mostrado antes de agarrar).
             action = "Soltar";
-        } else {
-            if (reachablePushBox) {
+        } else if (reachableCloset) {
+            action = "Esconder";
+        } else if (reachableRepairable) {
+            action = "Consertar";
+        } else if (GameObject* focus = GetInteractionFocus()) {
+            // O texto segue o MESMO alvo do contorno e do [E].
+            if (reachablePushBox && focus == &reachablePushBox->GetAssociated()) {
                 action = "Empurrar";
-            } else if (reachableCloset) {
-                action = "Esconder";
-            } else if (reachableRepairable) {
-                action = "Consertar";
-            } else if (reachableJornal) {
+            } else if (reachableJornal && focus == &reachableJornal->GetAssociated()) {
                 action = "Ler";
-            } else if (reachableCandle) {
+            } else if (reachableCandle && focus == &reachableCandle->GetAssociated()) {
                 action = reachableCandle->IsLit() ? "Apagar" : "Acender";
-            } else if (reachableWindow) {
-                if (reachableWindow->GetState() == Window::WindowState::OPEN) {
-                    action = "Fechar";
-                }
-            } else if (reachableRadio) {
+            } else if (reachableWindow && focus == &reachableWindow->GetAssociated()) {
+                action = "Fechar";
+            } else if (reachableRadio && focus == &reachableRadio->GetAssociated()) {
                 action = reachableRadio->IsPlaying() ? "Desligar" : "Ligar";
-            } else if (reachablePickup && IsPickupStillTracked(reachablePickup) &&
-                       !IsPickupBlocked(reachablePickup)) {
+            } else if (reachablePickup && focus == &reachablePickup->GetAssociated() &&
+                    !IsPickupBlocked(reachablePickup)) {
                 action = "Pegar";
             }
         }
@@ -1320,20 +1318,20 @@ bool sFarVoiceArmed = true;   // fala de medo do irmãozinho (sem limite de 3x)
 }
 
 // Pede a exibição de um tutorial. UM por vez: se já houver outro na tela, força o
-// atual a fazer fade-out e enfileira o novo (pendingTutText). Dedup: ignora se o
-// mesmo texto já está ativo/na fila.
-void StageState::RequestTutorial(const std::string& text) {
+// atual a fazer fade-out e enfileira o novo. `inventoryHint` marca os tutoriais
+// que devem mostrar as teclas da roda de itens enquanto estiverem na tela.
+void StageState::RequestTutorial(const std::string& text, bool inventoryHint) {
     if (text.empty()) return;
     if (activeTutText == text || pendingTutText == text) return;
-    // Telemetria: que tutoriais chegaram a aparecer. Um tutorial que dispara em
-    // toda a gente e um sinal de que o jogo nao se explica sozinho.
     Telemetry::Event("tutorial", Telemetry::Fields().Int("level", currentLevelIndex).Str("text", text));
     if (activeTutTimer > 0.0f) {
-        pendingTutText = text;
+        pendingTutText      = text;
+        pendingTutInventory = inventoryHint;
         if (activeTutTimer > kTutorialFadeOut) activeTutTimer = kTutorialFadeOut;
     } else {
-        activeTutText  = text;
-        activeTutTimer = kTutorialDisplayDuration;
+        activeTutText      = text;
+        activeTutInventory = inventoryHint;
+        activeTutTimer     = kTutorialDisplayDuration;
     }
 }
 
@@ -1344,10 +1342,13 @@ void StageState::UpdateTutorials(float dt) {
         if (activeTutTimer <= 0.0f) {
             activeTutTimer = 0.0f;
             activeTutText.clear();
+            activeTutInventory = false;
             if (!pendingTutText.empty()) {
-                activeTutText  = pendingTutText;
+                activeTutText       = pendingTutText;
+                activeTutInventory  = pendingTutInventory;
                 pendingTutText.clear();
-                activeTutTimer = kTutorialDisplayDuration;
+                pendingTutInventory = false;
+                activeTutTimer      = kTutorialDisplayDuration;
             }
         }
     }
@@ -1414,7 +1415,7 @@ void StageState::UpdateTutorials(float dt) {
                 sCycleTutShown++;
                 const std::string prev = tutKey(imTut.GetBinding(GameAction::CyclePrev), "Left");
                 const std::string next = tutKey(imTut.GetBinding(GameAction::CycleNext), "Right");
-                RequestTutorial("Use [" + prev + "] e [" + next + "] para trocar de item na mochila");
+                RequestTutorial("Use [" + prev + "] e [" + next + "] para trocar de item na mochila", true);
             }
             prevStackCount = stackCount;
         } else if (stackCount < prevStackCount) {
@@ -1428,7 +1429,7 @@ void StageState::UpdateTutorials(float dt) {
         if (sLighterEmptyTutShown < 1 && controlledCharacter == bigCharacter &&
             inventory.HasDepletedLighter()) {
             sLighterEmptyTutShown++;
-            RequestTutorial("Sua luz apagou! Use combustivel para reabastece-la");
+            RequestTutorial("Sua luz apagou! Use combustivel para reabastece-la", true);
         }
     }
 
@@ -1455,7 +1456,7 @@ void StageState::UpdateTutorials(float dt) {
             RequestTutorial("Combustivel: aperte [" + tutKey(imTut.GetBinding(GameAction::UseItem), "F") +
                             "], escolha o item com [" + tutKey(imTut.GetBinding(GameAction::MoveLeft), "A") +
                             "]/[" + tutKey(imTut.GetBinding(GameAction::MoveRight), "D") +
-                            "] e [" + tutKey(imTut.GetBinding(GameAction::UseItem), "F") + "] para confirmar");
+                            "] e [" + tutKey(imTut.GetBinding(GameAction::UseItem), "F") + "] para confirmar", true);
         }
         if (!holdingOil) {
             refuelTutArmed = true;
@@ -1493,7 +1494,7 @@ void StageState::UpdateTutorials(float dt) {
         if (cond && lighterTutArmed && sLighterTutShown < kMaxTutorialShows) {
             sLighterTutShown++;
             lighterTutArmed = false;
-            RequestTutorial("Pressione [" + tutKey(imTut.GetBinding(GameAction::UseItem), "F") + "] para ligar seu isqueiro");
+            RequestTutorial("Pressione [" + tutKey(imTut.GetBinding(GameAction::UseItem), "F") + "] para ligar seu isqueiro", true);
         }
         if (!cond) {
             lighterTutArmed = true;   // re-arma quando a condição passa

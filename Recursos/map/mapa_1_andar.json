@@ -71,8 +71,8 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":245,
-                 "x":1200.0303030303,
-                 "y":244.212121212121
+                 "x":1185.36363636363,
+                 "y":316.878787878788
                 }, 
                 {
                  "gid":3,
@@ -323,7 +323,7 @@
                         {
                          "name":"depthOffset",
                          "type":"float",
-                         "value":200
+                         "value":150
                         }, 
                         {
                          "name":"heightLevel",
@@ -344,13 +344,18 @@
                          "name":"unique",
                          "type":"bool",
                          "value":true
+                        }, 
+                        {
+                         "name":"zoomable",
+                         "type":"bool",
+                         "value":true
                         }],
                  "rotation":0,
                  "type":"JornalSpawn",
                  "visible":true,
                  "width":120,
-                 "x":1623.51515151515,
-                 "y":431
+                 "x":1841.51515151515,
+                 "y":483
                 }, 
                 {
                  "gid":2,
@@ -806,6 +811,11 @@
                          "name":"zoomFactor",
                          "type":"float",
                          "value":1.2
+                        }, 
+                        {
+                         "name":"zoomable",
+                         "type":"bool",
+                         "value":true
                         }],
                  "rotation":0,
                  "type":"JornalSpawn",
@@ -998,6 +1008,11 @@
                          "name":"zoomFactor",
                          "type":"float",
                          "value":1
+                        }, 
+                        {
+                         "name":"zoomable",
+                         "type":"bool",
+                         "value":true
                         }],
                  "rotation":0,
                  "type":"JornalSpawn",
@@ -1042,6 +1057,11 @@
                          "name":"zoomFactor",
                          "type":"float",
                          "value":1
+                        }, 
+                        {
+                         "name":"zoomable",
+                         "type":"bool",
+                         "value":true
                         }],
                  "rotation":0,
                  "type":"JornalSpawn",
@@ -1086,6 +1106,11 @@
                          "name":"zoomFactor",
                          "type":"float",
                          "value":1
+                        }, 
+                        {
+                         "name":"zoomable",
+                         "type":"bool",
+                         "value":true
                         }],
                  "rotation":0,
                  "type":"JornalSpawn",
@@ -1247,6 +1272,11 @@
                          "name":"zoomFactor",
                          "type":"float",
                          "value":1
+                        }, 
+                        {
+                         "name":"zoomable",
+                         "type":"bool",
+                         "value":true
                         }],
                  "rotation":0,
                  "type":"JornalSpawn",

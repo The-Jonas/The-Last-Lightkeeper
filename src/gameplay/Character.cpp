@@ -93,6 +93,27 @@ void Character::Start() {
     associated.AddComponent(new Collider(associated, scale, Vec2(0, offsetY)));
 }
 
+// Drena a sanidade no escuro e regenera na luz. 
+void Character::UpdateSanity(float dt) {
+    StageState* stage = Game::TryGetStageState();
+    float myLightContact = 1.0f;
+    if (stage) {
+        myLightContact = irmaozaoIdleStrips ? stage->bigIlluminationLevel : stage->smallIlluminationLevel;
+    }
+
+    const float darknessThreshold = 0.1f;
+    const float sanityDrainRate = 8.0f;
+    const float sanityRegenRate = 12.0f;
+
+    if (myLightContact < darknessThreshold) {
+        sanity -= sanityDrainRate * dt;
+        if (sanity <= 0.0f) sanity = 0.0f;
+    } else {
+        sanity += sanityRegenRate * dt;
+        if (sanity > kMaxSanity) sanity = kMaxSanity;
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  Gerenciamento de Animação e Sprites
 // ─────────────────────────────────────────────────────────────────────────────
@@ -257,8 +278,11 @@ void Character::Update(float dt) {
         interactTimer -= dt;
         if (interactTimer <= 0.0f) currentState = ActionState::NORMAL;
 
-        if (isHidden) UpdateVisionPower(dt);
-        return; 
+        if (isHidden) {
+            UpdateSanity(dt);        
+            UpdateVisionPower(dt);
+        }
+        return;
     }
 
     // ── Fila de Movimento ─────────────────────────────────────────────────────
@@ -368,22 +392,7 @@ void Character::Update(float dt) {
     }
 
     // ── Sistema de Sanidade ───────────────────────────────────────────────────
-    float myLightContact = 1.0f;
-    if (stage) {
-        myLightContact = irmaozaoIdleStrips ? stage->bigIlluminationLevel : stage->smallIlluminationLevel;
-    }
-
-    const float darknessThreshold = 0.1f; 
-    const float sanityDrainRate = 8.0f; 
-    const float sanityRegenRate = 12.0f; 
-
-    if (myLightContact < darknessThreshold) {
-        sanity -= sanityDrainRate * dt;
-        if (sanity <= 0.0f) sanity = 0.0f;
-    } else {
-        sanity += sanityRegenRate * dt;
-        if (sanity > kMaxSanity) sanity = kMaxSanity; 
-    }
+    UpdateSanity(dt);
 
     UpdateVisionPower(dt);
 }

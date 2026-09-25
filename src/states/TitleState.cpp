@@ -22,8 +22,8 @@
 #include "nlohmann/json.hpp"
 
 static const char* kMenuLabels[5] = {
-    "Novo Jogo",
     "Continuar",
+    "Novo Jogo",
     "Configurações",
     "Créditos",
     "Sair"
@@ -221,9 +221,8 @@ void TitleState::LoadAssets() {
 
     hasContinueSave = SaveManager::HasSave();
 
-    // Seleção inicial SEMPRE em "Novo Jogo" (índice 0). "Continuar" (índice 1) só
-    // fica disponível/selecionável quando existe um save de verdade (ver isDisabled).
-    menuSelection = 0;
+    // Com save, começa em "Continuar" (0); sem save, em "Novo Jogo" (1).
+    menuSelection = hasContinueSave ? 0 : 1;
     
     charFrameIndex=0; charAnimTimer=0.0f;
     fadeTimer=Timer(); fadeAlpha=0.0f; pulseTimer=0.0f;
@@ -257,7 +256,9 @@ void TitleState::LayoutAll() {
     shoulderY=(kCharBottomY-kCharH)+kCharH+kShoulderDY;
     for(int i=0;i<5;i++) {
         if(!menuTexts[i]) continue;
-        float y=kMenuStartY+i*kMenuSpacing;
+        const int slot = hasContinueSave ? i : i - 1;
+        if(slot < 0) continue;   
+        float y=kMenuStartY+slot*kMenuSpacing;
         menuTexts[i]->box.x=Camera::pos.x+kMenuX;
         menuTexts[i]->box.y=Camera::pos.y+y;
         optionPositions[i]={kMenuX+menuTexts[i]->box.w*0.5f, y+menuTexts[i]->box.h*0.5f};
@@ -591,7 +592,7 @@ void TitleState::Update(float dt) {
     if (rebindInvalidTimer > 0.0f) rebindInvalidTimer -= dt;
     InputManager& input=InputManager::GetInstance();
     hasContinueSave=SaveManager::HasSave();
-    if(!hasContinueSave&&menuSelection==1) menuSelection=0;
+    if(!hasContinueSave&&menuSelection==0) menuSelection=1;
 
     // Cursor visível SÓ no painel de configurações (sliders com mouse).
     SDL_ShowCursor(configOpen ? SDL_ENABLE : SDL_DISABLE);
@@ -611,7 +612,7 @@ void TitleState::Update(float dt) {
         quitRequested=true;
     }
 
-    auto isDisabled=[&](int idx){ return idx==1&&!hasContinueSave; };
+    auto isDisabled=[&](int idx){ return idx==0&&!hasContinueSave; };
     if(input.KeyPress(SDLK_w)||input.KeyPress(SDLK_UP)) {
         int next=(menuSelection+4)%5;
         while(isDisabled(next)&&next!=menuSelection) next=(next+4)%5;
@@ -664,13 +665,13 @@ void TitleState::ActivateMenuSelection() {
     // Telemetria: por onde o tester entrou no jogo, e quantas vezes voltou ao
     // menu. `hasSave` diz se "Continuar" estava sequer disponivel.
     {
-        static const char* kLabels[] = {"novo_jogo", "continuar", "opcoes", "creditos", "sair"};
+        static const char* kLabels[] = {"continuar", "novo_jogo", "opcoes", "creditos", "sair"};
         const int idx = (menuSelection >= 0 && menuSelection < 5) ? menuSelection : 0;
         Telemetry::Event("menu", Telemetry::Fields().Str("choice", kLabels[idx]).Bool("hasSave", hasContinueSave));
     }
     switch(menuSelection) {
-    case 0: StartNewGame(); break;
-    case 1: if(hasContinueSave) StartContinue(); break;
+    case 0: if(hasContinueSave) StartContinue(); break;
+    case 1: StartNewGame(); break;
     case 2: OpenConfig(); break;
     case 3: Game::GetInstance().Push(new EndState(/*creditsOnly=*/true)); break;
     case 4: Telemetry::SetEndReason("quit_menu"); quitRequested=true; break;
@@ -750,8 +751,13 @@ void TitleState::RenderArm(SDL_Renderer* r) {
         static_cast<double>(armAngle),&pivot,SDL_FLIP_NONE);
 }
 
+// Desenha as opções do menu. Sem save, "Continuar" (item 0) não aparece.
 void TitleState::RenderMenuTexts(SDL_Renderer*) {
-    for(int i=0;i<5;i++) if(menuTexts[i]) menuTexts[i]->Render();
+    for(int i=0;i<5;i++) {
+        if(!menuTexts[i]) continue;
+        if(i==0 && !hasContinueSave) continue;
+        menuTexts[i]->Render();
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -879,6 +885,7 @@ void TitleState::Resume() {
     Camera::ResetView();
     Camera::pos=Vec2(0,0);
     hasContinueSave=SaveManager::HasSave();
+    menuSelection = hasContinueSave ? 0 : 1;
     if(!hasContinueSave) menuSelection=0;
     InitSliders(); fadeTimer=Timer(); fadeAlpha=0.0f;
     configOpen=false;

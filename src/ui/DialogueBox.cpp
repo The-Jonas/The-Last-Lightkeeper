@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cctype>
 #include <sstream>
+#include <cmath>
 
 // Carrega as variações do blip uma única vez.
 DialogueBox::DialogueBox() {
@@ -128,6 +129,7 @@ void DialogueBox::Update(float dt) {
 
     if (skipPressed) { AdvancePageOrLine(); return; }
 
+    
     if (autoAdvanceTimer < 0.0f) autoAdvanceTimer = DialogueTuning::autoAdvanceDelay;
     autoAdvanceTimer -= dt;
     if (autoAdvanceTimer <= 0.0f) AdvancePageOrLine();
@@ -239,6 +241,43 @@ void DialogueBox::Render(SDL_Renderer* renderer, int windowW, int windowH) {
             };
             SDL_FreeSurface(nsf);
             if (nt) { SDL_RenderCopy(renderer, nt, nullptr, &nd); SDL_DestroyTexture(nt); }
+        }
+    }
+
+    // ── Aviso de Espaço (canto inferior direito da caixa) ───────────────────
+    // Fica ANTES do texto de propósito: o bloco do texto sai com `return` quando
+    // a página ainda não tem letra nenhuma, e o aviso sumiria nesse instante.
+    {
+        const bool typing   = revealedChars < fullText.size();
+        const bool lastLine = pendingPages.empty() && queue.empty();
+        const char* action  = typing ? "pular" : (lastLine ? "fechar" : "continuar");
+        const std::string hint = std::string("[Espaço] ") + action;
+
+        // Digitando: fixo e discreto. Texto completo: pulsa devagar (chama o olho).
+        Uint8 alpha = 170;
+        if (!typing) {
+            const float t = SDL_GetTicks() / 1000.0f;
+            alpha = static_cast<Uint8>(150.0f + 105.0f * (0.5f + 0.5f * std::sin(t * 4.0f)));
+        }
+
+        auto hintFont = Resources::GetFont("Recursos/font/times.ttf",
+                                           std::max(10, static_cast<int>(DialogueTuning::hintFontSize * scale)));
+        if (hintFont) {
+            const SDL_Color hintCol{200, 180, 110, alpha};
+            if (SDL_Surface* hs = TTF_RenderUTF8_Blended(hintFont.get(), hint.c_str(), hintCol)) {
+                SDL_Texture* ht = SDL_CreateTextureFromSurface(renderer, hs);
+                const SDL_Rect hd{
+                    boxX + boxW - static_cast<int>(DialogueTuning::hintPadX * scale) - hs->w,
+                    boxY + boxH - static_cast<int>(DialogueTuning::hintPadY * scale) - hs->h,
+                    hs->w, hs->h
+                };
+                SDL_FreeSurface(hs);
+                if (ht) {
+                    SDL_SetTextureAlphaMod(ht, alpha);
+                    SDL_RenderCopy(renderer, ht, nullptr, &hd);
+                    SDL_DestroyTexture(ht);
+                }
+            }
         }
     }
 

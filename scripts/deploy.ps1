@@ -12,7 +12,8 @@
       1. Build via `mingw32-make dist` (clean + optimized release with
          -static-libgcc/-static-libstdc++, then copies JOGO.exe + SDL DLLs +
          Recursos into .\dist).
-      2. Add .env, config\settings.json and LEIA-ME.txt to .\dist.
+      2. Add .env, every config\*.json (settings/playtest with example
+         fallbacks; *.example.json skipped) and LEIA-ME.txt to .\dist.
       3. Verify JOGO.exe has no MinGW runtime DLL dependencies (objdump).
       4. Stage into a date-stamped folder and Compress-Archive it.
 
@@ -72,7 +73,7 @@ if (-not (Test-Path $exe)) { Fail "dist\JOGO.exe nao foi gerado." }
 
 # --- 2. add config + readme into the bundle ---
 Write-Host ""
-Write-Host "==> Adicionando .env, config\settings.json e LEIA-ME.txt..." -ForegroundColor Cyan
+Write-Host "==> Adicionando .env, config\*.json e LEIA-ME.txt..." -ForegroundColor Cyan
 
 # .env: prefer repo-root .env, fall back to .env.example
 $envSrc = Join-Path $repoRoot '.env'
@@ -107,13 +108,21 @@ if ($settingsSrc) {
     Copy-Item $settingsSrc (Join-Path $distConfig 'settings.json') -Force
 }
 
-# config/lighting.json: valores do painel de afinacao (tecla \). Opcional — sem
-# ele o jogo usa os defaults compilados.
-$lightingSrc = Join-Path $repoRoot 'config\lighting.json'
-if (Test-Path $lightingSrc) {
-    Copy-Item $lightingSrc (Join-Path $distConfig 'lighting.json') -Force
+# Todos os outros config\*.json (lighting, monster, dialogue_ui, fuel_hud e
+# qualquer um que venha a ser criado): copiados automaticamente, sem lista fixa.
+# Ficam de fora os *.example.json (sao modelos) e os dois tratados a parte
+# (settings e playtest), que tem regra propria de reserva.
+$configSrcDir = Join-Path $repoRoot 'config'
+$skipConfigs  = @('settings.json', 'playtest.json')
+if (Test-Path $configSrcDir) {
+    Get-ChildItem -LiteralPath $configSrcDir -Filter '*.json' -File |
+        Where-Object { $_.Name -notlike '*.example.json' -and $skipConfigs -notcontains $_.Name } |
+        ForEach-Object {
+            Copy-Item $_.FullName (Join-Path $distConfig $_.Name) -Force
+            Write-Host "    + config\$($_.Name)" -ForegroundColor Green
+        }
 } else {
-    Write-Host "    (config\lighting.json ausente; o jogo usara os valores de fabrica da luz)"
+    Write-Host "    AVISO: pasta config\ nao encontrada; o jogo usara os valores compilados." -ForegroundColor Yellow
 }
 
 # config/playtest.json: nome do tester para o registo de playtest. Vai SEMPRE
@@ -127,19 +136,6 @@ if (Test-Path $playtestSrc) {
     Copy-Item $playtestSrc (Join-Path $distConfig 'playtest.json') -Force
 } else {
     Write-Host "    (config\playtest.json ausente; as sessoes ficam com o tester 'anon')"
-}
-
-# config/dialogue_ui.json e config/fuel_hud.json: medidas da caixa de dialogo e
-# do HUD do combustivel. SEM eles o jogo usa os defaults compilados — que agora
-# valem o mesmo, mas manda-se o ficheiro na mesma para o pacote poder ser
-# afinado sem recompilar.
-foreach ($uiCfg in @('dialogue_ui.json', 'fuel_hud.json')) {
-    $uiSrc = Join-Path $repoRoot "config\$uiCfg"
-    if (Test-Path $uiSrc) {
-        Copy-Item $uiSrc (Join-Path $distConfig $uiCfg) -Force
-    } else {
-        Write-Host "    (config\$uiCfg ausente; o jogo usara os valores compilados)"
-    }
 }
 
 # readme (tracked template)

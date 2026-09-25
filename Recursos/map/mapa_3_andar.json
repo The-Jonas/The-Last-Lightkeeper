@@ -810,8 +810,8 @@
                  "type":"ItemSpawn",
                  "visible":true,
                  "width":245,
-                 "x":471.939393939394,
-                 "y":1515.57575757576
+                 "x":12.6060606060607,
+                 "y":1796.24242424243
                 }, 
                 {
                  "gid":25,
@@ -4518,7 +4518,7 @@
          "value":"level_2"
         }],
  "renderorder":"right-down",
- "tiledversion":"1.12.2",
+ "tiledversion":"1.12.1",
  "tileheight":64,
  "tilesets":[
         {

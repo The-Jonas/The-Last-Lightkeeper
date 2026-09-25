@@ -38,9 +38,18 @@ Monster::~Monster() {
 }
 
 void Monster::LoadTuning() {
-    std::ifstream f("Recursos/data/monster.json");
-    if (!f.is_open()) return;
-    
+    // Procura primeiro em config/ (como os outros .json). O caminho antigo fica
+    // como reserva para não quebrar builds que ainda tenham o arquivo lá.
+    const char* kPaths[] = { "config/monster.json", "Recursos/data/monster.json" };
+    std::ifstream f;
+    const char* usedPath = nullptr;
+    for (const char* p : kPaths) {
+        f.open(p);
+        if (f.is_open()) { usedPath = p; break; }
+        f.clear();
+    }
+    if (!usedPath) return;   // sem arquivo: ficam os defaults do Monster.h
+
     try {
         nlohmann::json j;
         f >> j;
@@ -56,6 +65,11 @@ void Monster::LoadTuning() {
         rd("illumination_threshold", kIlluminationThreshold);
         rd("memory_decay_time", kMemoryDecayTime);
         rd("camp_max_time", kCampMaxTime);
+        rd("strategic_radar_interval", kStrategicRadarInterval);
+        rd("strategic_sabotage_rest", kStrategicSabotageRest);
+        rd("bored_time", kBoredTime);
+        rd("bored_radius", kBoredRadius);
+        rd("bored_avoid_time", kBoredAvoidTime);
         rd("window_radar_interval", kWindowRadarInterval);
         rd("window_radar_range", kWindowRadarRange);
         rd("noise_hear_radius", kNoiseHearRadius);
@@ -73,8 +87,10 @@ void Monster::LoadTuning() {
         rd("sanity_damage_dark", kSanityDamageDark);
         rd("sanity_damage_lit", kSanityDamageLit);
         rd("damage_cooldown_time", kDamageCooldownTime);
-    } catch (const std::exception&) {
-        // Fallback silencioso
+    } catch (const std::exception& ex) {
+        // Um JSON mal escrito não deve derrubar o jogo, mas precisa avisar:
+        // senão parece que o arquivo "não funciona".
+        std::cerr << usedPath << " ignorado (parse): " << ex.what() << std::endl;
     }
 }
 
@@ -175,25 +191,37 @@ void Monster::Update(float dt) {
 
     // 3. Sensor de Visão
     Vec2 seenPos;
+    bool sawBrother = false;
     if (state != MonsterState::HUNT && state != MonsterState::FLEE_LIGHT && CanSeeLitBrother(seenPos)) {
+        sawBrother = true;
         lastKnownPlayerPos = seenPos;
         hasMemory = true;
         memoryDecayTimer = 0.0f;
         if (state != MonsterState::CHASE) TransitionTo(MonsterState::CHASE);
     }
 
-    // 4. Modo Estratégico (Acampamento no armário)
+    // 4. Modo cerco (acampamento no armário)
+    // Ver alguém fora do esconderijo encerra o cerco: o monstro "descobre" que o
+    // irmão saiu e volta ao ritmo normal de janelas.
+    if (sawBrother && strategicMode) {
+        strategicMode = false;
+        windowRadarTimer = 0.0f;
+    }
     if (AnyBrotherHidden()) {
         if (!strategicMode) {
             campTimer += dt;
             if (campTimer >= kCampMaxTime) {
                 strategicMode = true;
-                windowRadarTimer = kStrategicRadarInterval;
+                campTimer = 0.0f;
+                windowRadarTimer = kStrategicRadarInterval;   // primeira sabotagem logo de cara
             }
         }
     } else {
         campTimer = 0.0f;
     }
+
+    // 4b. Tédio: rondando o mesmo lugar tempo demais sem ver ninguém → desiste.
+    UpdateBoredom(dt, sawBrother);
 
     // 5. Radar de Janelas
     if ((state == MonsterState::PATROL || state == MonsterState::INVESTIGATE) && !hasMemory && postSabotageIdleTimer <= 0.0f) {
@@ -1029,7 +1057,7 @@ void Monster::UpdateSabotageWindow(float dt) {
     }
 
     if (stateTimer >= 26.0f) {
-        windowRadarTimer = strategicMode ? -4.0f : -15.0f; 
+        windowRadarTimer = strategicMode ? -kStrategicSabotageRest : -15.0f; 
         targetWindow = nullptr;
         TransitionTo(MonsterState::PATROL);
         return;
@@ -1094,4 +1122,37 @@ void Monster::UpdateSabotageWindow(float dt) {
         targetWindow = nullptr;
         TransitionTo(MonsterState::PATROL);
     }
+}
+
+// Detecta o monstro "acampando": muito tempo dentro de um raio pequeno sem ver
+// nenhum irmão (tipicamente na frente de um armário, indo e voltando da luz da
+// fresta). Quando acontece, ele esquece o jogador e volta à patrulha,
+// preferindo pontos longe dali — reaproveita o "evitar lugar" da fuga da luz.
+void Monster::UpdateBoredom(float dt, bool sawBrother) {
+    const Vec2 pos = associated.box.Center();
+
+    // Não conta: vendo alguém (perseguição de verdade), abrindo janela (tem
+    // limite próprio de 26 s), saindo de parede ou na caçada (limite de 8 s).
+    const bool exempt = sawBrother ||
+                        state == MonsterState::SABOTAGE_WINDOW ||
+                        state == MonsterState::UNSTUCK ||
+                        state == MonsterState::HUNT;
+
+    if (exempt || pos.Distance(boredAnchor) > kBoredRadius) {
+        boredAnchor = pos;      
+        boredTimer = 0.0f;
+        return;
+    }
+
+    boredTimer += dt;
+    if (boredTimer < kBoredTime) return;
+
+    // Desiste: esquece onde o jogador estava e evita este lugar por um tempo.
+    boredTimer = 0.0f;
+    hasMemory = false;
+    memoryDecayTimer = 0.0f;
+    campTimer = 0.0f;
+    fleeLightPos = boredAnchor;
+    fleeLightAvoidTimer = kBoredAvoidTime;
+    TransitionTo(MonsterState::PATROL);   
 }

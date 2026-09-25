@@ -15,6 +15,10 @@
 #include "audio/GameVoice.h"
 #include "gameplay/Character.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 #include <algorithm>
 #include <cmath>
 #include <string>
@@ -26,6 +30,7 @@ namespace {
 constexpr float kCandleMaxDistX       = 120.0f;  // faixa lateral
 constexpr float kCandleMaxDistFront   = 180.0f;  // distância máxima na frente
 constexpr float kCandleBehindTolerance = 40.0f;  // tolerância pra não ser injusto
+
 
 bool IsHoldingLamp(const Inventory& inventory) {
     return inventory.GetHeldPropVisual() == HeldPropVisual::Lamp;
@@ -72,49 +77,71 @@ bool StageState::IsPushBoxCloserThanItem(ItemPickup* item, Box* box) const {
     return GetInteractableDistance(box->GetAssociated()) < GetInteractableDistance(item->GetAssociated());
 }
 
+namespace {
+// Alcance de pegar item (pixels de mundo). 
+constexpr float kPickupReachRadius  = 110.0f;               // até onde alcança à frente
+constexpr float kPickupTouchRadius  = 45.0f;                // encostado: vale até atrás
+constexpr float kPickupHalfAngleDeg = 70.0f;                // metade da abertura da "frente"
+
+// Vetor unitário da direção para onde o personagem olha (y cresce para baixo).
+Vec2 FacingVector(Character::Direction d) {
+    switch (d) {
+        case Character::Direction::UP:    return Vec2( 0.0f, -1.0f);
+        case Character::Direction::DOWN:  return Vec2( 0.0f,  1.0f);
+        case Character::Direction::LEFT:  return Vec2(-1.0f,  0.0f);
+        case Character::Direction::RIGHT:
+        default:                          return Vec2( 1.0f,  0.0f);
+    }
+}
+} // namespace
+
+// Item que o irmãozão consegue pegar agora: dentro de um círculo em volta do pé,
+// e À FRENTE dele (num cone na direção para onde olha). Item praticamente
+// encostado vale em qualquer direção. Itens em cima de móveis são projetados
+// para o chão (a base do móvel) antes de medir, como antes.
 ItemPickup* StageState::FindClosestReachableItem() const {
     if (!bigCharacter || !Character::player || controlledCharacter != bigCharacter) {
         return nullptr;
     }
 
+    const Rect& pbox = Character::player->GetAssociated().box;
+    const Vec2 foot{ pbox.x + pbox.w * 0.5f, pbox.y + pbox.h };
+    const Vec2 facing = FacingVector(Character::player->GetFacingDirection());
+    const float cosHalf = std::cos(kPickupHalfAngleDeg * 3.14159265f / 180.0f);
+
     ItemPickup* closest = nullptr;
     float closestDist = 1e30f;
-    const Vec2 playerCenter = bigCharacter->GetCenter();
 
     for (ItemPickup* pickup : itemPickups) {
-        if (!pickup || pickup->GetAssociated().IsDead()) {
-            continue;
+        if (!pickup || pickup->GetAssociated().IsDead()) continue;
+
+        // Retângulo do item "descido" até o chão: um item na prateleira fica
+        // desenhado mais acima, então soma-se a altura para compará-lo com o pé.
+        const int h = pickup->GetHeightLevel();
+        const float zOff = (h == 1) ? 140.0f : (h == 2 ? 260.0f : 0.0f);
+        const Rect& ib = pickup->GetAssociated().box;
+        const float rx = ib.x, ry = ib.y + zOff;
+
+        // Ponto do retângulo mais próximo do pé (clamp). Sprites grandes ou
+        // itens em cima de móveis ficam alcançáveis pela borda, como na regra antiga.
+        const Vec2 nearest{ std::max(rx, std::min(foot.x, rx + ib.w)),
+                            std::max(ry, std::min(foot.y, ry + ib.h)) };
+        const Vec2 toItem{ nearest.x - foot.x, nearest.y - foot.y };
+        const float dist = std::sqrt(toItem.x * toItem.x + toItem.y * toItem.y);
+
+        if (dist > kPickupReachRadius) continue;
+
+        // Encostado: vale em qualquer direção. Mais longe: só se estiver no cone da frente.
+        if (dist > kPickupTouchRadius) {
+            const float dot = (toItem.x * facing.x + toItem.y * facing.y) / dist;
+            if (dot < cosHalf) continue;
         }
 
-        const int itemHeight = pickup->GetHeightLevel();
-        // Alcance OMNIDIRECIONAL: pega o item por PROXIMIDADE, sem precisar estar
-        // "olhando" para ele. Caixa quadrada centrada no pé do jogador, elevada
-        // pela altura do item (mesmo zOffset da GetInteractionRect).
-        const Rect& pbox = Character::player->GetAssociated().box;
-        const int reachCX = static_cast<int>(pbox.x + pbox.w * 0.5f);
-        const int zOff = (itemHeight == 1) ? 140 : (itemHeight == 2 ? 260 : 0);
-        const int reachCY = static_cast<int>(pbox.y + pbox.h) - zOff;
-        constexpr int reachHalf = 90;   // ~alcance em todas as direções
-        const SDL_Rect reachBox = { reachCX - reachHalf, reachCY - reachHalf, 2 * reachHalf, 2 * reachHalf };
-        const GameObject& itemObj = pickup->GetAssociated();
-        const SDL_Rect itemRect = {
-            static_cast<int>(itemObj.box.x),
-            static_cast<int>(itemObj.box.y),
-            static_cast<int>(itemObj.box.w),
-            static_cast<int>(itemObj.box.h),
-        };
-
-        if (!SDL_HasIntersection(&reachBox, &itemRect)) {
-            continue;
-        }
-
-        const float d = playerCenter.Distance(pickup->GetCenter());
-        if (d < closestDist) {
-            closestDist = d;
+        if (dist < closestDist) {
+            closestDist = dist;
             closest = pickup;
         }
     }
-
     return closest;
 }
 
@@ -311,6 +338,34 @@ bool StageState::IsCandleClosestForInteraction(Candlestick* candle) const {
     }
 
     return true;
+}
+
+// Qual objeto o [E] vai usar AGORA: o mais perto entre os que estão ao alcance.
+// Usa a mesma régua (GetInteractableDistance) que as regras de desempate do E,
+// então o contorno e o texto do rodapé sempre apontam para o mesmo alvo.
+GameObject* StageState::GetInteractionFocus() const {
+    if (controlledCharacter != bigCharacter) return nullptr;
+    if (activePushBox) return &activePushBox->GetAssociated();   // agarrado: é sempre ele
+
+    GameObject* best = nullptr;
+    float bestDist = 1e30f;
+    auto consider = [&](GameObject* go) {
+        if (!go || go->IsDead()) return;
+        const float d = GetInteractableDistance(*go);
+        if (d < bestDist) { bestDist = d; best = go; }
+    };
+
+    if (reachablePushBox && reachablePushBox->IsPushable()) consider(&reachablePushBox->GetAssociated());
+    if (reachableJornal) consider(&reachableJornal->GetAssociated());
+    if (reachableCandle) consider(&reachableCandle->GetAssociated());
+    if (reachableRadio)  consider(&reachableRadio->GetAssociated());
+    if (reachableWindow && reachableWindow->GetState() == Window::WindowState::OPEN) {
+        consider(&reachableWindow->GetAssociated());
+    }
+    if (reachablePickup && IsPickupStillTracked(reachablePickup)) {
+        consider(&reachablePickup->GetAssociated());
+    }
+    return best;
 }
 
 void StageState::TryInteractCandleOnKeyPress() {
@@ -605,53 +660,54 @@ void StageState::ApplyCoupledPushMovement(const Vec2& prevPlayerPos) {
     }
 }
 
-void StageState::RenderInteractionGlowIfNeeded(GameObject& go) {
+bool StageState::RenderInteractionGlowIfNeeded(GameObject& go) {
     if (controlledCharacter != bigCharacter) {
-        return;
+        return false;
+    }
+
+    if (&go != GetInteractionFocus()) {
+        return false;
     }
 
     Box* box = go.GetComponent<Box>();
     if (box && box->IsPushable()) {
-        // Barril IMÓVEL (peso 0 / "empty" 0) NÃO recebe mais destaque especial:
-        // fica idêntico a um barril normal (branco ao alcance, dourado agarrado).
-        // O jogador interage normalmente e simplesmente nada acontece ao tentar
-        // movê-lo — não dá pra distinguir dos demais. O VERMELHO permanece só para
-        // "segurando lâmpada" (aí não dá pra empurrar nada).
         if (box == activePushBox) {
             DrawSpriteInteractionGlow(go, 255, 220, 0);
+            return true;
         } else if (box == reachablePushBox) {
             if (IsHoldingLamp(inventory)) {
                 DrawSpriteInteractionGlow(go, 255, 64, 64, 1.14f);
             } else {
                 DrawSpriteInteractionGlow(go, 255, 255, 255);
             }
+            return true;
         }
-        return;
+        return false;
     }
 
     Jornal* jornal = go.GetComponent<Jornal>();
     if (jornal && jornal == reachableJornal) {
         DrawSpriteInteractionGlow(go, 255, 255, 255, 1.14f);
-        return;
+        return true;
     }
 
     Candlestick* candle = go.GetComponent<Candlestick>();
     if (candle && candle == reachableCandle) {
         DrawSpriteInteractionGlow(go, 255, 255, 255, 1.14f);
-        return;
+        return true;
     }
 
     RadioAsset* radio = go.GetComponent<RadioAsset>();
     if (radio && radio == reachableRadio) {
         DrawSpriteInteractionGlow(go, 255, 255, 255, 1.14f);
-        return;
+        return true;
     }
 
     if (!reachablePickup || !IsPickupStillTracked(reachablePickup)) {
-        return;
+        return false;
     }
     if (reachablePickup->GetAssociated().IsDead()) {
-        return;
+        return false;
     }
     if (&reachablePickup->GetAssociated() == &go) {
         if (IsPickupBlocked(reachablePickup)) {
@@ -659,5 +715,7 @@ void StageState::RenderInteractionGlowIfNeeded(GameObject& go) {
         } else {
             DrawSpriteInteractionGlow(go, 255, 255, 255, 1.14f);
         }
+        return true;
     }
+    return false;
 }

@@ -110,6 +110,7 @@ public:
     // (apenas controlando o irmão maior). Substitui a antiga legenda fixa (3.5).
     void RenderInteractionPrompt(SDL_Renderer* renderer);
 
+    GameObject* GetInteractionFocus() const;
     Box* GetReachablePushBox() const { return reachablePushBox; }
     Box* GetActivePushBox() const { return activePushBox; }
     Jornal* GetReachableJornal() const { return reachableJornal; }
@@ -254,11 +255,17 @@ public:
     float       activeTutTimer = 0.0f;
     std::string pendingTutText;
     static constexpr float kTutorialFadeOut = 0.8f;   // janela de fade-out (= drawBanner)
-    void RequestTutorial(const std::string& text);
+    void RequestTutorial(const std::string& text, bool inventoryHint = false);
     static constexpr float kSwapTutFarDist = 660.0f;     // dispara o tutorial de troca
     static constexpr float kSwapTutNearDist = 340.0f;    // re-arma quando se aproximam
     void UpdateTutorials(float dt);
     void RenderTutorials(SDL_Renderer* renderer);
+
+    // O tutorial NA TELA agora é de inventário/combustível? A roda de itens usa
+    // isso para mostrar as teclas só junto com ele.
+    bool IsInventoryTutorialActive() const { return activeTutTimer > 0.0f && activeTutInventory; }
+    bool activeTutInventory  = false;   // o banner ativo pede as teclas da roda
+    bool pendingTutInventory = false;   // o banner da fila pede as teclas da roda
 
     // Dispara o feedback de dano do monstro: SFX + tremor de tela + flash vermelho.
     // Chamado pelo Monster ao tocar um irmão.
@@ -417,7 +424,7 @@ private:
     void UpdateBoxInteraction();
     void DetachActivePushBox();   // solta a caixa/barril ativo (para som, estado, velocidade)
     void ApplyCoupledPushMovement(const Vec2& prevPlayerPos);
-    void RenderInteractionGlowIfNeeded(GameObject& go);
+    bool RenderInteractionGlowIfNeeded(GameObject& go);
     void RegisterAllCandleLights();
     void ApplyLitCandleIds(const std::vector<int>& litIds, bool extinguishOthers = true);
     void MarkMissedUniquePickupsOnLevelLeave();
@@ -557,8 +564,9 @@ private:
     bool shadowsEnabled = true;
     bool musicMuted = false;
     
-    // Tentar criar o shader olho de peixe
-    SDL_Texture* renderTarget = nullptr;
+    SDL_Texture* renderTarget = nullptr;      // Tentar criar o shader olho de peixe
+    SDL_Texture* sceneSnapshot   = nullptr;   // cópia da cena logo depois da escuridão
+    SDL_Texture* occluderScratch = nullptr;   // rascunho para recortar um objeto da cópia
 
     /// Uma passada do monstro que ainda esta a ecoar no ecra.
     struct MonsterEcho {
@@ -602,6 +610,20 @@ private:
     std::string journalViewImagePath;
     SDL_FRect journalSourceScreenRect{0.0f, 0.0f, 0.0f, 0.0f};
     SDL_FRect journalTargetScreenRect{0.0f, 0.0f, 0.0f, 0.0f};
+
+    // ── Zoom do documento (só Jornais marcados "zoomable" no Tiled) ──────────────
+    bool  journalViewZoomable = false;
+    int   journalZoomLevel    = 0;                                      // 0 = normal, 1 = perto, 2 = bem perto
+    float journalZoomCurrent  = 1.0f;                                   // escala mostrada agora (anima até o nível)
+    float journalFocusX       = 0.5f;                                   // ponto do papel que fica no centro (0..1)
+    float journalFocusY       = 0.5f;
+    static constexpr float kJournalZoomLevels[3] = {1.0f, 2.0f, 3.0f};
+    static constexpr float kJournalPanSpeedPx    = 900.0f;              // rolagem, em pixels de tela por segundo
+    static constexpr float kJournalZoomSmoothing = 12.0f;               // maior = chega mais rápido no zoom
+
+    SDL_FRect GetJournalZoomedRect() const;                             // retângulo do papel com zoom e rolagem
+    void ClampJournalFocus(int winW, int winH);                         // impede rolar para fora do papel
+
     static constexpr float kJournalOpenDuration = 0.35f;
     static constexpr float kJournalCloseDuration = 0.2f;
 

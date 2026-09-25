@@ -52,6 +52,105 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+// Só mexe no ALFA do destino (a cor fica igual): leva o alfa para "cenário"
+// (1.0) onde o sprite tem pixel, apagando a marca de "irmão" que estava embaixo.
+static SDL_BlendMode AlphaOnlyOverBlend() {
+    return SDL_ComposeCustomBlendMode(
+        SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE,                 SDL_BLENDOPERATION_ADD,
+        SDL_BLENDFACTOR_ONE,  SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, SDL_BLENDOPERATION_ADD);
+}
+
+// Mistura que pinta a fonte "por dentro" do alfa do destino:
+// cor = fonte × alfa do destino; o alfa do destino não muda.
+static SDL_BlendMode KeepDstAlphaBlend() {
+    return SDL_ComposeCustomBlendMode(
+        SDL_BLENDFACTOR_DST_ALPHA, SDL_BLENDFACTOR_ZERO, SDL_BLENDOPERATION_ADD,
+        SDL_BLENDFACTOR_ZERO,      SDL_BLENDFACTOR_ONE,  SDL_BLENDOPERATION_ADD);
+}
+
+// Mistura para cor já multiplicada pelo alfa (o que a KeepDstAlphaBlend produz).
+static SDL_BlendMode PremultipliedBlend() {
+    return SDL_ComposeCustomBlendMode(
+        SDL_BLENDFACTOR_ONE, SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, SDL_BLENDOPERATION_ADD,
+        SDL_BLENDFACTOR_ONE, SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, SDL_BLENDOPERATION_ADD);
+}
+
+// Garante que a cópia e o rascunho existem e têm o tamanho da cena.
+// Recria se a janela mudou de tamanho. Retorna false se não deu para criar.
+static bool EnsureSceneAux(SDL_Renderer* r, SDL_Texture* scene,
+                           SDL_Texture*& snap, SDL_Texture*& scratch) {
+    int w = 0, h = 0;
+    if (!scene || SDL_QueryTexture(scene, nullptr, nullptr, &w, &h) != 0) return false;
+    auto ensure = [&](SDL_Texture*& t) {
+        int tw = 0, th = 0;
+        if (t && SDL_QueryTexture(t, nullptr, nullptr, &tw, &th) == 0 && tw == w && th == h) {
+            return true;
+        }
+        if (t) SDL_DestroyTexture(t);
+        t = SDL_CreateTexture(r, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, w, h);
+        return t != nullptr;
+    };
+    return ensure(snap) && ensure(scratch);
+}
+
+// Devolve ao sprite os pixels EXATOS que ele tinha logo depois da escuridão
+// (tirados de `snap`), só dentro de `areaIn` e só onde o sprite tem pixel.
+// Respeita o alfa atual do sprite (ex.: pilar apagado pelo FadeEffect).
+static void RestoreSpriteFromSnapshot(SDL_Renderer* r, SDL_Texture* scene, SDL_Texture* snap,
+                                      SDL_Texture* scratch, SpriteRenderer* sprite,
+                                      const SDL_Rect& areaIn) {
+    SDL_Texture* tex = sprite->GetTexturePtr();
+    if (!tex) return;
+
+    // 0. Recorta a área pelos limites da tela. Se uma parte ficar fora, o
+    //    SDL_RenderCopy recorta só a ORIGEM e estica o que sobrou no destino:
+    //    era isso que esticava e deslocava o pilar e os itens perto da borda.
+    int tw = 0, th = 0;
+    SDL_QueryTexture(scene, nullptr, nullptr, &tw, &th);
+    const SDL_Rect bounds{0, 0, tw, th};
+    SDL_Rect area;
+    if (!SDL_IntersectRect(&areaIn, &bounds, &area)) return;   // totalmente fora da tela
+
+    // 1. Rascunho: limpa a área para transparente.
+    SDL_SetRenderTarget(r, scratch);
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+    SDL_SetRenderDrawColor(r, 0, 0, 0, 0);
+    SDL_RenderFillRect(r, &area);
+
+    // 2. Desenha o sprite sem mistura: sobra só a silhueta dele (o alfa).
+    SDL_RenderSetClipRect(r, &area);
+    SDL_BlendMode prev = SDL_BLENDMODE_BLEND;
+    SDL_GetTextureBlendMode(tex, &prev);
+    SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_NONE);
+    sprite->Render();
+    SDL_SetTextureBlendMode(tex, prev);
+
+    // 3. Pinta a cópia da cena por dentro dessa silhueta.
+    SDL_SetTextureBlendMode(snap, KeepDstAlphaBlend());
+    SDL_RenderCopy(r, snap, &area, &area);
+    SDL_RenderSetClipRect(r, nullptr);
+
+    // 4. Cola o recorte de volta na cena.
+    SDL_SetRenderTarget(r, scene);
+    SDL_SetTextureBlendMode(scratch, PremultipliedBlend());
+    SDL_RenderCopy(r, scratch, &area, &area);
+
+    // 5. Objeto apagado (FadeEffect, alfa < 255): apaga a marca de "irmão"
+    //    embaixo dele, para o shader desfocá-lo por igual. Só mexe no alfa.
+    const SDL_Color tint = sprite->GetTint();
+    if (tint.a < 255) {
+        SDL_RenderSetClipRect(r, &area);
+        SDL_SetTextureBlendMode(tex, AlphaOnlyOverBlend());
+        sprite->SetTint(tint.r, tint.g, tint.b, 255);
+        sprite->Render();
+        sprite->SetTint(tint.r, tint.g, tint.b, tint.a);
+        SDL_SetTextureBlendMode(tex, prev);
+        SDL_RenderSetClipRect(r, nullptr);
+    }
+
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+}
+
 using namespace stage_internal;
 void StageState::Render(){
     SDL_Renderer* renderer = Game::GetInstance().GetRenderer();
@@ -432,20 +531,6 @@ void StageState::Render(){
         }
     }
 
-    // Objectos que seguem a regra do campo de visao e que ficaram visiveis
-    // neste frame, MAIS os dois irmaos. Todos sao redesenhados por cima da
-    // escuridao (para se verem) e carimbados no canal alfa. O numero do carimbo
-    // e a LUZ: um item sem luz fica cinzento e ganha a cor dentro de uma luz.
-    // Os irmaos entram com luz 1.0 fixa, por isso nunca ficam cinzentos.
-    struct StampedObject {
-        GameObject* obj;
-        SpriteRenderer* sprite;
-        float shown;
-        float light;
-    };
-    std::vector<StampedObject> stampedObjects;
-    stampedObjects.reserve(8);
-
     // A ORDEM POR QUE A CENA FOI DESENHADA. O acto 6.9 precisa dela para saber
     // quem ficou A FRENTE de quem: redesenhar um irmao por cima da escuridao e
     // redesenha-lo por cima de TUDO, e sem esta lista nao havia como voltar a
@@ -454,14 +539,23 @@ void StageState::Render(){
         GameObject* obj;
         SpriteRenderer* sprite;
         bool stamped;
-    };
+        float shown;
+        float light;
+        bool glow;
+    };  
     std::vector<DrawnSprite> drawOrder;
     drawOrder.reserve(objectArray.size());
+
+    const bool stampPassWillRun =
+        scenePostFx && scenePostFx->IsAvailable() &&
+        ScenePostFx::NoGrayStampBlendMode() != SDL_BLENDMODE_INVALID;
 
     // ===================================================================
     // 5. AGORA DESENHAMOS A LISTA ORDENADA INTEIRA SEM REGRAS
     // ===================================================================
     constexpr int kHudZ = 100;
+    GameObject* interactionFocus = GetInteractionFocus();
+
     for (const auto& go : objectArray) {
         if (go->z >= kHudZ) {
             continue;
@@ -475,10 +569,10 @@ void StageState::Render(){
         // poder ser usado se o jogador chegar la.
         SpriteRenderer* fadeSprite = nullptr;
         bool stampedThis = false;
+        float stampShown = 1.0f;
+        float stampLight = 1.0f;
         if (visionFrame.valid && ShouldHideOutsideVision(*go)) {
-            // A MESMA conta que a sombra deste objeto usou mais acima. Estar num
-            // sitio so e o que garante que sprite e sombra nunca discordam.
-            const float shown = VisibilityOfObject(*go);
+            const float shown = (go.get() == interactionFocus) ? 1.0f : VisibilityOfObject(*go);
             if (shown <= 0.01f) {
                 continue;
             }
@@ -488,38 +582,42 @@ void StageState::Render(){
                     fadeSprite->SetTint(255, 255, 255, static_cast<Uint8>(shown * 255.0f));
                 }
             }
-            if (SpriteRenderer* sr = go->GetComponent<SpriteRenderer>()) {
-                const float light = Clamp01(LightAmountAtScreen(WorldToScreen(go->box.Center())));
-                stampedObjects.push_back({go.get(), sr, shown, light});
+            if (go->GetComponent<SpriteRenderer>()) {
+                stampShown  = shown;
+                stampLight  = Clamp01(LightAmountAtScreen(WorldToScreen(go->box.Center())));
                 stampedThis = true;
             }
         }
-        // Os IRMAOS entram na mesma lista, e entram AQUI — dentro do ciclo que
-        // percorre o `objectArray` JA ORDENADO. E isso que lhes da a ordem
-        // certa: antes eram redesenhados com uma chamada fixa (o grande e
-        // depois o pequeno), por isso o pequeno aparecia sempre por cima,
-        // estivesse a frente ou atras.
-        //
-        // O CINZENTO NOS IRMAOS ESTA DESLIGADO, DE PROPOSITO. O carimbo deles
-        // levava a luz medida no PEITO, e era isso que os pintava de cinzento
-        // numa sala as escuras. Dava problemas no desenho, por isso voltam a
-        // ir com 1.0: carimbados como "totalmente iluminados", ou seja sempre
-        // nitidos e sempre a cores, esteja a sala como estiver. Para os por
-        // outra vez a obedecer a luz, troca-se este 1.0 pela medida no peito
-        // (`LightAmountAtScreen(chest, /*includeCarriedLight=*/false)`).
-        // Os ITENS nao mudam — continuam cinzentos sem luz.
-        if ((go.get() == bigCharacterObject || go.get() == smallCharacterObject) && visionFrame.valid) {
-            if (SpriteRenderer* sr = go->GetComponent<SpriteRenderer>()) {
-                stampedObjects.push_back({go.get(), sr, 1.0f, 1.0f});
+        // Escondido no armário não é carimbado: o redesenho do 6.9 desenharia com alfa
+        // cheio e devolveria a tinta a 255, desfazendo a invisibilidade do EnterCloset.
+        Character* ch = go->GetComponent<Character>();
+        const bool hiddenInCloset = ch && ch->isHidden;
+        if ((go.get() == bigCharacterObject || go.get() == smallCharacterObject) &&
+            visionFrame.valid && !hiddenInCloset) {
+            if (go->GetComponent<SpriteRenderer>()) {
+                stampShown  = 1.0f;
+                stampLight  = 1.0f;
                 stampedThis = true;
             }
         }
 
-        RenderInteractionGlowIfNeeded(*go);
+        SpriteRenderer* hideSprite =
+            (stampedThis && stampPassWillRun) ? go->GetComponent<SpriteRenderer>() : nullptr;
+        SDL_Color hiddenPrev{255, 255, 255, 255};
+        if (hideSprite) {
+            hiddenPrev = hideSprite->GetTint();
+            hideSprite->SetTint(hiddenPrev.r, hiddenPrev.g, hiddenPrev.b, 0);
+        }
+
+        const bool glowThis = RenderInteractionGlowIfNeeded(*go);
         go->Render();
 
+        if (hideSprite) {
+            hideSprite->SetTint(hiddenPrev.r, hiddenPrev.g, hiddenPrev.b, hiddenPrev.a);
+        }
+
         if (SpriteRenderer* sr = go->GetComponent<SpriteRenderer>()) {
-            drawOrder.push_back({go.get(), sr, stampedThis});
+            drawOrder.push_back({go.get(), sr, stampedThis, stampShown, stampLight, glowThis});
         }
 
         if (fadeSprite) {
@@ -658,119 +756,123 @@ void StageState::Render(){
     // A luz e medida so nas fontes REAIS da cena (velas, isqueiro, lamparina):
     // `includeCarriedLight = false`, senao contariam o circulo que acabamos de
     // lhes tirar.
-    if (scenePostFx && scenePostFx->IsAvailable()) {
+    if (stampPassWillRun) {
         const SDL_BlendMode stampBlend = ScenePostFx::NoGrayStampBlendMode();
-        if (stampBlend != SDL_BLENDMODE_INVALID) {
-            // Passo 1: de volta ao brilho cheio, por cima da escuridao.
-            // Irmaos E itens, na MESMA ORDEM em que a cena os desenhou (a lista
-            // foi enchida dentro do ciclo do `objectArray` ja ordenado). Sem
-            // isto um item ao pe do jogador estava la mas ficava preto por
-            // baixo da escuridao — via-se o contorno de "interagir" e nao se
-            // via o icone — e os irmaos saiam sempre na mesma ordem fixa, com o
-            // pequeno por cima do grande quisesse o Y o que quisesse.
-            for (const StampedObject& so : stampedObjects) {
-                if (!so.sprite) continue;
-                so.sprite->SetTint(255, 255, 255, static_cast<Uint8>(so.shown * 255.0f));
-                so.sprite->Render();
-                so.sprite->SetTint(255, 255, 255, 255);
-            }
-
-            // Passo 2: o carimbo leva a luz. A mistura do carimbo faz
-            // `dstA = dstA * (1 - srcA)`, logo para deixar no alvo um alfa de
-            // 254*(1-luz) o sprite tem de entrar com 1 + 254*luz.
-            //
-            // O alfa TEM de ir pelo tint do proprio SpriteRenderer: por baixo,
-            // `Sprite::Render` chama SDL_SetTextureAlphaMod(tintA) a cada
-            // desenho, por isso um alpha mod posto na textura aqui seria
-            // apagado nessa linha — o carimbo saia sempre a 255 e o shader lia
-            // "luz total", que e porque os irmaos ficavam a cores no escuro.
-            for (const StampedObject& so : stampedObjects) {
-                if (!so.sprite) continue;
-                SDL_Texture* tex = so.sprite->GetTexturePtr();
-                if (tex == nullptr) continue;
-                const Uint8 stampAlpha = static_cast<Uint8>(1.0f + 254.0f * Clamp01(so.light));
-                SDL_BlendMode prev = SDL_BLENDMODE_BLEND;
-                SDL_GetTextureBlendMode(tex, &prev);
-                if (SDL_SetTextureBlendMode(tex, stampBlend) == 0) {
-                    so.sprite->SetTint(255, 255, 255, stampAlpha);
-                    so.sprite->Render();
-                    so.sprite->SetTint(255, 255, 255, 255);
-                }
-                SDL_SetTextureBlendMode(tex, prev);
-            }
-
-            // Passo 3: QUEM ESTAVA A FRENTE VOLTA A TAPAR.
-            //
-            // A escuridao e um veu de ecra inteiro, por isso o passo 1 nao
-            // desenha "por cima da escuridao": desenha por cima de TUDO — do
-            // barril e da mesa que o Y-sort tinha posto A FRENTE do irmao. Era
-            // isto que punha os irmaos colados por cima dos barris, mesmo
-            // estando atras deles. Aqui percorremos a ordem real em que a cena
-            // foi desenhada e mandamos passar outra vez, por cima, tudo o que
-            // veio DEPOIS de um irmao (logo, a frente dele) e lhe toca.
-            //
-            // Dois cuidados:
-            //   • ESCURECIDOS pela luz que os apanha. Fora da escuridao eles
-            //     sairiam acesos, e um barril aceso num quarto preto salta a
-            //     vista mais do que o erro que viemos corrigir. O `ambient` e
-            //     o que a malha deixa passar onde nao chega luz nenhuma.
-            //   • RECORTADOS as caixas dos irmaos e dos itens. So a zona que o
-            //     passo 1 estragou e repintada; no resto do sprite fica a malha
-            //     verdadeira, com o seu degrade.
-            //
-            // Quem tem `FadeEffect` fica de fora: esse cenario ja se apaga
-            // sozinho quando um irmao passa por tras, e tapa-lo outra vez
-            // desfazia exactamente o efeito que ele existe para fazer.
+        {
             const float zoom = Camera::GetZoom();
             const float ambient = Clamp01(1.0f - lightMaskParams.ambientDarknessMax / 255.0f);
+
+            // Retângulo na tela ocupado pela caixa de um objeto.
             auto screenRectOf = [&](const GameObject* o) {
                 const Vec2 tl = WorldToScreen(Vec2(o->box.x, o->box.y));
                 return SDL_Rect{ static_cast<int>(std::floor(tl.x)),
-                                 static_cast<int>(std::floor(tl.y)),
-                                 static_cast<int>(std::ceil(o->box.w * zoom)) + 1,
-                                 static_cast<int>(std::ceil(o->box.h * zoom)) + 1 };
+                                static_cast<int>(std::floor(tl.y)),
+                                static_cast<int>(std::ceil(o->box.w * zoom)) + 1,
+                                static_cast<int>(std::ceil(o->box.h * zoom)) + 1 };
             };
 
-            for (size_t i = 0; i < drawOrder.size(); i++) {
-                const DrawnSprite& d = drawOrder[i];
-                if (d.stamped || !d.sprite || !d.obj) continue;
-                if (d.obj->GetComponent<FadeEffect>()) continue;
-                // Alfa abaixo de 255 = alguem o esta a esbater ou a esconder de
-                // proposito (a porta do armario onde o irmao se escondeu, por
-                // exemplo). Passar por cima disso trazia-o de volta a vista.
-                const SDL_Color prevTint = d.sprite->GetTint();
-                if (prevTint.a < 255) continue;
+            // Aumenta um retângulo em `frac` de cada lado (borda do contorno).
+            auto grown = [](SDL_Rect r, float frac) {
+                const int dx = static_cast<int>(std::ceil(r.w * frac));
+                const int dy = static_cast<int>(std::ceil(r.h * frac));
+                return SDL_Rect{ r.x - dx, r.y - dy, r.w + dx * 2, r.h + dy * 2 };
+            };
 
-                // O recorte e a soma das caixas dos carimbados que ESTE objecto
-                // tapa, e so deles: fora dessa zona o sprite fica com a malha
-                // verdadeira, degrade e tudo.
-                SDL_Rect cover{0, 0, 0, 0};
-                bool covers = false;
-                for (size_t j = 0; j < i; j++) {
-                    if (!drawOrder[j].stamped || !drawOrder[j].obj) continue;
-                    const Rect& a = d.obj->box;
-                    const Rect& b = drawOrder[j].obj->box;
-                    const bool touches = (a.x < b.x + b.w) && (b.x < a.x + a.w) &&
-                                         (a.y < b.y + b.h) && (b.y < a.y + a.h);
-                    if (!touches) continue;
-                    const SDL_Rect r = screenRectOf(drawOrder[j].obj);
-                    if (!covers) {
-                        cover = r;
-                        covers = true;
-                    } else {
-                        SDL_UnionRect(&cover, &r, &cover);
-                    }
+            // Cópia da cena como ela está AGORA: tudo na ordem certa, já com a
+            // escuridão exata. É de onde a repintura tira os pixels verdadeiros.
+            const bool canRestore = EnsureSceneAux(renderer, renderTarget, sceneSnapshot, occluderScratch);
+            if (canRestore) {
+                int sw = 0, sh = 0;
+                SDL_QueryTexture(renderTarget, nullptr, nullptr, &sw, &sh);
+                const SDL_Rect full{0, 0, sw, sh};
+
+                SDL_SetRenderTarget(renderer, sceneSnapshot);
+                SDL_SetTextureBlendMode(renderTarget, SDL_BLENDMODE_NONE);
+                SDL_RenderCopy(renderer, renderTarget, &full, &full);
+                SDL_SetRenderTarget(renderer, renderTarget);
+            }
+
+            // Põe um objeto não carimbado de volta por cima, só dentro de `area`.
+            // Com a cópia: pixels exatos, sem emenda. Sem ela: a tinta aproximada antiga.
+            auto repaintOccluder = [&](const DrawnSprite& d, const SDL_Rect& area) {
+                if (canRestore) {
+                    RestoreSpriteFromSnapshot(renderer, renderTarget, sceneSnapshot,
+                                            occluderScratch, d.sprite, area);
+                    return;
                 }
-                if (!covers) continue;
-
+                const SDL_Color prevTint = d.sprite->GetTint();
                 const float light = Clamp01(LightAmountAtScreen(WorldToScreen(d.obj->box.Center())));
-                const Uint8 v = static_cast<Uint8>(
-                    255.0f * Clamp01(ambient + (1.0f - ambient) * light));
-                SDL_RenderSetClipRect(renderer, &cover);
+                const Uint8 v = static_cast<Uint8>(255.0f * Clamp01(ambient + (1.0f - ambient) * light));
+                SDL_RenderSetClipRect(renderer, &area);
                 d.sprite->SetTint(v, v, v, prevTint.a);
                 d.sprite->Render();
                 d.sprite->SetTint(prevTint.r, prevTint.g, prevTint.b, prevTint.a);
                 SDL_RenderSetClipRect(renderer, nullptr);
+            };
+
+            // Áreas onde um carimbado já foi redesenhado por cima da escuridão.
+            std::vector<SDL_Rect> dirty;
+            dirty.reserve(8);
+
+            // UM laço, na ordem do Y-sort: quem vem depois fica sempre por cima.
+            for (const DrawnSprite& d : drawOrder) {
+                if (!d.sprite || !d.obj) continue;
+
+                if (d.stamped) {
+                    // (0) Contorno de interação, por cima da escuridão.
+                    if (d.glow) {
+                        RenderInteractionGlowIfNeeded(*d.obj);
+                    }
+
+                    // (a) Brilho cheio por cima da escuridão.
+                    d.sprite->SetTint(255, 255, 255, static_cast<Uint8>(d.shown * 255.0f));
+                    d.sprite->Render();
+                    d.sprite->SetTint(255, 255, 255, 255);
+
+                    // (b) Carimbo no alfa com a luz, para o shader.
+                    if (SDL_Texture* tex = d.sprite->GetTexturePtr()) {
+                        const Uint8 stampAlpha = static_cast<Uint8>(1.0f + 254.0f * Clamp01(d.light));
+                        SDL_BlendMode prev = SDL_BLENDMODE_BLEND;
+                        SDL_GetTextureBlendMode(tex, &prev);
+                        if (SDL_SetTextureBlendMode(tex, stampBlend) == 0) {
+                            d.sprite->SetTint(255, 255, 255, stampAlpha);
+                            d.sprite->Render();
+                            d.sprite->SetTint(255, 255, 255, 255);
+                        }
+                        SDL_SetTextureBlendMode(tex, prev);
+                    }
+
+                    const SDL_Rect r = screenRectOf(d.obj);
+                    dirty.push_back(d.glow ? grown(r, 0.10f) : r);
+                    continue;
+                }
+
+                // Não carimbado com contorno (barril, castiçal...): contorno por cima da
+                // escuridão e o sprite devolvido com as cores exatas por cima dele.
+                if (d.glow) {
+                    RenderInteractionGlowIfNeeded(*d.obj);
+                    repaintOccluder(d, screenRectOf(d.obj));
+                    dirty.push_back(grown(screenRectOf(d.obj), 0.10f));
+                    continue;
+                }
+
+                // Não carimbado: só repinta se estiver na FRENTE de uma área redesenhada.
+                // Objetos com FadeEffect entram também: voltam com o alfa que já têm.
+                if (dirty.empty()) continue;
+                if (d.sprite->GetTint().a == 0) continue;   // escondido de propósito (irmão no armário)
+
+                const SDL_Rect mine = screenRectOf(d.obj);
+                SDL_Rect cover{0, 0, 0, 0};
+                bool covers = false;
+                for (const SDL_Rect& r : dirty) {
+                    SDL_Rect inter;
+                    if (!SDL_IntersectRect(&mine, &r, &inter)) continue;
+                    if (!covers) { cover = inter; covers = true; }
+                    else         { SDL_UnionRect(&cover, &inter, &cover); }
+                }
+                if (!covers) continue;
+
+                repaintOccluder(d, cover);
             }
         }
     }
