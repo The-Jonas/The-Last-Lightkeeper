@@ -321,9 +321,19 @@
                  "opacity":1,
                  "properties":[
                         {
+                         "name":"collectible",
+                         "type":"bool",
+                         "value":true
+                        }, 
+                        {
                          "name":"depthOffset",
                          "type":"float",
                          "value":150
+                        }, 
+                        {
+                         "name":"doc_title",
+                         "type":"string",
+                         "value":"Mandato Militar"
                         }, 
                         {
                          "name":"heightLevel",
@@ -783,9 +793,19 @@
                  "opacity":1,
                  "properties":[
                         {
+                         "name":"collectible",
+                         "type":"bool",
+                         "value":true
+                        }, 
+                        {
                          "name":"depthOffset",
                          "type":"float",
                          "value":0
+                        }, 
+                        {
+                         "name":"doc_title",
+                         "type":"string",
+                         "value":"Aumento de Interna\u00e7\u00f5es"
                         }, 
                         {
                          "name":"heightLevel",
@@ -980,9 +1000,19 @@
                  "opacity":1,
                  "properties":[
                         {
+                         "name":"collectible",
+                         "type":"bool",
+                         "value":true
+                        }, 
+                        {
                          "name":"depthOffset",
                          "type":"float",
                          "value":0
+                        }, 
+                        {
+                         "name":"doc_title",
+                         "type":"string",
+                         "value":"Registros Militares"
                         }, 
                         {
                          "name":"heightLevel",
@@ -1029,9 +1059,19 @@
                  "opacity":1,
                  "properties":[
                         {
+                         "name":"collectible",
+                         "type":"bool",
+                         "value":true
+                        }, 
+                        {
                          "name":"depthOffset",
                          "type":"float",
                          "value":200
+                        }, 
+                        {
+                         "name":"doc_title",
+                         "type":"string",
+                         "value":"Invent\u00e1rio Farol"
                         }, 
                         {
                          "name":"heightLevel",
@@ -1078,9 +1118,19 @@
                  "opacity":1,
                  "properties":[
                         {
+                         "name":"collectible",
+                         "type":"bool",
+                         "value":true
+                        }, 
+                        {
                          "name":"depthOffset",
                          "type":"float",
                          "value":250
+                        }, 
+                        {
+                         "name":"doc_title",
+                         "type":"string",
+                         "value":"Lista de Presen\u00e7a"
                         }, 
                         {
                          "name":"heightLevel",
@@ -1244,9 +1294,19 @@
                  "opacity":1,
                  "properties":[
                         {
+                         "name":"collectible",
+                         "type":"bool",
+                         "value":true
+                        }, 
+                        {
                          "name":"depthOffset",
                          "type":"float",
                          "value":200
+                        }, 
+                        {
+                         "name":"doc_title",
+                         "type":"string",
+                         "value":" Equipe Delta"
                         }, 
                         {
                          "name":"heightLevel",
@@ -1304,9 +1364,9 @@
                  "rotation":0,
                  "type":"DialogueTrigger",
                  "visible":true,
-                 "width":398,
-                 "x":1661.81818181818,
-                 "y":1906.06060606061
+                 "width":710,
+                 "x":1452.48484848485,
+                 "y":1939.39393939394
                 }, 
                 {
                  "height":250,

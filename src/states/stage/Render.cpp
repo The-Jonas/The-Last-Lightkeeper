@@ -1264,6 +1264,7 @@ void StageState::Render(){
     RenderSettingsPanel(renderer);
     RenderControlsPanel(renderer);
     RenderQuitConfirmModal(renderer);
+    RenderDocumentFolder(renderer);
     RenderJournalViewer(renderer);
     RenderSaveToast(renderer);
     dialogueBox.Render(renderer, Game::GetInstance().GetWindowsWidth(), Game::GetInstance().GetWindowsHeight());

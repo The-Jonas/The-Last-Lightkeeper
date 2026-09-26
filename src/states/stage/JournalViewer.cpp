@@ -9,6 +9,13 @@
 #include "gameplay/ItemPickup.h"
 #include "gameplay/Jornal.h"
 #include "ui/Text.h"
+#include "audio/GameSfx.h"
+#include "states/stage/FirstLoadData.h"
+#include "nlohmann/json.hpp"
+
+#include <fstream>
+#include <iostream>
+#include <vector>
 
 #include <algorithm>
 #include <cctype>
@@ -178,17 +185,14 @@ Jornal* StageState::FindClosestReachableJornal() const {
     return closest;
 }
 
-void StageState::OpenJournalViewer(Jornal* jornal) {
-    if (!jornal) return;
-
+void StageState::BeginJournalView(const std::string& imagePath, const std::string& soundPath,
+                                  float zoomFactor, bool zoomable, const SDL_FRect& sourceRect) {
     if (bigCharacter)   bigCharacter->ForceStop();
     if (smallCharacter) smallCharacter->ForceStop();
 
-    // ── Som ao abrir ──────────────────────────────────────────────────────
-    // Prioridade ao som explícito do mapa; senão, se for um documento de PAPEL,
-    // toca um farfalhar de folha (não vale para fotos/telefones/caixas).
-    std::string openSound = jornal->GetSoundPath();
-    if (openSound.empty() && IsPaperDocumentImage(jornal->GetImagePath())) {
+    // Som ao abrir: o do mapa tem prioridade; papel sem som ganha o farfalhar.
+    std::string openSound = soundPath;
+    if (openSound.empty() && IsPaperDocumentImage(imagePath)) {
         openSound = PickPaperRustleSfx();
     }
     if (!openSound.empty()) {
@@ -196,27 +200,18 @@ void StageState::OpenJournalViewer(Jornal* jornal) {
         jornalInteractSound.Play();
     }
 
-    const GameObject& obj = jornal->GetAssociated();
-    journalViewImagePath = jornal->GetImagePath();
-    const float zoom = Camera::GetZoom();
-    journalSourceScreenRect = {
-        (obj.box.x - Camera::pos.x) * zoom,
-        (obj.box.y - Camera::pos.y) * zoom,
-        obj.box.w * zoom,
-        obj.box.h * zoom,
-    };
+    journalViewImagePath    = imagePath;
+    journalSourceScreenRect = sourceRect;
 
-    journalAnimTimer   = 0.0f;
-    journalCloseTimer  = 0.0f;
+    journalAnimTimer     = 0.0f;
+    journalCloseTimer    = 0.0f;
     journalViewerClosing = false;
     journalViewerOpen    = true;
-    journalViewZoomable = jornal->IsZoomable();
-    journalZoomLevel    = 0;
-    journalZoomCurrent  = 1.0f;
+    journalViewZoomable  = zoomable;
+    journalZoomLevel     = 0;
+    journalZoomCurrent   = 1.0f;
     journalFocusX = journalFocusY = 0.5f;
 
-    // Telemetria: que documentos o jogador abriu — e, com o par de eventos,
-    // quanto tempo os leu de facto (ou se fechou logo a seguir).
     telemetryJournalOpenedAt = static_cast<float>(Telemetry::Now());
     Telemetry::Event("journal_open", Telemetry::Fields()
         .Int("level", currentLevelIndex)
@@ -228,27 +223,40 @@ void StageState::OpenJournalViewer(Jornal* jornal) {
     if (auto tex = Resources::GetImage(journalViewImagePath)) {
         SDL_QueryTexture(tex.get(), nullptr, nullptr, &texW, &texH);
     }
-
-    // Calcula o rect base (cabe na tela) e aplica o zoom do item
     journalTargetScreenRect = FitTextureInWindow(winW, winH, texW, texH);
 
-    // ── Zoom opcional (1.0 = sem zoom, 1.5 = 50% maior, etc.) ────────────
-    float zf = jornal->GetZoomFactor();
-    if (zf != 1.0f) {
-        float cx = journalTargetScreenRect.x + journalTargetScreenRect.w * 0.5f;
-        float cy = journalTargetScreenRect.y + journalTargetScreenRect.h * 0.5f;
-        journalTargetScreenRect.w *= zf;
-        journalTargetScreenRect.h *= zf;
+    if (zoomFactor != 1.0f) {
+        const float cx = journalTargetScreenRect.x + journalTargetScreenRect.w * 0.5f;
+        const float cy = journalTargetScreenRect.y + journalTargetScreenRect.h * 0.5f;
+        journalTargetScreenRect.w *= zoomFactor;
+        journalTargetScreenRect.h *= zoomFactor;
         journalTargetScreenRect.x  = cx - journalTargetScreenRect.w * 0.5f;
         journalTargetScreenRect.y  = cy - journalTargetScreenRect.h * 0.5f;
     }
+}
+
+// Abre o visualizador de documento: som, animação saindo de sourceRect (na tela),
+// zoom inicial e telemetria. Parte comum a papel do cenário e documento da pasta.
+void StageState::OpenJournalViewer(Jornal* jornal) {
+    if (!jornal) return;
+
+    const GameObject& obj = jornal->GetAssociated();
+    const float zoom = Camera::GetZoom();
+    const SDL_FRect from{
+        (obj.box.x - Camera::pos.x) * zoom,
+        (obj.box.y - Camera::pos.y) * zoom,
+        obj.box.w * zoom,
+        obj.box.h * zoom,
+    };
+    BeginJournalView(jornal->GetImagePath(), jornal->GetSoundPath(),
+                     jornal->GetZoomFactor(), jornal->IsZoomable(), from);
+
     if (jornal->HasPendingDialogue()) {
         for (const DialogueBox::Line& l : jornal->GetDialogueLines()) {
             dialogueBox.Queue(l.speaker, l.listener, l.emotion, l.listenerEmotion, l.text);
         }
         jornal->MarkDialogueFired();
     }
-
 }
 
 void StageState::TryOpenJournalOnKeyPress() {
@@ -266,7 +274,81 @@ void StageState::TryOpenJournalOnKeyPress() {
         return;
     }
 
+    if (reachableJornal->IsCollectible()) {
+        CollectJornal(reachableJornal);
+        return;
+    }
     OpenJournalViewer(reachableJornal);
+}
+
+void StageState::CollectJornal(Jornal* jornal) {
+    if (!jornal) return;
+
+    CollectedDocument doc;
+    doc.imagePath  = jornal->GetImagePath();
+    doc.title      = jornal->GetDocTitle();
+    doc.soundPath  = jornal->GetSoundPath();
+    doc.order      = jornal->GetDocOrder();
+    doc.zoomFactor = jornal->GetZoomFactor();
+    doc.zoomable   = jornal->IsZoomable();
+    doc.level      = currentLevelIndex;
+    if (jornal->HasPendingDialogue()) {
+        doc.dialogueLines = jornal->GetDialogueLines();
+    }
+
+    // O mesmo documento não entra duas vezes (ex.: repetido em dois mapas).
+    const bool already = std::any_of(collectedDocuments.begin(), collectedDocuments.end(),
+        [&](const CollectedDocument& d) { return d.imagePath == doc.imagePath; });
+    if (!already) {
+        // Inserção ordenada por doc_order; empate mantém a ordem de coleta.
+        auto it = std::upper_bound(collectedDocuments.begin(), collectedDocuments.end(), doc,
+            [](const CollectedDocument& a, const CollectedDocument& b) {
+                return a.level != b.level ? a.level < b.level : a.order < b.order;
+            });
+        collectedDocuments.insert(it, std::move(doc));
+    }
+
+    // Feedback sonoro: o mesmo farfalhar de abrir um papel.
+    std::string sfx = jornal->GetSoundPath();
+    if (sfx.empty() && IsPaperDocumentImage(jornal->GetImagePath())) {
+        sfx = PickPaperRustleSfx();
+    }
+    if (!sfx.empty()) {
+        jornalInteractSound.Open(sfx);
+        jornalInteractSound.Play();
+    }
+
+    Telemetry::Event("document_collected", Telemetry::Fields()
+        .Int("level", currentLevelIndex)
+        .Str("image", jornal->GetImagePath()));
+
+    if (!documentTutorialShown) {
+        documentTutorialShown = true;
+        RequestTutorial(kDocumentTutorialText);
+    }
+    
+    jornals.erase(std::remove(jornals.begin(), jornals.end(), jornal), jornals.end());
+    if (reachableJornal == jornal) reachableJornal = nullptr;
+    jornal->GetAssociated().RequestDelete();
+}
+
+// CASO QUEIRAMOS FAZER A OPÇÃO DE VOLTAR ANDARES NO FUTURO
+// Tira do mapa os papéis colecionáveis que já estão na pasta — chamada depois
+// de montar um andar (voltar a um andar já visitado, carregar save).
+void StageState::RemoveCollectedJornalsFromWorld() {
+    for (auto it = jornals.begin(); it != jornals.end();) {
+        Jornal* j = *it;
+        const bool collected = j && j->IsCollectible() &&
+            std::any_of(collectedDocuments.begin(), collectedDocuments.end(),
+                [&](const CollectedDocument& d) { return d.imagePath == j->GetImagePath(); });
+        if (collected) {
+            j->GetAssociated().RequestDelete();
+            it = jornals.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    reachableJornal = nullptr;
 }
 
 void StageState::UpdateJournalViewer(float dt) {
@@ -395,3 +477,319 @@ void StageState::RenderJournalViewer(SDL_Renderer* renderer) {
         }
     }
 }
+
+// ========================================================= ##
+//  Desenha a pasta: fundo escurecido, carrossel de molduras ##
+// ========================================================= ##
+namespace {
+
+// Encaixa uma textura dentro de um retângulo mantendo a proporção, com margem.
+SDL_FRect FitInsideRect(const SDL_FRect& box, int texW, int texH, float pad) {
+    const float bw = box.w - 2.0f * pad;
+    const float bh = box.h - 2.0f * pad;
+    if (texW <= 0 || texH <= 0 || bw <= 0.0f || bh <= 0.0f) return box;
+    const float aspect = static_cast<float>(texW) / static_cast<float>(texH);
+    float w = bw;
+    float h = w / aspect;
+    if (h > bh) { h = bh; w = h * aspect; }
+    return { box.x + (box.w - w) * 0.5f, box.y + (box.h - h) * 0.5f, w, h };
+}
+
+// Desenha um texto centrado em cx com o topo em y (alpha vem de color.a).
+void DrawFolderText(SDL_Renderer* r, TTF_Font* font, const std::string& text,
+                    float cx, float y, SDL_Color color) {
+    if (!font || text.empty()) return;
+    SDL_Surface* s = TTF_RenderUTF8_Blended(font, text.c_str(), SDL_Color{color.r, color.g, color.b, 255});
+    if (!s) return;
+    if (SDL_Texture* t = SDL_CreateTextureFromSurface(r, s)) {
+        SDL_SetTextureAlphaMod(t, color.a);
+        const SDL_FRect d{ cx - s->w * 0.5f, y, static_cast<float>(s->w), static_cast<float>(s->h) };
+        SDL_RenderCopyF(r, t, nullptr, &d);
+        SDL_DestroyTexture(t);
+    }
+    SDL_FreeSurface(s);
+}
+
+} // namespace
+
+// Varre os mapas do 1º andar até o atual e guarda (andar, ordem) de cada
+// JornalSpawn colecionável — total do contador e posições das páginas vazias.
+void StageState::ScanKnownDocumentOrders() {
+    knownDocumentKeysLevel = currentLevelIndex;
+    knownDocumentKeys.clear();
+
+    const StageFirstLoadData cfg = LoadStageFirstLoadData();
+    const int last = std::min(currentLevelIndex, GetLevelCount(cfg) - 1);
+    for (int lv = 0; lv <= last; ++lv) {
+        const std::string& mapPath = GetLevelDef(cfg, lv).mapPath;
+        std::ifstream f(mapPath);
+        if (!f.is_open()) {
+            std::cerr << "[pasta] mapa nao encontrado: " << mapPath << std::endl;
+            continue;
+        }
+        try {
+            nlohmann::json j;
+            f >> j;
+            for (const auto& layer : j.value("layers", nlohmann::json::array())) {
+                if (layer.value("name", "") != "Entidades") continue;
+                for (const auto& obj : layer.value("objects", nlohmann::json::array())) {
+                    const std::string type = obj.value("class", obj.value("type", ""));
+                    if (type != "JornalSpawn" || !obj.contains("properties")) continue;
+
+                    bool collectible = false;
+                    int  order = 1000 + obj.value("id", -1);   // mesma regra do SpawnFactory
+                    for (const auto& p : obj["properties"]) {
+                        const std::string name = p.value("name", "");
+                        if (!p.contains("value")) continue;
+                        if (name == "collectible" && p["value"].is_boolean()) collectible = p["value"].get<bool>();
+                        if (name == "doc_order" && p["value"].is_number_integer()) order = p["value"].get<int>();
+                    }
+                    if (collectible) knownDocumentKeys.push_back({lv, order});
+                }
+            }
+        } catch (const std::exception& ex) {
+            std::cerr << "[pasta] falha ao varrer " << mapPath << ": " << ex.what() << std::endl;
+        }
+    }
+    std::sort(knownDocumentKeys.begin(), knownDocumentKeys.end());
+    knownDocumentKeys.erase(std::unique(knownDocumentKeys.begin(), knownDocumentKeys.end()),
+                            knownDocumentKeys.end());
+
+    std::cerr << "[pasta] " << knownDocumentKeys.size() << " colecionavel(is) ate o andar "
+              << (currentLevelIndex + 1) << std::endl;
+}
+
+// Monta as páginas em ordem (andar, ordem): uma por documento coletado e uma
+// vazia ("?") para cada colecionável conhecido que ficou para trás.
+void StageState::RebuildDocumentFolderFrames() {
+    documentFolderFrames.clear();
+
+    std::vector<std::pair<int, int>> keys = knownDocumentKeys;
+    for (const CollectedDocument& d : collectedDocuments) keys.push_back({d.level, d.order});
+    std::sort(keys.begin(), keys.end());
+    keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
+    documentFolderTotal = static_cast<int>(keys.size());
+
+    for (const auto& k : keys) {
+        bool found = false;
+        for (int i = 0; i < static_cast<int>(collectedDocuments.size()); ++i) {
+            const CollectedDocument& d = collectedDocuments[i];
+            if (d.level == k.first && d.order == k.second) {
+                documentFolderFrames.push_back({k.first, k.second, i});
+                found = true;
+            }
+        }
+        if (!found) documentFolderFrames.push_back({k.first, k.second, -1});
+    }
+}
+
+// Retângulo na tela da moldura `index`, considerando a rolagem suavizada:
+// a selecionada fica no centro em tamanho cheio, as vizinhas 25% menores.
+SDL_FRect StageState::GetDocumentFolderCardRect(int index) const {
+    const float winW = static_cast<float>(Game::GetInstance().GetWindowsWidth());
+    const float winH = static_cast<float>(Game::GetInstance().GetWindowsHeight());
+
+    const float cardH   = winH * 0.52f;
+    const float cardW   = cardH * 0.75f;          // moldura retrato padronizada (3:4)
+    const float spacing = cardW * 1.18f;
+
+    const float offset = static_cast<float>(index) - documentFolderScroll;
+    const float scale  = 1.0f - 0.25f * std::min(1.0f, std::fabs(offset));   // vizinhos menores
+    const float cx = winW * 0.5f + offset * spacing;
+    const float cy = winH * 0.46f;
+    return { cx - cardW * scale * 0.5f, cy - cardH * scale * 0.5f, cardW * scale, cardH * scale };
+}
+
+
+
+// Abre a pasta (Tab): varre os mapas na 1ª vez, monta as molduras, pausa o
+// mundo e posiciona no primeiro documento não lido.
+void StageState::OpenDocumentFolder() {
+     if (knownDocumentKeysLevel != currentLevelIndex) ScanKnownDocumentOrders();
+    RebuildDocumentFolderFrames();
+
+    if (bigCharacter)   bigCharacter->ForceStop();
+    if (smallCharacter) smallCharacter->ForceStop();
+    GameSfx::StopAllGameplayAudio();   // mesmo motivo do menu de pausa: o mundo para
+
+    // Começa no documento "novo" mais antigo; sem novos, mantém a última posição.
+    const int n = static_cast<int>(documentFolderFrames.size());
+    for (int i = 0; i < n; ++i) {
+        const int di = documentFolderFrames[i].docIndex;
+        if (di >= 0 && collectedDocuments[di].unread) { documentFolderSelection = i; break; }
+    }
+    documentFolderSelection = (n > 0) ? std::max(0, std::min(documentFolderSelection, n - 1)) : 0;
+    documentFolderScroll    = static_cast<float>(documentFolderSelection);
+
+    documentFolderOpen = true;
+    documentFolderAnim = 0.0f;
+    Telemetry::Event("document_folder_open", Telemetry::Fields()
+        .Int("level", currentLevelIndex)
+        .Int("collected", static_cast<int>(collectedDocuments.size())));
+}
+
+
+
+// Fecha a pasta e devolve o controle ao jogo.
+void StageState::CloseDocumentFolder() {
+    documentFolderOpen = false;
+}
+
+
+
+// Abre um documento da pasta no visualizador normal (zoom etc.), crescendo a
+// partir da moldura; tira o "novo" e toca o diálogo pendente.
+void StageState::OpenCollectedDocument(CollectedDocument& doc, const SDL_FRect& fromRect) {
+    BeginJournalView(doc.imagePath, doc.soundPath, doc.zoomFactor, doc.zoomable, fromRect);
+    doc.unread = false;
+
+    // Diálogo do Tiled: só na primeira leitura.
+    for (const DialogueBox::Line& l : doc.dialogueLines) {
+        dialogueBox.Queue(l.speaker, l.listener, l.emotion, l.listenerEmotion, l.text);
+    }
+    doc.dialogueLines.clear();
+}
+
+
+
+// Entrada da pasta: Tab/ESC fecham, esquerda/direita navegam, E/Enter abrem o
+// documento selecionado (molduras vazias são ignoradas). Suaviza a rolagem.
+void StageState::UpdateDocumentFolder(float dt) {
+    InputManager& input = InputManager::GetInstance();
+    if (bigCharacter)   bigCharacter->ReleaseInteract();
+    if (smallCharacter) smallCharacter->ReleaseInteract();
+
+    documentFolderAnim = std::min(1.0f, documentFolderAnim + dt / kDocumentFolderFadeTime);
+
+    if (input.KeyPress(TAB_KEY) || input.KeyPress(ESCAPE_KEY)) {
+        CloseDocumentFolder();
+        return;
+    }
+
+    const int n = static_cast<int>(documentFolderFrames.size());
+    if (n > 0 && !collectedDocuments.empty()) {
+        const bool left  = input.ActionPress(GameAction::MoveLeft)  || input.ActionPress(GameAction::CyclePrev) || input.KeyPress(SDLK_LEFT);
+        const bool right = input.ActionPress(GameAction::MoveRight) || input.ActionPress(GameAction::CycleNext) || input.KeyPress(SDLK_RIGHT);
+        if (left)  documentFolderSelection = std::max(0, documentFolderSelection - 1);
+        if (right) documentFolderSelection = std::min(n - 1, documentFolderSelection + 1);
+
+        if (input.ActionPress(GameAction::Interact) || input.KeyPress(SDLK_RETURN)) {
+            const FolderFrame& f = documentFolderFrames[documentFolderSelection];
+            if (f.docIndex >= 0) {
+                OpenCollectedDocument(collectedDocuments[f.docIndex],
+                                      GetDocumentFolderCardRect(documentFolderSelection));
+            }
+        }
+    }
+
+    const float target = static_cast<float>(documentFolderSelection);
+    documentFolderScroll += (target - documentFolderScroll) * std::min(1.0f, kDocumentFolderScrollSmoothing * dt);
+}
+
+
+
+// Desenha a pasta: páginas flutuando sem moldura (sombra + balanço), vizinhas
+// menores e escurecidas, "?" para as que ficaram para trás, selo "novo",
+// título, contador "coletados / total até este andar" e dicas.
+void StageState::RenderDocumentFolder(SDL_Renderer* renderer) {
+    if (!renderer || !documentFolderOpen) return;
+
+    const int   winW = Game::GetInstance().GetWindowsWidth();
+    const int   winH = Game::GetInstance().GetWindowsHeight();
+    const float a    = SmoothStep(documentFolderAnim);
+    const Uint8 ta   = static_cast<Uint8>(255.0f * a);
+    const float time = SDL_GetTicks() / 1000.0f;
+
+    DrawSceneBlur(renderer, winW, winH, a);   
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, static_cast<Uint8>(150.0f * a));
+    const SDL_FRect full{0.0f, 0.0f, static_cast<float>(winW), static_cast<float>(winH)};
+    SDL_RenderFillRectF(renderer, &full);
+
+    auto titleFont = Resources::GetFont("Recursos/font/times.ttf", 44);
+    auto bigFont   = Resources::GetFont("Recursos/font/times.ttf", 120);
+    auto smallFont = Resources::GetFont("Recursos/font/times.ttf", 28);
+    auto badgeFont = Resources::GetFont("Recursos/font/times.ttf", 24);
+    const SDL_Color textCol{230, 225, 200, ta};
+    const SDL_Color dimCol {200, 195, 175, ta};
+
+    if (collectedDocuments.empty()) {
+        DrawFolderText(renderer, titleFont.get(), "Não há nada aqui", winW * 0.5f, winH * 0.5f - 22.0f, textCol);
+        DrawFolderText(renderer, smallFont.get(), "Tab / ESC — fechar", winW * 0.5f, winH * 0.90f, dimCol);
+        return;
+    }
+
+    const int n = static_cast<int>(documentFolderFrames.size());
+
+    std::vector<int> drawList;
+    for (int i = 0; i < n; ++i) {
+        if (std::fabs(i - documentFolderScroll) < 3.5f) drawList.push_back(i);
+    }
+    std::sort(drawList.begin(), drawList.end(), [&](int x, int y) {
+        return std::fabs(x - documentFolderScroll) > std::fabs(y - documentFolderScroll);
+    });
+
+    for (int i : drawList) {
+        const FolderFrame& f = documentFolderFrames[i];
+        SDL_FRect slot = GetDocumentFolderCardRect(i);
+        slot.y += std::sin(time * 1.6f + i * 1.3f) * 6.0f;   // balanço leve, fora de fase entre páginas
+
+        const float dist  = std::fabs(i - documentFolderScroll);
+        const float fade  = a * (1.0f - 0.3f * std::min(dist, 2.0f));
+        const Uint8 fa    = static_cast<Uint8>(255.0f * fade);
+        const Uint8 shade = static_cast<Uint8>(255.0f - 105.0f * std::min(dist, 1.0f));   // vizinhas mais escuras
+
+        if (f.docIndex >= 0) {
+            const CollectedDocument& doc = collectedDocuments[f.docIndex];
+            auto tex = Resources::GetImage(doc.imagePath);
+            if (!tex) continue;
+            int tw = 0, th = 0;
+            SDL_QueryTexture(tex.get(), nullptr, nullptr, &tw, &th);
+            const SDL_FRect page = FitInsideRect(slot, tw, th, 0.0f);
+
+            // Sombra suave: a própria página em preto, deslocada.
+            SDL_SetTextureColorMod(tex.get(), 0, 0, 0);
+            SDL_SetTextureAlphaMod(tex.get(), static_cast<Uint8>(110.0f * fade));
+            const SDL_FRect shadow{page.x + 12.0f, page.y + 16.0f, page.w, page.h};
+            SDL_RenderCopyF(renderer, tex.get(), nullptr, &shadow);
+
+            SDL_SetTextureColorMod(tex.get(), shade, shade, shade);
+            SDL_SetTextureAlphaMod(tex.get(), fa);
+            SDL_RenderCopyF(renderer, tex.get(), nullptr, &page);
+
+            SDL_SetTextureColorMod(tex.get(), 255, 255, 255);   // textura é compartilhada pelo Resources
+            SDL_SetTextureAlphaMod(tex.get(), 255);
+
+            if (doc.unread) {
+                const SDL_FRect badge{page.x + page.w - 70.0f, page.y - 14.0f, 76.0f, 32.0f};
+                SDL_SetRenderDrawColor(renderer, 170, 45, 35, fa);
+                SDL_RenderFillRectF(renderer, &badge);
+                DrawFolderText(renderer, badgeFont.get(), "novo", badge.x + badge.w * 0.5f, badge.y + 2.0f,
+                               SDL_Color{245, 235, 215, fa});
+            }
+        } else {
+            // Documento que ficou para trás: só um "?" flutuando no lugar da página.
+            DrawFolderText(renderer, bigFont.get(), "?", slot.x + slot.w * 0.5f,
+                           slot.y + slot.h * 0.5f - 70.0f, SDL_Color{150, 140, 125, static_cast<Uint8>(fa * 0.7f)});
+        }
+    }
+
+    // Título só para documento encontrado.
+    const FolderFrame& sel = documentFolderFrames[documentFolderSelection];
+    if (sel.docIndex >= 0) {
+        const SDL_FRect selSlot = GetDocumentFolderCardRect(documentFolderSelection);
+        DrawFolderText(renderer, titleFont.get(), collectedDocuments[sel.docIndex].title,
+                       winW * 0.5f, selSlot.y + selSlot.h + 30.0f, textCol);
+    }
+
+    const std::string counter = std::to_string(collectedDocuments.size()) + " / " + std::to_string(documentFolderTotal);
+    DrawFolderText(renderer, smallFont.get(), counter, winW * 0.5f, winH * 0.07f, dimCol);
+
+    std::string interactKey = SDL_GetKeyName(InputManager::GetInstance().GetBinding(GameAction::Interact));
+    if (interactKey.empty()) interactKey = "E";
+    std::string hint = "Setas — navegar";
+    if (sel.docIndex >= 0) hint += "    " + interactKey + " — ler";
+    hint += "    Tab / ESC — fechar";
+    DrawFolderText(renderer, smallFont.get(), hint, winW * 0.5f, winH * 0.90f, dimCol);
+}
+

@@ -45,6 +45,26 @@ struct SavedBoxPos {
     float y = 0.0f;
 };
 
+struct SavedDialogueLine {
+    int speaker = 0;           
+    int listener = 0;
+    int emotion = 0;
+    int listenerEmotion = 0;
+    std::string text;
+};
+
+struct SavedDocument {
+    std::string imagePath;
+    std::string title;
+    std::string soundPath;
+    int   level = 0;
+    int   order = 0;
+    float zoomFactor = 1.0f;
+    bool  zoomable = false;
+    bool  unread = true;
+    std::vector<SavedDialogueLine> dialogue;   
+};
+
 struct SaveGameState {
     SavedCharacter big;
     SavedCharacter small;
@@ -67,6 +87,7 @@ struct SaveGameState {
     int primedOilDurability = 0;
     std::vector<SavedInventoryStack> inventoryStacks;
     std::vector<SavedBoxPos> boxPositions;
+    std::vector<SavedDocument> documents;
 };
 
 struct SaveFile {
@@ -93,5 +114,9 @@ void to_json(nlohmann::json& j, const SaveGameState& s);
 void from_json(const nlohmann::json& j, SaveGameState& s);
 void to_json(nlohmann::json& j, const SaveFile& f);
 void from_json(const nlohmann::json& j, SaveFile& f);
+void to_json(nlohmann::json& j, const SavedDialogueLine& l);
+void from_json(const nlohmann::json& j, SavedDialogueLine& l);
+void to_json(nlohmann::json& j, const SavedDocument& d);
+void from_json(const nlohmann::json& j, SavedDocument& d);
 
 #endif

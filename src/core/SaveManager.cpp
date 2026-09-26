@@ -10,7 +10,9 @@
 #ifdef _WIN32
 #include <direct.h>
 #define WIN32_LEAN_AND_MEAN   // corta o que não usamos do windows.h
+#ifndef NOMINMAX
 #define NOMINMAX              // impede o windows.h de criar macros min/max (quebram std::min/std::max)
+#endif
 #include <windows.h>          // DeleteFileW
 #else
 #include <sys/stat.h>

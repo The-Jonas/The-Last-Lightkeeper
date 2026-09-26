@@ -2,6 +2,7 @@
 #include "core/Game.h"
 #include "core/Resources.h"
 #include "core/InputManager.h"
+#include "ui/KeyGlyphs.h"
 
 #define INCLUDE_SDL_TTF
 #include "SDL_include.h"
@@ -130,6 +131,11 @@ void InventoryWheel::Update(float dt) {
     const float hintStep = dt / kKeyHintFadeDuration;
     if (keyHintAlpha < hintTarget) keyHintAlpha = std::min(hintTarget, keyHintAlpha + hintStep);
     else                           keyHintAlpha = std::max(hintTarget, keyHintAlpha - hintStep);
+    
+    // Tecla [Tab] da pasta: durante o tutorial da pasta ou enquanto houver documento novo.
+    const float folderTarget = (stage && (stage->IsDocumentTutorialActive() || stage->HasUnreadDocuments())) ? 1.0f : 0.0f;
+    if (folderHintAlpha < folderTarget) folderHintAlpha = std::min(folderTarget, folderHintAlpha + hintStep);
+    else                                folderHintAlpha = std::max(folderTarget, folderHintAlpha - hintStep);
 
     float target = static_cast<float>(currentActive);
     float diff = target - displayActiveIndex;
@@ -236,6 +242,69 @@ void InventoryWheel::DrawSlot(SDL_Renderer* renderer, int stackIndex, float x, f
         SDL_SetTextureAlphaMod(tex.get(), static_cast<Uint8>(std::min(255.0f, alpha)));
         SDL_SetTextureColorMod(tex.get(), 255, 255, 255);
         SDL_RenderCopyExF(renderer, tex.get(), nullptr, &dst, 0.0, nullptr, SDL_FLIP_NONE);
+    }
+}
+
+// Desenha o slot fixo da pasta de documentos ao lado da roda: moldura, ícone,
+// ponto vermelho quando há documento novo e a tecla [Tab] (com fade).
+void InventoryWheel::DrawDocumentFolderSlot(SDL_Renderer* renderer) {
+    StageState* stage = Game::TryGetStageState();
+    if (!stage) return;
+
+    const float u    = Game::UiScale();
+    const float size = kFolderSlotSize * u;
+    const float winH = static_cast<float>(Game::GetInstance().GetWindowsHeight());
+    const float cx   = kFolderMarginX * u + size * 0.5f;
+    const float cy   = winH - kFolderMarginY * u - size * 0.5f;
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+    // Moldura redonda — mesma arte do slot ATIVO da roda.
+    if (auto frame = Resources::GetImage("Recursos/img/ui/hud_items/bola_maior.png")) {
+        const SDL_FRect dst{cx - size * 0.5f, cy - size * 0.5f, size, size};
+        SDL_SetTextureAlphaMod(frame.get(), 255);
+        SDL_RenderCopyF(renderer, frame.get(), nullptr, &dst);
+    }
+
+    // Ícone da pasta.
+    if (auto icon = Resources::GetImage("Recursos/img/items/pasta_documentos.png")) {
+        const float iconSize = size * 1.0f;
+        const SDL_FRect dst = FitIconRect(icon.get(), cx - iconSize * 0.5f, cy - iconSize * 0.5f,
+                                          iconSize, iconSize);
+        SDL_SetTextureAlphaMod(icon.get(), 255);
+        SDL_SetTextureColorMod(icon.get(), 255, 255, 255);
+        SDL_RenderCopyF(renderer, icon.get(), nullptr, &dst);
+    }
+
+    // Ponto vermelho pulsando quando há documento não lido.
+    if (stage->HasUnreadDocuments()) {
+        const float pulse = 0.7f + 0.3f * std::sin(bobTimer * 4.0f);
+        const float r   = 8.0f * u;
+        const float dcx = cx + size * 0.32f;
+        const float dcy = cy - size * 0.32f;
+        SDL_SetRenderDrawColor(renderer, 200, 40, 30, static_cast<Uint8>(255.0f * pulse));
+        for (int dy = static_cast<int>(-r); dy <= static_cast<int>(r); ++dy) {
+            const float half = std::sqrt(std::max(0.0f, r * r - dy * dy));
+            const SDL_FRect row{dcx - half, dcy + dy, half * 2.0f, 1.0f};
+            SDL_RenderFillRectF(renderer, &row);
+        }
+    }
+
+    // Tecla [Tab] EM CIMA do slot (arte via KeyGlyphs).
+    if (folderHintAlpha > 0.01f) {
+        auto font = Resources::GetFont("Recursos/font/times.ttf",
+                                       std::max(13, static_cast<int>(std::lround(20.0f * u))));
+        if (font) {
+            const std::string text = "[Tab]";
+            int tw = 0, th = 0;
+            KeyGlyphs::Measure(font.get(), text, KeyGlyphs::kDefaultKeyScale, tw, th);
+            KeyGlyphs::Draw(renderer, font.get(), text,
+                            static_cast<int>(cx - tw * 0.5f),
+                            static_cast<int>(cy - size * 0.5f - 6.0f * u - th),
+                            SDL_Color{235, 225, 195, 255},
+                            static_cast<Uint8>(255.0f * folderHintAlpha),
+                            KeyGlyphs::kDefaultKeyScale);
+        }
     }
 }
 
@@ -504,6 +573,8 @@ void InventoryWheel::Render() {
         bool isActive = (offsetFromCenter == 0);
         DrawSlot(renderer, stackIndex, slotX, slotY, alpha, scale, isActive);
     }
+
+    DrawDocumentFolderSlot(renderer);
 
     if (inventory.IsOilPrimed()) {
         // Modal central "Escolha qual item quer abastecer" — substitui as dicas

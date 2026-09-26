@@ -20,12 +20,12 @@ private:
     int lastKnownActive = -1;
     float bobTimer = 0.0f;
 
-    static constexpr float kTopSlotOffsetX    = -25.0f;  // um pouco pra esquerda
-    static constexpr float kTopSlotOffsetY    =  55.0f;  // mais pra baixo
-    static constexpr float kBottomSlotOffsetX =  26.0f;  // mais pra direita (mais perto do centro)
-    static constexpr float kBottomSlotOffsetY =  -28.0f;  // sem ajuste vertical por enquanto
+    static constexpr float kTopSlotOffsetX    = -25.0f;         // um pouco pra esquerda
+    static constexpr float kTopSlotOffsetY    =  55.0f;         // mais pra baixo
+    static constexpr float kBottomSlotOffsetX =  26.0f;         // mais pra direita (mais perto do centro)
+    static constexpr float kBottomSlotOffsetY =  -28.0f;        // sem ajuste vertical por enquanto
 
-    float keyHintAlpha = 0.0f;                        // 0 = teclas escondidas, 1 = visíveis
+    float keyHintAlpha = 0.0f;                                  // 0 = teclas escondidas, 1 = visíveis
     static constexpr float kKeyHintFadeDuration = 0.4f;
 
     // Roda VERTICAL (itens sobem/descem): ativo no centro, anterior acima,
@@ -33,11 +33,11 @@ private:
     // durabilidade radial.
     static constexpr float kSlotSize = 88.0f;
     static constexpr float kIconSize = 62.0f;
-    static constexpr float kArcRadius = 150.0f;   // raio do arco vertical
-    static constexpr float kAnchorXFraction = 0.085f;  // X do slot ATIVO (borda esquerda)
-    static constexpr float kAnchorYFraction = 0.76f;   // Y do slot ATIVO (mais para baixo do canto)
+    static constexpr float kArcRadius = 150.0f;                 // raio do arco vertical
+    static constexpr float kAnchorXFraction = 0.085f;           // X do slot ATIVO (borda esquerda)
+    static constexpr float kAnchorYFraction = 0.76f;            // Y do slot ATIVO (mais para baixo do canto)
     static constexpr float kSlideSpeed = 10.0f;
-    static constexpr float kRingThickness = 7.0f;   // espessura do anel de durabilidade
+    static constexpr float kRingThickness = 7.0f;               // espessura do anel de durabilidade
 
     float GetAnchorX() const;
     float GetAnchorY() const;
@@ -52,6 +52,15 @@ private:
     // Desenha as teclas de trocar item (1/3) nos lados corretos da roda:
     // "anterior" à esquerda, "próximo" à direita.
     void DrawCycleKeyHints(SDL_Renderer* renderer, float fadeAlpha);
+
+    // Slot da pasta de documentos 
+    static constexpr float kFolderMarginX  = 24.0f;    // distância da borda esquerda (px em UiScale 1)
+    static constexpr float kFolderMarginY  = 24.0f;    // distância da borda de baixo
+    static constexpr float kFolderSlotSize = 90.0f;
+    float folderHintAlpha = 0.0f;                       // fade da tecla [Tab]
+    void DrawDocumentFolderSlot(SDL_Renderer* renderer);
+
+
 };
 
 #endif

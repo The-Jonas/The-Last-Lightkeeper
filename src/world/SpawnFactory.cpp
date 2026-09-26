@@ -417,6 +417,18 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
                 jornal->SetZoomable(spawn.properties.at("zoomable").get<bool>());
             }
 
+            // Documento colecionável: ao interagir, some do cenário e vai para a pasta (Tab).
+            if (spawn.properties.count("collectible") &&
+                spawn.properties.at("collectible").get<bool>()) {
+                std::string title = spawn.properties.count("doc_title")
+                                  ? spawn.properties.at("doc_title").get<std::string>()
+                                  : imageName;   
+                int order = spawn.properties.count("doc_order")
+                          ? spawn.properties.at("doc_order").get<int>()
+                          : 1000 + spawn.tiledId;
+                jornal->SetCollectible(true, title, order);
+            }
+
             // Diálogo específico deste papel (opcional) — mesmo formato do DialogueTrigger.
             std::vector<DialogueBox::Line> lines = ParseDialogueLinesProperty(spawn, "dialogue");
             if (!lines.empty()) {

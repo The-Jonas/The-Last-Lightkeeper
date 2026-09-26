@@ -40,8 +40,18 @@ public:
                          const std::string& soundPath = "",  
                          float zoomFactor = 1.0f);
 
-    void SetZoomable(bool z) { zoomable = z; }   // marcado no Tiled: aceita zoom com F
+    void SetZoomable(bool z) { zoomable = z; }                                      // marcado no Tiled: aceita zoom com F
     bool IsZoomable() const { return zoomable; }
+
+    // Documento colecionável (Tiled: collectible / doc_title / doc_order).
+    void SetCollectible(bool c, std::string title, int order) {
+        collectible = c;
+        docTitle    = std::move(title);
+        docOrder    = order;
+    }
+    bool IsCollectible() const { return collectible; }                              // some do cenário e vai para a pasta
+    const std::string& GetDocTitle() const { return docTitle; }                     // título embaixo do documento
+    int GetDocOrder() const { return docOrder; }                                    // posição cronológica na pasta
 
     void Start() override;
     void Update(float dt) override;
@@ -57,6 +67,10 @@ private:
     bool dialogueOnce  = true;
     bool dialogueFired = false;
     bool zoomable = false;
+
+    bool        collectible = false;
+    std::string docTitle;
+    int         docOrder = 0;
 };
 
 #endif

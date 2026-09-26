@@ -177,6 +177,12 @@ void StageState::Update(float dt){
         return;
     }
 
+    if (documentFolderOpen) {
+        dialogueBox.Update(dt);
+        UpdateDocumentFolder(dt);
+        return;
+    }
+
     if (quitConfirmOpen) {
         HandleQuitConfirmInput();
         return;
@@ -332,6 +338,10 @@ void StageState::Update(float dt){
     }
 
     if (!pauseMenuOpen) {
+        if (input.KeyPress(TAB_KEY)) {
+            OpenDocumentFolder();
+            return;
+        }
         UpdateBoxInteraction();
         TryOpenJournalOnKeyPress();
         TryInteractCandleOnKeyPress();

@@ -47,6 +47,38 @@ void to_json(json& j, const SavedBoxPos& b) {
     j = json{{"tiledId", b.tiledId}, {"x", b.x}, {"y", b.y}};
 }
 
+void to_json(json& j, const SavedDialogueLine& l) {
+    j = json{{"speaker", l.speaker}, {"listener", l.listener},
+             {"emotion", l.emotion}, {"listenerEmotion", l.listenerEmotion},
+             {"text", l.text}};
+}
+
+void from_json(const json& j, SavedDialogueLine& l) {
+    l.speaker         = j.value("speaker", 0);
+    l.listener        = j.value("listener", 0);
+    l.emotion         = j.value("emotion", 0);
+    l.listenerEmotion = j.value("listenerEmotion", 0);
+    l.text            = j.value("text", "");
+}
+
+void to_json(json& j, const SavedDocument& d) {
+    j = json{{"imagePath", d.imagePath}, {"title", d.title}, {"soundPath", d.soundPath},
+             {"level", d.level}, {"order", d.order}, {"zoomFactor", d.zoomFactor},
+             {"zoomable", d.zoomable}, {"unread", d.unread}, {"dialogue", d.dialogue}};
+}
+
+void from_json(const json& j, SavedDocument& d) {
+    d.imagePath  = j.value("imagePath", "");
+    d.title      = j.value("title", "");
+    d.soundPath  = j.value("soundPath", "");
+    d.level      = j.value("level", 0);
+    d.order      = j.value("order", 0);
+    d.zoomFactor = j.value("zoomFactor", 1.0f);
+    d.zoomable   = j.value("zoomable", false);
+    d.unread     = j.value("unread", true);
+    d.dialogue   = j.value("dialogue", std::vector<SavedDialogueLine>{});
+}
+
 void from_json(const json& j, SavedBoxPos& b) {
     b.tiledId = j.value("tiledId", -1);
     b.x = j.value("x", 0.0f);
@@ -119,7 +151,8 @@ void to_json(json& j, const SaveGameState& s) {
              {"droppedItems", s.droppedItems},
              {"litCandleIds", s.litCandleIds},
              {"repairedIds", s.repairedIds},
-             {"boxPositions", s.boxPositions}};
+             {"boxPositions", s.boxPositions},
+             {"documents", s.documents}};
 }
 
 void from_json(const json& j, SaveGameState& s) {
@@ -158,6 +191,7 @@ void from_json(const json& j, SaveGameState& s) {
     s.primedOilDurability = j.value("primedOilDurability", 0);
     s.inventoryStacks = j.value("inventoryStacks", std::vector<SavedInventoryStack>{});
     s.boxPositions = j.value("boxPositions", std::vector<SavedBoxPos>{});
+    s.documents = j.value("documents", std::vector<SavedDocument>{});
 }
 
 void to_json(json& j, const SaveFile& f) {
@@ -168,14 +202,14 @@ void to_json(json& j, const SaveFile& f) {
              {"current", f.current}};
 }
 
-void from_json(const json& j, SaveFile& f) {
-    f.version = j.value("version", SaveFile::kVersion);
-    f.levelIndex = j.value("levelIndex", 0);
-    f.levelPath = j.value("levelPath", "");
-    if (j.contains("levelCheckpoint")) {
-        from_json(j["levelCheckpoint"], f.levelCheckpoint);
+    void from_json(const json& j, SaveFile& f) {
+        f.version = j.value("version", SaveFile::kVersion);
+        f.levelIndex = j.value("levelIndex", 0);
+        f.levelPath = j.value("levelPath", "");
+        if (j.contains("levelCheckpoint")) {
+            from_json(j["levelCheckpoint"], f.levelCheckpoint);
+        }
+        if (j.contains("current")) {
+            from_json(j["current"], f.current);
+        }
     }
-    if (j.contains("current")) {
-        from_json(j["current"], f.current);
-    }
-}

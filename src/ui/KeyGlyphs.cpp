@@ -39,6 +39,7 @@ const std::unordered_map<std::string, std::string>& SpecialFiles() {
         {"return",      "HUD_TECLA__Enter.png"},
         {"enter",       "HUD_TECLA__Enter.png"},
         {"backspace",   "HUD_TECLA__Backspace.png"},
+        {"tab",         "0707_HUD_TECLA_FLV__Tab.png"},
         {"-",           "0707_HUD_TECLA_FLV__-.png"},
     };
     return m;

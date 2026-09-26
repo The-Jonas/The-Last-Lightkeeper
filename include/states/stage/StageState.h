@@ -173,7 +173,7 @@ public:
 
     // True quando algum overlay deve impedir o input de gameplay (menu/modal/jornal).
     // Público: consultado por HotbarComponent e Character.
-    bool IsPlayerInputFrozen() const { return pauseMenuOpen || quitConfirmOpen || journalViewerOpen; }
+    bool IsPlayerInputFrozen() const { return pauseMenuOpen || quitConfirmOpen || journalViewerOpen || documentFolderOpen; }
 
     // objetos estáticos que vão receber sombra de sprite real
     // Para reverter o teste, basta deixar esse vetor vazio (não chame Register)
@@ -354,6 +354,43 @@ public:
     float pendingWindowBreakDialogueTimer = -1.0f;
     float pendingWindowBreakLineTimer = -1.0f;
 
+    // ── Pasta de documentos ───────────────────────────────────────────────
+    struct CollectedDocument {
+        std::string imagePath;
+        std::string title;
+        std::string soundPath;
+        int   order      = 0;
+        float zoomFactor = 1.0f;
+        bool  zoomable   = false;
+        bool  unread     = true;                                        // mostra o "novo" até abrir pela pasta
+        std::vector<DialogueBox::Line> dialogueLines;                   // tocam na 1ª leitura pela pasta
+        int   level      = 0;                                           // andar onde foi coletado (0 = primeiro)
+    };
+    std::vector<CollectedDocument> collectedDocuments;                  // sempre ordenada por order
+    bool documentTutorialShown = false;
+    void CollectJornal(Jornal* jornal);
+
+    static constexpr float kJournalOpenDuration = 0.35f;
+    static constexpr float kJournalCloseDuration = 0.2f;
+
+    // Pasta de documentos — consultado pela roda do inventário (slot + tecla Tab).
+    static constexpr const char* kDocumentTutorialText =
+        "Documento guardado na pasta. [Tab] abre seus documentos.";
+
+    bool HasUnreadDocuments() const {
+        for (const CollectedDocument& d : collectedDocuments) {
+            if (d.unread) return true;
+        }
+        return false;
+    }
+    // True enquanto há ao menos um documento com o selo "novo".
+
+    void RemoveCollectedJornalsFromWorld();
+
+    bool IsDocumentTutorialActive() const {
+        return activeTutTimer > 0.0f && activeTutText == kDocumentTutorialText;
+    }
+
 private:
 
     DialogueBox dialogueBox;
@@ -404,6 +441,7 @@ private:
     void HandlePauseMenuInput();
     void RenderPauseMenu(SDL_Renderer* renderer);
     bool BuildPauseBlurTexture(SDL_Renderer* renderer, int winW, int winH);       // #19 gera o desfoque do cenário (GPU)
+    void DrawSceneBlur(SDL_Renderer* renderer, int winW, int winH, float alpha);
     void DrawBlurBehindRect(SDL_Renderer* renderer, const SDL_Rect& rect, int winW, int winH);  // desfoque só atrás de um box
     void RenderSaveToast(SDL_Renderer* renderer);
     void HandleSettingsPanelInput();
@@ -620,12 +658,36 @@ private:
     static constexpr float kJournalZoomLevels[3] = {1.0f, 2.0f, 3.0f};
     static constexpr float kJournalPanSpeedPx    = 900.0f;              // rolagem, em pixels de tela por segundo
     static constexpr float kJournalZoomSmoothing = 12.0f;               // maior = chega mais rápido no zoom
-
     SDL_FRect GetJournalZoomedRect() const;                             // retângulo do papel com zoom e rolagem
     void ClampJournalFocus(int winW, int winH);                         // impede rolar para fora do papel
 
-    static constexpr float kJournalOpenDuration = 0.35f;
-    static constexpr float kJournalCloseDuration = 0.2f;
+     // ── Pasta de documentos: tela (Tab) ──────────────────────────────────
+    struct FolderFrame {
+        int level    = 0;                                               // andar do documento
+        int order    = 0;                                               // ordem dentro do andar
+        int docIndex = -1;                                              // índice em collectedDocuments; -1 = ainda não encontrado ("?")
+    };
+    bool  documentFolderOpen = false;
+    float documentFolderAnim = 0.0f;                                    // 0→1, fade de entrada
+    int   documentFolderSelection = 0;                                  // moldura selecionada
+    float documentFolderScroll = 0.0f;                                  // posição suavizada do carrossel
+    int   documentFolderTotal = 0;                                      // total de documentos do jogo (contador)
+    std::vector<FolderFrame> documentFolderFrames;
+    std::vector<std::pair<int, int>> knownDocumentKeys;                 // (andar, ordem) de cada colecionável até o andar atual
+    int   knownDocumentKeysLevel = -1;                                  // andar em que a varredura foi feita (-1 = nunca)
+    static constexpr float kDocumentFolderFadeTime = 0.18f;
+    static constexpr float kDocumentFolderScrollSmoothing = 14.0f;
+
+    void OpenDocumentFolder();
+    void CloseDocumentFolder();
+    void UpdateDocumentFolder(float dt);
+    void RenderDocumentFolder(SDL_Renderer* renderer);
+    void ScanKnownDocumentOrders();
+    void RebuildDocumentFolderFrames();
+    SDL_FRect GetDocumentFolderCardRect(int index) const;
+    void OpenCollectedDocument(CollectedDocument& doc, const SDL_FRect& fromRect);
+    void BeginJournalView(const std::string& imagePath, const std::string& soundPath,
+                          float zoomFactor, bool zoomable, const SDL_FRect& sourceRect);
 
     ItemPickup* reachablePickup = nullptr;
     std::unordered_set<int> skippedPickupSpawnIds;

@@ -970,9 +970,19 @@
                  "opacity":1,
                  "properties":[
                         {
+                         "name":"collectible",
+                         "type":"bool",
+                         "value":true
+                        }, 
+                        {
                          "name":"depthOffset",
                          "type":"float",
                          "value":200
+                        }, 
+                        {
+                         "name":"doc_title",
+                         "type":"string",
+                         "value":"Pronunciamento do Presidente"
                         }, 
                         {
                          "name":"heightLevel",
@@ -1014,9 +1024,19 @@
                  "opacity":1,
                  "properties":[
                         {
+                         "name":"collectible",
+                         "type":"bool",
+                         "value":true
+                        }, 
+                        {
                          "name":"depthOffset",
                          "type":"float",
                          "value":150
+                        }, 
+                        {
+                         "name":"doc_title",
+                         "type":"string",
+                         "value":"12 de Setembro de 1952"
                         }, 
                         {
                          "name":"heightLevel",

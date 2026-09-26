@@ -1552,9 +1552,19 @@
                  "opacity":1,
                  "properties":[
                         {
+                         "name":"collectible",
+                         "type":"bool",
+                         "value":true
+                        }, 
+                        {
                          "name":"depthOffset",
                          "type":"float",
                          "value":150
+                        }, 
+                        {
+                         "name":"doc_title",
+                         "type":"string",
+                         "value":"Registro do Collins"
                         }, 
                         {
                          "name":"heightLevel",
@@ -1596,9 +1606,19 @@
                  "opacity":1,
                  "properties":[
                         {
+                         "name":"collectible",
+                         "type":"bool",
+                         "value":true
+                        }, 
+                        {
                          "name":"depthOffset",
                          "type":"float",
                          "value":0
+                        }, 
+                        {
+                         "name":"doc_title",
+                         "type":"string",
+                         "value":"Not\u00edcia de Desaparecimento"
                         }, 
                         {
                          "name":"heightLevel",
@@ -1683,6 +1703,11 @@
                  "opacity":1,
                  "properties":[
                         {
+                         "name":"collectible",
+                         "type":"bool",
+                         "value":true
+                        }, 
+                        {
                          "name":"depthOffset",
                          "type":"float",
                          "value":0
@@ -1696,6 +1721,11 @@
                          "name":"dialogue_once",
                          "type":"bool",
                          "value":false
+                        }, 
+                        {
+                         "name":"doc_title",
+                         "type":"string",
+                         "value":"Informa\u00e7\u00e3o dos Barris"
                         }, 
                         {
                          "name":"heightLevel",
@@ -1737,9 +1767,19 @@
                  "opacity":1,
                  "properties":[
                         {
+                         "name":"collectible",
+                         "type":"bool",
+                         "value":true
+                        }, 
+                        {
                          "name":"depthOffset",
                          "type":"float",
                          "value":100
+                        }, 
+                        {
+                         "name":"doc_title",
+                         "type":"string",
+                         "value":"Invent\u00e1rio do Farol"
                         }, 
                         {
                          "name":"heightLevel",
@@ -1782,9 +1822,19 @@
                  "opacity":1,
                  "properties":[
                         {
+                         "name":"collectible",
+                         "type":"bool",
+                         "value":true
+                        }, 
+                        {
                          "name":"depthOffset",
                          "type":"float",
                          "value":250
+                        }, 
+                        {
+                         "name":"doc_title",
+                         "type":"string",
+                         "value":"Not\u00edcia Observ\u00e1torios"
                         }, 
                         {
                          "name":"heightLevel",

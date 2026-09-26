@@ -117,6 +117,24 @@ SaveGameState StageState::CaptureSaveState() const {
         }
     }
 
+     for (const CollectedDocument& d : collectedDocuments) {
+        SavedDocument sd;
+        sd.imagePath  = d.imagePath;
+        sd.title      = d.title;
+        sd.soundPath  = d.soundPath;
+        sd.level      = d.level;
+        sd.order      = d.order;
+        sd.zoomFactor = d.zoomFactor;
+        sd.zoomable   = d.zoomable;
+        sd.unread     = d.unread;
+        for (const DialogueBox::Line& l : d.dialogueLines) {
+            sd.dialogue.push_back({static_cast<int>(l.speaker), static_cast<int>(l.listener),
+                                   static_cast<int>(l.emotion), static_cast<int>(l.listenerEmotion),
+                                   l.text});
+        }
+        state.documents.push_back(std::move(sd));
+    }
+
     return state;
 }
 
@@ -159,6 +177,31 @@ void StageState::ApplySaveState(const SaveGameState& state) {
     ApplyCharacter(state.big, bigCharacterObject, bigCharacter);
     ApplyCharacter(state.small, smallCharacterObject, smallCharacter);
     inventory.ReadFromSave(state, catalog);
+
+    collectedDocuments.clear();
+    for (const SavedDocument& sd : state.documents) {
+        CollectedDocument d;
+        d.imagePath  = sd.imagePath;
+        d.title      = sd.title;
+        d.soundPath  = sd.soundPath;
+        d.level      = sd.level;
+        d.order      = sd.order;
+        d.zoomFactor = sd.zoomFactor;
+        d.zoomable   = sd.zoomable;
+        d.unread     = sd.unread;
+        for (const SavedDialogueLine& l : sd.dialogue) {
+            d.dialogueLines.push_back({static_cast<DialogueBox::Speaker>(l.speaker),
+                                       static_cast<DialogueBox::Speaker>(l.listener),
+                                       static_cast<DialogueBox::Emotion>(l.emotion),
+                                       static_cast<DialogueBox::Emotion>(l.listenerEmotion),
+                                       l.text});
+        }
+        collectedDocuments.push_back(std::move(d));
+    }
+    documentTutorialShown = !collectedDocuments.empty();   // já viu o tutorial ao pegar o 1º
+    knownDocumentKeysLevel = -1;                           // refaz a contagem na próxima abertura
+    RemoveCollectedJornalsFromWorld();
+
     missedUniquePickupIdsAccum = state.missedUniquePickupIds;
     MergeSkippedPickupIds(state.removedPickupIds, state.missedUniquePickupIds);
     if (bigCharacter) {
@@ -473,7 +516,7 @@ void StageState::RenderInteractionPrompt(SDL_Renderer* renderer) {
             if (reachablePushBox && focus == &reachablePushBox->GetAssociated()) {
                 action = "Empurrar";
             } else if (reachableJornal && focus == &reachableJornal->GetAssociated()) {
-                action = "Ler";
+                action = reachableJornal->IsCollectible() ? "Pegar" : "Ler";
             } else if (reachableCandle && focus == &reachableCandle->GetAssociated()) {
                 action = reachableCandle->IsLit() ? "Apagar" : "Acender";
             } else if (reachableWindow && focus == &reachableWindow->GetAssociated()) {
@@ -661,12 +704,12 @@ bool StageState::BuildPauseBlurTexture(SDL_Renderer* renderer, int winW, int win
         return false;
     }
 
-    constexpr int kDownscale = 8;   // quanto menor o alvo, mais forte o borrão
+    constexpr int kDownscale = 25;                                                  // quanto menor o alvo, mais forte o borrão
     const int smallW = std::max(1, winW / kDownscale);
     const int smallH = std::max(1, winH / kDownscale);
 
     if (!pauseBlurTex) {
-        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");   // linear
+        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");                            // linear
         pauseBlurTex = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
                                          SDL_TEXTUREACCESS_TARGET, smallW, smallH);
     }
@@ -680,7 +723,17 @@ bool StageState::BuildPauseBlurTexture(SDL_Renderer* renderer, int winW, int win
 
     SDL_Texture* prev = SDL_GetRenderTarget(renderer);
     SDL_SetRenderTarget(renderer, pauseBlurTex);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
+    static const SDL_BlendMode kColorOnly = SDL_ComposeCustomBlendMode(
+        SDL_BLENDFACTOR_ONE,  SDL_BLENDFACTOR_ZERO, SDL_BLENDOPERATION_ADD,         // cor: substitui
+        SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE,  SDL_BLENDOPERATION_ADD);        // alpha: mantém
+    SDL_BlendMode sceneBlend = SDL_BLENDMODE_NONE;
+    SDL_GetTextureBlendMode(renderTarget, &sceneBlend);
+    SDL_SetTextureBlendMode(renderTarget, kColorOnly);
     SDL_RenderCopy(renderer, renderTarget, nullptr, nullptr);
+    SDL_SetTextureBlendMode(renderTarget, sceneBlend);                              // devolve o modo que o Render usa
+
     SDL_SetRenderTarget(renderer, prev);
     return true;
 }
@@ -707,6 +760,17 @@ void StageState::DrawBlurBehindRect(SDL_Renderer* renderer, const SDL_Rect& rect
     SDL_RenderSetClipRect(renderer, nullptr);
 }
 
+// Cobre a tela inteira com a cena borrada
+void StageState::DrawSceneBlur(SDL_Renderer* renderer, int winW, int winH, float alpha) {
+    if (!BuildPauseBlurTexture(renderer, winW, winH)) return;
+    alpha = std::max(0.0f, std::min(1.0f, alpha));
+    SDL_SetTextureBlendMode(pauseBlurTex, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureAlphaMod(pauseBlurTex, static_cast<Uint8>(255.0f * alpha));
+    const SDL_Rect full{0, 0, winW, winH};
+    SDL_RenderCopy(renderer, pauseBlurTex, nullptr, &full);
+    SDL_SetTextureAlphaMod(pauseBlurTex, 255);
+}
+
 void StageState::RenderPauseMenu(SDL_Renderer* renderer) {
     if (!renderer || !pauseMenuOpen) {
         return;
@@ -717,7 +781,9 @@ void StageState::RenderPauseMenu(SDL_Renderer* renderer) {
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
-    // Escurece a cena para dar foco ao menu (sem borrão de tela cheia).
+    // Cena borrada + véu escuro: foco no menu sem dar para estudar o jogo pausado.
+    DrawSceneBlur(renderer, winW, winH, 1.0f);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 125);
     const SDL_Rect fullDim{0, 0, winW, winH};
     SDL_RenderFillRect(renderer, &fullDim);

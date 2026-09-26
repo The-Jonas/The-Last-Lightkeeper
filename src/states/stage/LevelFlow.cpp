@@ -550,6 +550,7 @@ void StageState::TransitionToLevel(int targetLevelIndex) {
 
     BuildLevelWorld(cfg, false);
     StartArray();
+    RemoveCollectedJornalsFromWorld();
     ApplyLitCandleIds(preserved.litCandleIds, false);
 
     std::vector<ItemDef> catalog = cfg.pickupCycle;
