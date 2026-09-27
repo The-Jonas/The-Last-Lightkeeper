@@ -3,8 +3,9 @@
 #include "states/stage/StageState.h"
 #include "core/Game.h"
 
-DialogueTrigger::DialogueTrigger(GameObject& associated, std::vector<DialogueBox::Line> lines, bool once)
-    : Component(associated), lines(std::move(lines)), once(once) {}
+DialogueTrigger::DialogueTrigger(GameObject& associated, std::vector<DialogueBox::Line> lines, bool once,
+                                 std::string context)
+    : Component(associated), lines(std::move(lines)), once(once), context(std::move(context)) {}
 
 // Mesmo teste de "pé dentro do retângulo" que o CurtainTrigger já usa.
 static bool FootInsideTrigger(GameObject* go, const Rect& box) {
@@ -19,14 +20,19 @@ void DialogueTrigger::Update(float dt) {
     StageState* stage = Game::TryGetStageState();
     if (!stage) return;
 
+    // Save carregado: a conversa deste gatilho já aconteceu, não repete.
+    const std::string key = "trigger:" + std::to_string(associated.tiledId);
+    if (once && stage->IsDialogueLogged(key)) {
+        fired = true;
+        return;
+    }
+
     GameObject* bigGO   = stage->GetBigCharacter();
     GameObject* smallGO = stage->GetSmallCharacter();
     if (!FootInsideTrigger(bigGO, associated.box) && !FootInsideTrigger(smallGO, associated.box)) {
         return;
     }
 
-    for (const DialogueBox::Line& l : lines) {
-        stage->QueueDialogue(l.speaker, l.listener, l.emotion, l.listenerEmotion, l.text);
-    }
+    stage->PlayDialogue(key, context, lines);
     fired = true;
-}   
+}

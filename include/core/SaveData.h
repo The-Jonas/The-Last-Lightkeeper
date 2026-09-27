@@ -62,7 +62,16 @@ struct SavedDocument {
     float zoomFactor = 1.0f;
     bool  zoomable = false;
     bool  unread = true;
-    std::vector<SavedDialogueLine> dialogue;   
+    std::vector<SavedDialogueLine> dialogue;
+    std::string dialogueContext;   
+};
+
+struct SavedDialogueEntry {
+    std::string key;            
+    std::string context;        
+    int level = 0;
+    std::string docImagePath;   
+    std::vector<SavedDialogueLine> lines;
 };
 
 struct SaveGameState {
@@ -88,6 +97,7 @@ struct SaveGameState {
     std::vector<SavedInventoryStack> inventoryStacks;
     std::vector<SavedBoxPos> boxPositions;
     std::vector<SavedDocument> documents;
+    std::vector<SavedDialogueEntry> dialogueLog;
 };
 
 struct SaveFile {
@@ -118,5 +128,7 @@ void to_json(nlohmann::json& j, const SavedDialogueLine& l);
 void from_json(const nlohmann::json& j, SavedDialogueLine& l);
 void to_json(nlohmann::json& j, const SavedDocument& d);
 void from_json(const nlohmann::json& j, SavedDocument& d);
+void to_json(nlohmann::json& j, const SavedDialogueEntry& e);
+void from_json(const nlohmann::json& j, SavedDialogueEntry& e);
 
 #endif

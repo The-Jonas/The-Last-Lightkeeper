@@ -43,6 +43,9 @@ public:
     void SetZoomable(bool z) { zoomable = z; }                                      // marcado no Tiled: aceita zoom com F
     bool IsZoomable() const { return zoomable; }
 
+    void SetDialogueContext(std::string c) { dialogueContext = std::move(c); }      // Tiled: dialogue_context
+    const std::string& GetDialogueContext() const { return dialogueContext; }       // origem mostrada no log
+
     // Documento colecionável (Tiled: collectible / doc_title / doc_order).
     void SetCollectible(bool c, std::string title, int order) {
         collectible = c;
@@ -71,6 +74,7 @@ private:
     bool        collectible = false;
     std::string docTitle;
     int         docOrder = 0;
+    std::string dialogueContext;
 };
 
 #endif

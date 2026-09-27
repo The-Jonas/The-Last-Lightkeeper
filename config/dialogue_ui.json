@@ -1,7 +1,7 @@
 {   
     "box_scale_mul": 0.4,
     "chars_per_second": 42.0,
-    "auto_advance_delay": 6.0,
+    "auto_advance_delay": 3.0,
     "max_chars_per_page": 220,
     "margin": 40,
     "portrait_height_mul": 1.0,

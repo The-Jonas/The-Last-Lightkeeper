@@ -53,6 +53,11 @@
                          "value":-200
                         }, 
                         {
+                         "name":"dialogue",
+                         "type":"string",
+                         "value":"[{\"speaker\":\"Martin\",\"listener\":\"Luke\",\"emotion\":\"Normal\",\"listener_emotion\":\"Doubt\",\"text\":\"Isso pode ajudar a consertar a escada!\"}]"
+                        }, 
+                        {
                          "name":"heightLevel",
                          "type":"int",
                          "value":0
@@ -1354,7 +1359,12 @@
                         {
                          "name":"dialogue",
                          "type":"string",
-                         "value":"[{\"speaker\":\"Luke\",\"listener\":\"Martin\",\"emotion\":\"Fear\",\"listener_emotion\":\"Fear\",\"text\":\"Voc\u00ea ouviu aquele barulho? E ainda perdemos a nossa lanterna, e agora?\"},{\"speaker\":\"Martin\",\"listener\":\"Luke\",\"emotion\":\"Normal\",\"listener_emotion\":\"Fear\",\"text\":\"Calma, vai ficar tudo bem, conseguimos nos virar at\u00e9 agora.\"}]"
+                         "value":"[{\"speaker\":\"Luke\",\"listener\":\"Martin\",\"emotion\":\"Fear\",\"listener_emotion\":\"Fear\",\"text\":\"Fecha a porta, Martin! R\u00e1pido!\"},{\"speaker\":\"Martin\",\"listener\":\"Luke\",\"emotion\":\"Fear\",\"listener_emotion\":\"Fear\",\"text\":\"J\u00e1 fechei. Fica quieto um pouco... deixa eu ouvir.\"},{\"speaker\":\"Luke\",\"listener\":\"Martin\",\"emotion\":\"Fear\",\"listener_emotion\":\"Fear\",\"text\":\"Aquela coisa tava bem ali fora. Voc\u00ea viu o tamanho dela?\"},{\"speaker\":\"Martin\",\"listener\":\"Luke\",\"emotion\":\"Doubt\",\"listener_emotion\":\"Fear\",\"text\":\"Vi. Mas ela n\u00e3o veio atr\u00e1s da gente pela porta. Deu a volta no farol... e depois foi subindo.\"},{\"speaker\":\"Luke\",\"listener\":\"Martin\",\"emotion\":\"Doubt\",\"listener_emotion\":\"Doubt\",\"text\":\"Subindo? Pela parede?\"},{\"speaker\":\"Martin\",\"listener\":\"Luke\",\"emotion\":\"Doubt\",\"listener_emotion\":\"Doubt\",\"text\":\"Ouvi as pedras rangendo l\u00e1 em cima. Se tiver alguma janela aberta nos andares de cima, ela j\u00e1 t\u00e1 aqui dentro com a gente.\"},{\"speaker\":\"Luke\",\"listener\":\"Martin\",\"emotion\":\"Fear\",\"listener_emotion\":\"Doubt\",\"text\":\"Ent\u00e3o a gente trancou a porta de um lugar que ela j\u00e1 entrou?\"},{\"speaker\":\"Martin\",\"listener\":\"Luke\",\"emotion\":\"Normal\",\"listener_emotion\":\"Fear\",\"text\":\"A gente n\u00e3o sabe disso. Respira. L\u00e1 fora a gente n\u00e3o tinha chance nenhuma.\"},{\"speaker\":\"Luke\",\"listener\":\"Martin\",\"emotion\":\"Fear\",\"listener_emotion\":\"Normal\",\"text\":\"Martin... olha aquele canto ali, onde a luz n\u00e3o chega. Tem algu\u00e9m parado ali?\"},{\"speaker\":\"Martin\",\"listener\":\"Luke\",\"emotion\":\"Doubt\",\"listener_emotion\":\"Fear\",\"text\":\"\u00c9 s\u00f3 sombra. Acho. O isqueiro n\u00e3o alcan\u00e7a t\u00e3o longe.\"},{\"speaker\":\"Luke\",\"listener\":\"Martin\",\"emotion\":\"Doubt\",\"listener_emotion\":\"Fear\",\"text\":\"E ele ainda vai durar muito? A chama t\u00e1 ficando pequena.\"},{\"speaker\":\"Martin\",\"listener\":\"Luke\",\"emotion\":\"Normal\",\"listener_emotion\":\"Doubt\",\"text\":\"N\u00e3o muito. Um farol precisa de luz pra funcionar, ent\u00e3o deve ter um interruptor em algum lugar. Ou pelo menos \u00f3leo pra lamparina.\"},{\"speaker\":\"Luke\",\"listener\":\"Martin\",\"emotion\":\"Doubt\",\"listener_emotion\":\"Normal\",\"text\":\"E se o faroleiro ainda estiver por aqui? Algu\u00e9m tinha que cuidar disso tudo.\"},{\"speaker\":\"Martin\",\"listener\":\"Luke\",\"emotion\":\"Doubt\",\"listener_emotion\":\"Doubt\",\"text\":\"Se estivesse, a luz l\u00e1 em cima estaria acesa.\"},{\"speaker\":\"Martin\",\"listener\":\"Luke\",\"emotion\":\"Normal\",\"listener_emotion\":\"Fear\",\"text\":\"Vamos fazer assim: voc\u00ea fica colado em mim, a gente procura essa luz e n\u00e3o faz barulho. Nada de correr \u00e0 toa, nada de gritar. Combinado?\"},{\"speaker\":\"Luke\",\"listener\":\"Martin\",\"emotion\":\"Fear\",\"listener_emotion\":\"Normal\",\"text\":\"...Combinado. Mas voc\u00ea vai na frente.\"}]"
+                        }, 
+                        {
+                         "name":"dialogue_context",
+                         "type":"string",
+                         "value":"Ao chegar no farol"
                         }, 
                         {
                          "name":"once",
@@ -1401,6 +1411,11 @@
                          "name":"dialogue",
                          "type":"string",
                          "value":"[{\"speaker\":\"Martin\",\"listener\":\"Luke\",\"emotion\":\"Doubt\",\"listener_emotion\":\"Normal\",\"text\":\"Ser\u00e1 que tem algo por perto que pode nos ajudar a prosseguir?\"}, {\"speaker\":\"Luke\",\"listener\":\"Martin\",\"emotion\":\"Doubt\",\"listener_emotion\":\"Doubt\",\"text\":\"Pois\u00e9, talvez algo para passar daquela escada perigosa...\"}]"
+                        }, 
+                        {
+                         "name":"dialogue_context",
+                         "type":"string",
+                         "value":"Explorando o Primeiro Andar"
                         }, 
                         {
                          "name":"once",

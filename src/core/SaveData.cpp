@@ -64,20 +64,37 @@ void from_json(const json& j, SavedDialogueLine& l) {
 void to_json(json& j, const SavedDocument& d) {
     j = json{{"imagePath", d.imagePath}, {"title", d.title}, {"soundPath", d.soundPath},
              {"level", d.level}, {"order", d.order}, {"zoomFactor", d.zoomFactor},
-             {"zoomable", d.zoomable}, {"unread", d.unread}, {"dialogue", d.dialogue}};
+             {"zoomable", d.zoomable}, {"unread", d.unread}, {"dialogue", d.dialogue},
+             {"dialogueContext", d.dialogueContext}};
 }
 
 void from_json(const json& j, SavedDocument& d) {
-    d.imagePath  = j.value("imagePath", "");
-    d.title      = j.value("title", "");
-    d.soundPath  = j.value("soundPath", "");
-    d.level      = j.value("level", 0);
-    d.order      = j.value("order", 0);
-    d.zoomFactor = j.value("zoomFactor", 1.0f);
-    d.zoomable   = j.value("zoomable", false);
-    d.unread     = j.value("unread", true);
-    d.dialogue   = j.value("dialogue", std::vector<SavedDialogueLine>{});
+    d.imagePath       = j.value("imagePath", "");
+    d.title           = j.value("title", "");
+    d.soundPath       = j.value("soundPath", "");
+    d.level           = j.value("level", 0);
+    d.order           = j.value("order", 0);
+    d.zoomFactor      = j.value("zoomFactor", 1.0f);
+    d.zoomable        = j.value("zoomable", false);
+    d.unread          = j.value("unread", true);
+    d.dialogue        = j.value("dialogue", std::vector<SavedDialogueLine>{});
+    d.dialogueContext = j.value("dialogueContext", "");
 }
+
+void to_json(json& j, const SavedDialogueEntry& e) {
+    j = json{{"key", e.key}, {"context", e.context}, {"level", e.level},
+             {"docImagePath", e.docImagePath}, {"lines", e.lines}};
+}
+// Serializa uma conversa do log de diálogos.
+
+void from_json(const json& j, SavedDialogueEntry& e) {
+    e.key          = j.value("key", "");
+    e.context      = j.value("context", "");
+    e.level        = j.value("level", 0);
+    e.docImagePath = j.value("docImagePath", "");
+    e.lines        = j.value("lines", std::vector<SavedDialogueLine>{});
+}
+// Lê uma conversa do log (campos ausentes ficam no padrão).
 
 void from_json(const json& j, SavedBoxPos& b) {
     b.tiledId = j.value("tiledId", -1);
@@ -152,7 +169,8 @@ void to_json(json& j, const SaveGameState& s) {
              {"litCandleIds", s.litCandleIds},
              {"repairedIds", s.repairedIds},
              {"boxPositions", s.boxPositions},
-             {"documents", s.documents}};
+             {"documents", s.documents},
+             {"dialogueLog", s.dialogueLog}};
 }
 
 void from_json(const json& j, SaveGameState& s) {
@@ -192,6 +210,7 @@ void from_json(const json& j, SaveGameState& s) {
     s.inventoryStacks = j.value("inventoryStacks", std::vector<SavedInventoryStack>{});
     s.boxPositions = j.value("boxPositions", std::vector<SavedBoxPos>{});
     s.documents = j.value("documents", std::vector<SavedDocument>{});
+    s.dialogueLog = j.value("dialogueLog", std::vector<SavedDialogueEntry>{});
 }
 
 void to_json(json& j, const SaveFile& f) {

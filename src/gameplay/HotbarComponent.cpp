@@ -49,6 +49,16 @@ void PlayRandomPickupSound() {
     }
 }
 
+// Nome do item em português para a origem no log ("Ao pegar: Tábua de madeira").
+std::string ItemLabelPt(const std::string& name) {
+    if (name == "Flashlight" || name == "Broken Flashlight") return "Isqueiro";
+    if (name == "Lamp")             return "Lamparina";
+    if (name == "Fuel")             return "Combustível";
+    if (name == "Apple")            return "Maçã";
+    if (name == "Tabua de Madeira") return "Tábua de madeira";
+    return name;
+}
+
 PickupOutcome PerformPickup(Inventory& inventory, ItemPickup* closest, std::vector<ItemPickup*>& itemPickups,
                             Character* bigChar) {
     const ItemDef& def = *closest->GetDef();
@@ -62,12 +72,20 @@ PickupOutcome PerformPickup(Inventory& inventory, ItemPickup* closest, std::vect
             .Pos("", pickupPos.x, pickupPos.y));
         return PickupOutcome::Blocked;   // bolsa cheia
     }
+
     for (auto& p : itemPickups) {
         if (p == closest) {
             p = nullptr;
             break;
         }
     }
+
+    // Guarda a conversa antes de destruir o pickup.
+    const std::vector<DialogueBox::Line> pickupLines = closest->GetDialogueLines();
+    std::string pickupContext = closest->GetDialogueContext();
+    if (pickupContext.empty()) pickupContext = "Ao pegar: " + ItemLabelPt(def.name);
+    const int pickupTiledId = closest->GetAssociated().tiledId;
+
     closest->Destroy();
     PlayRandomPickupSound();
     CrashHandler::Log("pegou item: %s", def.name.c_str());
@@ -77,6 +95,9 @@ PickupOutcome PerformPickup(Inventory& inventory, ItemPickup* closest, std::vect
         .Pos("", pickupPos.x, pickupPos.y));
     if (StageState* stage = Game::TryGetStageState()) {
         stage->NotifyItemPickupCollected(closest);
+        if (!pickupLines.empty()) {
+            stage->PlayDialogue("item:" + std::to_string(pickupTiledId), pickupContext, pickupLines);
+        }
         stage->SaveCurrentProgress();
     }
     return inventory.IsFull() ? PickupOutcome::PickedUpAndFilled : PickupOutcome::PickedUp;
@@ -84,36 +105,24 @@ PickupOutcome PerformPickup(Inventory& inventory, ItemPickup* closest, std::vect
 
 // Dispara a fala adequada ao resultado de pegar item: bolsa cheia → "bolsa
 // pesada" (sem a fala normal de pegar); bloqueado → "não consigo"; senão,
-// ocasionalmente comenta.
+// ocasionalmente comenta. A conversa da tábua vem do Tiled (ItemSpawn: dialogue).
 void VoiceForPickup(PickupOutcome outcome, const std::string& itemName, bool oilAtMax) {
     const bool woodPlank = (itemName == "Tabua de Madeira");
     switch (outcome) {
     case PickupOutcome::Blocked:
-        // Óleo além do limite de combustível: "minha bolsa tá pesada" (a bolsa já
-        // está cheia de óleo). Qualquer outro bloqueio: "não consigo".
+        // Óleo além do limite de combustível: "minha bolsa tá pesada".
+        // Qualquer outro bloqueio: "não consigo".
         if (oilAtMax) GameVoice::OnBagFull();
         else          GameVoice::OnActionBlocked();
         break;
     case PickupOutcome::PickedUpAndFilled:
-        if (woodPlank) {
-            GameVoice::OnPickupWoodPlank();
-            if (StageState* stage = Game::TryGetStageState()) {
-                stage->QueueDialogue(DialogueBox::Speaker::LittleBrother, DialogueBox::Speaker::BigBrother,
-                                     DialogueBox::Emotion::Normal, DialogueBox::Emotion::Doubt, "Isso pode ajudar a consertar a escada!");
-            }
-        }
-        else GameVoice::OnBagFull();
+        if (woodPlank) GameVoice::OnPickupWoodPlank();
+        else           GameVoice::OnBagFull();
         break;
     case PickupOutcome::PickedUp:
         // Tábua de madeira → SEMPRE "Isso vai servir."; demais itens → comentário ocasional.
-        if (woodPlank) {
-            GameVoice::OnPickupWoodPlank();
-            if (StageState* stage = Game::TryGetStageState()) {
-                stage->QueueDialogue(DialogueBox::Speaker::BigBrother, DialogueBox::Speaker::None,
-                                     DialogueBox::Emotion::Normal, DialogueBox::Emotion::Normal, "Isso pode ajudar a consertar a escada!");
-            }
-        }
-        else GameVoice::OnItemPickup();
+        if (woodPlank) GameVoice::OnPickupWoodPlank();
+        else           GameVoice::OnItemPickup();
         break;
     }
 }

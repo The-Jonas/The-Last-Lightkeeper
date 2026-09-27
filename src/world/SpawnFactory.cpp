@@ -358,6 +358,13 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
 
             ApplyTiledFlip(&itemObj, spawn);
 
+            std::vector<DialogueBox::Line> pickupLines = ParseDialogueLinesProperty(spawn, "dialogue");
+            if (!pickupLines.empty()) {
+                std::string ctx = spawn.properties.count("dialogue_context")
+                                ? spawn.properties.at("dialogue_context").get<std::string>() : "";
+                pickup->SetDialogue(std::move(pickupLines), std::move(ctx));
+            }
+
             stage.AddObject(&itemObj);
             } 
         }
@@ -435,6 +442,9 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
                 bool once = spawn.properties.count("dialogue_once")
                           ? spawn.properties.at("dialogue_once").get<bool>() : true;
                 jornal->SetDialogueLines(lines, once);
+                if (spawn.properties.count("dialogue_context")) {
+                    jornal->SetDialogueContext(spawn.properties.at("dialogue_context").get<std::string>());
+                }
             }
         }
     }
@@ -729,8 +739,10 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
     
         std::vector<DialogueBox::Line> lines = ParseDialogueLinesProperty(spawn, "dialogue");
         bool once = spawn.properties.count("once") ? spawn.properties.at("once").get<bool>() : true;
-    
-        triggerObj->AddComponent(new DialogueTrigger(*triggerObj, lines, once));
+        std::string context = spawn.properties.count("dialogue_context")
+                            ? spawn.properties.at("dialogue_context").get<std::string>() : "";
+
+        triggerObj->AddComponent(new DialogueTrigger(*triggerObj, lines, once, context));
         triggerObj->box.x = spawn.x;
         triggerObj->box.y = spawn.y;
         triggerObj->box.w = spawn.w;

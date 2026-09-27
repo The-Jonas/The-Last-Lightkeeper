@@ -135,13 +135,25 @@ void DialogueBox::Update(float dt) {
     if (autoAdvanceTimer <= 0.0f) AdvancePageOrLine();
 }
 
-std::string DialogueBox::PortraitPath(Speaker s, Emotion e, bool mouthOpen) const {
+std::string DialogueBox::PortraitPath(Speaker s, Emotion e, bool mouthOpen) {
     if (s == Speaker::None) return "";
     const std::string who   = (s == Speaker::BigBrother) ? "irmaozao" : "irmaozinho";
     const std::string emo   = (e == Emotion::Normal) ? "NORMAL" : (e == Emotion::Fear) ? "MEDO" : "DUVIDA";
     const std::string mouth = mouthOpen ? "aberta" : "fechada";
     return "Recursos/img/ui/portraits/" + who + "/" + emo + "/" + mouth + ".png";
 }
+
+void DialogueBox::Stop() {
+    queue.clear();
+    pendingPages.clear();
+    fullText.clear();
+    revealedChars    = 0;
+    typeTimer        = 0.0f;
+    autoAdvanceTimer = -1.0f;
+    mouthFlapToggle  = 0;
+    active = false;
+}
+// Corta a conversa na hora: esvazia a fila e as páginas pendentes e esconde a caixa.
 
 void DialogueBox::Render(SDL_Renderer* renderer, int windowW, int windowH) {
     if (!renderer || !active) return;

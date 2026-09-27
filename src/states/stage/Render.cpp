@@ -1256,10 +1256,14 @@ void StageState::Render(){
         }
     }
 
+     // HUD de jogo (fica POR BAIXO dos menus, da pasta e do visualizador).
+    fuelFlameHud.Render(renderer, inventory, Game::GetInstance().GetWindowsWidth(), Game::GetInstance().GetWindowsHeight());
     RenderInteractionPrompt(renderer);
     RenderTutorials(renderer);
     RenderVoiceSubtitle(renderer);
     RenderLevelTitleBanner(renderer);
+
+    // Overlays que cobrem o jogo.
     RenderPauseMenu(renderer);
     RenderSettingsPanel(renderer);
     RenderControlsPanel(renderer);
@@ -1268,7 +1272,6 @@ void StageState::Render(){
     RenderJournalViewer(renderer);
     RenderSaveToast(renderer);
     dialogueBox.Render(renderer, Game::GetInstance().GetWindowsWidth(), Game::GetInstance().GetWindowsHeight());
-    fuelFlameHud.Render(renderer, inventory, Game::GetInstance().GetWindowsWidth(), Game::GetInstance().GetWindowsHeight());
 
     // Status dos toggles de debug (canto superior direito) — verde=ON, cinza=OFF.
     if (Game::debugMode) {

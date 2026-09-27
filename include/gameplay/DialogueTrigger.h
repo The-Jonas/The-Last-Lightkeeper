@@ -14,7 +14,8 @@ class GameObject;
 class DialogueTrigger : public Component {
 public:
 
-    DialogueTrigger(GameObject& associated, std::vector<DialogueBox::Line> lines, bool once);
+    DialogueTrigger(GameObject& associated, std::vector<DialogueBox::Line> lines, bool once,
+                    std::string context = "");
 
     void Start()          override {}
     void Update(float dt) override;             // Checa se algum irmão pisou dentro; dispara a conversa
@@ -24,6 +25,7 @@ private:
     std::vector<DialogueBox::Line> lines;
     bool once;                                  // true = só dispara 1 vez na vida do nível
     bool fired = false;
+    std::string context;
 };
 
 #endif

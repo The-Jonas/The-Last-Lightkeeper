@@ -351,8 +351,32 @@ public:
         dialogueBox.Queue(speaker, listener, emotion, listenerEmotion, text);
     }
 
+    // Toca uma conversa E registra no log de diálogos (uma vez por chave).
+    void PlayDialogue(const std::string& key, const std::string& context,
+                      const std::vector<DialogueBox::Line>& lines,
+                      const std::string& docImagePath = "");
+
     float pendingWindowBreakDialogueTimer = -1.0f;
     float pendingWindowBreakLineTimer = -1.0f;
+
+    // True se a conversa com esta chave (sem o prefixo do andar) já está no log deste andar.
+    bool IsDialogueLogged(const std::string& key) const {
+        const std::string fullKey = std::to_string(currentLevelIndex) + ":" + key;
+        for (const DialogueLogEntry& e : dialogueLog) {
+            if (e.key == fullKey) return true;
+        }
+        return false;
+    }
+
+    // ── Log de diálogos ────────────────────────────────────────────────────
+    struct DialogueLogEntry {
+        std::string key;                                                // "andar:origem" — evita duplicar gatilho repetível
+        std::string context;                                            // "Ao chegar no farol" (Tiled: dialogue_context)
+        int level = 0;                                                  // andar onde aconteceu
+        std::string docImagePath;                                       // documento de origem (vazio = não veio de papel)
+        std::vector<DialogueBox::Line> lines;
+    };
+    std::vector<DialogueLogEntry> dialogueLog;                          // ordem em que aconteceram
 
     // ── Pasta de documentos ───────────────────────────────────────────────
     struct CollectedDocument {
@@ -365,10 +389,26 @@ public:
         bool  unread     = true;                                        // mostra o "novo" até abrir pela pasta
         std::vector<DialogueBox::Line> dialogueLines;                   // tocam na 1ª leitura pela pasta
         int   level      = 0;                                           // andar onde foi coletado (0 = primeiro)
+        std::string dialogueContext;
     };
     std::vector<CollectedDocument> collectedDocuments;                  // sempre ordenada por order
     bool documentTutorialShown = false;
     void CollectJornal(Jornal* jornal);
+
+    int documentFolderTab   = 0;                                        // 0 = Documentos, 1 = Diálogos
+    int dialogueLogSelection = 0;                                       // conversa selecionada na aba Diálogos
+
+    void UpdateDialogueLogTab(float dt);
+    void RenderFolderTabs(SDL_Renderer* renderer, float a);
+    void RenderDialogueLogTab(SDL_Renderer* renderer, float a);
+    const DialogueLogEntry* FindDialogueForDocument(const std::string& imagePath) const;
+
+    bool  dialogueLogFocusPanel   = false;                              // true = W/S rolam a conversa; false = escolhem na lista
+    float dialogueLogScroll       = 0.0f;                               // rolagem atual do painel de balões (px)
+    float dialogueLogScrollTarget = 0.0f;
+    float dialogueLogMaxScroll    = 0.0f;                               // medido no Render (altura dos balões − altura do painel)
+    static constexpr float kDialogueLogScrollSpeed = 900.0f;            // px/s segurando W/S
+    bool dialogueReplayActive = false;                                  // a conversa na caixa é um replay da pasta (ESC pode cortar)
 
     static constexpr float kJournalOpenDuration = 0.35f;
     static constexpr float kJournalCloseDuration = 0.2f;

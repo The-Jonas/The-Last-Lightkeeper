@@ -137,9 +137,10 @@ void StageState::Update(float dt){
         pendingWindowBreakLineTimer -= dt;
         if (pendingWindowBreakLineTimer <= 0.0f) {
             pendingWindowBreakLineTimer = -1.0f;
-            dialogueBox.Queue(DialogueBox::Speaker::LittleBrother, DialogueBox::Speaker::BigBrother,
-                              DialogueBox::Emotion::Doubt, DialogueBox::Emotion::Fear,
-                              "Que barulho foi esse?");
+            PlayDialogue("event:window_break", "Ao ouvir uma janela quebrar", {
+                {DialogueBox::Speaker::LittleBrother, DialogueBox::Speaker::BigBrother,
+                 DialogueBox::Emotion::Doubt, DialogueBox::Emotion::Fear,
+                 "Que barulho foi esse?"}});
         }
     }     
 

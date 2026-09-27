@@ -127,12 +127,27 @@ SaveGameState StageState::CaptureSaveState() const {
         sd.zoomFactor = d.zoomFactor;
         sd.zoomable   = d.zoomable;
         sd.unread     = d.unread;
+        sd.dialogueContext = d.dialogueContext;
         for (const DialogueBox::Line& l : d.dialogueLines) {
             sd.dialogue.push_back({static_cast<int>(l.speaker), static_cast<int>(l.listener),
                                    static_cast<int>(l.emotion), static_cast<int>(l.listenerEmotion),
                                    l.text});
         }
         state.documents.push_back(std::move(sd));
+    }
+
+    for (const DialogueLogEntry& e : dialogueLog) {
+        SavedDialogueEntry se;
+        se.key          = e.key;
+        se.context      = e.context;
+        se.level        = e.level;
+        se.docImagePath = e.docImagePath;
+        for (const DialogueBox::Line& l : e.lines) {
+            se.lines.push_back({static_cast<int>(l.speaker), static_cast<int>(l.listener),
+                                static_cast<int>(l.emotion), static_cast<int>(l.listenerEmotion),
+                                l.text});
+        }
+        state.dialogueLog.push_back(std::move(se));
     }
 
     return state;
@@ -189,6 +204,7 @@ void StageState::ApplySaveState(const SaveGameState& state) {
         d.zoomFactor = sd.zoomFactor;
         d.zoomable   = sd.zoomable;
         d.unread     = sd.unread;
+        d.dialogueContext = sd.dialogueContext;
         for (const SavedDialogueLine& l : sd.dialogue) {
             d.dialogueLines.push_back({static_cast<DialogueBox::Speaker>(l.speaker),
                                        static_cast<DialogueBox::Speaker>(l.listener),
@@ -198,6 +214,25 @@ void StageState::ApplySaveState(const SaveGameState& state) {
         }
         collectedDocuments.push_back(std::move(d));
     }
+
+    dialogueLog.clear();
+    for (const SavedDialogueEntry& se : state.dialogueLog) {
+        DialogueLogEntry e;
+        e.key          = se.key;
+        e.context      = se.context;
+        e.level        = se.level;
+        e.docImagePath = se.docImagePath;
+        for (const SavedDialogueLine& l : se.lines) {
+            e.lines.push_back({static_cast<DialogueBox::Speaker>(l.speaker),
+                               static_cast<DialogueBox::Speaker>(l.listener),
+                               static_cast<DialogueBox::Emotion>(l.emotion),
+                               static_cast<DialogueBox::Emotion>(l.listenerEmotion),
+                               l.text});
+        }
+        dialogueLog.push_back(std::move(e));
+    }
+    dialogueLogSelection = std::max(0, static_cast<int>(dialogueLog.size()) - 1);
+
     documentTutorialShown = !collectedDocuments.empty();   // já viu o tutorial ao pegar o 1º
     knownDocumentKeysLevel = -1;                           // refaz a contagem na próxima abertura
     RemoveCollectedJornalsFromWorld();
@@ -734,7 +769,7 @@ bool StageState::BuildPauseBlurTexture(SDL_Renderer* renderer, int winW, int win
     SDL_RenderCopy(renderer, renderTarget, nullptr, nullptr);
     SDL_SetTextureBlendMode(renderTarget, sceneBlend);                              // devolve o modo que o Render usa
 
-    SDL_SetRenderTarget(renderer, prev);
+    SDL_SetRenderTarget(renderer, prev);    
     return true;
 }
 
