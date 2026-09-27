@@ -87,6 +87,10 @@ void LoadingState::Update(float /*dt*/) {
 
     stage->LoadAssets();
 
+    // Sons carregados AQUI, na tela de carregamento — não na entrada do jogo.
+    GameSfx::Preload();
+    GameVoice::Preload();
+
     if (loadMode == StageState::LoadMode::Continue) {
         SaveFile saveFile;
         if (SaveManager::Load(saveFile)) {

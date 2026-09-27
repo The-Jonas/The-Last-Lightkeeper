@@ -25,6 +25,8 @@ void StopAllGameplayAudio();
 /// monstro). Usada nas transições nível↔menu para nenhum som sobreviver.
 void HardStopAll();
 
+void Preload();         // Carrega todos os efeitos agora (chamar na tela de carregamento)
+
 // Funções para fazer o áudio ficar direcional
 void SetChannelSpatial(int channel, float srcX, float srcY, float listX, float listY, float maxDist = 800.0f);
 void ClearChannelSpatial(int channel);

@@ -281,6 +281,10 @@ void NotifyLoadingEnd() {
     gMuted = false;
 }
 
+void Preload() {
+    EnsureLoaded();
+}
+
 void StopAll() {
     if (gChannel >= 0 && Mix_Playing(gChannel)) {
         Mix_HaltChannel(gChannel);

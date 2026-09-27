@@ -231,9 +231,9 @@ void StageState::LoadAssets() {
             break;
         }
     }
-    if (oceanWavesChunk) {
-        oceanAmbient_.EnsurePlaying();
-    } else if (!cfg.oceanChunkCandidates.empty()) {
+    // As ondas NÃO começam aqui: isto roda na tela de carregamento, e elas tocariam
+    // por baixo da cutscene. Quem dá o play é o Update, depois do ambientResumeDelay.
+    if (!oceanWavesChunk && !cfg.oceanChunkCandidates.empty()) {
         std::cerr << "Ocean waves: falha ao carregar qualquer formato (tentou .ogg, .wav, .mp3). "
                      "SDL_mixer só tem 1 faixa Mix_Music; o ambiente precisa de Mix_Chunk. "
                      "MP3 muito longo como chunk pode falhar (RAM); prefira um loop OGG/WAV curto."

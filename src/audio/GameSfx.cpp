@@ -396,6 +396,13 @@ void NotifyLoadingEnd() {
     gThunderFlashTimer = 0.0f;
 }
 
+// Carrega todos os efeitos de uma vez, durante o "Carregando...", para a entrada
+// no jogo não travar decodificando sons.
+void Preload() {
+    EnsureLoaded();
+}
+
+
 void NotifyBoxSlide() {
     if (gGameplayMuted) {
         return;

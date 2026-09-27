@@ -9,6 +9,7 @@ namespace StageOceanAudio {
 constexpr int kNominalPercent = 100; // % de MIX_MAX × master nas ondas (relativo ao slider).
 /// Canal reservado em Game.cpp (Mix_ReserveChannels) — não usar Mix_PlayChannel(-1) aqui.
 constexpr int kAmbientWavesChannel = 0;
+constexpr int kFadeInMs = 1500;   // entrada suave das ondas ao começar/voltar ao jogo
 }
 
 /// Loop de ondas via Mix_Chunk (mesmo comportamento anterior em `StageState`).
@@ -23,6 +24,7 @@ private:
     std::shared_ptr<Mix_Chunk>* wavesChunk_ = nullptr;
     int* mixerChannel_ = nullptr;
     bool* musicMuted_ = nullptr;
+    int TargetVolume() const;
 };
 
 #endif

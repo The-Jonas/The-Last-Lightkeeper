@@ -12,6 +12,8 @@ void NotifyLoadingBegin();   // silencia/para as falas durante carregamento
 void NotifyLoadingEnd();
 void StopAll();              // corta a fala atual (morte/troca de cena)
 
+void Preload();             // Carrega todas as falas agora (chamar na tela de carregamento)
+
 // Legenda (subtitle) da fala em reprodução. Como só existe UMA fala por vez e
 // cada gatilho conhece seu texto, dá para legendar exatamente: retorna true e
 // preenche `out` enquanto o canal de voz estiver tocando; false quando em
