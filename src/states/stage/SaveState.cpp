@@ -1,35 +1,120 @@
+// ─────────────────────────────────────────────────────────────────────────────
+//  StageState — save/load, confirmação de saída, prompt de interação, menu de
+//  pausa, aviso de "progresso salvo" e tutoriais.
+// ─────────────────────────────────────────────────────────────────────────────
 #include "states/stage/StageState.h"
-#include "ui/KeyGlyphs.h"
-#include "core/Telemetry.h"
 #include "states/stage/FirstLoadData.h"
 #include "states/LoadingState.h"
-#include "core/SaveManager.h"
+#include "audio/GameVoice.h"
 #include "core/Game.h"
-#include "core/Resources.h"
 #include "core/InputManager.h"
-#include "ui/VideoSettings.h"
+#include "core/Resources.h"
+#include "core/SaveManager.h"
+#include "core/Telemetry.h"
 #include "engine/GameObject.h"
-#include "gameplay/Character.h"
 #include "gameplay/Box.h"
 #include "gameplay/Candlestick.h"
-#include "gameplay/Window.h"
-#include "gameplay/Repairable.h"
-#include "gameplay/ItemPickup.h"
+#include "gameplay/Character.h"
 #include "gameplay/Item.h"
-#include "audio/GameVoice.h"
+#include "gameplay/ItemPickup.h"
 #include "gameplay/Jornal.h"
 #include "gameplay/RadioAsset.h"
+#include "gameplay/Repairable.h"
+#include "gameplay/Window.h"
+#include "ui/KeyGlyphs.h"
 
 #define INCLUDE_SDL_TTF
 #include "SDL_include.h"
 
 #include <algorithm>
 #include <cmath>
-#include <cstdio>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace {
 
+const char* kUiFont = "Recursos/font/times.ttf";
+
+// ── Menu de pausa ────────────────────────────────────────────────────────────
+enum PauseItem { kPauseContinue, kPauseSave, kPauseSettings, kPauseRestart, kPauseQuit };
+const char* kPauseMenuLabels[] = {"Continuar", "Salvar", "Configurações", "Reiniciar Nivel", "Sair"};
+const char* kPauseMenuIcons[]  = {
+    "Recursos/img/menu/pause/icon_continuar.png",
+    "Recursos/img/menu/pause/icon_salvar.png",
+    "Recursos/img/menu/pause/icon_config.png",
+    "Recursos/img/menu/pause/icon_reiniciar.png",
+    "Recursos/img/menu/pause/icon_voltar.png",
+};
+
+// ── Tutoriais: contadores POR SESSÃO (valem entre andares e instâncias) ──────
+int  sLighterTutShown      = 0;
+int  sSwapTutShown         = 0;
+int  sAbilityTutShown      = 0;
+int  sMoveTutShown         = 0;
+int  sPickupTutShown       = 0;
+int  sRefuelTutShown       = 0;
+int  sCycleTutShown        = 0;      // trocar item na roda (1x)
+int  sLighterEmptyTutShown = 0;      // "sua luz apagou" (1x)
+int  sLampTutShown         = 0;      // explicação da lamparina (1x)
+bool sFarVoiceArmed        = true;   // fala de medo/bronca ao se afastarem (sem limite)
+bool sScoldTurn            = false;  // alterna medo do irmãozinho / bronca do irmãozão
+
+// Posição e tamanho do modal de sair e dos seus dois botões (input e render usam o mesmo).
+void QuitConfirmLayout(SDL_Rect& panel, SDL_Rect& saveBtn, SDL_Rect& cancelBtn) {
+    const int winW = Game::GetInstance().GetWindowsWidth();
+    const int winH = Game::GetInstance().GetWindowsHeight();
+    constexpr int kPanelW = 760, kPanelH = 260, kBtnW = 260, kBtnH = 48;
+    panel = {(winW - kPanelW) / 2, (winH - kPanelH) / 2, kPanelW, kPanelH};
+    const int btnY = panel.y + kPanelH - 80;
+    saveBtn   = {panel.x + 60, btnY, kBtnW, kBtnH};
+    cancelBtn = {panel.x + kPanelW - kBtnW - 60, btnY, kBtnW, kBtnH};
+}
+
+// Desenha um texto em (x, y); wrapW > 0 quebra linhas nessa largura.
+void DrawUiText(SDL_Renderer* r, TTF_Font* font, const char* text, int x, int y,
+                SDL_Color color, int wrapW = 0) {
+    if (!font || !text) return;
+    SDL_Surface* s = (wrapW > 0) ? TTF_RenderUTF8_Blended_Wrapped(font, text, color, static_cast<Uint32>(wrapW))
+                                 : TTF_RenderUTF8_Blended(font, text, color);
+    if (!s) return;
+    if (SDL_Texture* t = SDL_CreateTextureFromSurface(r, s)) {
+        const SDL_Rect dst{x, y, s->w, s->h};
+        SDL_RenderCopy(r, t, nullptr, &dst);
+        SDL_DestroyTexture(t);
+    }
+    SDL_FreeSurface(s);
+}
+
+// Nome da tecla ligada à ação, ou `fallback` se o SDL não tiver nome para ela.
+std::string KeyName(GameAction action, const char* fallback) {
+    const char* k = SDL_GetKeyName(InputManager::GetInstance().GetBinding(action));
+    return (k && k[0] != '\0') ? std::string(k) : std::string(fallback);
+}
+
+// Converte linhas de diálogo do jogo para o formato do save (enums viram int).
+std::vector<SavedDialogueLine> ToSavedLines(const std::vector<DialogueBox::Line>& lines) {
+    std::vector<SavedDialogueLine> out;
+    out.reserve(lines.size());
+    for (const DialogueBox::Line& l : lines) {
+        out.push_back({static_cast<int>(l.speaker), static_cast<int>(l.listener),
+                       static_cast<int>(l.emotion), static_cast<int>(l.listenerEmotion), l.text});
+    }
+    return out;
+}
+
+// Caminho inverso de ToSavedLines.
+std::vector<DialogueBox::Line> FromSavedLines(const std::vector<SavedDialogueLine>& lines) {
+    std::vector<DialogueBox::Line> out;
+    out.reserve(lines.size());
+    for (const SavedDialogueLine& l : lines) {
+        out.push_back({static_cast<DialogueBox::Speaker>(l.speaker), static_cast<DialogueBox::Speaker>(l.listener),
+                       static_cast<DialogueBox::Emotion>(l.emotion), static_cast<DialogueBox::Emotion>(l.listenerEmotion),
+                       l.text});
+    }
+    return out;
+}
+
+// Posição, sanidade e estado de escada de um irmão, para o save.
 SavedCharacter CaptureCharacter(GameObject* object, Character* character) {
     SavedCharacter saved;
     if (!object || !character) {
@@ -43,6 +128,7 @@ SavedCharacter CaptureCharacter(GameObject* object, Character* character) {
     return saved;
 }
 
+// Devolve ao irmão o que CaptureCharacter guardou.
 void ApplyCharacter(const SavedCharacter& saved, GameObject* object, Character* character) {
     if (!object || !character) {
         return;
@@ -54,14 +140,21 @@ void ApplyCharacter(const SavedCharacter& saved, GameObject* object, Character* 
     character->stairAnchorY = saved.stairAnchorY;
 }
 
+// Todos os itens que podem aparecer no save (ciclo de pickups + lanterna inicial).
 std::vector<ItemDef> BuildItemCatalog(const StageFirstLoadData& cfg) {
     std::vector<ItemDef> catalog = cfg.pickupCycle;
     catalog.push_back(cfg.startingFlashlight);
     return catalog;
 }
 
-} // namespace
+}  // namespace
 
+// ═════════════════════════════════════════════════════════════════════════════
+//  Save / load
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Fotografa o andar atual: irmãos, inventário, itens, caixas, velas, consertos,
+// documentos e log de diálogos.
 SaveGameState StageState::CaptureSaveState() const {
     SaveGameState state;
     state.big = CaptureCharacter(bigCharacterObject, bigCharacter);
@@ -117,22 +210,18 @@ SaveGameState StageState::CaptureSaveState() const {
         }
     }
 
-     for (const CollectedDocument& d : collectedDocuments) {
+    for (const CollectedDocument& d : collectedDocuments) {
         SavedDocument sd;
-        sd.imagePath  = d.imagePath;
-        sd.title      = d.title;
-        sd.soundPath  = d.soundPath;
-        sd.level      = d.level;
-        sd.order      = d.order;
-        sd.zoomFactor = d.zoomFactor;
-        sd.zoomable   = d.zoomable;
-        sd.unread     = d.unread;
+        sd.imagePath       = d.imagePath;
+        sd.title           = d.title;
+        sd.soundPath       = d.soundPath;
+        sd.level           = d.level;
+        sd.order           = d.order;
+        sd.zoomFactor      = d.zoomFactor;
+        sd.zoomable        = d.zoomable;
+        sd.unread          = d.unread;
         sd.dialogueContext = d.dialogueContext;
-        for (const DialogueBox::Line& l : d.dialogueLines) {
-            sd.dialogue.push_back({static_cast<int>(l.speaker), static_cast<int>(l.listener),
-                                   static_cast<int>(l.emotion), static_cast<int>(l.listenerEmotion),
-                                   l.text});
-        }
+        sd.dialogue        = ToSavedLines(d.dialogueLines);
         state.documents.push_back(std::move(sd));
     }
 
@@ -142,17 +231,14 @@ SaveGameState StageState::CaptureSaveState() const {
         se.context      = e.context;
         se.level        = e.level;
         se.docImagePath = e.docImagePath;
-        for (const DialogueBox::Line& l : e.lines) {
-            se.lines.push_back({static_cast<int>(l.speaker), static_cast<int>(l.listener),
-                                static_cast<int>(l.emotion), static_cast<int>(l.listenerEmotion),
-                                l.text});
-        }
+        se.lines        = ToSavedLines(e.lines);
         state.dialogueLog.push_back(std::move(se));
     }
 
     return state;
 }
 
+// Garante que toda vela do andar tem a sua luz registrada.
 void StageState::RegisterAllCandleLights() {
     for (const auto& goPtr : objectArray) {
         GameObject* go = goPtr.get();
@@ -165,6 +251,7 @@ void StageState::RegisterAllCandleLights() {
     }
 }
 
+// Acende as velas da lista (por tiledId); com extinguishOthers, apaga as demais.
 void StageState::ApplyLitCandleIds(const std::vector<int>& litIds, bool extinguishOthers) {
     RegisterAllCandleLights();
     std::unordered_set<int> litSet(litIds.begin(), litIds.end());
@@ -185,6 +272,8 @@ void StageState::ApplyLitCandleIds(const std::vector<int>& litIds, bool extingui
     }
 }
 
+// Restaura um save sobre o andar já carregado: irmãos, inventário, documentos,
+// log, itens removidos/soltos, caixas, consertos e velas.
 void StageState::ApplySaveState(const SaveGameState& state) {
     const StageFirstLoadData cfg = LoadStageFirstLoadData();
     const std::vector<ItemDef> catalog = BuildItemCatalog(cfg);
@@ -196,22 +285,16 @@ void StageState::ApplySaveState(const SaveGameState& state) {
     collectedDocuments.clear();
     for (const SavedDocument& sd : state.documents) {
         CollectedDocument d;
-        d.imagePath  = sd.imagePath;
-        d.title      = sd.title;
-        d.soundPath  = sd.soundPath;
-        d.level      = sd.level;
-        d.order      = sd.order;
-        d.zoomFactor = sd.zoomFactor;
-        d.zoomable   = sd.zoomable;
-        d.unread     = sd.unread;
+        d.imagePath       = sd.imagePath;
+        d.title           = sd.title;
+        d.soundPath       = sd.soundPath;
+        d.level           = sd.level;
+        d.order           = sd.order;
+        d.zoomFactor      = sd.zoomFactor;
+        d.zoomable        = sd.zoomable;
+        d.unread          = sd.unread;
         d.dialogueContext = sd.dialogueContext;
-        for (const SavedDialogueLine& l : sd.dialogue) {
-            d.dialogueLines.push_back({static_cast<DialogueBox::Speaker>(l.speaker),
-                                       static_cast<DialogueBox::Speaker>(l.listener),
-                                       static_cast<DialogueBox::Emotion>(l.emotion),
-                                       static_cast<DialogueBox::Emotion>(l.listenerEmotion),
-                                       l.text});
-        }
+        d.dialogueLines   = FromSavedLines(sd.dialogue);
         collectedDocuments.push_back(std::move(d));
     }
 
@@ -222,13 +305,7 @@ void StageState::ApplySaveState(const SaveGameState& state) {
         e.context      = se.context;
         e.level        = se.level;
         e.docImagePath = se.docImagePath;
-        for (const SavedDialogueLine& l : se.lines) {
-            e.lines.push_back({static_cast<DialogueBox::Speaker>(l.speaker),
-                               static_cast<DialogueBox::Speaker>(l.listener),
-                               static_cast<DialogueBox::Emotion>(l.emotion),
-                               static_cast<DialogueBox::Emotion>(l.listenerEmotion),
-                               l.text});
-        }
+        e.lines        = FromSavedLines(se.lines);
         dialogueLog.push_back(std::move(e));
     }
     dialogueLogSelection = std::max(0, static_cast<int>(dialogueLog.size()) - 1);
@@ -261,23 +338,18 @@ void StageState::ApplySaveState(const SaveGameState& state) {
         boxPosById[boxPos.tiledId] = boxPos;
     }
 
-    for (size_t i = 0; i < objectArray.size();) {
+    for (size_t i = 0; i < objectArray.size(); ++i) {   // índice: Destroy() pode mexer no vetor
         GameObject* go = objectArray[i].get();
         if (!go) {
-            ++i;
             continue;
         }
 
+        // Pickups soltos (tiledId < 0) são recriados pelo droppedItems abaixo;
+        // os do mapa somem se foram pegos ou pulados.
         if (ItemPickup* pickup = go->GetComponent<ItemPickup>()) {
-            if (go->tiledId >= 0 && (removedIds.count(go->tiledId) > 0 ||
-                                      skippedPickupSpawnIds.count(go->tiledId) > 0)) {
+            if (go->tiledId < 0 || removedIds.count(go->tiledId) > 0 ||
+                skippedPickupSpawnIds.count(go->tiledId) > 0) {
                 pickup->Destroy();
-                ++i;
-                continue;
-            }
-            if (go->tiledId < 0) {
-                pickup->Destroy();
-                ++i;
                 continue;
             }
         }
@@ -295,8 +367,6 @@ void StageState::ApplySaveState(const SaveGameState& state) {
                 repairable->ApplyRepairedState();
             }
         }
-
-        ++i;
     }
 
     ApplyLitCandleIds(state.litCandleIds);
@@ -336,6 +406,7 @@ void StageState::ApplySaveState(const SaveGameState& state) {
     UpdateControlledCharacterVisuals();
 }
 
+// Grava o progresso atual. Sem save anterior, este vira também o checkpoint do andar.
 bool StageState::SaveCurrentProgress() {
     SaveFile file;
     const StageFirstLoadData cfg = LoadStageFirstLoadData();
@@ -351,6 +422,7 @@ bool StageState::SaveCurrentProgress() {
     return SaveManager::Save(file);
 }
 
+// Grava o início do andar: checkpoint e progresso atual ficam iguais.
 bool StageState::SaveLevelCheckpoint() {
     const StageFirstLoadData cfg = LoadStageFirstLoadData();
     SaveFile file;
@@ -362,167 +434,107 @@ bool StageState::SaveLevelCheckpoint() {
     return SaveManager::Save(file);
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+//  Confirmação de saída
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Setas/Tab alternam, mouse seleciona; Enter/Y/1/clique confirmam, ESC/N/2 cancelam.
+// "Salvar e sair" grava e volta ao título. Retorna true se o modal fechou.
 bool StageState::HandleQuitConfirmInput() {
     InputManager& input = InputManager::GetInstance();
-    const int winW = Game::GetInstance().GetWindowsWidth();
-    const int winH = Game::GetInstance().GetWindowsHeight();
-    const int panelW = 760;
-    const int panelH = 260;
-    const int panelX = (winW - panelW) / 2;
-    const int panelY = (winH - panelH) / 2;
-    const int btnW = 260;
-    const int btnH = 48;
-    const int btnY = panelY + panelH - 80;
+    SDL_Rect panel;
+    QuitConfirmLayout(panel, quitConfirmSaveBtn, quitConfirmCancelBtn);
 
-    quitConfirmSaveBtn = {panelX + 60, btnY, btnW, btnH};
-    quitConfirmCancelBtn = {panelX + panelW - btnW - 60, btnY, btnW, btnH};
-
-    if (input.KeyPress(SDLK_UP) || input.KeyPress(SDLK_DOWN) ||
-        input.KeyPress(SDLK_LEFT) || input.KeyPress(SDLK_RIGHT) ||
-        input.KeyPress(SDLK_TAB)) {
+    if (input.KeyPress(SDLK_UP) || input.KeyPress(SDLK_DOWN) || input.KeyPress(SDLK_LEFT) ||
+        input.KeyPress(SDLK_RIGHT) || input.KeyPress(SDLK_TAB)) {
         quitConfirmSelection = 1 - quitConfirmSelection;
     }
 
-    const int mx = input.GetMouseX();
-    const int my = input.GetMouseY();
-    SDL_Point mousePoint{mx, my};
-    if (SDL_PointInRect(&mousePoint, &quitConfirmSaveBtn)) {
-        quitConfirmSelection = 0;
-    } else if (SDL_PointInRect(&mousePoint, &quitConfirmCancelBtn)) {
-        quitConfirmSelection = 1;
-    }
+    const SDL_Point mouse{input.GetMouseX(), input.GetMouseY()};
+    const bool overSave   = SDL_PointInRect(&mouse, &quitConfirmSaveBtn);
+    const bool overCancel = SDL_PointInRect(&mouse, &quitConfirmCancelBtn);
+    if (overSave)   quitConfirmSelection = 0;
+    if (overCancel) quitConfirmSelection = 1;
 
     if (input.KeyPress(SDLK_ESCAPE) || input.KeyPress(SDLK_n) || input.KeyPress(SDLK_2)) {
-        // Desistiu de sair. Sem isto so se via o "Sair" do menu de pausa e
-        // parecia que a sessao tinha acabado ali.
         Telemetry::Event("quit_confirm", Telemetry::Fields()
             .Int("level", currentLevelIndex).Str("choice", "cancelou"));
         quitConfirmOpen = false;
         return true;
     }
 
-    const bool activateSelection =
-        input.KeyPress(SDLK_RETURN) || input.KeyPress(SDLK_y) || input.KeyPress(SDLK_1) ||
-        input.MousePress(SDL_BUTTON_LEFT);
-
-    if (activateSelection) {
-        if (input.MousePress(SDL_BUTTON_LEFT)) {
-            if (SDL_PointInRect(&mousePoint, &quitConfirmSaveBtn)) {
-                quitConfirmSelection = 0;
-            } else if (SDL_PointInRect(&mousePoint, &quitConfirmCancelBtn)) {
-                quitConfirmSelection = 1;
-            } else {
-                return false;
-            }
-        }
-
-        Telemetry::Event("quit_confirm", Telemetry::Fields()
-            .Int("level", currentLevelIndex)
-            .Str("choice", quitConfirmSelection == 0 ? "salvou_e_saiu" : "cancelou")
-            .Num("levelTime", telemetryLevelElapsed));
-        if (quitConfirmSelection == 0) {
-            Telemetry::SetEndReason("quit_stage");
-            SaveCurrentProgress();
-            popRequested = true;
-        }
-        quitConfirmOpen = false;
-        return true;
+    const bool clicked = input.MousePress(SDL_BUTTON_LEFT);
+    if (clicked && !overSave && !overCancel) {
+        return false;   // clique fora dos botões não faz nada
+    }
+    if (!clicked && !input.KeyPress(SDLK_RETURN) && !input.KeyPress(SDLK_y) && !input.KeyPress(SDLK_1)) {
+        return false;
     }
 
-    return false;
+    Telemetry::Event("quit_confirm", Telemetry::Fields()
+        .Int("level", currentLevelIndex)
+        .Str("choice", quitConfirmSelection == 0 ? "salvou_e_saiu" : "cancelou")
+        .Num("levelTime", telemetryLevelElapsed));
+    if (quitConfirmSelection == 0) {
+        Telemetry::SetEndReason("quit_stage");
+        SaveCurrentProgress();
+        popRequested = true;
+    }
+    quitConfirmOpen = false;
+    return true;
 }
 
+// Véu escuro, painel com a pergunta e os botões "Salvar e sair" / "Cancelar".
 void StageState::RenderQuitConfirmModal(SDL_Renderer* renderer) {
     if (!renderer || !quitConfirmOpen) {
         return;
     }
-
     const int winW = Game::GetInstance().GetWindowsWidth();
     const int winH = Game::GetInstance().GetWindowsHeight();
-    const int panelW = 760;
-    const int panelH = 260;
-    const int panelX = (winW - panelW) / 2;
-    const int panelY = (winH - panelH) / 2;
-    const int btnW = 260;
-    const int btnH = 48;
-    const int btnY = panelY + panelH - 80;
-
-    quitConfirmSaveBtn = {panelX + 60, btnY, btnW, btnH};
-    quitConfirmCancelBtn = {panelX + panelW - btnW - 60, btnY, btnW, btnH};
+    SDL_Rect panel;
+    QuitConfirmLayout(panel, quitConfirmSaveBtn, quitConfirmCancelBtn);
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180);
-    SDL_Rect backdrop{0, 0, winW, winH};
+    const SDL_Rect backdrop{0, 0, winW, winH};
     SDL_RenderFillRect(renderer, &backdrop);
 
-    SDL_Rect panel{panelX, panelY, panelW, panelH};
     SDL_SetRenderDrawColor(renderer, 35, 35, 42, 240);
     SDL_RenderFillRect(renderer, &panel);
     SDL_SetRenderDrawColor(renderer, 180, 160, 100, 255);
     SDL_RenderDrawRect(renderer, &panel);
 
+    auto textFont   = Resources::GetFont(kUiFont, 22);
+    auto buttonFont = Resources::GetFont(kUiFont, 18);
+    DrawUiText(renderer, textFont.get(), "Tem certeza? Você pode perder o progresso não salvo.",
+               panel.x + 40, panel.y + 36, SDL_Color{230, 230, 230, 255}, panel.w - 80);
+
     auto drawButton = [&](const SDL_Rect& rect, bool selected, const char* label) {
-        SDL_SetRenderDrawColor(renderer, selected ? 200 : 80, selected ? 180 : 80, selected ? 100 : 80, 230);
+        const Uint8 c = selected ? 200 : 80;
+        SDL_SetRenderDrawColor(renderer, c, selected ? 180 : 80, selected ? 100 : 80, 230);
         SDL_RenderFillRect(renderer, &rect);
         SDL_SetRenderDrawColor(renderer, 220, 200, 140, 255);
         SDL_RenderDrawRect(renderer, &rect);
-
-        auto font = Resources::GetFont("Recursos/font/times.ttf", 18);
-        if (!font) {
-            return;
-        }
-        SDL_Color color{240, 240, 240, 255};
-        SDL_Surface* surface = TTF_RenderUTF8_Blended(font.get(), label, color);
-        if (!surface) {
-            return;
-        }
-        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
-        SDL_Rect dst{rect.x + (rect.w - surface->w) / 2, rect.y + (rect.h - surface->h) / 2, surface->w, surface->h};
-        SDL_FreeSurface(surface);
-        if (texture) {
-            SDL_RenderCopy(renderer, texture, nullptr, &dst);
-            SDL_DestroyTexture(texture);
-        }
+        if (!buttonFont) return;
+        int tw = 0, th = 0;
+        TTF_SizeUTF8(buttonFont.get(), label, &tw, &th);
+        DrawUiText(renderer, buttonFont.get(), label, rect.x + (rect.w - tw) / 2, rect.y + (rect.h - th) / 2,
+                   SDL_Color{240, 240, 240, 255});
     };
-
-    auto drawText = [&](const char* text, int x, int y, int size) {
-        auto font = Resources::GetFont("Recursos/font/times.ttf", size);
-        if (!font) {
-            return;
-        }
-        SDL_Color color{230, 230, 230, 255};
-        SDL_Surface* surface = TTF_RenderUTF8_Blended_Wrapped(font.get(), text, color, panelW - 80);
-        if (!surface) {
-            return;
-        }
-        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
-        SDL_Rect dst{x, y, surface->w, surface->h};
-        SDL_FreeSurface(surface);
-        if (texture) {
-            SDL_RenderCopy(renderer, texture, nullptr, &dst);
-            SDL_DestroyTexture(texture);
-        }
-    };
-
-    drawText("Tem certeza? Voce pode perder o progresso nao salvo.", panelX + 40, panelY + 36, 22);
     drawButton(quitConfirmSaveBtn, quitConfirmSelection == 0, "Salvar e sair");
     drawButton(quitConfirmCancelBtn, quitConfirmSelection == 1, "Cancelar");
 }
 
-void StageState::RenderInteractionPrompt(SDL_Renderer* renderer) {
-    if (!renderer) {
-        return;
-    }
-    // Não mostra durante menu/modais/jornal.
-    if (IsPlayerInputFrozen()) {
-        return;
-    }
+// ═════════════════════════════════════════════════════════════════════════════
+//  Prompt de interação (rodapé)
+// ═════════════════════════════════════════════════════════════════════════════
 
-    InputManager& imPrompt = InputManager::GetInstance();
-    auto keyLabel = [&imPrompt](GameAction a, const char* fallback) {
-        const char* k = SDL_GetKeyName(imPrompt.GetBinding(a));
-        return (k && k[0] != '\0') ? std::string(k) : std::string(fallback);
-    };
+// Caixa no rodapé com até 3 linhas "[tecla] ação" para o que o personagem
+// controlado pode fazer agora (segue o mesmo alvo do contorno de interação).
+void StageState::RenderInteractionPrompt(SDL_Renderer* renderer) {
+    if (!renderer || IsPlayerInputFrozen()) {
+        return;
+    }
 
     // Até TRÊS linhas (irmãozinho escondido: sair + habilidade + trocar).
     std::string lines[3];
@@ -532,11 +544,11 @@ void StageState::RenderInteractionPrompt(SDL_Renderer* renderer) {
     if (hidden) {
         // Escondidos: AMBOS os irmãos saem com Interact (E) e podem TROCAR de
         // personagem. Só o irmãozinho tem a HABILIDADE de visão, agora em UseItem (F).
-        lines[lineCount++] = "[" + keyLabel(GameAction::Interact, "E") + "] Sair do esconderijo";
+        lines[lineCount++] = "[" + KeyName(GameAction::Interact, "E") + "] Sair do esconderijo";
         if (controlledCharacter == smallCharacter) {
-            lines[lineCount++] = "[" + keyLabel(GameAction::UseItem, "F") + "] Usar habilidade do irmaozinho";
+            lines[lineCount++] = "[" + KeyName(GameAction::UseItem, "F") + "] Usar habilidade do irmaozinho";
         }
-        lines[lineCount++] = "[" + keyLabel(GameAction::SwapBrother, "Ctrl") + "] Trocar de personagem";
+        lines[lineCount++] = "[" + KeyName(GameAction::SwapBrother, "Ctrl") + "] Trocar de personagem";
     } else if (controlledCharacter == bigCharacter) {
         // Irmão maior fora do esconderijo: todas as interações do rodapé.
         const char* action = nullptr;
@@ -566,24 +578,24 @@ void StageState::RenderInteractionPrompt(SDL_Renderer* renderer) {
         if (!action) {
             return;
         }
-        lines[lineCount++] = "[" + keyLabel(GameAction::Interact, "E") + "] " + std::string(action);
+        lines[lineCount++] = "[" + KeyName(GameAction::Interact, "E") + "] " + std::string(action);
     } else {
         // Irmãozinho fora do esconderijo: só pode se ESCONDER num armário.
         if (!reachableCloset) {
             return;
         }
-        lines[lineCount++] = "[" + keyLabel(GameAction::Interact, "E") + "] Esconder";
+        lines[lineCount++] = "[" + KeyName(GameAction::Interact, "E") + "] Esconder";
     }
 
     if (lineCount == 0) {
         return;
     }
 
-    auto font = Resources::GetFont("Recursos/font/times.ttf", 24);
+    auto font = Resources::GetFont(kUiFont, 24);
     if (!font) {
         return;
     }
-    SDL_Color color{240, 235, 220, 255};
+    const SDL_Color color{240, 235, 220, 255};
 
     // Renderiza cada linha; empilha verticalmente dentro de uma única caixa.
     SDL_Texture* texs[3] = {nullptr, nullptr, nullptr};
@@ -646,10 +658,11 @@ void StageState::RenderInteractionPrompt(SDL_Renderer* renderer) {
     }
 }
 
-namespace {
-const char* kPauseMenuLabels[] = {"Continuar", "Salvar", "Configuracoes", "Reiniciar nivel", "Sair"};
-}
+// ═════════════════════════════════════════════════════════════════════════════
+//  Menu de pausa
+// ═════════════════════════════════════════════════════════════════════════════
 
+// Volta o progresso ao checkpoint do andar e recarrega a fase por cima deste estado.
 void StageState::RestartLevelFromCheckpoint() {
     Telemetry::Event("checkpoint_restart", Telemetry::Fields()
         .Int("level", currentLevelIndex)
@@ -660,6 +673,8 @@ void StageState::RestartLevelFromCheckpoint() {
     Game::GetInstance().Push(new LoadingState(StageState::LoadMode::Continue));
 }
 
+// W/S ou setas navegam, mouse seleciona; Enter/Espaço/F/clique ativam; ESC fecha.
+// Só é chamado com a pausa aberta e as Configurações fechadas.
 void StageState::HandlePauseMenuInput() {
     InputManager& input = InputManager::GetInstance();
 
@@ -702,23 +717,22 @@ void StageState::HandlePauseMenuInput() {
         .Str("choice", kPauseMenuLabels[pauseMenuSelection]));
 
     switch (pauseMenuSelection) {
-    case 0:  // Continuar
+    case kPauseContinue:
         pauseMenuOpen = false;
         break;
-    case 1:  // Salvar
+    case kPauseSave:
         SaveCurrentProgress();
         ShowSaveToast();
         pauseMenuOpen = false;
         break;
-    case 2:  // Configuracoes
-        settingsPanelOpen = true;
-        settingsSelection = 0;
+    case kPauseSettings:
+        settingsMenu.Open();
         break;
-    case 3:  // Reiniciar nivel
+    case kPauseRestart:
         pauseMenuOpen = false;
         RestartLevelFromCheckpoint();
         break;
-    case 4:  // Sair
+    case kPauseQuit:
         pauseMenuOpen = false;
         quitConfirmOpen = true;
         quitConfirmSelection = 0;
@@ -728,12 +742,9 @@ void StageState::HandlePauseMenuInput() {
     }
 }
 
-// (O losango decorativo foi substituído pela imagem "linha_divisoria.png".)
-
-// #19 Gera o desfoque do cenário (GPU): reduz o alvo da cena (renderTarget) para
-// um alvo pequeno; ao ampliar depois com filtragem linear surge o borrão barato
-// (sem SDL_RenderReadPixels, que quebra em alguns backends). Retorna false se não
-// houver cena para borrar. NÃO desenha nada na tela — só prepara pauseBlurTex.
+// Prepara o desfoque da cena na GPU: reduz o renderTarget para pauseBlurTex
+// (1/25); ampliado com filtragem linear, vira um borrão barato. Não desenha na
+// tela. False se não houver cena para borrar.
 bool StageState::BuildPauseBlurTexture(SDL_Renderer* renderer, int winW, int winH) {
     if (!renderTarget) {
         return false;
@@ -773,10 +784,8 @@ bool StageState::BuildPauseBlurTexture(SDL_Renderer* renderer, int winW, int win
     return true;
 }
 
-// #19 Desenha o cenário borrado APENAS atrás de um box (recorte), não na tela
-// inteira. Amplia pauseBlurTex para a tela cheia mas com clip no retângulo do box,
-// então o borrão fica alinhado com o que está por trás daquele box. Véu escuro só
-// dentro do box para contraste do texto. Fora dos boxes o jogo aparece nítido.
+// Cena borrada só dentro de `rect` (alinhada com o que está atrás dele) + véu
+// escuro para o texto. Sem desfoque pronto, só um painel escuro.
 void StageState::DrawBlurBehindRect(SDL_Renderer* renderer, const SDL_Rect& rect, int winW, int winH) {
     if (!pauseBlurTex) {
         // Sem desfoque disponível: painel escuro simples só no box.
@@ -795,7 +804,7 @@ void StageState::DrawBlurBehindRect(SDL_Renderer* renderer, const SDL_Rect& rect
     SDL_RenderSetClipRect(renderer, nullptr);
 }
 
-// Cobre a tela inteira com a cena borrada
+// Cobre a tela inteira com a cena borrada, com opacidade `alpha` (0..1).
 void StageState::DrawSceneBlur(SDL_Renderer* renderer, int winW, int winH, float alpha) {
     if (!BuildPauseBlurTexture(renderer, winW, winH)) return;
     alpha = std::max(0.0f, std::min(1.0f, alpha));
@@ -806,6 +815,9 @@ void StageState::DrawSceneBlur(SDL_Renderer* renderer, int winW, int winH, float
     SDL_SetTextureAlphaMod(pauseBlurTex, 255);
 }
 
+// Cena borrada e escurecida, título "PAUSA", divisória e as cinco caixas com
+// ícone + texto (a selecionada um pouco maior e acesa). Guarda os retângulos
+// para o mouse.
 void StageState::RenderPauseMenu(SDL_Renderer* renderer) {
     if (!renderer || !pauseMenuOpen) {
         return;
@@ -822,16 +834,6 @@ void StageState::RenderPauseMenu(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 125);
     const SDL_Rect fullDim{0, 0, winW, winH};
     SDL_RenderFillRect(renderer, &fullDim);
-
-    // Ícone de cada opção — MESMA ordem de kPauseMenuLabels
-    // {Continuar, Salvar, Configuracoes, Reiniciar nivel, Sair}.
-    static const char* kPauseMenuIcons[] = {
-        "Recursos/img/menu/pause/icon_continuar.png",
-        "Recursos/img/menu/pause/icon_salvar.png",
-        "Recursos/img/menu/pause/icon_config.png",
-        "Recursos/img/menu/pause/icon_reiniciar.png",
-        "Recursos/img/menu/pause/icon_voltar.png",
-    };
 
     const int n = kPauseMenuItemCount;
     const int gap = 10;
@@ -855,7 +857,7 @@ void StageState::RenderPauseMenu(SDL_Renderer* renderer) {
     const int divH = static_cast<int>(divW / divAspect);
 
     // Título "PAUSA" (texto).
-    auto titleFont = Resources::GetFont("Recursos/font/times.ttf", 48);
+    auto titleFont = Resources::GetFont(kUiFont, 48);
     SDL_Texture* titleTex = nullptr;
     int titleW = 0, titleH = 48;
     if (titleFont) {
@@ -887,7 +889,7 @@ void StageState::RenderPauseMenu(SDL_Renderer* renderer) {
 
     // Opções: cada uma é a caixa de seleção com ícone à esquerda + texto dentro.
     const int boxX = (winW - boxW) / 2;
-    auto font = Resources::GetFont("Recursos/font/times.ttf", 26);
+    auto font = Resources::GetFont(kUiFont, 26);
     for (int i = 0; i < n; ++i) {
         const SDL_Rect r{boxX, y + i * (boxH + gap), boxW, boxH};
         pauseMenuItemRects[i] = r;
@@ -940,11 +942,16 @@ void StageState::RenderPauseMenu(SDL_Renderer* renderer) {
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+//  Aviso "Progresso salvo"
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Caixa verde no canto superior direito, com fade nos últimos 0,5 s.
 void StageState::RenderSaveToast(SDL_Renderer* renderer) {
     if (!renderer || saveToastTimer <= 0.0f) {
         return;
     }
-    auto font = Resources::GetFont("Recursos/font/times.ttf", 22);
+    auto font = Resources::GetFont(kUiFont, 22);
     if (!font) {
         return;
     }
@@ -987,436 +994,9 @@ void StageState::RenderSaveToast(SDL_Renderer* renderer) {
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }
 
-namespace {
-const char* kSettingsLabels[] = {"Volume Master", "Volume Fundo", "Volume Efeitos",
-                                 "Volume Dublagem", "Brilho", "Video",
-                                 "Reduzir flashes", "Controles", "Voltar"};
-// Índices das linhas não-slider (após os 5 sliders 0..4).
-enum { kRowVideo = 5, kRowReduceFlash = 6, kRowControls = 7, kRowBack = 8 };
-void SettingsRowRange(int row, int& lo, int& hi) {
-    lo = (row == 4) ? 50 : 0;     // brilho 50..150; volumes 0..100
-    hi = (row == 4) ? 150 : 100;
-}
-int SettingsRowValue(int row) {
-    switch (row) {
-    case 0: return Game::masterVolumePercent;
-    case 1: return Game::ambientVolumePercent;
-    case 2: return Game::sfxVolumePercent;
-    case 3: return Game::voiceVolumePercent;
-    case 4: return Game::brightnessPercent;
-    default: return 0;
-    }
-}
-}  // namespace
-
-void StageState::HandleSettingsPanelInput() {
-    InputManager& input = InputManager::GetInstance();
-
-    // O overlay de vídeo (dropdown + Aplicar) fica por cima e captura o input.
-    if (VideoSettings::IsOpen()) {
-        VideoSettings::HandleInput(input);
-        return;
-    }
-
-    auto applyValue = [this](int row, int v) {
-        switch (row) {
-        case 0: Game::SetMasterVolume(v); break;
-        case 1: Game::SetAmbientVolume(v); oceanAmbient_.RefreshVolume(); break;
-        case 2: Game::SetSfxVolume(v); break;
-        case 3: Game::SetVoiceVolume(v); break;
-        case 4: Game::SetBrightness(v); break;
-        default: break;
-        }
-    };
-    auto closePanel = [this]() {
-        settingsPanelOpen = false;
-        settingsDragging = false;
-        Game::SaveSettings();
-    };
-    auto openControls = [this]() {
-        controlsPanelOpen = true;
-        controlsSelection = 0;
-        awaitingRebind = false;
-    };
-
-    if (input.KeyPress(SDLK_ESCAPE)) {   // ESC volta ao menu de pausa (salva)
-        closePanel();
-        return;
-    }
-
-    if (input.KeyPress(SDLK_UP) || input.KeyPress(SDLK_w)) {
-        settingsSelection = (settingsSelection + kSettingsRowCount - 1) % kSettingsRowCount;
-    }
-    if (input.KeyPress(SDLK_DOWN) || input.KeyPress(SDLK_s)) {
-        settingsSelection = (settingsSelection + 1) % kSettingsRowCount;
-    }
-
-    // Ajuste por teclado nas linhas de slider; setas alternam a tela cheia.
-    if (settingsSelection < kSettingsSliderCount) {
-        int delta = 0;
-        if (input.KeyPress(SDLK_LEFT) || input.KeyPress(SDLK_a)) delta = -5;
-        if (input.KeyPress(SDLK_RIGHT) || input.KeyPress(SDLK_d)) delta = 5;
-        if (delta != 0) {
-            int lo, hi;
-            SettingsRowRange(settingsSelection, lo, hi);
-            int v = SettingsRowValue(settingsSelection) + delta;
-            if (v < lo) v = lo;
-            if (v > hi) v = hi;
-            applyValue(settingsSelection, v);
-        }
-    } else if (settingsSelection == kRowReduceFlash) {
-        if (input.KeyPress(SDLK_LEFT) || input.KeyPress(SDLK_RIGHT) ||
-            input.KeyPress(SDLK_a) || input.KeyPress(SDLK_d)) {
-            Game::reduceFlashing = !Game::reduceFlashing;
-        }
-    }
-
-    // Mouse: hover seleciona; clique/arrasto nos sliders; clique no toggle/voltar.
-    SDL_Point mp{input.GetMouseX(), input.GetMouseY()};
-    for (int i = 0; i < kSettingsRowCount; ++i) {
-        if (SDL_PointInRect(&mp, &settingsRowRects[i])) {
-            settingsSelection = i;
-        }
-    }
-    if (input.MousePress(SDL_BUTTON_LEFT)) {
-        bool onSlider = false;
-        for (int i = 0; i < kSettingsSliderCount; ++i) {
-            if (SDL_PointInRect(&mp, &settingsSliderRects[i])) {
-                settingsSelection = i;
-                settingsDragging = true;
-                onSlider = true;
-                break;
-            }
-        }
-        if (!onSlider) {
-            if (SDL_PointInRect(&mp, &settingsRowRects[kRowVideo])) {
-                VideoSettings::Open();            // abre o overlay de vídeo
-            } else if (SDL_PointInRect(&mp, &settingsRowRects[kRowReduceFlash])) {
-                Game::reduceFlashing = !Game::reduceFlashing;
-            } else if (SDL_PointInRect(&mp, &settingsRowRects[kRowControls])) {
-                openControls();
-                return;
-            } else if (SDL_PointInRect(&mp, &settingsRowRects[kRowBack])) {
-                closePanel();
-                return;
-            }
-        }
-    }
-    if (settingsDragging) {
-        if (input.IsMouseDown(SDL_BUTTON_LEFT) && settingsSelection < kSettingsSliderCount) {
-            const SDL_Rect& sr = settingsSliderRects[settingsSelection];
-            int lo, hi;
-            SettingsRowRange(settingsSelection, lo, hi);
-            float frac = (sr.w > 0) ? static_cast<float>(mp.x - sr.x) / static_cast<float>(sr.w) : 0.0f;
-            if (frac < 0.0f) frac = 0.0f;
-            if (frac > 1.0f) frac = 1.0f;
-            applyValue(settingsSelection, lo + static_cast<int>(frac * (hi - lo) + 0.5f));
-        } else {
-            settingsDragging = false;
-        }
-    }
-
-    // Enter/Espaco/F: alterna tela cheia / reduzir flashes, abre Controles ou Voltar.
-    if (input.KeyPress(SDLK_RETURN) || input.KeyPress(SDLK_SPACE) || input.KeyPress(SDLK_f)) {
-        if (settingsSelection == kRowVideo) {
-            VideoSettings::Open();
-        } else if (settingsSelection == kRowReduceFlash) {
-            Game::reduceFlashing = !Game::reduceFlashing;
-        } else if (settingsSelection == kRowControls) {
-            openControls();
-            return;
-        } else if (settingsSelection == kRowBack) {
-            closePanel();
-            return;
-        }
-    }
-}
-
-void StageState::RenderSettingsPanel(SDL_Renderer* renderer) {
-    if (!renderer || !settingsPanelOpen) {
-        return;
-    }
-    const int winW = Game::GetInstance().GetWindowsWidth();
-    const int winH = Game::GetInstance().GetWindowsHeight();
-
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 185);
-    const SDL_Rect full{0, 0, winW, winH};
-    SDL_RenderFillRect(renderer, &full);
-
-    const int panelW = 640;
-    const int rowH = 50;
-    const int gap = 10;
-    const int contentTop = 96;
-    const int panelH = contentTop + kSettingsRowCount * (rowH + gap) + 20;
-    const int px = (winW - panelW) / 2;
-    const int py = (winH - panelH) / 2;
-
-    SDL_SetRenderDrawColor(renderer, 30, 30, 38, 242);
-    const SDL_Rect panel{px, py, panelW, panelH};
-    SDL_RenderFillRect(renderer, &panel);
-    SDL_SetRenderDrawColor(renderer, 180, 160, 100, 255);
-    SDL_RenderDrawRect(renderer, &panel);
-
-    auto labelFont = Resources::GetFont("Recursos/font/times.ttf", 20);
-    auto titleFont = Resources::GetFont("Recursos/font/times.ttf", 32);
-
-    auto drawText = [&](const char* str, int tx, int ty, SDL_Color c, TTF_Font* fnt, bool centerX, int centerW) {
-        if (!fnt || !str) return;
-        SDL_Surface* sf = TTF_RenderUTF8_Blended(fnt, str, c);
-        if (!sf) return;
-        SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, sf);
-        const int w = sf->w;
-        const int h = sf->h;
-        SDL_FreeSurface(sf);
-        if (!t) return;
-        const int dx = centerX ? (tx + (centerW - w) / 2) : tx;
-        const SDL_Rect d{dx, ty, w, h};
-        SDL_RenderCopy(renderer, t, nullptr, &d);
-        SDL_DestroyTexture(t);
-    };
-
-    drawText("Configuracoes", px, py + 28, SDL_Color{220, 200, 140, 255}, titleFont.get(), true, panelW);
-
-    for (int i = 0; i < kSettingsRowCount; ++i) {
-        const int rowY = py + contentTop + i * (rowH + gap);
-        const SDL_Rect rowRect{px + 30, rowY, panelW - 60, rowH};
-        settingsRowRects[i] = rowRect;
-        const bool sel = (i == settingsSelection);
-
-        if (sel) {
-            SDL_SetRenderDrawColor(renderer, 60, 55, 40, 220);
-            SDL_RenderFillRect(renderer, &rowRect);
-        }
-
-        const SDL_Color labelColor = sel ? SDL_Color{245, 235, 205, 255} : SDL_Color{195, 195, 195, 255};
-        drawText(kSettingsLabels[i], rowRect.x + 18, rowY + (rowH - 24) / 2, labelColor, labelFont.get(), false, 0);
-
-        if (i < kSettingsSliderCount) {
-            const int barX = px + 280;
-            const int barW = 230;
-            const int barY = rowY + rowH / 2 - 5;
-            const int barH = 10;
-            const SDL_Rect sliderHit{barX, rowY + 8, barW, rowH - 16};
-            settingsSliderRects[i] = sliderHit;
-
-            int lo, hi;
-            SettingsRowRange(i, lo, hi);
-            const int val = SettingsRowValue(i);
-            const float frac = (hi > lo) ? static_cast<float>(val - lo) / static_cast<float>(hi - lo) : 0.0f;
-
-            SDL_SetRenderDrawColor(renderer, 60, 60, 66, 255);
-            const SDL_Rect barBg{barX, barY, barW, barH};
-            SDL_RenderFillRect(renderer, &barBg);
-            SDL_SetRenderDrawColor(renderer, sel ? 220 : 150, sel ? 190 : 140, sel ? 90 : 70, 255);
-            const SDL_Rect barFill{barX, barY, static_cast<int>(barW * frac), barH};
-            SDL_RenderFillRect(renderer, &barFill);
-            const SDL_Rect handle{barX + static_cast<int>(barW * frac) - 4, barY - 5, 8, barH + 10};
-            SDL_SetRenderDrawColor(renderer, 230, 220, 180, 255);
-            SDL_RenderFillRect(renderer, &handle);
-
-            char valBuf[16];
-            std::snprintf(valBuf, sizeof(valBuf), "%d", val);
-            drawText(valBuf, barX + barW + 18, rowY + (rowH - 24) / 2, labelColor, labelFont.get(), false, 0);
-        } else if (i == kRowVideo) {
-            drawText("Abrir  >", px + 280, rowY + (rowH - 24) / 2, labelColor, labelFont.get(), false, 0);
-        } else if (i == kRowReduceFlash) {
-            drawText(Game::reduceFlashing ? "Ligado" : "Desligado", px + 280, rowY + (rowH - 24) / 2,
-                     labelColor, labelFont.get(), false, 0);
-        }
-    }
-
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-
-    // Overlay de vídeo por cima do painel de configurações.
-    VideoSettings::Render(renderer);
-}
-
-void StageState::HandleControlsPanelInput() {
-    InputManager& input = InputManager::GetInstance();
-
-    // Capturando a próxima tecla para a ação selecionada.
-    if (awaitingRebind) {
-        if (input.KeyPress(SDLK_ESCAPE)) {   // ESC cancela a captura
-            awaitingRebind = false;
-            return;
-        }
-        const int key = input.PollAnyKeyPressed();
-        if (key != 0) {
-            static const int kAllowed[] = {
-                SDLK_a,SDLK_b,SDLK_c,SDLK_d,SDLK_e,SDLK_f,SDLK_g,SDLK_h,
-                SDLK_i,SDLK_j,SDLK_k,SDLK_l,SDLK_m,SDLK_n,SDLK_o,SDLK_p,
-                SDLK_q,SDLK_r,SDLK_s,SDLK_t,SDLK_u,SDLK_v,SDLK_w,SDLK_x,
-                SDLK_y,SDLK_z,
-                SDLK_0,SDLK_1,SDLK_2,SDLK_3,SDLK_4,
-                SDLK_5,SDLK_6,SDLK_7,SDLK_8,SDLK_9,
-                SDLK_UP,SDLK_DOWN,SDLK_LEFT,SDLK_RIGHT,
-                SDLK_RETURN,SDLK_SPACE,SDLK_BACKSPACE,SDLK_TAB,
-                SDLK_LSHIFT,SDLK_RSHIFT,SDLK_LCTRL,SDLK_RCTRL,
-                SDLK_LALT,SDLK_RALT,
-            };
-            bool allowed = false;
-            for (int k : kAllowed) if (k == key) { allowed = true; break; }
-            if (allowed) {
-                input.SetBinding(rebindAction, key);
-                awaitingRebind = false;
-                rebindInvalidTimer = 0.0f;
-            } else {
-                rebindInvalidTimer = 2.0f;
-            }
-        }
-        return;
-    }
-
-    if (input.KeyPress(SDLK_ESCAPE)) {   // ESC volta para Configurações (salva)
-        controlsPanelOpen = false;
-        Game::SaveSettings();
-        return;
-    }
-
-    if (input.KeyPress(SDLK_UP) || input.KeyPress(SDLK_w)) {
-        controlsSelection = (controlsSelection + kControlsRowCount - 1) % kControlsRowCount;
-    }
-    if (input.KeyPress(SDLK_DOWN) || input.KeyPress(SDLK_s)) {
-        controlsSelection = (controlsSelection + 1) % kControlsRowCount;
-    }
-
-    SDL_Point mp{input.GetMouseX(), input.GetMouseY()};
-    for (int i = 0; i < kControlsRowCount; ++i) {
-        if (SDL_PointInRect(&mp, &controlsRowRects[i])) {
-            controlsSelection = i;
-        }
-    }
-
-    bool activate = input.KeyPress(SDLK_RETURN) || input.KeyPress(SDLK_SPACE) || input.KeyPress(SDLK_f);
-    if (input.MousePress(SDL_BUTTON_LEFT)) {
-        for (int i = 0; i < kControlsRowCount; ++i) {
-            if (SDL_PointInRect(&mp, &controlsRowRects[i])) {
-                controlsSelection = i;
-                activate = true;
-                break;
-            }
-        }
-    }
-    if (!activate) {
-        return;
-    }
-
-    if (controlsSelection < InputManager::ActionCount) {
-        awaitingRebind = true;
-        rebindAction = static_cast<GameAction>(controlsSelection);
-    } else if (controlsSelection == InputManager::ActionCount) {  // Restaurar padrão
-        input.ResetBindingsToDefault();
-    } else {  // Voltar
-        controlsPanelOpen = false;
-        Game::SaveSettings();
-    }
-}
-
-void StageState::RenderControlsPanel(SDL_Renderer* renderer) {
-    if (!renderer || !controlsPanelOpen) {
-        return;
-    }
-    const int winW = Game::GetInstance().GetWindowsWidth();
-    const int winH = Game::GetInstance().GetWindowsHeight();
-
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 200);
-    const SDL_Rect full{0, 0, winW, winH};
-    SDL_RenderFillRect(renderer, &full);
-
-    const int panelW = 580;
-    const int rowH = 38;
-    const int gap = 6;
-    const int contentTop = 84;
-    const int panelH = contentTop + kControlsRowCount * (rowH + gap) + 20;
-    const int px = (winW - panelW) / 2;
-    const int py = (winH - panelH) / 2;
-
-    SDL_SetRenderDrawColor(renderer, 30, 30, 38, 244);
-    const SDL_Rect panel{px, py, panelW, panelH};
-    SDL_RenderFillRect(renderer, &panel);
-    SDL_SetRenderDrawColor(renderer, 180, 160, 100, 255);
-    SDL_RenderDrawRect(renderer, &panel);
-
-    auto labelFont = Resources::GetFont("Recursos/font/times.ttf", 18);
-    auto titleFont = Resources::GetFont("Recursos/font/times.ttf", 30);
-
-    // align: 0 = esquerda em tx, 1 = centralizado em [tx, tx+refW], 2 = direita em tx
-    auto drawText = [&](const char* str, int tx, int ty, SDL_Color c, TTF_Font* fnt, int align, int refW) {
-        if (!fnt || !str) return;
-        SDL_Surface* sf = TTF_RenderUTF8_Blended(fnt, str, c);
-        if (!sf) return;
-        SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, sf);
-        const int w = sf->w;
-        const int h = sf->h;
-        SDL_FreeSurface(sf);
-        if (!t) return;
-        int dx = tx;
-        if (align == 1) dx = tx + (refW - w) / 2;
-        else if (align == 2) dx = tx - w;
-        const SDL_Rect d{dx, ty, w, h};
-        SDL_RenderCopy(renderer, t, nullptr, &d);
-        SDL_DestroyTexture(t);
-    };
-
-    drawText("Controles", px, py + 24, SDL_Color{220, 200, 140, 255}, titleFont.get(), 1, panelW);
-
-    for (int i = 0; i < kControlsRowCount; ++i) {
-        const int rowY = py + contentTop + i * (rowH + gap);
-        const SDL_Rect rr{px + 24, rowY, panelW - 48, rowH};
-        controlsRowRects[i] = rr;
-        const bool sel = (i == controlsSelection);
-        if (sel) {
-            SDL_SetRenderDrawColor(renderer, 60, 55, 40, 220);
-            SDL_RenderFillRect(renderer, &rr);
-        }
-        const SDL_Color lc = sel ? SDL_Color{245, 235, 205, 255} : SDL_Color{195, 195, 195, 255};
-        const int textY = rowY + (rowH - 22) / 2;
-
-        if (i < InputManager::ActionCount) {
-            const GameAction a = static_cast<GameAction>(i);
-            drawText(InputManager::ActionLabel(a), rr.x + 14, textY, lc, labelFont.get(), 0, 0);
-
-            const char* keyStr;
-            const bool capturing = (awaitingRebind && rebindAction == a);
-            if (capturing) {
-                keyStr = "Pressione uma tecla...";
-            } else {
-                keyStr = SDL_GetKeyName(InputManager::GetInstance().GetBinding(a));
-                if (!keyStr || keyStr[0] == '\0') keyStr = "?";
-            }
-            const SDL_Color kc = capturing ? SDL_Color{230, 200, 90, 255} : lc;
-            drawText(keyStr, rr.x + rr.w - 14, textY, kc, labelFont.get(), 2, 0);
-        } else if (i == InputManager::ActionCount) {
-            drawText("Restaurar padrao", rr.x + 14, textY, lc, labelFont.get(), 0, 0);
-        } else {
-            drawText("Voltar", rr.x + 14, textY, lc, labelFont.get(), 0, 0);
-        }
-    }
-
-    if (rebindInvalidTimer > 0.0f) {
-        drawText("Tecla indisponivel! Use letras, numeros ou setas.",
-            px + panelW/2, py + panelH - 30,
-            {255, 80, 80, 255}, labelFont.get(), 1, 0);
-    }
-
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-}
-
-// Contadores POR SESSÃO (persistem entre níveis/instâncias de StageState).
-namespace {
-int sLighterTutShown = 0;
-int sSwapTutShown = 0;
-int sAbilityTutShown = 0;
-int sMoveTutShown = 0;
-int sPickupTutShown = 0;
-int sRefuelTutShown = 0;
-int sCycleTutShown = 0;        // dica de trocar item na roda (1x por sessão)
-int sLighterEmptyTutShown = 0; // aviso "luz apagou" (1x por sessão)
-int sLampTutShown = 0;         // explicação da lamparina ao pegá-la (1x por sessão)
-bool sFarVoiceArmed = true;   // fala de medo do irmãozinho (sem limite de 3x)
-}
+// ═════════════════════════════════════════════════════════════════════════════
+//  Tutoriais
+// ═════════════════════════════════════════════════════════════════════════════
 
 // Pede a exibição de um tutorial. UM por vez: se já houver outro na tela, força o
 // atual a fazer fade-out e enfileira o novo. `inventoryHint` marca os tutoriais
@@ -1436,6 +1016,9 @@ void StageState::RequestTutorial(const std::string& text, bool inventoryHint) {
     }
 }
 
+// Avança o banner ativo (promove o da fila ao acabar) e checa cada gatilho:
+// movimento, pegar item, trocar item, luz apagou, lamparina, combustível,
+// isqueiro, troca de irmão (+ falas), habilidade e o aviso da escada.
 void StageState::UpdateTutorials(float dt) {
     // Um tutorial por vez: conta o tempo do ATIVO; ao zerar, promove o pendente.
     if (activeTutTimer > 0.0f) {
@@ -1455,10 +1038,6 @@ void StageState::UpdateTutorials(float dt) {
     }
 
     InputManager& imTut = InputManager::GetInstance();
-    auto tutKey = [](int code, const char* fallback) {
-        const char* k = SDL_GetKeyName(code);
-        return (k && k[0] != '\0') ? std::string(k) : std::string(fallback);
-    };
 
     // Tutorial de MOVIMENTO (WASD): só no começo. Some para sempre assim que o
     // jogador anda pela primeira vez; se ficar parado por uns segundos sem nunca
@@ -1475,10 +1054,10 @@ void StageState::UpdateTutorials(float dt) {
             if (noMoveAccum > 3.0f && sMoveTutShown < 1) {
                 sMoveTutShown++;
                 moveTutDone = true;
-                const std::string up = tutKey(imTut.GetBinding(GameAction::MoveUp),    "W");
-                const std::string lf = tutKey(imTut.GetBinding(GameAction::MoveLeft),  "A");
-                const std::string dn = tutKey(imTut.GetBinding(GameAction::MoveDown),  "S");
-                const std::string rt = tutKey(imTut.GetBinding(GameAction::MoveRight), "D");
+                const std::string up = KeyName(GameAction::MoveUp, "W");
+                const std::string lf = KeyName(GameAction::MoveLeft, "A");
+                const std::string dn = KeyName(GameAction::MoveDown, "S");
+                const std::string rt = KeyName(GameAction::MoveRight, "D");
                 RequestTutorial("Use [" + up + "] [" + lf + "] [" + dn + "] [" + rt + "] para se mover");
             }
         }
@@ -1495,7 +1074,7 @@ void StageState::UpdateTutorials(float dt) {
                 sPickupTutShown < kMaxTutorialShows) {
                 sPickupTutShown++;
                 pickupTutArmed = false;
-                RequestTutorial("Pressione [" + tutKey(imTut.GetBinding(GameAction::Interact), "E") + "] para pegar o item");
+                RequestTutorial("Pressione [" + KeyName(GameAction::Interact, "E") + "] para pegar o item");
             }
         } else {
             pickupNearAccum = 0.0f;
@@ -1514,8 +1093,8 @@ void StageState::UpdateTutorials(float dt) {
             if (sCycleTutShown < 1 && stackCount >= 2 &&
                 controlledCharacter == bigCharacter) {
                 sCycleTutShown++;
-                const std::string prev = tutKey(imTut.GetBinding(GameAction::CyclePrev), "Left");
-                const std::string next = tutKey(imTut.GetBinding(GameAction::CycleNext), "Right");
+                const std::string prev = KeyName(GameAction::CyclePrev, "Left");
+                const std::string next = KeyName(GameAction::CycleNext, "Right");
                 RequestTutorial("Use [" + prev + "] e [" + next + "] para trocar de item na mochila", true);
             }
             prevStackCount = stackCount;
@@ -1554,10 +1133,10 @@ void StageState::UpdateTutorials(float dt) {
             sRefuelTutShown < kMaxTutorialShows) {
             sRefuelTutShown++;
             refuelTutArmed = false;
-            RequestTutorial("Combustivel: aperte [" + tutKey(imTut.GetBinding(GameAction::UseItem), "F") +
-                            "], escolha o item com [" + tutKey(imTut.GetBinding(GameAction::MoveLeft), "A") +
-                            "]/[" + tutKey(imTut.GetBinding(GameAction::MoveRight), "D") +
-                            "] e [" + tutKey(imTut.GetBinding(GameAction::UseItem), "F") + "] para confirmar", true);
+            RequestTutorial("Combustivel: aperte [" + KeyName(GameAction::UseItem, "F") +
+                            "], escolha o item com [" + KeyName(GameAction::MoveLeft, "A") +
+                            "]/[" + KeyName(GameAction::MoveRight, "D") +
+                            "] e [" + KeyName(GameAction::UseItem, "F") + "] para confirmar", true);
         }
         if (!holdingOil) {
             refuelTutArmed = true;
@@ -1595,7 +1174,7 @@ void StageState::UpdateTutorials(float dt) {
         if (cond && lighterTutArmed && sLighterTutShown < kMaxTutorialShows) {
             sLighterTutShown++;
             lighterTutArmed = false;
-            RequestTutorial("Pressione [" + tutKey(imTut.GetBinding(GameAction::UseItem), "F") + "] para ligar seu isqueiro", true);
+            RequestTutorial("Pressione [" + KeyName(GameAction::UseItem, "F") + "] para ligar seu isqueiro", true);
         }
         if (!cond) {
             lighterTutArmed = true;   // re-arma quando a condição passa
@@ -1609,7 +1188,7 @@ void StageState::UpdateTutorials(float dt) {
         if (cond && swapTutArmed && sSwapTutShown < kMaxTutorialShows) {
             sSwapTutShown++;
             swapTutArmed = false;
-            RequestTutorial("Pressione [" + tutKey(imTut.GetBinding(GameAction::SwapBrother), "Ctrl") + "] para trocar de personagem");
+            RequestTutorial("Pressione [" + KeyName(GameAction::SwapBrother, "Ctrl") + "] para trocar de personagem");
         }
         if (dist < kSwapTutNearDist) {
             swapTutArmed = true;
@@ -1619,7 +1198,6 @@ void StageState::UpdateTutorials(float dt) {
         // REPREENSÃO do irmãozão ("para de ser medroso") — assim as duas falas
         // de bronca também entram em jogo. Sem o limite de 3x do tutorial — o
         // cooldown global de voz já evita repetição.
-        static bool sScoldTurn = false;
         if (cond && sFarVoiceArmed) {
             if (sScoldTurn) {
                 GameVoice::OnScoldFear();
@@ -1640,7 +1218,7 @@ void StageState::UpdateTutorials(float dt) {
         if (abilityTutArmed && sAbilityTutShown < kMaxTutorialShows) {
             sAbilityTutShown++;
             abilityTutArmed = false;
-            RequestTutorial("Pressione [" + tutKey(imTut.GetBinding(GameAction::UseItem), "F") + "] para usar a habilidade do irmaozinho");
+            RequestTutorial("Pressione [" + KeyName(GameAction::UseItem, "F") + "] para usar a habilidade do irmaozinho");
             // Enfileira o tutorial de TROCA para logo após este — mas só será
             // exibido quando a tela de tutoriais ficar vazia (ver bloco abaixo).
             if (sSwapTutShown < kMaxTutorialShows) {
@@ -1660,7 +1238,7 @@ void StageState::UpdateTutorials(float dt) {
         if (sSwapTutShown < kMaxTutorialShows) {
             sSwapTutShown++;
             swapTutArmed = false;
-            RequestTutorial("Pressione [" + tutKey(imTut.GetBinding(GameAction::SwapBrother), "Ctrl") + "] para trocar de personagem");
+            RequestTutorial("Pressione [" + KeyName(GameAction::SwapBrother, "Ctrl") + "] para trocar de personagem");
         }
     }
 
@@ -1677,8 +1255,8 @@ void StageState::UpdateTutorials(float dt) {
     }
 }
 
+// Banner do tutorial ativo (um por vez), com fade in/out e as teclas em imagem.
 void StageState::RenderTutorials(SDL_Renderer* renderer) {
-    // Um ÚNICO banner de tutorial por vez (ver RequestTutorial/UpdateTutorials).
     if (!renderer || IsPlayerInputFrozen() || activeTutText.empty() || activeTutTimer <= 0.0f) {
         return;
     }
@@ -1693,7 +1271,7 @@ void StageState::RenderTutorials(SDL_Renderer* renderer) {
     // Escala p/ a resolução: fonte/margens/posição proporcionais (consistente
     // em telas grandes e cabendo em resoluções baixas).
     const float u = Game::UiScale();
-    auto font = Resources::GetFont("Recursos/font/times.ttf",
+    auto font = Resources::GetFont(kUiFont,
                                    std::max(12, static_cast<int>(std::lround(24.0f * u))));
     if (!font) return;
     SDL_Color col{245, 232, 200, 255};
@@ -1719,80 +1297,5 @@ void StageState::RenderTutorials(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, 200, 180, 110, static_cast<Uint8>(220.0f * a01));
     SDL_RenderDrawRect(renderer, &bg);
     KeyGlyphs::Draw(renderer, font.get(), activeTutText, x, y, col, alpha, KeyGlyphs::kDefaultKeyScale);
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-}
-
-void StageState::RenderMonsterScare(SDL_Renderer* renderer) {
-    if (!renderer || !monsterScareActive || IsPlayerInputFrozen()) {
-        return;
-    }
-
-    const float elapsed = monsterScareElapsed;
-
-    // Fade-in curto na entrada; fade-out ao esconder (quando o monstro para).
-    float a01 = 1.0f;
-    if (monsterScareFadeOut > 0.0f) {
-        a01 = monsterScareFadeOut / kMonsterScareFadeOut;         // fade-out
-    } else if (elapsed < kMonsterScareFadeIn) {
-        a01 = elapsed / kMonsterScareFadeIn;                      // fade-in
-    }
-    a01 = std::max(0.0f, std::min(1.0f, a01));
-
-    const float u = Game::UiScale();
-    auto font = Resources::GetFont("Recursos/font/times.ttf",
-                                   std::max(24, static_cast<int>(std::lround(64.0f * u))));
-    if (!font) return;
-
-    const char* text = "FUJA E SE ESCONDA!!!";
-    SDL_Color red{225, 30, 28, 255};
-    SDL_Surface* sf = TTF_RenderUTF8_Blended(font.get(), text, red);
-    if (!sf) return;
-    SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, sf);
-    const int tw = sf->w;
-    const int th = sf->h;
-    SDL_FreeSurface(sf);
-    if (!t) return;
-    SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND);
-
-    const int winW = Game::GetInstance().GetWindowsWidth();
-    const int winH = Game::GetInstance().GetWindowsHeight();
-
-    // Ocupa ~42% da largura (metade do tamanho anterior) e PULSA em torno disso;
-    // tremor forte para alarmar.
-    const float baseScale = (tw > 0) ? (winW * 0.425f) / static_cast<float>(tw) : 1.0f;
-    const float pulse = 1.0f + 0.06f * std::sin(elapsed * 13.0f);
-    const float w = static_cast<float>(tw) * baseScale * pulse;
-    const float h = static_cast<float>(th) * baseScale * pulse;
-
-    // Movimento (tremor) reduzido em 50%.
-    const float shakeAmp = (5.0f + 2.5f * std::sin(elapsed * 2.7f)) * u;
-    const float shakeX = std::sin(elapsed * 47.0f) * shakeAmp;
-    const float shakeY = std::cos(elapsed * 41.0f) * shakeAmp;
-
-    const float cx = winW * 0.5f + shakeX;
-    const float cy = winH * 0.36f + shakeY;   // um pouco acima do centro
-
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-
-    // Véu escuro atrás do texto (destaca e aumenta a tensão).
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, static_cast<Uint8>(95.0f * a01));
-    const SDL_FRect veil{0.0f, cy - h * 0.85f, static_cast<float>(winW), h * 1.7f};
-    SDL_RenderFillRectF(renderer, &veil);
-
-    // Sombra preta deslocada.
-    const float off = 5.0f * u;
-    SDL_SetTextureColorMod(t, 0, 0, 0);
-    SDL_SetTextureAlphaMod(t, static_cast<Uint8>(200.0f * a01));
-    const SDL_FRect shadow{cx - w * 0.5f + off, cy - h * 0.5f + off, w, h};
-    SDL_RenderCopyF(renderer, t, nullptr, &shadow);
-
-    // Texto vermelho principal, com flicker de brilho.
-    const Uint8 b = static_cast<Uint8>(255.0f * (0.80f + 0.20f * std::sin(elapsed * 28.0f)));
-    SDL_SetTextureColorMod(t, b, b, b);
-    SDL_SetTextureAlphaMod(t, static_cast<Uint8>(255.0f * a01));
-    const SDL_FRect dst{cx - w * 0.5f, cy - h * 0.5f, w, h};
-    SDL_RenderCopyF(renderer, t, nullptr, &dst);
-
-    SDL_DestroyTexture(t);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }

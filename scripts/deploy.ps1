@@ -108,6 +108,18 @@ if ($settingsSrc) {
     Copy-Item $settingsSrc (Join-Path $distConfig 'settings.json') -Force
 }
 
+# A calibração de brilho é por máquina: tira a marca "já calibrou" da cópia do
+# pacote, para cada tester passar pela tela no 1º arranque.
+$distSettings = Join-Path $distConfig 'settings.json'
+if (Test-Path $distSettings) {
+    $s = Get-Content $distSettings -Raw | ConvertFrom-Json
+    if ($s.PSObject.Properties.Name -contains 'brightness_calibrated') {
+        $s.PSObject.Properties.Remove('brightness_calibrated')
+        $s | ConvertTo-Json -Depth 5 | Set-Content $distSettings -Encoding UTF8
+        Write-Host "    (brightness_calibrated removido do pacote)"
+    }
+}
+
 # Todos os outros config\*.json (lighting, monster, dialogue_ui, fuel_hud e
 # qualquer um que venha a ser criado): copiados automaticamente, sem lista fixa.
 # Ficam de fora os *.example.json (sao modelos) e os dois tratados a parte

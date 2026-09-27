@@ -219,12 +219,12 @@ const char* InputManager::ActionLabel(GameAction action) {
     case GameAction::MoveDown:    return "Mover baixo";
     case GameAction::MoveLeft:    return "Mover esquerda";
     case GameAction::MoveRight:   return "Mover direita";
-    case GameAction::Interact:    return "Interagir";
+    case GameAction::Interact:    return "Interagir com cenário";
     case GameAction::UseItem:     return "Usar item";
     case GameAction::CyclePrev:   return "Item anterior";
-    case GameAction::CycleNext:   return "Proximo item";
-    case GameAction::SwapBrother: return "Trocar irmao";
-    case GameAction::ToggleMode:  return "Modo dupla";
+    case GameAction::CycleNext:   return "Próximo item";
+    case GameAction::SwapBrother: return "Trocar irmão controlado";
+    case GameAction::ToggleMode:  return "Modo Dupla (Perseguir/Parar)";
     default:                      return "";
     }
 }

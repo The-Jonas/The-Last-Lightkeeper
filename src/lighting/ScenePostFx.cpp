@@ -172,6 +172,8 @@ const char* kFragmentSrc =
     "uniform float uRequireLight;\n"
     "uniform float uVisionColorGain;\n"
     "uniform float uVisionSat;\n"
+    "uniform float uGamma;\n"
+    "uniform float uBlack;\n"
     "uniform float uFlipV;\n"
     "\n"
     "/* Converte uma posicao logica de ecra (y para baixo) de volta para UV da\n"
@@ -329,7 +331,10 @@ const char* kFragmentSrc =
     "       ficam mais cheias (a mistura extrapola a partir do cinzento). */\n"
     "    float lum = dot(col, vec3(0.299, 0.587, 0.114));\n"
     "    vec3 hl = clamp(mix(vec3(lum), col, uVisionSat) * uVisionColorGain, 0.0, 1.0);\n"
-    "    gl_FragColor = vec4(mix(col, hl, clamp(visGeo, 0.0, 1.0)), 1.0);\n"
+    "    vec3 outc = mix(col, hl, clamp(visGeo, 0.0, 1.0));\n"
+    "    outc = clamp((outc - vec3(uBlack)) / (1.0 - uBlack), 0.0, 1.0);\n"
+    "    outc = pow(outc, vec3(1.0 / uGamma));\n"
+    "    gl_FragColor = vec4(outc, 1.0);\n"
     "}\n";
 
 GLuint_ CompileStage(GLenum_ kind, const char* src, char* err, size_t errSize) {
@@ -463,7 +468,8 @@ bool ScenePostFx::Init(SDL_Renderer* renderer) {
         "uFoot1",           "uFootCount",      "uFootRadius",      "uMaskGamma",
         "uVisionColorGain", "uFlipV",       "uLights[0]",       "uLightGamma",
         "uPlayerPos",       "uUnlitFadeR",     "uRequireLight",    "uConeGamma",
-        "uMonoHighlight",   "uMonoLightGlow",  "uLightColor",      "uVisionSat"};
+        "uMonoHighlight",   "uMonoLightGlow",  "uLightColor",      "uVisionSat",
+        "uGamma", "uBlack"};
     for (int i = 0; i < U_COUNT; i++) {
         uniforms[i] = g_gl.GetUniformLocation(program, kNames[i]);
     }
@@ -529,6 +535,8 @@ bool ScenePostFx::Render(SDL_Renderer* renderer, SDL_Texture* sceneTex, int wind
     set1f(U_LIGHT_COLOR, std::max(0.0f, std::min(1.0f, params.lightColorStrength)));
     set1f(U_LIGHT_SHARPEN, std::max(0.0f, std::min(1.0f, params.lightSharpenStrength)));
     set1f(U_FLIP_V, flipV ? 1.0f : 0.0f);
+    set1f(U_GAMMA, std::max(0.3f, std::min(3.0f, gamma)));
+    set1f(U_BLACK, std::max(0.0f, std::min(0.5f, blackPoint)));
 
     set1f(U_VISION_ENABLED, visionOn ? 1.0f : 0.0f);
     if (visionOn) {

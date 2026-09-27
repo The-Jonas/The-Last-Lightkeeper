@@ -1,138 +1,127 @@
-#ifndef GAME_H                                  // Evita inclusão múltipla
+#ifndef GAME_H
 #define GAME_H
 
 #define INCLUDE_SDL
-#include "SDL_include.h"                        // Usa a classe state
+#include "SDL_include.h"
 
 #include "core/State.h"
-#include <string>
-#include <stack>
-#include <memory>
 
-class State;
+#include <memory>
+#include <stack>
+#include <string>
+
 class StageState;
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Game — singleton com a janela, o renderer, a pilha de estados e o loop.
+//
+//  As configurações do jogador (volumes, brilho, vídeo, teclas) são estáticas
+//  e ficam em config/settings.json (LoadSettings / SaveSettings).
+//
+//  Espaço lógico: o jogo inteiro desenha na resolução escolhida (appliedResolution)
+//  e o SDL escala para a janela com SDL_RenderSetLogicalSize, em qualquer modo.
+// ─────────────────────────────────────────────────────────────────────────────
 class Game {
 public:
-    static constexpr int MASTER_VOLUME_PERCENT = 20;
-    static constexpr int AMBIENT_VOLUME_PERCENT = 50;
-    static constexpr int SFX_VOLUME_PERCENT = 100;
-    static constexpr int VOICE_VOLUME_PERCENT = 100;   // dublagem (falas dos irmãos)
-    static int masterVolumePercent;
-    static int ambientVolumePercent;
-    static int sfxVolumePercent;
-    static int voiceVolumePercent;
-    static int brightnessPercent;   // 50..150, 100 = normal (overlay de brilho)
-    static bool fullscreen;         // janela em tela cheia (borderless desktop)
-    static bool reduceFlashing;     // acessibilidade: atenua clarões/flashes de tela
+    enum DisplayMode { kBorderless = 0, kFullscreen = 1, kWindowed = 2, kDisplayModeCount = 3 };
 
-    // ── Modo de exibição / resolução (aplicam no PRÓXIMO boot) ────────────────
-    // displayMode: 0 = Sem bordas (borderless desktop), 1 = Tela cheia (exclusiva
-    // na resolução escolhida), 2 = Janela (na resolução escolhida).
-    static int displayMode;
-    static int resolutionIndex;     // índice na lista de resoluções disponíveis (pendente)
-    static int committedDisplayMode;      // valor efetivamente salvo (aplicado)
-    static int committedResolutionIndex;
+    // ── Áudio (0..100) ───────────────────────────────────────────────────────
+    static int masterVolumePercent;
+    static int ambientVolumePercent;             // barramento "Música e ambiente"
+    static int sfxVolumePercent;
+    static int voiceVolumePercent;               // dublagem dos irmãos
+    static void SetMasterVolume(int percent);    // aplica no mixer na hora
+    static void SetAmbientVolume(int percent);   // aplica na música na hora
+    static void SetSfxVolume(int percent);
+    static void SetVoiceVolume(int percent);
+    static int  MusicVolume();                   // master × ambiente, 0..MIX_MAX_VOLUME (use para toda música)
+
+    // ── Imagem ───────────────────────────────────────────────────────────────
+    static int  brightnessPercent;               // 50..150, 100 = neutro
+    static bool brightnessCalibrated;            // já passou pela tela de calibração
+    static bool reduceFlashing;                  // acessibilidade: atenua clarões
+    static bool vsync;
+    static int  fpsCapIndex;                     // índice na lista de limites (0 = sem limite)
+    static void  SetBrightness(int percent);     // limita a 50..150
+    static float BrightnessGamma();              // metade de cima (100..150) → gama ≥ 1
+    static float BrightnessBlackPoint();         // metade de baixo (50..100) → ponto de preto 0..0.08
+    static void  SetVSync(bool on);              // aplica na hora
+    static int   FpsCap();                       // FPS máximo (0 = sem limite)
+    static const char* FpsCapLabel();
+    static void  CycleFpsCap(int dir);
+
+    // ── Modo de tela e resolução ─────────────────────────────────────────────
+    static int displayMode;                      // DisplayMode atual (aplicado na hora)
+    static int resolutionIndex;                  // resolução escolhida (vale no próximo arranque)
+    static int appliedResolutionIndex;           // resolução com que o jogo abriu
     static int DisplayModeCount();
     static const char* DisplayModeLabel(int mode);
     static const char* CurrentDisplayModeLabel();
-    static int ResolutionCount();
-    static int RecommendedResolutionIndex();   // resolução nativa da área de trabalho
+    static void ApplyDisplayMode(int mode);      // troca o modo na hora e grava
+    static int  ResolutionCount();
+    static int  RecommendedResolutionIndex();    // a nativa da área de trabalho
     static void ResolutionAt(int idx, int& w, int& h);
     static std::string ResolutionLabelAt(int idx);   // "W x H" (+ " (Recomendado)")
     static std::string CurrentResolutionLabel();
-    static void SetResolutionIndex(int idx);
-    static void CycleDisplayMode(int delta);   // muda o modo (pendente)
-    static void CycleResolution(int delta);    // muda a resolução (pendente)
-    // Fluxo "Aplicar": vídeo (modo+resolução) só vale após reiniciar.
-    static bool VideoSettingsDirty();          // há mudança de vídeo não aplicada?
-    static void ApplyVideoSettings();          // comita + salva
-    static void RevertVideoSettings();         // descarta pendências não aplicadas
-    static void RestartApplication();          // relança o executável e encerra
+    static void CycleResolution(int delta);      // só muda a escolha; aplicar exige reiniciar
+    static void RestartApplication();            // relança o executável e encerra este
 
-    static void LoadEnvVolume();
-    static void SetMasterVolume(int percent);
-    static void SetAmbientVolume(int percent);
-    static void SetSfxVolume(int percent);
-    static void SetVoiceVolume(int percent);
-    static void SetBrightness(int percent);
-    static void SetFullscreen(bool on);
-
-    // ── MODO DE GRAVACAO (OBS) ───────────────────────────────────────────────
-    // Uma janela que cobre o ecra INTEIRO e promovida pelo Windows a
-    // "independent flip": os frames vao direitos para o monitor e o DWM deixa
-    // de ter uma copia da janela. Qualquer captura (Window Capture ou Display
-    // Capture) congela no ultimo frame composto enquanto o jogo tem o foco.
-    // Com o backend OpenGL (preciso para o filtro do campo de visao) isto
-    // acontece sempre; com o antigo direct3d nao acontecia.
-    // Este modo poe a janela mais pequena do que o ecra — deixa de ser
-    // promovida, o DWM volta a compo-la e a captura funciona com o foco no
-    // jogo. Alterna-se com F11 (ou arranca ligado com TLL_WINDOW_MODE=windowed).
+    // ── Modo de gravação (F11) ───────────────────────────────────────────────
+    // Janela menor que o ecrã: o Windows deixa de promovê-la a "independent flip"
+    // e o OBS volta a capturar com o foco no jogo (com OpenGL a captura congelava).
+    // Liga com F11 ou arrancando com TLL_WINDOW_MODE=windowed.
     static bool captureWindowMode;
     static void SetCaptureWindowMode(bool on);
     static void ToggleCaptureWindowMode();
-    // Volume da música/fundo constante = master × "Fundo" (ambientVolumePercent).
-    // 0..MIX_MAX_VOLUME. Toda música de fundo deve usar isto (não o master puro).
-    static int MusicVolume();
-    // Configurações unificadas em config/settings.json (volume/brilho/fullscreen/debug).
-    static void LoadSettings();
-    static void SaveSettings();
-    static constexpr int WINDOW_WIDTH = 1920;
-    static constexpr int WINDOW_HEIGHT = 1080;
 
-    // Runtime debug toggle. True for debug builds (-DDEBUG) or when opted in via
-    // `DEBUG=1` in .env. Gates developer-only keys and the on-screen dev HUD so
-    // players never see them.
-    static bool debugMode;
+    // ── Configurações ────────────────────────────────────────────────────────
+    static void LoadSettings();                  // lê config/settings.json
+    static void SaveSettings();                  // grava, preservando chaves desconhecidas
 
-    static Game& GetInstance();                 // Retorna instância única (singleton)
-    SDL_Renderer* GetRenderer();                // Retorna o renderizador SDL
-    SDL_Window* GetWindow();                    // Retorna a janela SDL
-    State& GetCurrentState();                   // Retorna o estado atual do jogo
-    /// Null when the active state is not gameplay (title, loading, etc.). Always check before use.
-    static StageState* TryGetStageState();
-    void Run();                                 // Loop Principal do jogo
+    // ── Debug ────────────────────────────────────────────────────────────────
+    static bool debugMode;                       // teclas de dev e HUD de dev (build debug, DEBUG=1 no .env ou "debug": true)
+    static bool IsDebugBuild();                  // compilado com -DDEBUG
 
-    ~Game();                                    // Destrutor
+    // ── Instância, estados e loop ────────────────────────────────────────────
+    static Game& GetInstance();
+    static StageState* TryGetStageState();       // nullptr fora do gameplay — sempre verifique
+    ~Game();
 
-    float GetDeltaTime();                       // Retorna o valor de dt
+    void Run();                                  // loop principal até a pilha esvaziar ou pedir saída
+    void Push(State* state);                     // empilha no início do próximo frame (Game vira dono)
+    State& GetCurrentState();
 
-    int GetWindowsWidth();                      // Funções get para altura e
-    int GetWindowsHeight();                     // largura da janela do jogo
+    SDL_Renderer* GetRenderer();
+    SDL_Window*   GetWindow();
+    float GetDeltaTime();                        // segundos do último frame
+    int   GetWindowsWidth();                     // largura do ESPAÇO LÓGICO (não da tela física)
+    int   GetWindowsHeight();                    // altura do ESPAÇO LÓGICO
 
-    // Fator de escala da UI: 1.0 na resolução de referência (1080p de altura);
-    // proporcional em outras resoluções lógicas. HUD/tutoriais/overlays com
-    // tamanhos em pixels multiplicam por isto para caberem em resoluções baixas
-    // e ficarem consistentes nas altas. Clampado para evitar extremos.
-    static float UiScale();
-    /// Escala de UI que cabe SEMPRE no ecra: a MENOR das duas razoes contra
-    /// 1920x1080. A `UiScale` olha so para a altura, o que chega para texto
-    /// solto mas nao para uma peca LARGA (a caixa de dialogo tem 2.54:1): num
-    /// ecra 21:9 ou num monitor alto, a altura cresce, a peca cresce com ela e
-    /// passa a largura do ecra. Quem desenha caixas largas usa esta.
-    static float UiFitScale();
-
-    // true quando compilado com alvo `mingw32-make debug` (-DDEBUG)
-    static bool IsDebugBuild();
-
-    void Push(State* state);
+    static float UiScale();                      // escala da UI pela altura (1.0 em 1080p)
+    static float UiFitScale();                   // escala que sempre cabe (menor entre largura e altura) — peças largas
 
 private:
-    Game(std::string title);
+    explicit Game(const std::string& title);
 
-    static Game* instance;                      // Instância única da classe Game
-    SDL_Window* window;                         // Janela do jogo
-    SDL_Renderer* renderer;                     // Renderizador SDL
+    static void LoadEnvFile();                   // .env legado: volumes e DEBUG
+    void InitSdl();                              // SDL, SDL_image, SDL_mixer, SDL_ttf
+    void CreateWindowAndRenderer(const std::string& title);
+    void LogEnvironment();                       // telemetria da máquina e das configurações
+    void CalculateDeltaTime();
+    void ApplyPendingStackChanges();             // pop pedido + push pendente
+    void LimitFrameRate(Uint64 frameBegin);      // dorme o que falta para o limite de FPS
 
-    void CalculateDeltaTime();                  // Vai calcular o dt e ser chamado em cada iteração do game loop
-    int frameStart;                             // Usado para calcular diferença de tempo entre frames 
-    float dt;                                   // Convertido o resultado em segundos, vamos armazenar aqui em dt
-    
-    int windowsWidth, windowsHeight;            // Variáveis que criei para pegar os valores do tamanho da janela
+    static Game* instance;
 
-    State* storedState;
+    SDL_Window*   window   = nullptr;
+    SDL_Renderer* renderer = nullptr;
+    Uint32 frameStart = 0;                       // ticks do início do frame anterior
+    float  dt = 0.0f;
+    int    windowsWidth  = 0;                    // espaço lógico
+    int    windowsHeight = 0;
+
+    std::unique_ptr<State> pendingState;         // entra na pilha no próximo frame
     std::stack<std::unique_ptr<State>> stateStack;
-    
 };
 
-#endif //GAME_H
+#endif  // GAME_H

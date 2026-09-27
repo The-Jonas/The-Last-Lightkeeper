@@ -1,20 +1,10 @@
 #include "core/Game.h"
-#include "core/State.h"
 #include "core/CrashHandler.h"
+#include "core/InputManager.h"
 #include "core/Telemetry.h"
 #include "states/stage/StageState.h"
-#include "core/InputManager.h"
 #include "ui/DialogueTuning.h"
 #include "ui/FuelHudTuning.h"
-#include <cstdlib>
-#include <ctime>
-#include <fstream>
-#include <string>
-#include <vector>
-#include <algorithm>
-#include <cctype>
-#include <exception>
-#include <typeinfo>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -30,269 +20,210 @@
 
 #include "nlohmann/json.hpp"
 
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <cstdlib>
+#include <ctime>
+#include <exception>
+#include <fstream>
 #include <iostream>
-
-Game* Game::instance = nullptr;
-int Game::masterVolumePercent = Game::MASTER_VOLUME_PERCENT;
-int Game::ambientVolumePercent = Game::AMBIENT_VOLUME_PERCENT;
-int Game::sfxVolumePercent = Game::SFX_VOLUME_PERCENT;
-int Game::voiceVolumePercent = Game::VOICE_VOLUME_PERCENT;
-int Game::brightnessPercent = 100;
-bool Game::fullscreen = false;
-bool Game::captureWindowMode = false;
-bool Game::reduceFlashing = false;
-bool Game::debugMode = false;
-int Game::displayMode = 0;        // 0 = sem bordas (padrão seguro)
-int Game::resolutionIndex = 0;    // definido ao montar a lista (nativo = recomendado)
-int Game::committedDisplayMode = 0;
-int Game::committedResolutionIndex = 0;
+#include <typeinfo>
+#include <vector>
 
 namespace {
 
-struct ResEntry { int w; int h; };
+const char* kSettingsPath = "config/settings.json";
+const char* kEnvPath      = ".env";
 
-// Lista curada de resoluções (a nativa da área de trabalho é inserida se faltar
-// e marcada como "Recomendado"). Montada uma vez em EnsureResolutionList().
-std::vector<ResEntry> gResolutions;
+constexpr int   kReferenceW = 1920;          // resolução de referência da UI
+constexpr int   kReferenceH = 1080;
+constexpr float kUiScaleMin = 0.55f;
+constexpr float kUiScaleMax = 2.50f;
+
+constexpr int kMixChannels       = 48;       // 0-13 fixos, 14-31 voz/one-shots, 32-47 passos do monstro
+constexpr int kReservedChannels  = 14;       // 0..13 nunca são escolhidos por Mix_PlayChannel(-1)
+constexpr int kAudioBufferFrames = 4096;     // buffer maior evita underrun com música + ambiente
+
+const char* kDisplayModeLabels[]   = {"Sem bordas", "Tela cheia", "Janela"};
+const char* kDisplayModeSettings[] = {"borderless", "fullscreen", "windowed"};   // valor em settings.json
+
+const int   kFpsCaps[]      = {0, 30, 60, 120, 144, 240};
+const char* kFpsCapLabels[] = {"Sem limite", "30", "60", "120", "144", "240"};
+constexpr int kFpsCapCount  = 6;
+
+struct Resolution { int w; int h; };
+std::vector<Resolution> gResolutions;
 int gRecommendedIndex = 0;
 
+// Monta (uma vez) a lista de resoluções, maiores primeiro, com a nativa garantida
+// e marcada como recomendada. Precisa do SDL_Init(VIDEO) já feito.
 void EnsureResolutionList() {
     if (!gResolutions.empty()) return;
     gResolutions = {
-        // Altas / ultrawide
         {5120, 1440}, {3840, 2160}, {3840, 1080}, {3440, 1440}, {2560, 1600},
-        {2560, 1440}, {2560, 1080}, {1920, 1200},
-        // Comuns
-        {1920, 1080}, {1680, 1050}, {1600, 1024}, {1440, 1080}, {1440, 900},
-        {1400, 1050}, {1366, 768},  {1360, 768},  {1280, 1024}, {1280, 960},
-        {1280, 800},  {1280, 768},  {1280, 720},
+        {2560, 1440}, {2560, 1080}, {1920, 1200}, {1920, 1080}, {1680, 1050},
+        {1600, 1024}, {1440, 1080}, {1440, 900},  {1400, 1050}, {1366, 768},
+        {1360, 768},  {1280, 1024}, {1280, 960},  {1280, 800},  {1280, 768},
+        {1280, 720},
     };
-    // Resolução nativa da área de trabalho → garante presença + marca recomendada.
-    int nativeW = 1920, nativeH = 1080;
+
+    int nativeW = kReferenceW, nativeH = kReferenceH;
     SDL_DisplayMode dm;
     if (SDL_GetDesktopDisplayMode(0, &dm) == 0 && dm.w > 0 && dm.h > 0) {
-        nativeW = dm.w; nativeH = dm.h;
+        nativeW = dm.w;
+        nativeH = dm.h;
     }
-    bool found = false;
-    for (const auto& e : gResolutions) {
-        if (e.w == nativeW && e.h == nativeH) { found = true; break; }
+    auto isNative = [&](const Resolution& r) { return r.w == nativeW && r.h == nativeH; };
+    if (std::none_of(gResolutions.begin(), gResolutions.end(), isNative)) {
+        gResolutions.push_back({nativeW, nativeH});
     }
-    if (!found) gResolutions.push_back({nativeW, nativeH});
-    // Ordena por área decrescente (maiores no topo, como no dropdown do exemplo).
     std::sort(gResolutions.begin(), gResolutions.end(),
-              [](const ResEntry& a, const ResEntry& b) {
-                  return (a.w * a.h) > (b.w * b.h);
-              });
-    gRecommendedIndex = 0;
-    for (int i = 0; i < static_cast<int>(gResolutions.size()); ++i) {
-        if (gResolutions[i].w == nativeW && gResolutions[i].h == nativeH) {
-            gRecommendedIndex = i; break;
-        }
-    }
+              [](const Resolution& a, const Resolution& b) { return a.w * a.h > b.w * b.h; });
+    gRecommendedIndex = static_cast<int>(
+        std::find_if(gResolutions.begin(), gResolutions.end(), isNative) - gResolutions.begin());
 }
 
-const char* kDisplayModeLabels[] = {"Sem bordas", "Tela cheia", "Janela"};
-constexpr int kDisplayModeCount = 3;
-
-
-std::string TrimWhitespace(std::string s) {
-    const auto notspace = [](unsigned char c) { return !std::isspace(c); };
-    while (!s.empty() && !notspace(static_cast<unsigned char>(s.front()))) {
-        s.erase(s.begin());
-    }
-    while (!s.empty() && !notspace(static_cast<unsigned char>(s.back()))) {
-        s.pop_back();
-    }
-    return s;
+// Tira espaços do começo e do fim.
+std::string Trim(const std::string& s) {
+    size_t b = 0, e = s.size();
+    while (b < e && std::isspace(static_cast<unsigned char>(s[b]))) ++b;
+    while (e > b && std::isspace(static_cast<unsigned char>(s[e - 1]))) --e;
+    return s.substr(b, e - b);
 }
 
-void ApplyOptionalWindowSettingsFromFile(int& width, int& height) {
-    std::ifstream f("config/settings.json");
-    if (!f.is_open()) {
-        return;
-    }
-    try {
-        nlohmann::json j;
-        f >> j;
-        if (j.contains("window_width") && j["window_width"].is_number_integer()) {
-            const int w = j["window_width"].get<int>();
-            if (w >= 320 && w <= 16384) {
-                width = w;
-            }
-        }
-        if (j.contains("window_height") && j["window_height"].is_number_integer()) {
-            const int h = j["window_height"].get<int>();
-            if (h >= 240 && h <= 16384) {
-                height = h;
-            }
-        }
-    } catch (const std::exception& ex) {
-        std::cerr << "config/settings.json ignorado (parse): " << ex.what() << std::endl;
-    }
+// Índice com volta (…, n-1, 0, 1, …) para ciclar listas.
+int Wrap(int value, int n) {
+    return ((value % n) + n) % n;
 }
 
-} // namespace
+}  // namespace
 
-void Game::LoadEnvVolume() {
-    std::ifstream env(".env");
-    if (!env.is_open()) {
-        return;
-    }
-    std::string line;
-    while (std::getline(env, line)) {
-        const std::string trimmedLine = TrimWhitespace(line);
-        if (trimmedLine.empty() || trimmedLine.front() == '#') {
-            continue;
-        }
-        const auto eqPos = trimmedLine.find('=');
-        if (eqPos == std::string::npos) {
-            continue;
-        }
-        std::string key = TrimWhitespace(trimmedLine.substr(0, eqPos));
-        std::string value = TrimWhitespace(trimmedLine.substr(eqPos + 1));
-        if (key.empty()) {
-            continue;
-        }
-        if (key == "MASTER_VOLUME") {
-            try {
-                const int vol = std::stoi(value);
-                if (vol >= 0 && vol <= 100) {
-                    masterVolumePercent = vol;
-                }
-            } catch (const std::exception&) {
-                // valores malformados são ignorados
-            }
-        } else if (key == "AMBIENT_VOLUME") {
-            try {
-                const int vol = std::stoi(value);
-                if (vol >= 0 && vol <= 100) {
-                    ambientVolumePercent = vol;
-                }
-            } catch (const std::exception&) {
-            }
-        } else if (key == "VFX_VOLUME") {
-            try {
-                const int vol = std::stoi(value);
-                if (vol >= 0 && vol <= 100) {
-                    sfxVolumePercent = vol;
-                }
-            } catch (const std::exception&) {
-            }
-        } else if (key == "VOICE_VOLUME") {
-            try {
-                const int vol = std::stoi(value);
-                if (vol >= 0 && vol <= 100) {
-                    voiceVolumePercent = vol;
-                }
-            } catch (const std::exception&) {
-            }
-        } else if (key == "DEBUG") {
-            if (value == "1" || value == "true" || value == "TRUE") {
-                debugMode = true;
-            }
-        }
-    }
-}
+Game* Game::instance = nullptr;
 
-int Game::MusicVolume() {
-    int vol = (MIX_MAX_VOLUME * masterVolumePercent) / 100;
-    vol = (vol * ambientVolumePercent) / 100;   // barramento "Fundo"
-    return vol;
-}
+int  Game::masterVolumePercent  = 20;
+int  Game::ambientVolumePercent = 50;
+int  Game::sfxVolumePercent     = 100;
+int  Game::voiceVolumePercent   = 100;
 
+int  Game::brightnessPercent    = 100;
+bool Game::brightnessCalibrated = false;
+bool Game::reduceFlashing       = false;
+bool Game::vsync                = true;
+int  Game::fpsCapIndex          = 0;
+
+int  Game::displayMode            = Game::kBorderless;
+int  Game::resolutionIndex        = 0;   // LoadSettings define (padrão = nativa)
+int  Game::appliedResolutionIndex = 0;
+
+bool Game::captureWindowMode = false;
+bool Game::debugMode         = false;
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  Áudio
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Master nos canais (teto de segurança) e na música pelo barramento de ambiente.
 void Game::SetMasterVolume(int percent) {
-    if (percent < 0) percent = 0;
-    if (percent > 100) percent = 100;
-    masterVolumePercent = percent;
-    // Blanket master nos canais (segurança) + música pelo barramento de fundo.
+    masterVolumePercent = std::clamp(percent, 0, 100);
     Mix_Volume(-1, (MIX_MAX_VOLUME * masterVolumePercent) / 100);
     Mix_VolumeMusic(MusicVolume());
 }
 
+// O ambiente também controla a música: atualiza na hora.
 void Game::SetAmbientVolume(int percent) {
-    if (percent < 0) percent = 0;
-    if (percent > 100) percent = 100;
-    ambientVolumePercent = percent;
-    // "Fundo" também controla a música — atualiza ao vivo.
+    ambientVolumePercent = std::clamp(percent, 0, 100);
     Mix_VolumeMusic(MusicVolume());
 }
 
-void Game::SetSfxVolume(int percent) {
-    if (percent < 0) percent = 0;
-    if (percent > 100) percent = 100;
-    sfxVolumePercent = percent;
+void Game::SetSfxVolume(int percent)   { sfxVolumePercent   = std::clamp(percent, 0, 100); }
+void Game::SetVoiceVolume(int percent) { voiceVolumePercent = std::clamp(percent, 0, 100); }
+
+// Volume de música/fundo = master × ambiente, em 0..MIX_MAX_VOLUME.
+int Game::MusicVolume() {
+    return (MIX_MAX_VOLUME * masterVolumePercent / 100) * ambientVolumePercent / 100;
 }
 
-void Game::SetVoiceVolume(int percent) {
-    if (percent < 0) percent = 0;
-    if (percent > 100) percent = 100;
-    voiceVolumePercent = percent;
+// ═════════════════════════════════════════════════════════════════════════════
+//  Imagem
+// ═════════════════════════════════════════════════════════════════════════════
+
+void Game::SetBrightness(int percent) { brightnessPercent = std::clamp(percent, 50, 150); }
+
+// Metade de cima do brilho: gama que clareia as sombras sem mexer no preto.
+// 100 → 1.0 (neutro), 150 → 1.41.
+float Game::BrightnessGamma() {
+    const float b = static_cast<float>(std::clamp(brightnessPercent, 100, 150));
+    return std::pow(2.0f, (b - 100.0f) / 100.0f);
 }
 
-void Game::SetBrightness(int percent) {
-    if (percent < 50) percent = 50;
-    if (percent > 150) percent = 150;
-    brightnessPercent = percent;
+// Metade de baixo: sobe o ponto de preto. 100 → 0 (neutro), 50 → 0.08 (≈20/255 vira preto).
+float Game::BrightnessBlackPoint() {
+    const float b = static_cast<float>(std::clamp(brightnessPercent, 50, 100));
+    return (100.0f - b) / 50.0f * 0.08f;
 }
 
-void Game::SetFullscreen(bool on) {
-    fullscreen = on;
-    if (instance && instance->window) {
-        SDL_SetWindowFullscreen(instance->window, on ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+// Liga/desliga o VSync no renderer atual (SDL 2.0.18+).
+void Game::SetVSync(bool on) {
+    vsync = on;
+    if (instance && instance->renderer) {
+        SDL_RenderSetVSync(instance->renderer, on ? 1 : 0);
     }
 }
 
-// ── MODO DE GRAVACAO ────────────────────────────────────────────────────────
-// Ver a nota em Game.h. O tamanho LOGICO de render nao muda (o SDL continua a
-// escalar com SDL_RenderSetLogicalSize), por isso camara, HUD, rato e o filtro
-// do campo de visao trabalham exatamente com os mesmos numeros. So a janela
-// fisica encolhe.
-void Game::SetCaptureWindowMode(bool on) {
-    captureWindowMode = on;
-    if (!instance || !instance->window) {
-        return;
-    }
-    SDL_Window* w = instance->window;
-    if (on) {
-        SDL_SetWindowFullscreen(w, 0);
+int Game::FpsCap()              { return kFpsCaps[std::clamp(fpsCapIndex, 0, kFpsCapCount - 1)]; }
+const char* Game::FpsCapLabel() { return kFpsCapLabels[std::clamp(fpsCapIndex, 0, kFpsCapCount - 1)]; }
+void Game::CycleFpsCap(int dir) { fpsCapIndex = Wrap(fpsCapIndex + dir, kFpsCapCount); }
 
-        // 85% do ecra. O que conta e NAO cobrir o ecra todo: basta isso para o
-        // Windows deixar de a promover a "independent flip".
-        int px = 1280;
-        int py = 720;
-        int display = SDL_GetWindowDisplayIndex(w);
-        if (display < 0) {
-            display = 0;
-        }
-        SDL_DisplayMode dm;
-        SDL_zero(dm);
-        if (SDL_GetDesktopDisplayMode(display, &dm) == 0 && dm.w > 0 && dm.h > 0) {
-            px = static_cast<int>(dm.w * 0.85f);
-            py = static_cast<int>(dm.h * 0.85f);
-        }
-        SDL_SetWindowBordered(w, SDL_TRUE);
-        SDL_SetWindowSize(w, px, py);
-        SDL_SetWindowPosition(w, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
-        fullscreen = false;
-    } else {
-        SDL_SetWindowFullscreen(w, SDL_WINDOW_FULLSCREEN_DESKTOP);
-        fullscreen = true;
-    }
-    SDL_ShowCursor(SDL_DISABLE);   // o SDL volta a mostrar o cursor ao trocar de modo
-}
-
-void Game::ToggleCaptureWindowMode() {
-    SetCaptureWindowMode(!captureWindowMode);
-}
+// ═════════════════════════════════════════════════════════════════════════════
+//  Modo de tela e resolução
+// ═════════════════════════════════════════════════════════════════════════════
 
 int Game::DisplayModeCount() { return kDisplayModeCount; }
 
 const char* Game::DisplayModeLabel(int mode) {
-    if (mode < 0 || mode >= kDisplayModeCount) mode = 0;
-    return kDisplayModeLabels[mode];
+    return kDisplayModeLabels[std::clamp(mode, 0, kDisplayModeCount - 1)];
 }
 
 const char* Game::CurrentDisplayModeLabel() { return DisplayModeLabel(displayMode); }
+
+// Troca o modo de tela na hora e grava. O espaço lógico não muda (SDL_RenderSetLogicalSize),
+// então o jogo continua igual em qualquer modo. Desliga o modo de gravação.
+void Game::ApplyDisplayMode(int mode) {
+    displayMode = std::clamp(mode, 0, kDisplayModeCount - 1);
+    captureWindowMode = false;
+
+    if (instance && instance->window) {
+        SDL_Window* w = instance->window;
+        int resW = kReferenceW, resH = kReferenceH;
+        ResolutionAt(resolutionIndex, resW, resH);
+
+        if (displayMode == kBorderless) {
+            SDL_SetWindowFullscreen(w, SDL_WINDOW_FULLSCREEN_DESKTOP);
+        } else if (displayMode == kFullscreen) {
+            SDL_DisplayMode dm;
+            SDL_zero(dm);                          // formato/Hz 0 = o SDL escolhe o mais próximo
+            dm.w = resW;
+            dm.h = resH;
+            SDL_SetWindowDisplayMode(w, &dm);
+            SDL_SetWindowFullscreen(w, SDL_WINDOW_FULLSCREEN);
+        } else {
+            SDL_SetWindowFullscreen(w, 0);
+            SDL_SetWindowBordered(w, SDL_TRUE);
+            // No máximo 90% da área de trabalho, mantendo a proporção.
+            const int display = std::max(0, SDL_GetWindowDisplayIndex(w));
+            SDL_DisplayMode desk;
+            if (SDL_GetDesktopDisplayMode(display, &desk) == 0 && desk.w > 0 && desk.h > 0) {
+                const float s = std::min({1.0f, 0.9f * desk.w / resW, 0.9f * desk.h / resH});
+                resW = static_cast<int>(resW * s);
+                resH = static_cast<int>(resH * s);
+            }
+            SDL_SetWindowSize(w, resW, resH);
+            SDL_SetWindowPosition(w, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+        }
+    }
+    SaveSettings();
+}
 
 int Game::ResolutionCount() {
     EnsureResolutionList();
@@ -304,6 +235,7 @@ int Game::RecommendedResolutionIndex() {
     return gRecommendedIndex;
 }
 
+// Largura/altura da resolução `idx`; índice inválido cai na recomendada.
 void Game::ResolutionAt(int idx, int& w, int& h) {
     EnsureResolutionList();
     if (idx < 0 || idx >= static_cast<int>(gResolutions.size())) idx = gRecommendedIndex;
@@ -321,44 +253,12 @@ std::string Game::ResolutionLabelAt(int idx) {
 
 std::string Game::CurrentResolutionLabel() { return ResolutionLabelAt(resolutionIndex); }
 
-void Game::SetResolutionIndex(int idx) {
-    const int n = ResolutionCount();
-    if (n <= 0) return;
-    if (idx < 0) idx = 0;
-    if (idx >= n) idx = n - 1;
-    resolutionIndex = idx;
-}
-
-void Game::CycleDisplayMode(int delta) {
-    displayMode = ((displayMode + delta) % kDisplayModeCount + kDisplayModeCount) % kDisplayModeCount;
-    // Mantém o bool legado coerente (Sem bordas/Tela cheia = "fullscreen").
-    fullscreen = (displayMode != 2);
-}
-
 void Game::CycleResolution(int delta) {
     const int n = ResolutionCount();
-    if (n <= 0) return;
-    resolutionIndex = ((resolutionIndex + delta) % n + n) % n;
+    if (n > 0) resolutionIndex = Wrap(resolutionIndex + delta, n);
 }
 
-// ── Aplicar/reverter vídeo (modo de tela + resolução aplicam no próximo boot) ──
-bool Game::VideoSettingsDirty() {
-    return displayMode != committedDisplayMode || resolutionIndex != committedResolutionIndex;
-}
-
-void Game::ApplyVideoSettings() {
-    committedDisplayMode = displayMode;
-    committedResolutionIndex = resolutionIndex;
-    fullscreen = (displayMode != 2);
-    SaveSettings();   // grava os valores já comprometidos
-}
-
-void Game::RevertVideoSettings() {
-    displayMode = committedDisplayMode;
-    resolutionIndex = committedResolutionIndex;
-    fullscreen = (displayMode != 2);
-}
-
+// Lança uma nova cópia do executável (Windows) e encerra esta.
 void Game::RestartApplication() {
 #ifdef _WIN32
     wchar_t path[MAX_PATH];
@@ -375,38 +275,84 @@ void Game::RestartApplication() {
         }
     }
 #endif
-    std::exit(0);   // encerra esta instância (a nova já foi lançada acima)
+    std::exit(0);
 }
 
-void Game::LoadSettings() {
-    std::ifstream f("config/settings.json");
-    if (!f.is_open()) {
+// ═════════════════════════════════════════════════════════════════════════════
+//  Modo de gravação
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Ligado: janela com borda em 85% do ecrã (o DWM volta a compor e o OBS captura).
+// Desligado: volta ao modo de tela escolhido nas Configurações.
+void Game::SetCaptureWindowMode(bool on) {
+    if (!instance || !instance->window) {
+        captureWindowMode = on;
         return;
     }
+    if (!on) {
+        ApplyDisplayMode(displayMode);   // já zera captureWindowMode
+        SDL_ShowCursor(SDL_DISABLE);
+        return;
+    }
+
+    captureWindowMode = true;
+    SDL_Window* w = instance->window;
+    SDL_SetWindowFullscreen(w, 0);
+
+    int px = 1280, py = 720;
+    const int display = std::max(0, SDL_GetWindowDisplayIndex(w));
+    SDL_DisplayMode dm;
+    SDL_zero(dm);
+    if (SDL_GetDesktopDisplayMode(display, &dm) == 0 && dm.w > 0 && dm.h > 0) {
+        px = static_cast<int>(dm.w * 0.85f);
+        py = static_cast<int>(dm.h * 0.85f);
+    }
+    SDL_SetWindowBordered(w, SDL_TRUE);
+    SDL_SetWindowSize(w, px, py);
+    SDL_SetWindowPosition(w, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+    SDL_ShowCursor(SDL_DISABLE);   // o SDL volta a mostrar o cursor ao trocar de modo
+}
+
+void Game::ToggleCaptureWindowMode() { SetCaptureWindowMode(!captureWindowMode); }
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  Configurações
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Lê settings.json. Chaves ausentes ou fora da faixa mantêm o valor atual.
+void Game::LoadSettings() {
+    resolutionIndex = RecommendedResolutionIndex();
+
+    std::ifstream f(kSettingsPath);
+    if (!f.is_open()) return;
     try {
         nlohmann::json j;
         f >> j;
-        auto readPercent = [&](const char* key, int& out) {
+        auto readInt = [&](const char* key, int lo, int hi, int& out) {
             if (j.contains(key) && j[key].is_number_integer()) {
                 const int v = j[key].get<int>();
-                if (v >= 0 && v <= 100) out = v;
+                if (v >= lo && v <= hi) out = v;
             }
         };
-        readPercent("master_volume", masterVolumePercent);
-        readPercent("ambient_volume", ambientVolumePercent);
-        readPercent("sfx_volume", sfxVolumePercent);
-        readPercent("voice_volume", voiceVolumePercent);
-        if (j.contains("brightness") && j["brightness"].is_number_integer()) {
-            const int b = j["brightness"].get<int>();
-            if (b >= 50 && b <= 150) brightnessPercent = b;
+        auto readBool = [&](const char* key, bool& out) {
+            if (j.contains(key) && j[key].is_boolean()) out = j[key].get<bool>();
+        };
+
+        readInt("master_volume", 0, 100, masterVolumePercent);
+        readInt("ambient_volume", 0, 100, ambientVolumePercent);
+        readInt("sfx_volume", 0, 100, sfxVolumePercent);
+        readInt("voice_volume", 0, 100, voiceVolumePercent);
+        readInt("brightness", 50, 150, brightnessPercent);
+        readBool("brightness_calibrated", brightnessCalibrated);
+        readBool("reduce_flashing", reduceFlashing);
+        readBool("vsync", vsync);
+
+        if (j.contains("display_mode") && j["display_mode"].is_string()) {
+            const std::string m = j["display_mode"].get<std::string>();
+            for (int i = 0; i < kDisplayModeCount; ++i) {
+                if (m == kDisplayModeSettings[i]) displayMode = i;
+            }
         }
-        if (j.contains("fullscreen") && j["fullscreen"].is_boolean()) {
-            fullscreen = j["fullscreen"].get<bool>();
-        }
-        // O jogo é SEMPRE tela cheia sem bordas — não há mais opção de modo de
-        // janela. A "resolução" é a resolução lógica de render (ver Game ctor).
-        displayMode = 0;
-        resolutionIndex = RecommendedResolutionIndex();   // padrão = nativa
         if (j.contains("window_width") && j.contains("window_height") &&
             j["window_width"].is_number_integer() && j["window_height"].is_number_integer()) {
             const int w = j["window_width"].get<int>();
@@ -417,372 +363,102 @@ void Game::LoadSettings() {
                 if (rw == w && rh == h) { resolutionIndex = i; break; }
             }
         }
-        fullscreen = (displayMode != 2);
-        // Baseline "comprometido" = o que foi carregado (usado pelo fluxo Aplicar).
-        committedDisplayMode = displayMode;
-        committedResolutionIndex = resolutionIndex;
-        if (j.contains("reduce_flashing") && j["reduce_flashing"].is_boolean()) {
-            reduceFlashing = j["reduce_flashing"].get<bool>();
+        if (j.contains("fps_cap") && j["fps_cap"].is_number_integer()) {
+            const int cap = j["fps_cap"].get<int>();
+            for (int i = 0; i < kFpsCapCount; ++i) {
+                if (kFpsCaps[i] == cap) { fpsCapIndex = i; break; }
+            }
         }
-        if (j.contains("debug") && j["debug"].is_boolean() && j["debug"].get<bool>()) {
-            debugMode = true;
-        }
+
+        bool debug = false;
+        readBool("debug", debug);
+        if (debug) debugMode = true;
+
         if (j.contains("keybindings") && j["keybindings"].is_object()) {
+            const auto& kb = j["keybindings"];
             InputManager& im = InputManager::GetInstance();
             for (int i = 0; i < InputManager::ActionCount; ++i) {
                 const GameAction action = static_cast<GameAction>(i);
                 const char* name = InputManager::ActionName(action);
-                if (j["keybindings"].contains(name) && j["keybindings"][name].is_string()) {
-                    const std::string keyName = j["keybindings"][name].get<std::string>();
-                    const SDL_Keycode kc = SDL_GetKeyFromName(keyName.c_str());
-                    if (kc != SDLK_UNKNOWN) {
-                        im.SetBinding(action, kc);
-                    }
-                }
+                if (!kb.contains(name) || !kb[name].is_string()) continue;
+                const SDL_Keycode kc = SDL_GetKeyFromName(kb[name].get<std::string>().c_str());
+                if (kc != SDLK_UNKNOWN) im.SetBinding(action, kc);
             }
         }
     } catch (const std::exception& ex) {
-        std::cerr << "config/settings.json ignorado (parse): " << ex.what() << std::endl;
+        std::cerr << kSettingsPath << " ignorado (parse): " << ex.what() << std::endl;
     }
 }
 
+// Grava settings.json por cima do existente, preservando chaves que o jogo não
+// conhece (ex.: "debug" colocado à mão).
 void Game::SaveSettings() {
-    // Preserva chaves existentes (window_width/height/debug) lendo antes de gravar.
     nlohmann::json j = nlohmann::json::object();
     {
-        std::ifstream f("config/settings.json");
+        std::ifstream f(kSettingsPath);
         if (f.is_open()) {
+            try { f >> j; } catch (const std::exception&) { j = nlohmann::json::object(); }
+        }
+    }
+    if (!j.is_object()) j = nlohmann::json::object();
+
+    j["master_volume"]         = masterVolumePercent;
+    j["ambient_volume"]        = ambientVolumePercent;
+    j["sfx_volume"]            = sfxVolumePercent;
+    j["voice_volume"]          = voiceVolumePercent;
+    j["brightness"]            = brightnessPercent;
+    j["brightness_calibrated"] = brightnessCalibrated;
+    j["reduce_flashing"]       = reduceFlashing;
+    j["vsync"]                 = vsync;
+    j["fps_cap"]               = FpsCap();
+    j["display_mode"]          = kDisplayModeSettings[std::clamp(displayMode, 0, kDisplayModeCount - 1)];
+
+    int rw = 0, rh = 0;
+    ResolutionAt(resolutionIndex, rw, rh);
+    j["window_width"]  = rw;
+    j["window_height"] = rh;
+
+    nlohmann::json kb = nlohmann::json::object();
+    InputManager& im = InputManager::GetInstance();
+    for (int i = 0; i < InputManager::ActionCount; ++i) {
+        const GameAction action = static_cast<GameAction>(i);
+        kb[InputManager::ActionName(action)] = SDL_GetKeyName(im.GetBinding(action));
+    }
+    j["keybindings"] = kb;
+    j.erase("fullscreen");   // chave antiga, substituída por display_mode
+
+    std::ofstream out(kSettingsPath, std::ios::trunc);
+    if (out.is_open()) out << j.dump(2) << std::endl;
+}
+
+// .env legado: MASTER_VOLUME, AMBIENT_VOLUME, VFX_VOLUME, VOICE_VOLUME (0..100) e DEBUG.
+// Lido antes do settings.json, que tem a palavra final.
+void Game::LoadEnvFile() {
+    std::ifstream env(kEnvPath);
+    if (!env.is_open()) return;
+
+    std::string line;
+    while (std::getline(env, line)) {
+        line = Trim(line);
+        const auto eq = line.find('=');
+        if (line.empty() || line.front() == '#' || eq == std::string::npos) continue;
+        const std::string key   = Trim(line.substr(0, eq));
+        const std::string value = Trim(line.substr(eq + 1));
+
+        int* target = nullptr;
+        if (key == "MASTER_VOLUME")       target = &masterVolumePercent;
+        else if (key == "AMBIENT_VOLUME") target = &ambientVolumePercent;
+        else if (key == "VFX_VOLUME")     target = &sfxVolumePercent;
+        else if (key == "VOICE_VOLUME")   target = &voiceVolumePercent;
+        else if (key == "DEBUG" && (value == "1" || value == "true" || value == "TRUE")) debugMode = true;
+
+        if (target) {
             try {
-                f >> j;
-            } catch (const std::exception&) {
-                j = nlohmann::json::object();
-            }
+                const int v = std::stoi(value);
+                if (v >= 0 && v <= 100) *target = v;
+            } catch (const std::exception&) {}   // valor malformado: ignora
         }
     }
-    if (!j.is_object()) {
-        j = nlohmann::json::object();
-    }
-    j["master_volume"] = masterVolumePercent;
-    j["ambient_volume"] = ambientVolumePercent;
-    j["sfx_volume"] = sfxVolumePercent;
-    j["voice_volume"] = voiceVolumePercent;
-    j["brightness"] = brightnessPercent;
-    // Vídeo: grava os valores COMPROMETIDOS (só mudam via "Aplicar"), não os
-    // pendentes que o usuário está pré-visualizando na UI.
-    j["fullscreen"] = (committedDisplayMode != 2);
-    j["reduce_flashing"] = reduceFlashing;
-    j["display_mode"] = (committedDisplayMode == 0) ? "borderless" : (committedDisplayMode == 1) ? "fullscreen" : "windowed";
-    {
-        int rw = 0, rh = 0;
-        ResolutionAt(committedResolutionIndex, rw, rh);
-        j["window_width"] = rw;
-        j["window_height"] = rh;
-    }
-
-    {
-        InputManager& im = InputManager::GetInstance();
-        nlohmann::json kb = nlohmann::json::object();
-        for (int i = 0; i < InputManager::ActionCount; ++i) {
-            const GameAction action = static_cast<GameAction>(i);
-            kb[InputManager::ActionName(action)] = SDL_GetKeyName(im.GetBinding(action));
-        }
-        j["keybindings"] = kb;
-    }
-
-    std::ofstream out("config/settings.json", std::ios::trunc);
-    if (out.is_open()) {
-        out << j.dump(2) << std::endl;
-    }
-}
-
-Game::Game(std::string title) {
-    if (instance != nullptr) {
-        std::cerr << "Erro: Já existe uma instância do Game rodando!" << std::endl;
-        exit(1);
-    }
-
-    instance = this;                  // Define a instância atual
-
-    LoadEnvVolume();                  // Carrega volume (e flag DEBUG) do .env (legado)
-    srand(time(NULL));                // Inicializando o gerador de números aleátorios
-
-    // Inicializa SDL
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER) != 0) {
-        std::cerr << "SDL_Init falhou: " << SDL_GetError() << std::endl;
-        exit(1);
-    }
-
-    // Só APÓS SDL_Init(VIDEO) a resolução nativa pode ser consultada
-    // (EnsureResolutionList usa SDL_GetDesktopDisplayMode).
-    LoadSettings();                   // config/settings.json (fonte unificada)
-    DialogueTuning::Load();
-    FuelHudTuning::Load();
-    if (IsDebugBuild()) {
-        debugMode = true;             // builds de debug sempre habilitam ferramentas de dev
-    }
-
-    // Inicializa SDL_Image
-    int imgFlags = IMG_INIT_JPG | IMG_INIT_PNG | IMG_INIT_TIF;
-    if (!(IMG_Init(imgFlags) & imgFlags)) {
-        std::cerr << "IMG_Init falhou: " << IMG_GetError() << std::endl;
-        exit(1);
-    }
-
-    // Codec DLLs/formatos antes de Mix_OpenAudio ajudam Mix_LoadWAV_RW a aceitar mp3/ogg/flac como chunk.
-    {
-        const int wantFormats = MIX_INIT_MP3 | MIX_INIT_OGG | MIX_INIT_FLAC | MIX_INIT_WAVPACK | MIX_INIT_MOD;
-        const int loaded = Mix_Init(wantFormats);
-        if ((loaded & MIX_INIT_MP3) == 0 || (loaded & MIX_INIT_OGG) == 0) {
-            std::cerr << "Aviso: Mix_Init codecs (mp3=" << ((loaded & MIX_INIT_MP3) != 0)
-                      << ", ogg=" << ((loaded & MIX_INIT_OGG) != 0) << ") — " << Mix_GetError()
-                      << std::endl;
-        }
-    }
-
-    // Inicializa SDL_Mixer
-    // Buffer um pouco maior ajuda a mixar Mix_PlayMusic (OST) + Mix_PlayChannel (ambiente) sem underruns.
-    if (Mix_OpenAudio(MIX_DEFAULT_FREQUENCY, MIX_DEFAULT_FORMAT, MIX_DEFAULT_CHANNELS, 4096) == -1) {
-        std::cerr << "Mix_OpenAudio falhou: " << Mix_GetError() << std::endl;
-        exit(1);
-    }
-    Mix_AllocateChannels(48);   // 0-13 fixos, 14-31 voz/one-shots, 32-47 pool de passos do monstro
-    // Reserva 0..13 para os canais FIXOS de SFX (waves..heartbeat=10, pool de passos
-    // do monstro=11..13). Antes reservava só 9, então Mix_PlayChannel(-1) — usado pela
-    // VOZ e pelos one-shots — caía nos canais 9..13 e um passo do monstro (canal fixo
-    // 11..13) HALTAVA a fala no meio da frase. Com 14 reservados, a voz/one-shots vão
-    // para 14..31 e nunca colidem com os SFX fixos.
-    Mix_ReserveChannels(14);
-    // Canais 0..13 não são escolhidos por Mix_PlayChannel(-1): usados explicitamente
-    // pelos loops/one-shots fixos (ver GameSfx). Voz e efeitos livres ficam em 14+.
-    const int masterVolume = (MIX_MAX_VOLUME * masterVolumePercent) / 100;
-    Mix_Volume(-1, masterVolume);
-    Mix_VolumeMusic(MusicVolume());
-
-    // Inicializa TTF
-    if (TTF_Init() != 0) {
-        std::cerr << "TTF_Init falhou: " << TTF_GetError() << std::endl;
-        exit(1);
-    }
-
-    int winW = WINDOW_WIDTH;
-    int winH = WINDOW_HEIGHT;
-    ApplyOptionalWindowSettingsFromFile(winW, winH);
-
-    // O jogo roda SEMPRE em tela cheia SEM BORDAS (borderless desktop). A
-    // "resolução" escolhida nas Configurações é a resolução LÓGICA de render:
-    // o jogo desenha nessa resolução e o SDL escala para preencher a tela
-    // (SDL_RenderSetLogicalSize). Assim a resolução tem efeito sem trocar o modo
-    // de vídeo do monitor nem sair do fullscreen sem bordas.
-    (void)winW; (void)winH;
-    int resW = 1920, resH = 1080;
-    ResolutionAt(committedResolutionIndex, resW, resH);
-    displayMode = 0;
-    fullscreen = true;
-
-    //Cria a janela em fullscreen borderless
-    window = SDL_CreateWindow(
-        title.c_str(),                  // Coloquei o título como sendo argumento do construtor de Game também
-        SDL_WINDOWPOS_CENTERED,
-        SDL_WINDOWPOS_CENTERED,
-        resW,
-        resH,
-        SDL_WINDOW_FULLSCREEN_DESKTOP
-    );
-
-    if (!window) {
-        std::cerr << "SDL_CreateWindow falhou: " << SDL_GetError() << std::endl;
-        exit(1);
-    }
-
-    // ===== [EXPERIMENTO: FILTRAGEM LINEAR GLOBAL] ============================
-    // Filtragem LINEAR (bilinear) como PADRÃO de todas as texturas — a arte do
-    // jogo é pintada (não pixel-art), então o (down/up)scale fica suave em vez de
-    // "pixelado". Precisa ser definido ANTES de criar texturas/renderer.
-    // >>> Se ficar ruim (borrado demais), REVERTER: remover esta linha. <<<
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");   // "0"=nearest (padrão), "1"=linear
-    // =========================================================================
-
-    // ===== [BACKEND DE RENDER: PREFERIR OPENGL] ==============================
-    // O filtro preto-e-branco fora do campo de visao (ScenePostFx) precisa de um
-    // fragment shader, e isso so existe no backend "opengl" do SDL. A dica abaixo
-    // apenas PREFERE esse backend; se o driver nao o tiver, o SDL escolhe outro e
-    // o jogo corre na mesma — apenas sem o filtro monocromatico.
-    // >>> Para forcar o backend antigo: TLL_RENDER_DRIVER=direct3d no ambiente. <<<
-    {
-        const char* forcedDriver = SDL_getenv("TLL_RENDER_DRIVER");
-        SDL_SetHint(SDL_HINT_RENDER_DRIVER, (forcedDriver && forcedDriver[0]) ? forcedDriver : "opengl");
-        SDL_SetHint(SDL_HINT_RENDER_BATCHING, "1");
-    }
-
-    //Cria Renderizador
-    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC); // SDL_RENDERER_ACCELERATED, para requisitar o uso de OpenGL ou Direct3D.
-    if (!renderer) {
-        // A dica de backend pode ter escolhido um driver que falha nesta maquina:
-        // limpa-a e tenta outra vez com a escolha automatica do SDL.
-        std::cerr << "SDL_CreateRenderer (opengl) falhou: " << SDL_GetError() << " — a tentar o backend automatico." << std::endl;
-        SDL_SetHint(SDL_HINT_RENDER_DRIVER, "");
-        renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    }
-    if (!renderer) {
-        std::cerr << "SDL_CreateRenderer falhou: " << SDL_GetError() << std::endl;
-        exit(1);
-    }
-
-    {
-        SDL_RendererInfo rinfo;
-        SDL_zero(rinfo);
-        if (SDL_GetRendererInfo(renderer, &rinfo) == 0 && rinfo.name) {
-            std::cout << "[Render] backend SDL: " << rinfo.name << std::endl;
-        }
-    }
-
-    SDL_ShowCursor(SDL_DISABLE);   // esconde o cursor do mouse (o mouse ainda mira a lanterna)
-
-    // Arranque ja em modo de gravacao: TLL_WINDOW_MODE=windowed. Util para
-    // gravar sem ter de carregar em F11 depois de o jogo abrir.
-    if (const char* wm = SDL_getenv("TLL_WINDOW_MODE")) {
-        if (SDL_strcasecmp(wm, "windowed") == 0) {
-            captureWindowMode = true;
-        }
-    }
-
-    // Resolução LÓGICA de render = resolução escolhida. O SDL escala esse alvo
-    // para preencher a tela cheia sem bordas (com letterbox se o aspecto diferir).
-    SDL_RenderSetLogicalSize(renderer, resW, resH);
-
-    storedState = nullptr;                         // Inicializa o ponteiro de troca de estado
-
-    //Inicia membros — o "tamanho da janela" para o jogo é o ESPAÇO LÓGICO
-    // (a resolução escolhida), não o tamanho físico da tela. Assim câmera, HUD e
-    // alvos de render trabalham todos na resolução escolhida.
-    windowsWidth = resW;
-    windowsHeight = resH;
-    frameStart = 0;
-    dt = 0.0f;
-
-    // So agora, com `instance` e `window` prontos, a janela pode mudar de modo.
-    if (captureWindowMode) {
-        SetCaptureWindowMode(true);
-    }
-
-    // Maquina e definicoes do tester. So aqui: antes disto o SDL ainda nao
-    // sabia responder sobre ecra, CPU nem memoria.
-    {
-        SDL_RendererInfo info;
-        SDL_zero(info);
-        const char* backend = (SDL_GetRendererInfo(renderer, &info) == 0 && info.name) ? info.name : "?";
-        SDL_DisplayMode dm;
-        SDL_zero(dm);
-        SDL_GetDesktopDisplayMode(0, &dm);
-        Telemetry::Event("env", Telemetry::Fields()
-            .Str("renderer", backend)
-            .Int("logicalW", windowsWidth)
-            .Int("logicalH", windowsHeight)
-            .Int("desktopW", dm.w)
-            .Int("desktopH", dm.h)
-            .Int("refreshHz", dm.refresh_rate)
-            .Int("cpuCores", SDL_GetCPUCount())
-            .Int("ramMB", SDL_GetSystemRAM())
-            .Str("displayMode", CurrentDisplayModeLabel())
-            .Str("resolution", CurrentResolutionLabel())
-            .Int("volMaster", masterVolumePercent)
-            .Int("volAmbient", ambientVolumePercent)
-            .Int("volSfx", sfxVolumePercent)
-            .Int("volVoice", voiceVolumePercent)
-            .Int("brightness", brightnessPercent)
-            .Bool("reduceFlashing", reduceFlashing));
-    }
-}
-
-// Destrutor
-
-Game::~Game() {
-    if (storedState) delete storedState;                // Deletar o storedState não nulo se tiver
-    while (!stateStack.empty()) stateStack.pop();       // Esvaziar a pilha de estados
-
-    SDL_DestroyRenderer(renderer);      // Destroi Renderizador
-    SDL_DestroyWindow(window);          // Detroi a Janela
-
-    TTF_Quit();                         // Encerra TTF
-    Mix_CloseAudio();                   // Encerra Audio
-    Mix_Quit();                         // Finaliza Mixer
-    IMG_Quit();                         // Finaliza imagem
-    SDL_Quit();                         // Finaliza SDL
-    
-}
-
-Game& Game::GetInstance() {                         // Se não tiver instância do game, cria e retorna a instância
-    if (!instance){
-        instance = new Game("The Last Lightkeeper");
-    }
-    return *instance;                               // O compilador resolve como uma referência
-}
-
-State& Game::GetCurrentState() {                    // Retorna o State atual
-    return *stateStack.top(); 
-}
-
-StageState* Game::TryGetStageState() {
-    return dynamic_cast<StageState*>(&GetInstance().GetCurrentState());
-}
-
-SDL_Renderer* Game::GetRenderer(){                  // Retorna o Renderizador
-    return renderer; 
-}
-
-SDL_Window* Game::GetWindow() {                     // Retorna a Janela
-    return window;
-}
-
-void Game::Push(State* state) {
-    if (state) {
-        CrashHandler::Log("Push estado: %s", typeid(*state).name());
-        // Por onde o jogador andou no jogo (menu -> carregar -> fase -> fim).
-        // O nome vem do typeid, o mesmo que ja vai para o log de sessao.
-        Telemetry::Event("state_push", Telemetry::Fields().Str("state", typeid(*state).name()));
-    }
-    storedState = state;                            // Guarda para empilhar no início do frame
-}
-
-void Game::CalculateDeltaTime() {       
-    int currentTicks = SDL_GetTicks();              // Nos diz quantos milissegundos se passaram
-    dt = (currentTicks - frameStart) / 1000.0f;     // Calcula intervalo de tempo, transforma em segundos e armazena em dt
-    frameStart = currentTicks;                      // Atualiza frameStart
-}
-
-float Game::GetDeltaTime() {                        // GetDeltaTime retorna dt para entidades interessadas (como State)
-    return dt;
-}
-
-// Devolve o ESPAÇO LÓGICO (resolução escolhida), não o tamanho físico da tela —
-// todo o jogo (câmera, HUD, alvos de render, mouse) trabalha nesse espaço.
-int Game::GetWindowsWidth() {
-    return windowsWidth;
-}
-
-int Game::GetWindowsHeight() {
-    return windowsHeight;
-}
-
-// 1.0 a 1080p de altura; proporcional nas demais resoluções lógicas.
-float Game::UiScale() {
-    if (!instance || instance->windowsHeight <= 0) return 1.0f;
-    float s = static_cast<float>(instance->windowsHeight) / 1080.0f;
-    if (s < 0.55f) s = 0.55f;   // não deixa a UI ilegível em resoluções minúsculas
-    if (s > 2.50f) s = 2.50f;
-    return s;
-}
-
-float Game::UiFitScale() {
-    if (!instance || instance->windowsHeight <= 0 || instance->windowsWidth <= 0) {
-        return 1.0f;
-    }
-    const float byW = static_cast<float>(instance->windowsWidth) / 1920.0f;
-    const float byH = static_cast<float>(instance->windowsHeight) / 1080.0f;
-    float s = (byW < byH) ? byW : byH;
-    if (s < 0.55f) s = 0.55f;
-    if (s > 2.50f) s = 2.50f;
-    return s;
 }
 
 bool Game::IsDebugBuild() {
@@ -793,51 +469,262 @@ bool Game::IsDebugBuild() {
 #endif
 }
 
-void Game::Run() {
+// ═════════════════════════════════════════════════════════════════════════════
+//  Construção e destruição
+// ═════════════════════════════════════════════════════════════════════════════
 
-    if (storedState) {
-        stateStack.emplace(storedState);
-        storedState = nullptr;
+// Ordem: .env → SDL → settings.json (precisa do SDL para a resolução nativa) →
+// volumes → janela/renderer → modo de tela salvo → telemetria.
+Game::Game(const std::string& title) {
+    if (instance != nullptr) {
+        std::cerr << "Erro: Já existe uma instância do Game rodando!" << std::endl;
+        std::exit(1);
+    }
+    instance = this;
+
+    LoadEnvFile();
+    std::srand(static_cast<unsigned>(std::time(nullptr)));
+    InitSdl();
+
+    LoadSettings();
+    DialogueTuning::Load();
+    FuelHudTuning::Load();
+    if (IsDebugBuild()) debugMode = true;
+    SetMasterVolume(masterVolumePercent);   // aplica master e música no mixer
+
+    CreateWindowAndRenderer(title);
+
+    if (displayMode != kBorderless) ApplyDisplayMode(displayMode);
+
+    if (const char* wm = SDL_getenv("TLL_WINDOW_MODE")) {
+        if (SDL_strcasecmp(wm, "windowed") == 0) SetCaptureWindowMode(true);
+    }
+
+    LogEnvironment();
+}
+
+// Inicializa SDL, SDL_image, SDL_mixer (codecs + canais) e SDL_ttf; aborta se algum falhar.
+void Game::InitSdl() {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER) != 0) {
+        std::cerr << "SDL_Init falhou: " << SDL_GetError() << std::endl;
+        std::exit(1);
+    }
+
+    const int imgFlags = IMG_INIT_JPG | IMG_INIT_PNG | IMG_INIT_TIF;
+    if (!(IMG_Init(imgFlags) & imgFlags)) {
+        std::cerr << "IMG_Init falhou: " << IMG_GetError() << std::endl;
+        std::exit(1);
+    }
+
+    // Codecs antes do Mix_OpenAudio: deixa o Mix_LoadWAV_RW aceitar mp3/ogg/flac como chunk.
+    const int loaded = Mix_Init(MIX_INIT_MP3 | MIX_INIT_OGG | MIX_INIT_FLAC | MIX_INIT_WAVPACK | MIX_INIT_MOD);
+    if ((loaded & MIX_INIT_MP3) == 0 || (loaded & MIX_INIT_OGG) == 0) {
+        std::cerr << "Aviso: Mix_Init codecs (mp3=" << ((loaded & MIX_INIT_MP3) != 0)
+                  << ", ogg=" << ((loaded & MIX_INIT_OGG) != 0) << ") — " << Mix_GetError() << std::endl;
+    }
+    if (Mix_OpenAudio(MIX_DEFAULT_FREQUENCY, MIX_DEFAULT_FORMAT, MIX_DEFAULT_CHANNELS, kAudioBufferFrames) == -1) {
+        std::cerr << "Mix_OpenAudio falhou: " << Mix_GetError() << std::endl;
+        std::exit(1);
+    }
+    // Os canais fixos do GameSfx (0..13) ficam reservados; se não, a voz e os
+    // one-shots (Mix_PlayChannel(-1)) caíam neles e um passo do monstro cortava a fala.
+    Mix_AllocateChannels(kMixChannels);
+    Mix_ReserveChannels(kReservedChannels);
+
+    if (TTF_Init() != 0) {
+        std::cerr << "TTF_Init falhou: " << TTF_GetError() << std::endl;
+        std::exit(1);
+    }
+}
+
+// Cria a janela sem bordas na resolução escolhida e o renderer (prefere OpenGL,
+// que o ScenePostFx precisa; cai no automático se falhar). Define o espaço lógico.
+void Game::CreateWindowAndRenderer(const std::string& title) {
+    int resW = kReferenceW, resH = kReferenceH;
+    ResolutionAt(resolutionIndex, resW, resH);
+    appliedResolutionIndex = resolutionIndex;
+
+    window = SDL_CreateWindow(title.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                              resW, resH, SDL_WINDOW_FULLSCREEN_DESKTOP);
+    if (!window) {
+        std::cerr << "SDL_CreateWindow falhou: " << SDL_GetError() << std::endl;
+        std::exit(1);
+    }
+
+    // Filtragem linear em todas as texturas: a arte é pintada, não pixel-art.
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
+    // TLL_RENDER_DRIVER=direct3d força o backend antigo (sem o filtro do ScenePostFx).
+    const char* forcedDriver = SDL_getenv("TLL_RENDER_DRIVER");
+    SDL_SetHint(SDL_HINT_RENDER_DRIVER, (forcedDriver && forcedDriver[0]) ? forcedDriver : "opengl");
+    SDL_SetHint(SDL_HINT_RENDER_BATCHING, "1");
+
+    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    if (!renderer) {
+        std::cerr << "SDL_CreateRenderer (opengl) falhou: " << SDL_GetError()
+                  << " — a tentar o backend automatico." << std::endl;
+        SDL_SetHint(SDL_HINT_RENDER_DRIVER, "");
+        renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    }
+    if (!renderer) {
+        std::cerr << "SDL_CreateRenderer falhou: " << SDL_GetError() << std::endl;
+        std::exit(1);
+    }
+
+    SDL_RenderSetVSync(renderer, vsync ? 1 : 0);
+    SDL_RenderSetLogicalSize(renderer, resW, resH);
+    SDL_ShowCursor(SDL_DISABLE);   // o mouse continua mirando a lanterna
+
+    SDL_RendererInfo info;
+    SDL_zero(info);
+    if (SDL_GetRendererInfo(renderer, &info) == 0 && info.name) {
+        std::cout << "[Render] backend SDL: " << info.name << std::endl;
+    }
+
+    windowsWidth  = resW;
+    windowsHeight = resH;
+}
+
+// Evento "env" da telemetria: máquina do tester e configurações com que abriu.
+void Game::LogEnvironment() {
+    SDL_RendererInfo info;
+    SDL_zero(info);
+    const char* backend = (SDL_GetRendererInfo(renderer, &info) == 0 && info.name) ? info.name : "?";
+    SDL_DisplayMode dm;
+    SDL_zero(dm);
+    SDL_GetDesktopDisplayMode(0, &dm);
+    Telemetry::Event("env", Telemetry::Fields()
+        .Str("renderer", backend)
+        .Int("logicalW", windowsWidth)
+        .Int("logicalH", windowsHeight)
+        .Int("desktopW", dm.w)
+        .Int("desktopH", dm.h)
+        .Int("refreshHz", dm.refresh_rate)
+        .Int("cpuCores", SDL_GetCPUCount())
+        .Int("ramMB", SDL_GetSystemRAM())
+        .Str("displayMode", CurrentDisplayModeLabel())
+        .Str("resolution", CurrentResolutionLabel())
+        .Int("volMaster", masterVolumePercent)
+        .Int("volAmbient", ambientVolumePercent)
+        .Int("volSfx", sfxVolumePercent)
+        .Int("volVoice", voiceVolumePercent)
+        .Int("brightness", brightnessPercent)
+        .Bool("reduceFlashing", reduceFlashing));
+}
+
+// Esvazia os estados antes de destruir o renderer (eles podem ter texturas) e encerra o SDL.
+Game::~Game() {
+    pendingState.reset();
+    while (!stateStack.empty()) stateStack.pop();
+
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    TTF_Quit();
+    Mix_CloseAudio();
+    Mix_Quit();
+    IMG_Quit();
+    SDL_Quit();
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  Instância, estados e loop
+// ═════════════════════════════════════════════════════════════════════════════
+
+Game& Game::GetInstance() {
+    if (!instance) instance = new Game("The Last Lightkeeper");
+    return *instance;
+}
+
+State& Game::GetCurrentState() { return *stateStack.top(); }
+
+StageState* Game::TryGetStageState() {
+    Game& g = GetInstance();
+    if (g.stateStack.empty()) return nullptr;
+    return dynamic_cast<StageState*>(g.stateStack.top().get());
+}
+
+SDL_Renderer* Game::GetRenderer()  { return renderer; }
+SDL_Window*   Game::GetWindow()    { return window; }
+float Game::GetDeltaTime()         { return dt; }
+int   Game::GetWindowsWidth()      { return windowsWidth; }
+int   Game::GetWindowsHeight()     { return windowsHeight; }
+
+// Guarda o estado para entrar na pilha no começo do próximo frame (log + telemetria).
+void Game::Push(State* state) {
+    if (state) {
+        CrashHandler::Log("Push estado: %s", typeid(*state).name());
+        Telemetry::Event("state_push", Telemetry::Fields().Str("state", typeid(*state).name()));
+    }
+    pendingState.reset(state);
+}
+
+// Escala da UI pela altura lógica (1.0 em 1080p), limitada para não sumir nem estourar.
+float Game::UiScale() {
+    if (!instance || instance->windowsHeight <= 0) return 1.0f;
+    return std::clamp(static_cast<float>(instance->windowsHeight) / kReferenceH, kUiScaleMin, kUiScaleMax);
+}
+
+// Escala que sempre cabe no ecrã: a menor entre largura e altura. Para peças
+// largas (a caixa de diálogo, 2.54:1), que pela altura estourariam em 21:9.
+float Game::UiFitScale() {
+    if (!instance || instance->windowsWidth <= 0 || instance->windowsHeight <= 0) return 1.0f;
+    const float byW = static_cast<float>(instance->windowsWidth) / kReferenceW;
+    const float byH = static_cast<float>(instance->windowsHeight) / kReferenceH;
+    return std::clamp(std::min(byW, byH), kUiScaleMin, kUiScaleMax);
+}
+
+void Game::CalculateDeltaTime() {
+    const Uint32 now = SDL_GetTicks();
+    dt = (now - frameStart) / 1000.0f;
+    frameStart = now;
+}
+
+// Aplica o pop pedido pelo estado do topo (e retoma o de baixo) e depois o push pendente.
+void Game::ApplyPendingStackChanges() {
+    if (!stateStack.empty() && stateStack.top()->PopRequested()) {
+        stateStack.pop();
+        if (!stateStack.empty()) stateStack.top()->Resume();
+    }
+    if (pendingState) {
+        if (!stateStack.empty()) stateStack.top()->Pause();
+        stateStack.push(std::move(pendingState));
+        stateStack.top()->Start();
+    }
+}
+
+// Dorme o que falta para completar um quadro no limite de FPS escolhido.
+void Game::LimitFrameRate(Uint64 frameBegin) {
+    const int cap = FpsCap();
+    if (cap <= 0) return;
+    const double elapsedMs = (SDL_GetPerformanceCounter() - frameBegin) * 1000.0 / SDL_GetPerformanceFrequency();
+    const double targetMs  = 1000.0 / cap;
+    if (elapsedMs < targetMs) SDL_Delay(static_cast<Uint32>(targetMs - elapsedMs));
+}
+
+// Loop: tempo → input → atalhos globais (F11) → pilha → update/render → limite de FPS.
+void Game::Run() {
+    if (pendingState) {
+        stateStack.push(std::move(pendingState));
         stateStack.top()->Start();
     }
 
+    InputManager& input = InputManager::GetInstance();
     while (!stateStack.empty() && !stateStack.top()->QuitRequested()) {
         CalculateDeltaTime();
-        Telemetry::FrameTick(dt);   // FPS das amostras + engasgos
-        InputManager::GetInstance().Update();
+        Telemetry::FrameTick(dt);
+        input.Update();
 
-        // Fechou a janela (X / alt-F4). Registado aqui porque e o unico sitio
-        // por onde passa qualquer estado, e distingue-se de sair pelo menu.
-        if (InputManager::GetInstance().QuitRequested()) {
-            Telemetry::SetEndReason("window_close");
-        }
+        if (input.QuitRequested()) Telemetry::SetEndReason("window_close");
+        if (input.KeyPress(SDLK_F11)) ToggleCaptureWindowMode();
 
-        // F11: janela de gravacao <-> tela cheia sem bordas. Global, funciona em
-        // qualquer estado (ver a nota de `captureWindowMode` em Game.h).
-        if (InputManager::GetInstance().KeyPress(SDLK_F11)) {
-            ToggleCaptureWindowMode();
-        }
+        ApplyPendingStackChanges();
 
-        // Gerencia Pilha (Pop)
-        if (stateStack.top()->PopRequested()) {
-            stateStack.pop();
-            if (!stateStack.empty()) stateStack.top()->Resume();
-        }
-
-        // Gerencia Pilha (Push)
-        if (storedState) {
-            if (!stateStack.empty()) stateStack.top()->Pause();
-            stateStack.emplace(storedState);
-            storedState = nullptr;
-            stateStack.top()->Start();
-        }
-
-        // Executa Estado Atual
+        const Uint64 frameBegin = SDL_GetPerformanceCounter();
         if (!stateStack.empty()) {
             stateStack.top()->Update(dt);
             SDL_RenderClear(renderer);
             stateStack.top()->Render();
             SDL_RenderPresent(renderer);
         }
+        LimitFrameRate(frameBegin);
     }
 }

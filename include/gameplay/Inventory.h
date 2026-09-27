@@ -7,134 +7,99 @@
 #include <string>
 #include <vector>
 
+struct SaveGameState;
+
 enum class HeldPropVisual { None, Lighter, Lamp };
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Mochila do irmãozão: até kMaxCapacity itens numa roda, um deles "na mão".
+//
+//  Fontes de luz (isqueiro, lamparina) são únicas por tipo e recarregáveis —
+//  esgotadas ficam com carga 0 na bolsa. Combustível é limitado a
+//  kMaxFuelUnits e é despejado numa fonte de luz pelo modal de reabastecimento.
+//
+//  activeIndex é um contador SEM limite (a roda anima continuamente); o item na
+//  mão é derivado dele por GetSelectedStackIndex — nunca indexe stacks com ele.
+// ─────────────────────────────────────────────────────────────────────────────
 class Inventory {
 public:
     struct ItemStack {
         ItemDef def;
         int count;
-        std::vector<int> durabilities;
+        std::vector<int> durabilities;                   // uma carga por unidade (a da frente é a em uso)
     };
 
-    static constexpr int kMaxStackSize = 5;
-    // Capacidade da bolsa: nº máximo de itens (stacks). Pegar o 6º enche a bolsa;
-    // tentar pegar o 7º é bloqueado.
-    static constexpr int kMaxCapacity = 6;
-    // Combustível é limitado: no máximo 2 unidades podem estar na bolsa.
-    static constexpr int kMaxFuelUnits = 2;
+    static constexpr int kMaxCapacity  = 6;              // itens na bolsa (o 7º é recusado)
+    static constexpr int kMaxFuelUnits = 2;              // combustíveis na bolsa
 
-    bool AddItem(const ItemDef& def, int durability);
+    // ── Itens ────────────────────────────────────────────────────────────────
+    bool AddItem(const ItemDef& def, int durability);    // false se CanAcceptItem recusar
+    bool CanAcceptItem(const ItemDef& def) const;        // critério único de "posso pegar?" (fala e contorno vermelho)
     bool IsFull() const { return GetStackCount() >= kMaxCapacity; }
+    bool IsFuelAtMax() const;                            // já tem kMaxFuelUnits de combustível
+    bool HasItem(const std::string& name) const;
+    bool TryConsumeItem(const std::string& name);        // gasta uma unidade (ex.: a tábua no conserto)
     void ClearAll();
 
-    int GetActiveIndex() const { return activeIndex; }
-    void SetActiveIndex(int index);
-    void CycleLeft();
-    void CycleRight();
-
-    const ItemStack* GetActiveStack() const;
-    ItemStack* GetActiveStackMutable();
     const ItemStack* GetStack(int index) const;
     int GetStackCount() const { return static_cast<int>(stacks.size()); }
-    int GetVisibleStackIndex(int visibleOffset, int visibleCount) const;
 
-    // Wheel geometry shared by the UI and gameplay so the item the player can
-    // use is always the one shown at the center of the wheel. activeIndex is an
-    // unbounded cycle counter (kept continuous for the wheel animation); the
-    // selected stack is derived from it, never indexed directly.
-    int GetVisibleSlotCount() const;
-    int GetRingSize() const;
-    int GetSelectedStackIndex() const;
-    void SetSelectedStackIndex(int stackIndex);
+    // ── Roda ─────────────────────────────────────────────────────────────────
+    int  GetActiveIndex() const { return activeIndex; }  // contador contínuo (animação da roda)
+    void CycleLeft();                                    // girar a roda apaga a luz
+    void CycleRight();
+    int  GetVisibleSlotCount() const;                    // sempre 3 (a roda e o gameplay usam o mesmo)
+    int  GetRingSize() const;                            // posições da roda (itens ou 3, o maior)
+    int  GetSelectedStackIndex() const;                  // item no centro da roda, -1 se vazio
+    void SetSelectedStackIndex(int stackIndex);          // gira pelo caminho mais curto até ele
+    const ItemStack* GetActiveStack() const;             // item na mão (ou nullptr)
 
-    // "Oil apply" mode: pressing F on a fuel item enters a state where the
-    // player cycles to a lighter/lamp and presses F again to pour the oil in.
-    // The oil is NOT removed from the wheel while applying; it stays in its slot
-    // and only disappears once its own durability hits 0.
-    bool IsOilPrimed() const { return oilApplyMode; }
-    int GetPrimedOilDurability() const;
-    const std::string& GetPrimedOilSpritePath() const { return primedOilSpritePath; }
-    // True when the currently centered slot is a valid oil target (a non-empty
-    // lighter/lamp that still has room). Drives the faded vs. bright oil icon.
-    bool CanCombineOilWithActive() const;
-    bool TryPrimeOil();
-    bool TryCombineOil();
+    // ── Luz ──────────────────────────────────────────────────────────────────
+    bool isLightToggledOn = false;                       // luz de mão ligada pelo jogador
+    bool TryTurnLightOn();                               // liga se o item na mão for luz com carga
+    bool TryActivateBestLight();                         // garante uma luz acesa (isqueiro antes da lamparina)
+    bool IsUsableLightActive() const;                    // luz na mão, ligada e com carga
+    bool IsActiveLightLighter() const;                   // idem, e é o isqueiro
+    bool IsActiveLightLamp() const;                      // idem, e é a lamparina
+    bool IsActiveItemLighter() const;                    // isqueiro na mão, aceso ou não (som de ligar)
+    bool IsActiveItemFuel() const;                       // combustível na mão (tutorial)
+    bool HasDepletedLighter() const;                     // isqueiro com carga 0 ("sua luz apagou")
+    HeldPropVisual GetHeldPropVisual() const;            // o que o sprite segura (só acesa aparece)
+    float GetSelectedLightFuelRatio() const;             // carga da luz na mão, 0..1
+    LightMaskParams BuildLighterLightParams(const LightMaskParams& base) const;   // tamanho da luz pela carga
+    LightMaskParams BuildLampLightParams(const LightMaskParams& base) const;      // mesma curva do isqueiro
+    void TickUsingDurability(float dt);                  // gasta carga com a luz acesa (lamparina dura 2x)
+
+    // ── Reabastecimento ([F] no combustível abre o modal) ────────────────────
+    bool IsOilPrimed() const { return oilApplyMode; }    // modal aberto
+    bool TryPrimeOil();                                  // abre o modal (combustível na mão e alvo disponível)
+    bool TryCombineOil();                                // despeja no alvo escolhido (gasta a unidade inteira)
     void CancelOil();
-
-    // Seleção de alvo do reabastecimento (modal central). Ao apertar [F] no
-    // combustível, listamos as fontes de luz que ainda cabem óleo; o jogador
-    // navega com A/D (ou setas) e confirma com [F].
-    std::vector<int> GetRefuelTargetIndices() const;
-    int GetRefuelTargetCount() const;
-    int GetRefuelSelection() const { return oilTargetSelection; }
+    std::vector<int> GetRefuelTargetIndices() const;     // fontes de luz que ainda cabem óleo
+    int  GetRefuelTargetCount() const;
+    int  GetRefuelSelection() const { return oilTargetSelection; }
     const ItemStack* GetRefuelTargetStack(int selectionIdx) const;
     void RefuelSelectionPrev();
     void RefuelSelectionNext();
 
-    bool TryTurnLightOn();
-    // Ensures a usable light is active, preferring the lighter over the lamp.
-    // No-op (returns true) if one is already lit. Returns false when neither a
-    // lighter nor a lamp with fuel exists. Used when lighting a candle.
-    bool TryActivateBestLight();
-    HeldPropVisual GetHeldPropVisual() const;
-    bool IsUsableLightActive() const;
-    bool IsActiveLightLamp() const;
-    bool IsActiveLightLighter() const;
-    // Like IsActiveLightLighter, but reports the *type* of the centered item
-    // regardless of whether the light is currently lit. Needed for the
-    // turn-ON sound, which must be decided before the light becomes active.
-    bool IsActiveItemLighter() const;
-    // True quando o item selecionado (na mão) é combustível — usado para só
-    // mostrar o tutorial do combustível quando o jogador está segurando-o.
-    bool IsActiveItemFuel() const;
-    float GetSelectedLightFuelRatio() const;
-    LightMaskParams BuildLighterLightParams(const LightMaskParams& base) const;
-    LightMaskParams BuildLampLightParams(const LightMaskParams& base) const;
-    void TickUsingDurability(float dt);
-
-    void WriteToSave(struct SaveGameState& state) const;
-    void ReadFromSave(const struct SaveGameState& state,
-                      const std::vector<ItemDef>& itemCatalog);
-
-    bool CanAcceptItem(const ItemDef& def) const;
-    // True quando já há o máximo de combustível (kMaxFuelUnits) na bolsa — usado
-    // para dizer "minha bolsa tá pesada" ao tentar pegar óleo além do limite.
-    bool IsFuelAtMax() const;
-    bool HasItem(const std::string& name) const;
-    // True quando existe uma fonte de luz sem carga (0) E há combustível na bolsa
-    // — condição para sugerir o tutorial de reabastecimento.
-    bool HasDepletedLightAndFuel() const;
-    // True quando existe uma fonte de luz sem carga (0), independente de haver
-    // combustível — dispara o aviso de "luz apagou" na 1ª vez.
-    bool HasDepletedLightSource() const;
-    // Como HasDepletedLightSource, mas SÓ para o isqueiro (a lamparina não conta)
-    // — usado no aviso "sua luz apagou".
-    bool HasDepletedLighter() const;
-    bool TryConsumeItem(const std::string& name);
-    int FindStackWithName(const std::string& name) const;
-    int FindStackWithProperty(ItemProperty prop) const;
-
-    bool isLightToggledOn = false;
+    // ── Save ─────────────────────────────────────────────────────────────────
+    void WriteToSave(SaveGameState& state) const;
+    void ReadFromSave(const SaveGameState& state, const std::vector<ItemDef>& itemCatalog);   // aceita os formatos antigos
 
 private:
     std::vector<ItemStack> stacks;
-    int activeIndex = -1;
-    bool oilApplyMode = false;
-    int oilApplySourceIndex = -1;        // stack index of the oil being applied
-    int oilApplyReturnActiveIndex = 0;   // wheel position to restore on exit
-    int oilTargetSelection = 0;          // índice na lista de alvos de reabastecimento
-    std::string primedOilSpritePath;
+    int   activeIndex = -1;
+    bool  oilApplyMode = false;
+    int   oilApplySourceIndex = -1;                      // pilha do combustível sendo despejado
+    int   oilApplyReturnActiveIndex = 0;                 // posição da roda para voltar ao sair
+    int   oilTargetSelection = 0;                        // índice em GetRefuelTargetIndices
     float usingDrainAccum = 0.0f;
 
     void ExitOilApplyMode();
-
-    // Colapsa fontes de luz duplicadas (isqueiro/lamparina) para no máximo uma de
-    // cada tipo, mantendo a maior carga. Cura saves que já tenham duplicado.
-    void DedupeLightSources();
-
-    int FindBestFlashlight() const;
-    int FindBestLamp() const;
+    void DedupeLightSources();                           // cura saves com isqueiro/lamparina duplicados
+    void SelectAfterLegacyLoad(int preferred);           // escolha do item na mão ao ler save antigo
+    int  FindStackWithName(const std::string& name) const;
+    int  FindBestLight(bool lighter) const;              // isqueiro (true) ou lamparina com mais carga
 };
 
 #endif

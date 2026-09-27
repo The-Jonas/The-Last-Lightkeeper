@@ -79,6 +79,28 @@ std::shared_ptr<SDL_Texture> KeyTexture(const std::string& keyName) {
     return tex;
 }
 
+/// Teto da altura de uma tecla "em pé", em múltiplos da altura normal.
+constexpr float kTallKeyMaxHeight = 1.8f;
+
+/// Tamanho da arte na linha. Tecla deitada ou quadrada: altura keyH e largura
+/// pela proporção. Tecla EM PÉ (o Enter): largura keyH, como uma tecla
+/// quadrada, e altura pela proporção, limitada a kTallKeyMaxHeight × keyH.
+/// Sem isso o Enter ficava com a altura das outras e um terço da largura,
+/// e o "Enter" escrito nele não se lia.
+void KeySize(int texW, int texH, int keyH, int& outW, int& outH) {
+    if (texW <= 0 || texH <= 0) { outW = outH = keyH; return; }
+    const float aspect = static_cast<float>(texW) / static_cast<float>(texH);
+    if (aspect >= 1.0f) {
+        outH = keyH;
+        outW = static_cast<int>(keyH * aspect);
+    } else {
+        outH = std::min(static_cast<int>(keyH / aspect),
+                        static_cast<int>(keyH * kTallKeyMaxHeight));
+        outW = static_cast<int>(outH * aspect);
+    }
+}
+// Mede a arte de uma tecla: as deitadas pela altura, as em pé pela largura (com teto).
+
 /// Um pedaco da linha: texto puro ou uma tecla.
 struct Piece {
     std::string text;                      ///< texto a escrever (vazio numa tecla)
@@ -116,8 +138,7 @@ std::vector<Piece> Split(TTF_Font* font, const std::string& text, int keyH) {
                     SDL_QueryTexture(tex.get(), nullptr, nullptr, &tw, &th);
                     Piece p;
                     p.key = tex;
-                    p.h = keyH;
-                    p.w = (th > 0) ? static_cast<int>(keyH * (static_cast<float>(tw) / th)) : keyH;
+                    KeySize(tw, th, keyH, p.w, p.h);
                     pieces.push_back(p);
                 } else {
                     run += text.substr(i, close - i + 1);   // sem arte: fica escrito

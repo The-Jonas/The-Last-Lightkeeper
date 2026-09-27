@@ -7,6 +7,8 @@
 
 #include "core/State.h"
 #include "core/InputManager.h"
+#include "core/LevelManager.h"
+#include "core/SaveData.h"
 #include "audio/Music.h"
 #include "world/TileSet.h"
 #include "lighting/LightMaskTypes.h"
@@ -16,21 +18,20 @@
 #include "lighting/TopDownLightShadows.h"
 #include "gameplay/Inventory.h"
 #include "gameplay/Character.h"
-#include "core/LevelManager.h"
-#include "core/SaveData.h"
-#include "gameplay/Character.h"
+#include "gameplay/RadioAsset.h"
 #include "states/stage/FirstLoadData.h"
 #include "states/stage/OceanAmbientController.h"
 #include "math/Vec2.h"
-#include "gameplay/RadioAsset.h"
 #include "ui/FuelFlameHud.h"
 #include "ui/DialogueBox.h"
+#include "ui/SettingsMenu.h"
 
 #include <memory>
 #include <unordered_set>
 #include <vector>
 
 class GameObject;
+class SpriteRenderer;
 class TileMap;
 class Box;
 class ItemPickup;
@@ -41,273 +42,75 @@ class Closet;
 class Repairable;
 class Monster;
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  StageState — o andar em jogo.
+//
+//  O header é dividido por ASSUNTO. Cada seção tem a parte pública (usada por
+//  componentes como Character, Monster, HotbarComponent) e a privada. Para
+//  adicionar algo novo: ache a seção do assunto e ponha lá — público só se
+//  outra classe precisar.
+//
+//   1. Ciclo de vida             8. Campo de visão          15. Tutoriais
+//   2. Andares e transição       9. Render (etapas)         16. Menus
+//   3. Save                     10. Interação               17. Áudio
+//   4. Irmãos                   11. Inventário e itens      18. HUD
+//   5. Câmera                   12. Diálogos                19. Debug
+//   6. Navegação e colisão      13. Documentos e pasta      20. Telemetria
+//   7. Luz e sombras            14. Monstro e sanidade
+//
+//  Arquivos: Update.cpp (frame), Render.cpp (desenho), SaveState.cpp (save,
+//  menus, tutoriais), LevelFlow.cpp (andares), JournalViewer.cpp (documentos),
+//  Navigation.cpp, Lighting.cpp, BoxInteraction.cpp, MonsterEcho.cpp…
+// ─────────────────────────────────────────────────────────────────────────────
 class StageState : public State {
-friend class SpawnFactory;
+    friend class SpawnFactory;
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  1. Ciclo de vida
+    // ═════════════════════════════════════════════════════════════════════════
 public:
-    enum class LoadMode {
-        NewGame,
-        Continue
-    };
+    enum class LoadMode { NewGame, Continue };
 
-    struct LightInstance {
-        Vec2 worldPos;
-        LightMaskShape shape = LightMaskShape::Circle;
-        LightMaskParams params;
-        bool enabled = true;
-        float animationSeed = 0.0f;
-    };
+    explicit StageState(LoadMode mode = LoadMode::NewGame);
+    ~StageState();
 
-    StageState(LoadMode mode = LoadMode::NewGame);                      // Construtor
-    ~StageState();                                                      // Destrutor
-
-    LevelManager level;
-    void LoadAssets() override;                                         // Carrega assets do estado
-    void Update(float dt) override ;                                    // Atualiza lógica de estado
-    void Render() override;                                             // Desenha na tela
-
-    void Start() override;                                              // Método para a fase de inicialização.
+    void LoadAssets() override;                          // pode ser chamado pelo LoadingState antes do Start
+    void Start() override;
     void Pause() override;
     void Resume() override;
+    void Update(float dt) override;
+    void Render() override;
 
-    GameObject* GetBigCharacter() { return bigCharacterObject; }
-    GameObject* GetSmallCharacter() { return smallCharacterObject; }
-
-    // Funções para controle de luzes dinâmicas de cenário
-    int CreateStaticLight(Vec2 pos, bool startsLit);
-    int CreateStaticLight(Vec2 pos, bool startsLit, LightMaskShape shape, const LightMaskParams& params); // Overload de CreateStaticLight com shape e params customizados
-
-    void SetLightEnabled(int lightId, bool enabled);
-    void UpdateInventoryLight();
-
-    // Verifica se a luz está no range dos pés dos personagens
-    float bigLightContact = 0.0f;
-    float smallLightContact = 0.0f;
-    
-    // Verifica a intensidade da luz nos personagens
-    float bigIlluminationLevel = 0.0f;
-    float smallIlluminationLevel = 0.0f;
-
-    Inventory& GetInventory() { return inventory; }
-    const LightMaskParams& GetLightMaskParams() const { return lightMaskParams; }
-    LoadMode GetLoadMode() const { return loadMode; }
-
-    SaveGameState CaptureSaveState() const;
-    void ApplySaveState(const SaveGameState& state);
-    bool SaveCurrentProgress();
-    bool SaveLevelCheckpoint();
-
-    void SetInitialLevelIndex(int index);
-    void BeginLevelTransition(int targetLevelIndex);
-    void TransitionToLevel(int targetLevelIndex);
-    int GetCurrentLevelIndex() const { return currentLevelIndex; }
-
-    void RenderQuitConfirmModal(SDL_Renderer* renderer);
-    void RenderLevelTitleBanner(SDL_Renderer* renderer);
-    // Legenda da fala (dublagem) que estiver tocando — barra inferior central.
-    void RenderVoiceSubtitle(SDL_Renderer* renderer);
-    void RenderJournalViewer(SDL_Renderer* renderer);
-    // Prompt contextual "[E] ..." quando há um objeto interagível ao alcance
-    // (apenas controlando o irmão maior). Substitui a antiga legenda fixa (3.5).
-    void RenderInteractionPrompt(SDL_Renderer* renderer);
-
-    GameObject* GetInteractionFocus() const;
-    Box* GetReachablePushBox() const { return reachablePushBox; }
-    Box* GetActivePushBox() const { return activePushBox; }
-    Jornal* GetReachableJornal() const { return reachableJornal; }
-    Candlestick* GetReachableCandle() const { return reachableCandle; }
-    bool IsPushBoxCloserThanItem(ItemPickup* item, Box* box) const;
-    bool IsJornalCloserThanItemAndBox(Jornal* jornal, ItemPickup* item, Box* box) const;
-    bool IsCandleClosestForInteraction(Candlestick* candle) const;
-    ItemPickup* GetReachablePickup() const { return reachablePickup; }
-    void NotifyItemPickupCollected(ItemPickup* pickup);
-    bool ShouldSkipPickupSpawn(int tiledId) const;
-    bool IsPickupBlocked(ItemPickup* pickup) const;
-
-    const std::vector<LightInstance>& GetLights() const { return lights; }
- 
-    // Posição em MUNDO da tocha/isqueiro do personagem, se estiver ativa.  
-    // (smoothedTorchLightScreenPos é em coordenadas de TELA — não serve direto)
-    bool GetActiveTorchWorldPos(Vec2& outPos, float& outFalloffRadiusPx) const {
-        const bool playerWantsLightHidden = Character::player && Character::player->hidePersonalLight;
-        const bool torchActive = inventory.IsActiveLightLighter() && !playerWantsLightHidden && bigCharacterObject;
-        if (!torchActive) return false;
- 
-        outPos = bigCharacterObject->box.Center();
-        const float fuelRatio = inventory.GetSelectedLightFuelRatio();
-        outFalloffRadiusPx = lightMaskParams.falloffRadiusPx * fuelRatio;
-        return true;
-    }
-
-    // True quando existe ≥1 janela no andar e TODAS estão abertas — o monstro
-    // dominou o andar. Consultado pelo Monster (fim da campanha estratégica).
-    bool AreAllWindowsOpen() const;
-
-    // Empurra o personagem para fora de qualquer colisão em que tenha ficado
-    // preso (ex.: ao sair do armário). Testa AS DUAS colisões do movimento:
-    // level.CheckCollision (geometria estática) E IsBoxWalkableOnMapLayer (tiles).
-    void UnstickCharacter(Character* c);
-
-    Window* GetReachableWindow() const { return reachableWindow; }
-    Window* FindClosestReachableWindow() const;
-    bool IsWindowClosestForInteraction(Window* window) const;
-    void TryInteractWindowOnKeyPress();
-
-    // Armário alcançável neste frame (preenchido por Closet::Update); alimenta
-    // o prompt central do rodapé. Resetado a cada frame antes do UpdateArray.
-    Closet* GetReachableCloset() const { return reachableCloset; }
-    void SetReachableCloset(Closet* c) { reachableCloset = c; }
-
-    // Público pra ser reutilizado pelo monstro
-    // footRadius > 0 usa um footprint CIRCULAR centrado no tile (agentes grandes,
-    // ex.: monstro); <= 0 usa o footprint padrão "nos pés" da box do agente (1.4).
-    std::vector<Vec2> FindPathWorld(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent = nullptr,
-                                    int nodeBudget = 4096, float footRadius = -1.0f) const;
-    bool IsWorldPosNavigableFor(const Vec2& worldPos, const GameObject* agent, float footRadius = -1.0f) const;
-    // Linha livre (navegável) entre dois pontos. Público: usado pelo Monster (LOS de visão).
-    bool HasWalkableLine(const Vec2& fromWorld, const Vec2& toWorld) const;
-    bool HasWalkableLine(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent, float footRadius = -1.0f) const;
-    const std::vector<std::shared_ptr<GameObject>>& GetObjectArray() const { return objectArray; }
-
-    // Getter para saber quem está atualmente sendo controlado
-    Character* GetControlledCharacter() const { return controlledCharacter; }
-
-    // True quando algum overlay deve impedir o input de gameplay (menu/modal/jornal).
-    // Público: consultado por HotbarComponent e Character.
-    bool IsPlayerInputFrozen() const { return pauseMenuOpen || quitConfirmOpen || journalViewerOpen || documentFolderOpen; }
-
-    // objetos estáticos que vão receber sombra de sprite real
-    // Para reverter o teste, basta deixar esse vetor vazio (não chame Register)
-    std::vector<GameObject*> testShadowObjects;
-    void RegisterTestShadowObject(GameObject* go) { testShadowObjects.push_back(go); }
+    LevelManager level;                                  // mapa do Tiled: colisão, zonas e spawns
     float lastFrameDt = 0.016f;
 
-    // Overlay de baixa sanidade (spritesheet de "linhas"/rabiscos na tela)
-    GameObject* sanityOverlayObj = nullptr;   // GameObject dedicado para o overlay
-    float sanityOverlayFrameTimer = 0.0f;
-    int   sanityOverlayFrameIndex = 0;
-    float sanityOverlaySmoothedIntensity = 0.0f;
-    static constexpr int   kSanityOverlayFrameCount = 56;
-    static constexpr float kSanityOverlayFrameSeconds = 0.05f; // ajuste a velocidade aqui
-    static constexpr float kChromaticAberrationMaxOffsetPx = 14.0f;
+    const std::vector<std::shared_ptr<GameObject>>& GetObjectArray() const { return objectArray; }
+    // True com algum overlay que congela o input de gameplay (pausa, sair, documento, pasta).
+    bool IsPlayerInputFrozen() const { return pauseMenuOpen || quitConfirmOpen || journalViewerOpen || documentFolderOpen; }
 
-    // Flash vermelho de dano (toque do monstro). Decai ao longo do tempo.
-    float damageFlashTimer = 0.0f;
-    static constexpr float kDamageFlashDuration = 0.35f;
-    // Janela após um toque do monstro: se a morte ocorre com esse timer ativo,
-    // a derrota é atribuída ao monstro (6.5); senão, à escuridão.
-    float lastMonsterHitTimer = 0.0f;
-    static constexpr float kMonsterHitDeathWindow = 2.0f;
+private:
+    LoadMode loadMode = LoadMode::NewGame;
+    bool levelContentLoaded = false;                     // LoadAssets já rodou (o Start não recarrega)
 
-    // Showcase inicial: em jogo novo o jogador começa com a luz APAGADA e, alguns
-    // segundos após o 1º nível carregar, ela é acesa automaticamente — mostrando
-    // ao jogador o contraste e a mecânica da luz.
-    bool  autoLightShowcasePending = false;
-    float autoLightShowcaseTimer = 0.0f;
-    static constexpr float kAutoLightShowcaseDelay = 2.0f;
+    // ═════════════════════════════════════════════════════════════════════════
+    //  2. Andares e transição
+    // ═════════════════════════════════════════════════════════════════════════
+public:
+    void SetInitialLevelIndex(int index);
+    void BeginLevelTransition(int targetLevelIndex);     // escada: transição até o próximo andar (ou o fim)
+    void TransitionToLevel(int targetLevelIndex);
+    int  GetCurrentLevelIndex() const { return currentLevelIndex; }
+    void RenderLevelTitleBanner(SDL_Renderer* renderer);
 
-    // Indicador "quem estou controlando": aparece no início e a cada troca,
-    // quica + pisca branco por alguns segundos e some (eased-out).
-    float controlIndicatorTimer = 0.0f;
-    static constexpr float kControlIndicatorDuration = 2.5f;
-    void TriggerControlIndicator() { controlIndicatorTimer = kControlIndicatorDuration; }
-
-    // Tutoriais (máx. 3x por sessão cada — contadores estáticos no .cpp).
-    float lighterTutTimer = 0.0f;
-    bool lighterTutArmed = true;
-    float swapTutTimer = 0.0f;
-    bool swapTutArmed = true;
-    float abilityTutTimer = 0.0f;   // habilidade do irmãozinho (E)
-    bool abilityTutArmed = true;
-    // Após o tutorial da habilidade (abertura do 2º andar), enfileira o tutorial
-    // de troca de personagem — mas só o mostra quando a tela de tutoriais estiver
-    // vazia (sem outro banner ativo nem pendente); caso contrário, espera terminar.
-    bool swapAfterAbilityPending = false;
-    // Aviso "preciso de uma tábua": arma ao chegar no vão da escada sem a tábua;
-    // re-arma ao se afastar, para avisar de novo numa nova aproximação.
-    bool repairWarnArmed = true;
-    // Tutorial de movimento (WASD): aparece no começo se o jogador ficar parado
-    // sem nunca ter andado.
-    float moveTutTimer = 0.0f;
-    bool moveTutDone = false;        // vira true ao primeiro movimento; não repete
-    float noMoveAccum = 0.0f;
-    // Tutorial de pegar item (E): aparece ao ficar perto de um item sem pegar.
-    float pickupTutTimer = 0.0f;
-    bool pickupTutArmed = true;
-    float pickupNearAccum = 0.0f;
-    // Tutorial de reabastecer (F): só aparece quando o jogador está segurando o
-    // combustível (item selecionado na roda).
-    float refuelTutTimer = 0.0f;
-    bool refuelTutArmed = true;
-    // Tutorial de trocar item na roda (1/3): dispara ao pegar o 1º item novo,
-    // quando a roda passa a ter mais de um item para alternar.
-    float cycleTutTimer = 0.0f;
-    int prevStackCount = -1;
-    // Aviso "luz apagou": quando a fonte de luz chega a zero pela 1ª vez.
-    float lighterEmptyTutTimer = 0.0f;
-    static constexpr float kTutorialDisplayDuration = 8.0f;   // mínimo 8 s na tela
-    static constexpr int   kMaxTutorialShows = 3;
-
-    // ── Canal ÚNICO de tutorial (um por vez) ──────────────────────────────────
-    // Só um banner aparece de cada vez. Ao pedir um novo enquanto há outro na tela,
-    // o atual faz FADE-OUT e o novo entra na fila (pendingTutText). Não some por
-    // "aprender" — fica os 8 s independentemente do que o jogador fizer.
-    std::string activeTutText;
-    float       activeTutTimer = 0.0f;
-    std::string pendingTutText;
-    static constexpr float kTutorialFadeOut = 0.8f;   // janela de fade-out (= drawBanner)
-    void RequestTutorial(const std::string& text, bool inventoryHint = false);
-    static constexpr float kSwapTutFarDist = 660.0f;     // dispara o tutorial de troca
-    static constexpr float kSwapTutNearDist = 340.0f;    // re-arma quando se aproximam
-    void UpdateTutorials(float dt);
-    void RenderTutorials(SDL_Renderer* renderer);
-
-    // O tutorial NA TELA agora é de inventário/combustível? A roda de itens usa
-    // isso para mostrar as teclas só junto com ele.
-    bool IsInventoryTutorialActive() const { return activeTutTimer > 0.0f && activeTutInventory; }
-    bool activeTutInventory  = false;   // o banner ativo pede as teclas da roda
-    bool pendingTutInventory = false;   // o banner da fila pede as teclas da roda
-
-    // Dispara o feedback de dano do monstro: SFX + tremor de tela + flash vermelho.
-    // Chamado pelo Monster ao tocar um irmão.
-    void TriggerMonsterHitFeedback();
-
-    // Susto "FUJA E SE ESCONDA!!!": texto grande, tremendo, um pouco acima do
-    // centro, na 1ª vez que o monstro entra em CHASE. Fica no mínimo
-    // kMonsterScareMinTime s; depois some (com fade-out) quando o monstro para.
-    bool  monsterScareShown  = false;   // já disparou uma vez neste nível
-    bool  monsterScareActive = false;   // texto na tela (visível OU em fade-out)
-    float monsterScareElapsed = 0.0f;   // tempo desde que apareceu
-    float monsterScareFadeOut = 0.0f;   // > 0 durante o fade-out (s restantes)
-    static constexpr float kMonsterScareMinTime = 5.0f;   // mínimo garantido na tela
-    static constexpr float kMonsterScareFadeIn  = 0.25f;
-    static constexpr float kMonsterScareFadeOut = 0.6f;
-    void UpdateMonsterScare(float dt);
-    void RenderMonsterScare(SDL_Renderer* renderer);
-
-    // Sequência final: ao alcançar a escada no último andar, uma sucessão rápida
-    // de clarões (a luz do farol se aproximando) satura a tela até o branco total,
-    // e então os créditos/pós-créditos entram (EndState).
-    bool  finalEscapeActive = false;
-    float finalEscapeTimer = 0.0f;
-    int   finalEscapeStrikeCount = 0;   // clarões de trovão já disparados
-    static constexpr float kFinalEscapeDuration = 3.4f;
-    void UpdateFinalEscape(float dt);
-    void RenderFinalEscape(SDL_Renderer* renderer);
-
-    // Transição de cena estilo RE4: congela o quadro atual e faz um zoom central
-    // borrado escurecendo, antes de carregar o próximo andar (ou o EndState no
-    // último). Usada em TODAS as escadas.
+    // Transição estilo RE4 em todas as escadas: congela o quadro e faz um zoom
+    // borrado escurecendo antes de carregar o próximo andar (ou o EndState).
     bool  sceneTransitionActive = false;
-    bool  sceneTransitionToEnd  = false;   // último andar → EndState (vitória)
+    bool  sceneTransitionToEnd  = false;                 // último andar → EndState (vitória)
     int   sceneTransitionTargetLevel = 0;
     float sceneTransitionTimer  = 0.0f;
-    SDL_Texture* sceneTransitionFrame = nullptr;   // quadro congelado
-
-    // #19 Backdrop borrado do menu de pausa: alvo pequeno onde a cena é reduzida
-    // (downscale) e depois ampliada com filtragem linear = desfoque barato na GPU.
-    SDL_Texture* pauseBlurTex = nullptr;
-    static constexpr float kSceneTransitionDuration    = 1.5f;   // escadas normais
-    static constexpr float kSceneTransitionEndDuration = 2.2f;   // último andar (com clarão + trovão)
+    SDL_Texture* sceneTransitionFrame = nullptr;         // quadro congelado
+    static constexpr float kSceneTransitionDuration    = 1.5f;
+    static constexpr float kSceneTransitionEndDuration = 2.2f;
     float SceneTransitionDuration() const {
         return sceneTransitionToEnd ? kSceneTransitionEndDuration : kSceneTransitionDuration;
     }
@@ -316,50 +119,364 @@ public:
     void CaptureSceneFrame(SDL_Renderer* renderer);
     void RenderSceneTransition(SDL_Renderer* renderer);
 
-    RadioAsset* GetReachableRadio() const { return reachableRadio; }
-    void SetReachableRepairable(Repairable* r) { reachableRepairable = r; }
-    // Sinaliza que o irmãozão chegou no vão a consertar mas NÃO tem o item
-    // necessário — dispara o aviso "preciso de uma tábua" (ver UpdateTutorials).
-    void SetRepairableInReachNoItem(bool v) { repairableInReachNoItem = v; }
+private:
+    int   currentLevelIndex = 0;
+    float levelTitleTimer = 0.0f;
+    int   levelTitleNumber = 1;
+    static constexpr float kLevelTitleDuration = 3.0f;
+    TileSet* tileSet;                                    // tileset ativo no mapa
+    std::unique_ptr<TileSet> dungeonTileSet;
+    Vec2  mapOrigin{0.0f, 0.0f};
+    float levelWorldW = 0.0f;
+    float levelWorldH = 0.0f;
 
-    Character* GetBigCharacterComponent()   const { return bigCharacter; }
-    Character* GetSmallCharacterComponent() const { return smallCharacter; }
+    void ClearGameplayWorld();
+    void BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInventory);
+    void ShowLevelTitleBanner();
+    void RestartLevelFromCheckpoint();                   // "Reiniciar nível" da pausa
 
-    // ── ECO DOS PASSOS DO MONSTRO ────────────────────────────────────────────
-    // O monstro so aparece onde ha luz. Sem nada em troca, o jogador as escuras
-    // nao faz ideia de onde ele esta — e uma ameaca que nao se consegue situar
-    // nao gera tensao, gera frustracao. Cada PASSADA dele abre um circulo
-    // branco no chao, que cresce e apaga: o jogador ouve com os olhos.
-    //
-    // O circulo nasce do mesmo sitio e com a mesma regra de distancia do SOM da
-    // passada (`GameSfx::PlayMonsterStep`), por isso ve-se exactamente aquilo
-    // que se ouviria: perto = forte, longe = quase nada, fora de alcance = nada.
-    /// Chamado pelo `Monster` a cada passada. `strength01` e 1 colado ao
-    /// jogador e 0 no limite do alcance.
-    void SpawnMonsterEcho(const Vec2& worldFootPos, float strength01);
+    // ═════════════════════════════════════════════════════════════════════════
+    //  3. Save
+    // ═════════════════════════════════════════════════════════════════════════
+public:
+    SaveGameState CaptureSaveState() const;
+    void ApplySaveState(const SaveGameState& state);
+    bool SaveCurrentProgress();
+    bool SaveLevelCheckpoint();
 
-    // Debug (só em Game::debugMode): jogador invisível para o monstro (observar
-    // comportamento) e câmera livre seguindo o mouse.
-    bool debugMonsterBlind = false;
-    bool debugFreeCam = false;
-    bool IsMonsterBlindDebug() const { return debugMonsterBlind; }
-    bool IsPhysicsDebugOn() const { return showMapPhysicsDebug; }   // tecla [B]: overlays de colisão (inclui boxes do monstro)
+private:
+    std::unordered_set<int> skippedPickupSpawnIds;       // pickups do mapa que não renascem
+    std::vector<int> missedUniquePickupIdsAccum;
+    void MarkMissedUniquePickupsOnLevelLeave();
+    void MergeSkippedPickupIds(const std::vector<int>& removed, const std::vector<int>& missed);
 
-    void QueueDialogue(DialogueBox::Speaker speaker, DialogueBox::Speaker listener,
-                        DialogueBox::Emotion emotion, DialogueBox::Emotion listenerEmotion,
-                        const std::string& text) {
-        dialogueBox.Queue(speaker, listener, emotion, listenerEmotion, text);
+    // ═════════════════════════════════════════════════════════════════════════
+    //  4. Irmãos
+    // ═════════════════════════════════════════════════════════════════════════
+public:
+    GameObject* GetBigCharacter() { return bigCharacterObject; }
+    GameObject* GetSmallCharacter() { return smallCharacterObject; }
+    Character*  GetBigCharacterComponent() const { return bigCharacter; }
+    Character*  GetSmallCharacterComponent() const { return smallCharacter; }
+    Character*  GetControlledCharacter() const { return controlledCharacter; }
+    // Tira o personagem de dentro de colisão (ex.: saindo do armário), testando
+    // a geometria do mapa e os tiles.
+    void UnstickCharacter(Character* c);
+
+    // Seta "quem estou controlando": aparece no início e a cada troca.
+    float controlIndicatorTimer = 0.0f;
+    static constexpr float kControlIndicatorDuration = 2.5f;
+    void TriggerControlIndicator() { controlIndicatorTimer = kControlIndicatorDuration; }
+
+private:
+    enum class PartyMode {
+        TOGETHER,                                        // o parceiro segue
+        INDEPENDENT                                      // o parceiro fica parado
+    };
+
+    GameObject* bigCharacterObject;                      // irmãozão
+    GameObject* smallCharacterObject;                    // irmãozinho
+    Character*  bigCharacter;
+    Character*  smallCharacter;
+    GameObject* controlledCharacterObject;
+    Character*  controlledCharacter;
+    GameObject* companionCharacterObject;                // o que não está sendo controlado
+    Character*  companionCharacter;
+    PartyMode   partyMode;
+    int companionStartDelay = 0;                         // frames antes do parceiro começar a seguir
+
+    float companionPathRefreshTimer = 0.0f;
+    static constexpr float kCompanionPathRefreshInterval = 0.35f;
+    std::vector<Vec2> cachedCompanionPath;
+    int  companionPathIndex = 0;                         // waypoint atual no caminho em cache
+    bool companionHolding = false;                       // seguidor parado no ponto atrás do líder (histerese)
+    std::vector<Vec2> companionFollowPathWorld;          // rota do seguidor neste frame (debug)
+
+    bool IsPartyReady() const;                           // referências da dupla válidas
+    void HandlePartyInput();                             // troca de personagem e modo
+    void IssueMovementFromInput(Character* character, GameObject* object);   // WASD no controlado
+    void UpdateCompanionBehavior();
+    void IssueFollowCommand(Character* follower, GameObject* followerObject, GameObject* leaderObject, bool allowCatchup);
+    void EnforceMaxDistance();                           // distância máxima entre os dois
+    void SwapControlledCharacter();
+    void UpdateControlledCharacterVisuals();             // destaque de quem está sob controle
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  5. Câmera
+    // ═════════════════════════════════════════════════════════════════════════
+private:
+    void RefreshCameraTargets();                         // alvos da câmera (dupla + principal)
+    // Zoom-base e limites do andar. No carregamento (snap) e ao voltar de outro
+    // estado, porque menu/loading devolvem a câmera ao neutro.
+    void ApplyCameraFraming(bool snap);
+    void UpdateCamera(float dt, InputManager& input);    // câmera normal ou livre (debug)
+    Vec2 ScreenToWorld(const Vec2& screenPos) const;
+    Vec2 WorldToScreen(const Vec2& worldPos) const;
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  6. Navegação e colisão
+    // ═════════════════════════════════════════════════════════════════════════
+public:
+    // footRadius > 0 = pé CIRCULAR centrado no tile (agentes grandes, ex.: monstro);
+    // <= 0 = pé padrão na base da caixa.
+    std::vector<Vec2> FindPathWorld(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent = nullptr,
+                                    int nodeBudget = 4096, float footRadius = -1.0f) const;
+    bool IsWorldPosNavigableFor(const Vec2& worldPos, const GameObject* agent, float footRadius = -1.0f) const;
+    bool HasWalkableLine(const Vec2& fromWorld, const Vec2& toWorld) const;          // linha de visão do monstro
+    bool HasWalkableLine(const Vec2& fromWorld, const Vec2& toWorld, const GameObject* agent, float footRadius = -1.0f) const;
+
+private:
+    TileMap* tileMapComp = nullptr;
+    int navTilePx = 64;                                  // grade sintética quando não há TileMap
+    int navGridWidthTiles = 0;
+    int navGridHeightTiles = 0;
+    std::unordered_set<int> walkableTileIds{0, 1, 2, 7, 8, 9, 31, 37, 38};
+    mutable std::vector<GameObject*> dynamicColliderCache;
+    mutable bool dynamicColliderCacheDirty = true;
+    mutable GameObject* monsterNavObstacle = nullptr;    // monstro como obstáculo para os irmãos
+
+    void ApplyMapBoundsAndWalkability(GameObject* characterObject, const Vec2& previousPos);
+    bool IsBoxWalkableOnMapLayer(const Rect& box) const;
+    bool IsTileWalkable(int tx, int ty) const;
+    bool IsTileNavigableFor(const GameObject* agent, int tx, int ty, float footRadius = -1.0f) const;   // tile + cenário + dinâmicos
+    Vec2 TileCenterToWorld(int tx, int ty) const;
+    bool WorldToTile(const Vec2& worldPos, int& outTx, int& outTy) const;
+    bool FindNearestWalkableTile(int startTx, int startTy, int& outTx, int& outTy, int maxRadius = 8,
+                                 const GameObject* agent = nullptr, float footRadius = -1.0f) const;
+    bool HasNavigationGrid() const;                      // matriz de tiles OU grade sintética
+    int  NavTileWidthPx() const;
+    int  NavTileHeightPx() const;
+    Vec2 ClampPickupTopLeft(Vec2 topLeft, float itemW, float itemH) const;   // item não nasce fora do mapa
+    void RefreshDynamicColliderCache() const;
+    void CheckObjectCollisions();                        // pares de Collider → NotifyCollision
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  7. Luz e sombras
+    // ═════════════════════════════════════════════════════════════════════════
+public:
+    struct LightInstance {
+        Vec2 worldPos;
+        LightMaskShape shape = LightMaskShape::Circle;
+        LightMaskParams params;
+        bool enabled = true;
+        float animationSeed = 0.0f;
+    };
+
+    int  CreateStaticLight(Vec2 pos, bool startsLit);
+    int  CreateStaticLight(Vec2 pos, bool startsLit, LightMaskShape shape, const LightMaskParams& params);
+    void SetLightEnabled(int lightId, bool enabled);
+    void UpdateInventoryLight();
+    const std::vector<LightInstance>& GetLights() const { return lights; }
+    const LightMaskParams& GetLightMaskParams() const { return lightMaskParams; }
+
+    // Posição em MUNDO da luz de mão do irmãozão, se estiver acesa (o raio encolhe com a carga).
+    bool GetActiveTorchWorldPos(Vec2& outPos, float& outFalloffRadiusPx) const {
+        const bool hidden = Character::player && Character::player->hidePersonalLight;
+        if (!inventory.IsActiveLightLighter() || hidden || !bigCharacterObject) return false;
+        outPos = bigCharacterObject->box.Center();
+        outFalloffRadiusPx = lightMaskParams.falloffRadiusPx * inventory.GetSelectedLightFuelRatio();
+        return true;
     }
 
-    // Toca uma conversa E registra no log de diálogos (uma vez por chave).
+    float bigLightContact = 0.0f;                        // sombra de contato nos pés
+    float smallLightContact = 0.0f;
+    float bigIlluminationLevel = 0.0f;                   // luz recebida (a sanidade e o monstro leem)
+    float smallIlluminationLevel = 0.0f;
+
+    // Objetos de cenário com sombra de sprite (vazio = sem sombras de objeto).
+    std::vector<GameObject*> testShadowObjects;
+    void RegisterTestShadowObject(GameObject* go) { testShadowObjects.push_back(go); }
+
+    // Jogo novo: começa com a luz apagada e ela acende sozinha após alguns segundos.
+    bool  autoLightShowcasePending = false;
+    float autoLightShowcaseTimer = 0.0f;
+    static constexpr float kAutoLightShowcaseDelay = 2.0f;
+
+private:
+    std::vector<LightInstance> lights;
+    RadialLightOverlay* radialGeometry;                  // malha de escuridão
+    LightMaskParams lightMaskParams;
+    LightMaskShape  lightMaskShape;
+    std::vector<TopDownShadowEdge> staticShadowEdges;    // sombras das paredes
+    bool staticShadowEdgesBuilt = false;
+    int  maxActiveLights = 24;
+    bool lightsEnabled = true;
+    bool shadowsEnabled = true;
+    int  inventoryLightId = -1;
+
+    Vec2 smoothedTorchLightScreenPos{0.0f, 0.0f};        // luz de mão suavizada (tela)
+    bool hasSmoothedTorchLight = false;
+    Vec2 smoothedDynamicLightScreenPos{0.0f, 0.0f};      // luz de preview suavizada (tela)
+    bool hasSmoothedDynamicLight = false;
+    bool cursorPreviewLightEnabled = false;              // luz de preview (debug) no mouse ou num irmão
+    bool previewLightLockedToPlayer = false;
+    GameObject* previewLightAnchorPlayer = nullptr;
+
+    std::unique_ptr<LightTweakPanel> lightTweakPanel;    // painel de ajuste (debug, tecla \)
+    bool tweakDurabilityOnLoad = true;                   // lido de config/lighting.json antes do painel existir
+
+    void CreateLightAtCursor();
+    void RegisterAllCandleLights();
+    void ApplyLitCandleIds(const std::vector<int>& litIds, bool extinguishOthers = true);
+    void UpdateAutoLightShowcase(float dt);
+    void UpdatePreviewLightAnchor(InputManager& input);  // botão direito prende a luz de preview num irmão
+    void UpdateLightSmoothing(float dt, InputManager& input);
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  8. Campo de visão
+    // ═════════════════════════════════════════════════════════════════════════
+    // Cone para onde o controlado olha + círculo nos pés. Dentro, a escuridão
+    // some e a cor volta; fora, a cena fica em preto e branco (ScenePostFx).
+private:
+    PlayerVisionParams visionParams;
+    PlayerVisionFrame  visionFrame;
+    float visionAxisRad = 0.0f;                          // eixo do cone suavizado
+    bool  visionAxisInitialized = false;
+
+    void UpdatePlayerVision(float dt);                   // uma vez por frame, no começo do Render
+    // Luzes sintéticas que abrem o buraco da visão na escuridão (sem sombra, sem sanidade).
+    void AppendVisionMaskLights(std::vector<RadialLightOverlay::ScreenLight>& out) const;
+    // Reduz as luzes REAIS do frame a círculos de tela. Depois de montar as luzes, antes dos objetos.
+    void BuildVisionLights(const std::vector<RadialLightOverlay::ScreenLight>& screenLights);
+    float VisionVisibilityAtScreen(const Vec2& screenPos) const;                      // geometria do cone: 0..1
+    float LightAmountAtScreen(const Vec2& screenPos, bool includeCarriedLight = true) const;   // luz real: 0..1
+    float ProximityAtScreen(const Vec2& screenPos) const;                             // perto do controlado: 0..1
+    bool  ShouldHideOutsideVision(GameObject& go) const;                              // interagível que some fora da visão
+    // Quanto do objeto o jogador vê (0..1): cone, luz e exceção do monstro. Sprite e sombra usam o mesmo.
+    float VisibilityOfObject(GameObject& go) const;
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  9. Render (etapas — Render.cpp)
+    // ═════════════════════════════════════════════════════════════════════════
+private:
+    struct FrameLighting {                               // luz do frame, montada e lida pelas etapas
+        bool showDebugTools = false;
+        bool lighterFromInventory = false;               // luz de mão na mão (e não escondida)
+        bool torchLit = false;
+        LightMaskParams lighterParams;                   // com a carga
+        float bigMaxContact = 0.0f, smallMaxContact = 0.0f;
+        float bigMaxTouch = 0.0f,   smallMaxTouch = 0.0f;
+    };
+    struct DrawnSprite {                                 // objeto desenhado, na ordem do Y-sort
+        GameObject* obj;
+        SpriteRenderer* sprite;
+        bool  stamped;                                   // redesenhado depois da escuridão
+        float shown;                                     // visibilidade 0..1
+        float light;                                     // luz recebida 0..1
+        bool  glow;                                      // contorno de interação
+    };
+
+    std::unique_ptr<ScenePostFx> scenePostFx;
+    SDL_Texture* renderTarget    = nullptr;              // a cena é desenhada aqui
+    SDL_Texture* sceneSnapshot   = nullptr;              // cópia da cena logo depois da escuridão
+    SDL_Texture* occluderScratch = nullptr;              // rascunho para recortar um objeto da cópia
+
+    void SortObjectsForDrawing();
+    FrameLighting BuildFrameLighting() const;
+    void RenderCharacterShadows(SDL_Renderer* renderer, FrameLighting& fl);
+    std::vector<RadialLightOverlay::ScreenLight> CollectScreenLights(const FrameLighting& fl) const;
+    void RenderObjectShadows(const std::vector<RadialLightOverlay::ScreenLight>& screenLights);
+    std::vector<DrawnSprite> RenderWorldObjects(bool stampPassWillRun);
+    void RenderDarknessAndWallShadows(SDL_Renderer* renderer, const std::vector<RadialLightOverlay::ScreenLight>& screenLights);
+    void UpdateIlluminationLevels(const FrameLighting& fl);
+    void RenderStampedSprites(SDL_Renderer* renderer, const std::vector<DrawnSprite>& drawOrder);
+    bool PresentScene(SDL_Renderer* renderer, int winW, int winH);    // cena + ScenePostFx na tela
+    void RenderBrightnessFallback(SDL_Renderer* renderer, int winW, int winH);
+    void RenderScreenFlashes(SDL_Renderer* renderer, int winW, int winH);   // dano e trovão
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  10. Interação ([E] e contornos)
+    // ═════════════════════════════════════════════════════════════════════════
+    // Os "reachable" são recalculados a cada frame; o foco é o mais próximo.
+public:
+    GameObject*  GetInteractionFocus() const;
+    void         RenderInteractionPrompt(SDL_Renderer* renderer);   // "[E] ação" no rodapé
+    Box*         GetReachablePushBox() const { return reachablePushBox; }
+    Box*         GetActivePushBox() const { return activePushBox; }
+    Jornal*      GetReachableJornal() const { return reachableJornal; }
+    Candlestick* GetReachableCandle() const { return reachableCandle; }
+    Window*      GetReachableWindow() const { return reachableWindow; }
+    RadioAsset*  GetReachableRadio() const { return reachableRadio; }
+    Closet*      GetReachableCloset() const { return reachableCloset; }
+    void SetReachableCloset(Closet* c) { reachableCloset = c; }                  // Closet::Update
+    void SetReachableRepairable(Repairable* r) { reachableRepairable = r; }      // Repairable::Update
+    void SetRepairableInReachNoItem(bool v) { repairableInReachNoItem = v; }     // no vão sem a tábua (aviso)
+
+    bool IsPushBoxCloserThanItem(ItemPickup* item, Box* box) const;
+    bool IsJornalCloserThanItemAndBox(Jornal* jornal, ItemPickup* item, Box* box) const;
+    bool IsCandleClosestForInteraction(Candlestick* candle) const;
+    bool IsWindowClosestForInteraction(Window* window) const;
+    Window* FindClosestReachableWindow() const;
+    void TryInteractWindowOnKeyPress();
+
+private:
+    Box*         reachablePushBox = nullptr;
+    Box*         activePushBox = nullptr;                // caixa/barril sendo empurrado
+    Vec2         pushBoxOffset{0.0f, 0.0f};
+    bool         wasPushingLastFrame = false;
+    Jornal*      reachableJornal = nullptr;
+    Candlestick* reachableCandle = nullptr;
+    Window*      reachableWindow = nullptr;
+    Closet*      reachableCloset = nullptr;
+    RadioAsset*  reachableRadio = nullptr;
+    Repairable*  reachableRepairable = nullptr;
+    bool         repairableInReachNoItem = false;
+
+    float GetInteractableDistance(const GameObject& obj) const;
+    bool  RenderInteractionGlowIfNeeded(GameObject& go);
+    void  UpdateBoxInteraction();
+    void  DetachActivePushBox();                         // solta a caixa (som, estado, velocidade)
+    void  ApplyCoupledPushMovement(const Vec2& prevPlayerPos);
+    Box*  FindClosestReachablePushBox() const;
+    Candlestick* FindClosestReachableCandle() const;
+    bool  IsPlayerNearLitCandle() const;
+    void  TryInteractCandleOnKeyPress();
+    RadioAsset* FindClosestReachableRadio() const;
+    void  TryInteractRadioOnKeyPress();
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  11. Inventário e itens
+    // ═════════════════════════════════════════════════════════════════════════
+public:
+    Inventory& GetInventory() { return inventory; }
+    ItemPickup* GetReachablePickup() const { return reachablePickup; }
+    void NotifyItemPickupCollected(ItemPickup* pickup);
+    bool ShouldSkipPickupSpawn(int tiledId) const;
+    bool IsPickupBlocked(ItemPickup* pickup) const;      // bolsa não aceita (contorno vermelho)
+
+private:
+    Inventory inventory;
+    bool inventoryInitialized = false;
+    GameObject* hotbarObject = nullptr;
+    GameObject* inventoryWheelObject = nullptr;
+    std::vector<ItemPickup*> itemPickups;
+    ItemPickup* reachablePickup = nullptr;
+
+    ItemPickup* FindClosestReachableItem() const;
+    bool IsPickupStillTracked(ItemPickup* pickup) const;
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  12. Diálogos
+    // ═════════════════════════════════════════════════════════════════════════
+public:
+    struct DialogueLogEntry {
+        std::string key;                                 // "andar:origem" — não duplica gatilho repetível
+        std::string context;                             // "Ao chegar no farol" (Tiled: dialogue_context)
+        int level = 0;
+        std::string docImagePath;                        // documento de origem (vazio = não veio de papel)
+        std::vector<DialogueBox::Line> lines;
+    };
+    std::vector<DialogueLogEntry> dialogueLog;           // na ordem em que aconteceram
+
+    void QueueDialogue(DialogueBox::Speaker speaker, DialogueBox::Speaker listener,
+                       DialogueBox::Emotion emotion, DialogueBox::Emotion listenerEmotion,
+                       const std::string& text) {
+        dialogueBox.Queue(speaker, listener, emotion, listenerEmotion, text);
+    }
+    // Toca uma conversa e registra no log (uma vez por chave).
     void PlayDialogue(const std::string& key, const std::string& context,
-                      const std::vector<DialogueBox::Line>& lines,
-                      const std::string& docImagePath = "");
-
-    float pendingWindowBreakDialogueTimer = -1.0f;
-    float pendingWindowBreakLineTimer = -1.0f;
-
-    // True se a conversa com esta chave (sem o prefixo do andar) já está no log deste andar.
+                      const std::vector<DialogueBox::Line>& lines, const std::string& docImagePath = "");
+    // A conversa com esta chave (sem o prefixo do andar) já está no log deste andar?
     bool IsDialogueLogged(const std::string& key) const {
         const std::string fullKey = std::to_string(currentLevelIndex) + ":" + key;
         for (const DialogueLogEntry& e : dialogueLog) {
@@ -367,18 +484,19 @@ public:
         }
         return false;
     }
+    void RenderVoiceSubtitle(SDL_Renderer* renderer);    // legenda da dublagem tocando
 
-    // ── Log de diálogos ────────────────────────────────────────────────────
-    struct DialogueLogEntry {
-        std::string key;                                                // "andar:origem" — evita duplicar gatilho repetível
-        std::string context;                                            // "Ao chegar no farol" (Tiled: dialogue_context)
-        int level = 0;                                                  // andar onde aconteceu
-        std::string docImagePath;                                       // documento de origem (vazio = não veio de papel)
-        std::vector<DialogueBox::Line> lines;
-    };
-    std::vector<DialogueLogEntry> dialogueLog;                          // ordem em que aconteceram
+    float pendingWindowBreakDialogueTimer = -1.0f;       // janela quebrada: estrondo, depois a fala
+    float pendingWindowBreakLineTimer = -1.0f;
 
-    // ── Pasta de documentos ───────────────────────────────────────────────
+private:
+    DialogueBox dialogueBox;
+    void UpdatePendingWindowBreak(float dt);
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  13. Documentos e pasta (JournalViewer.cpp)
+    // ═════════════════════════════════════════════════════════════════════════
+public:
     struct CollectedDocument {
         std::string imagePath;
         std::string title;
@@ -386,335 +504,90 @@ public:
         int   order      = 0;
         float zoomFactor = 1.0f;
         bool  zoomable   = false;
-        bool  unread     = true;                                        // mostra o "novo" até abrir pela pasta
-        std::vector<DialogueBox::Line> dialogueLines;                   // tocam na 1ª leitura pela pasta
-        int   level      = 0;                                           // andar onde foi coletado (0 = primeiro)
+        bool  unread     = true;                         // selo "novo" até abrir pela pasta
+        std::vector<DialogueBox::Line> dialogueLines;    // tocam na 1ª leitura pela pasta
+        int   level      = 0;                            // andar onde foi coletado
         std::string dialogueContext;
     };
-    std::vector<CollectedDocument> collectedDocuments;                  // sempre ordenada por order
+    std::vector<CollectedDocument> collectedDocuments;   // sempre ordenada por order
     bool documentTutorialShown = false;
-    void CollectJornal(Jornal* jornal);
-
-    int documentFolderTab   = 0;                                        // 0 = Documentos, 1 = Diálogos
-    int dialogueLogSelection = 0;                                       // conversa selecionada na aba Diálogos
-
-    void UpdateDialogueLogTab(float dt);
-    void RenderFolderTabs(SDL_Renderer* renderer, float a);
-    void RenderDialogueLogTab(SDL_Renderer* renderer, float a);
-    const DialogueLogEntry* FindDialogueForDocument(const std::string& imagePath) const;
-
-    bool  dialogueLogFocusPanel   = false;                              // true = W/S rolam a conversa; false = escolhem na lista
-    float dialogueLogScroll       = 0.0f;                               // rolagem atual do painel de balões (px)
-    float dialogueLogScrollTarget = 0.0f;
-    float dialogueLogMaxScroll    = 0.0f;                               // medido no Render (altura dos balões − altura do painel)
-    static constexpr float kDialogueLogScrollSpeed = 900.0f;            // px/s segurando W/S
-    bool dialogueReplayActive = false;                                  // a conversa na caixa é um replay da pasta (ESC pode cortar)
-
-    static constexpr float kJournalOpenDuration = 0.35f;
-    static constexpr float kJournalCloseDuration = 0.2f;
-
-    // Pasta de documentos — consultado pela roda do inventário (slot + tecla Tab).
     static constexpr const char* kDocumentTutorialText =
         "Documento guardado na pasta. [Tab] abre seus documentos.";
 
-    bool HasUnreadDocuments() const {
+    void CollectJornal(Jornal* jornal);
+    void RemoveCollectedJornalsFromWorld();
+    void RenderJournalViewer(SDL_Renderer* renderer);
+    bool HasUnreadDocuments() const {                    // algum com selo "novo"
         for (const CollectedDocument& d : collectedDocuments) {
             if (d.unread) return true;
         }
         return false;
     }
-    // True enquanto há ao menos um documento com o selo "novo".
-
-    void RemoveCollectedJornalsFromWorld();
-
     bool IsDocumentTutorialActive() const {
         return activeTutTimer > 0.0f && activeTutText == kDocumentTutorialText;
     }
 
+    // Aba "Diálogos" da pasta.
+    int   documentFolderTab = 0;                         // 0 = Documentos, 1 = Diálogos
+    int   dialogueLogSelection = 0;
+    bool  dialogueLogFocusPanel = false;                 // true = W/S rolam a conversa; false = escolhem na lista
+    float dialogueLogScroll = 0.0f;
+    float dialogueLogScrollTarget = 0.0f;
+    float dialogueLogMaxScroll = 0.0f;                   // medido no Render
+    static constexpr float kDialogueLogScrollSpeed = 900.0f;
+    bool  dialogueReplayActive = false;                  // conversa na caixa é replay da pasta (ESC corta)
+    void UpdateDialogueLogTab(float dt);
+    void RenderFolderTabs(SDL_Renderer* renderer, float a);
+    void RenderDialogueLogTab(SDL_Renderer* renderer, float a);
+    const DialogueLogEntry* FindDialogueForDocument(const std::string& imagePath) const;
+
+    static constexpr float kJournalOpenDuration = 0.35f;
+    static constexpr float kJournalCloseDuration = 0.2f;
+
 private:
-
-    DialogueBox dialogueBox;
-    FuelFlameHud fuelFlameHud;
-
-    enum class PartyMode {
-        TOGETHER,      // Personagens andam juntos (seguidor ativo)
-        INDEPENDENT    // Só o controlado anda; parceiro fica parado
-    };
-
-    void HandlePartyInput();                                             // Trata TAB/F para troca e modo
-    void IssueMovementFromInput(Character* character, GameObject* object); // Aplica WASD no personagem ativo
-    void UpdateCompanionBehavior();                                      // Decide lógica do parceiro no frame
-    void IssueFollowCommand(Character* follower, GameObject* followerObject, GameObject* leaderObject, bool allowCatchup); // Comando de seguir com espaçamento
-    void EnforceMaxDistance();                                           // Limita distância máxima entre os dois
-    void SwapControlledCharacter();                                      // Troca personagem controlado
-    void RefreshCameraTargets();                                         // Atualiza alvos da câmera (dupla + principal)
-    // Zoom-base + limites do mundo desta fase. Chamado ao carregar o nível
-    // (`snap`) e ao voltar de outro estado, porque o menu/loading devolvem a
-    // câmera ao neutro e é preciso reinstalar o enquadramento da fase.
-    void ApplyCameraFraming(bool snap);
-    void UpdateHudInstructions();                                        // Mantém HUD no canto superior esquerdo
-    void UpdateControlledCharacterVisuals();                             // Destaca visualmente quem está sob controle
-    void CreateLightAtCursor();
-    Vec2 ScreenToWorld(const Vec2& screenPos) const;
-    Vec2 WorldToScreen(const Vec2& worldPos) const;
-    void ApplyMapBoundsAndWalkability(GameObject* characterObject, const Vec2& previousPos);
-    bool IsBoxWalkableOnMapLayer(const Rect& box) const;
-    bool IsTileWalkable(int tx, int ty) const;
-    /// Tile walkability + cenário (`LevelManager`) + colliders dinâmicos; `agent nullptr` não é usado aqui (usar `IsTileWalkable`).
-    bool IsTileNavigableFor(const GameObject* agent, int tx, int ty, float footRadius = -1.0f) const;
-    Vec2 TileCenterToWorld(int tx, int ty) const;
-    /// Retângulo jogável em coordenadas de mundo (para itens não nascerem fora do mapa).
-    Vec2 ClampPickupTopLeft(Vec2 topLeft, float itemW, float itemH) const;
-    bool WorldToTile(const Vec2& worldPos, int& outTx, int& outTy) const;
-    bool FindNearestWalkableTile(int startTx, int startTy, int& outTx, int& outTy, int maxRadius = 8,
-                                   const GameObject* agent = nullptr, float footRadius = -1.0f) const;
-
-    /// Grade A* disponível: matriz de tiles OU grade sintética (`LoadAssets` sem `TileMap` em cena).
-    bool HasNavigationGrid() const;
-    int NavTileWidthPx() const;
-    int NavTileHeightPx() const;
-    bool IsPartyReady() const;                                           // Confere se referências da dupla são válidas
-    bool HandleQuitConfirmInput();                                       // Modal ESC: save and quit / cancel
-
-    // Menu de pausa (overlay): o mundo continua simulando, mas o input do
-    // jogador é congelado enquanto o menu está aberto (decisão 1.1).
-    void HandlePauseMenuInput();
-    void RenderPauseMenu(SDL_Renderer* renderer);
-    bool BuildPauseBlurTexture(SDL_Renderer* renderer, int winW, int winH);       // #19 gera o desfoque do cenário (GPU)
-    void DrawSceneBlur(SDL_Renderer* renderer, int winW, int winH, float alpha);
-    void DrawBlurBehindRect(SDL_Renderer* renderer, const SDL_Rect& rect, int winW, int winH);  // desfoque só atrás de um box
-    void RenderSaveToast(SDL_Renderer* renderer);
-    void HandleSettingsPanelInput();
-    void RenderSettingsPanel(SDL_Renderer* renderer);
-    void HandleControlsPanelInput();
-    void RenderControlsPanel(SDL_Renderer* renderer);
-    void RestartLevelFromCheckpoint();
-    void ShowSaveToast() { saveToastTimer = kSaveToastDuration; }
-    void ClearGameplayWorld();
-    void BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInventory);
-    void ShowLevelTitleBanner();
-    // Trancamento do andar: quando todas as janelas abrem, apaga todas as velas
-    // e mantém as reacesas apagando (2s) até uma janela fechar de novo.
-    bool windowLockdownActive = false;
-    void UpdateWindowLockdown(float dt);
-    void RenderGameplayCollisionDebug(SDL_Renderer* renderer) const;     // Com showMapPhysicsDebug: colliders + foot circles
-    void RenderCompanionFollowPathDebug(SDL_Renderer* renderer) const;   // Com showMapPhysicsDebug: polylinha do seguidor (modo junto)
-    void UpdateBoxInteraction();
-    void DetachActivePushBox();   // solta a caixa/barril ativo (para som, estado, velocidade)
-    void ApplyCoupledPushMovement(const Vec2& prevPlayerPos);
-    bool RenderInteractionGlowIfNeeded(GameObject& go);
-    void RegisterAllCandleLights();
-    void ApplyLitCandleIds(const std::vector<int>& litIds, bool extinguishOthers = true);
-    void MarkMissedUniquePickupsOnLevelLeave();
-    void MergeSkippedPickupIds(const std::vector<int>& removed, const std::vector<int>& missed);
-    void TryOpenJournalOnKeyPress();
-    void TryInteractCandleOnKeyPress();
-    void OpenJournalViewer(Jornal* jornal);
-    void UpdateJournalViewer(float dt);
-    Box* FindClosestReachablePushBox() const;
-    ItemPickup* FindClosestReachableItem() const;
-    bool IsPickupStillTracked(ItemPickup* pickup) const;
-    Jornal* FindClosestReachableJornal() const;
-    Candlestick* FindClosestReachableCandle() const;
-    bool IsPlayerNearLitCandle() const;
-    float GetInteractableDistance(const GameObject& obj) const;
-
-    Music music;                                                        // Música de Fundo
-    TileSet* tileSet;                                                   // TileSet atualmente ativo no mapa
-    std::unique_ptr<TileSet> dungeonTileSet;
-    Vec2 mapOrigin{0.0f, 0.0f};
-    float levelWorldW = 0.0f;
-    float levelWorldH = 0.0f;
-    GameObject* bigCharacterObject;                                      // GameObject do personagem grande (IRMÃOZÃO)
-    GameObject* smallCharacterObject;                                    // GameObject do personagem pequeno (IRMÃOZINHO)
-    Character* bigCharacter;                                             // Componente Character do grande (IRMÃOZÃO)
-    Character* smallCharacter;                                           // Componente Character do pequeno (IRMÃOZINHO)
-    GameObject* controlledCharacterObject;                               // GameObject atualmente controlado
-    Character* controlledCharacter;                                      // Character atualmente controlado
-    GameObject* companionCharacterObject;                                // GameObject do parceiro (não controlado)
-    Character* companionCharacter;                                       // Character do parceiro (não controlado)
-    PartyMode partyMode;                                                 // Estado atual da dupla (junto/independente)
-    GameObject* hudLine1 = nullptr;                                      // Linha 1 de instruções (debug)
-    GameObject* hudLine2 = nullptr;                                      // Linha 2 de instruções (debug)
-    GameObject* hudLine3 = nullptr;                                      // Linha 3: atalhos luz / painel (debug)
-    GameObject* hudFps = nullptr;                                        // Linha FPS (monitor, debug)
-    float fpsSmoothed = 60.0f;                                           // FPS suavizado para leitura estável
-    float fpsUiRefreshTimer = 0.0f;                                      // Timer de refresh do texto FPS
-    RadialLightOverlay* radialGeometry;                                  // Vignette procedural (várias formas)
-    LightMaskParams lightMaskParams;
-    LightMaskShape lightMaskShape;
-
-    // ── CAMPO DE VISAO DO PERSONAGEM CONTROLADO ──────────────────────────────
-    // Cone na direcao para onde ele olha + circulo pequeno nos pes. Dentro dele
-    // a camada escura desaparece e a cor volta; fora dele a cena fica em
-    // preto-e-branco (ver ScenePostFx).
-    PlayerVisionParams visionParams;
-    PlayerVisionFrame visionFrame;
-    float visionAxisRad = 0.0f;          // eixo do cone ja suavizado
-    bool visionAxisInitialized = false;
-    std::unique_ptr<ScenePostFx> scenePostFx;
-
-    /// Recalcula `visionFrame` a partir do personagem controlado (roda uma vez
-    /// por frame, no inicio do `Render`).
-    void UpdatePlayerVision(float dt);
-    /// Luzes sinteticas que abrem o buraco do campo de visao na malha de
-    /// escuridao. Nao sao fontes de luz: nao dao sombras nem contam para a
-    /// sanidade.
-    void AppendVisionMaskLights(std::vector<RadialLightOverlay::ScreenLight>& out) const;
-    /// Reduz as luzes REAIS deste frame a circulos de tela dentro do
-    /// `visionFrame`. Tem de correr DEPOIS de `screenLights` estar montado e
-    /// ANTES de desenhar os objetos e o `ScenePostFx`.
-    void BuildVisionLights(const std::vector<RadialLightOverlay::ScreenLight>& screenLights);
-    /// GEOMETRIA do campo de visao neste ponto do ecra: 0 = fora, 1 = no meio
-    /// do cone ou dos pes. Diz para onde o jogador olha, nao o que ele ve.
-    float VisionVisibilityAtScreen(const Vec2& screenPos) const;
-    /// Quanta LUZ REAL chega a este ponto do ecra (0..1), a partir dos circulos
-    /// de `visionFrame`. Nao inclui o cone: o cone e visao, nao e lanterna.
-    /// `includeCarriedLight` a false deixa de fora os circulos dos pes (que
-    /// existem mesmo com a luz apagada) — e o que o monstro usa.
-    float LightAmountAtScreen(const Vec2& screenPos, bool includeCarriedLight = true) const;
-    /// Rampa LINEAR de proximidade ao personagem controlado: 1 colado a ele,
-    /// 0 a `unlitFadeDistancePx`. E o que deixa ver as coisas ao pe sem luz.
-    float ProximityAtScreen(const Vec2& screenPos) const;
-    /// True quando este objeto e interagivel E a sua categoria esta marcada para
-    /// desaparecer fora do campo de visao.
-    bool ShouldHideOutsideVision(GameObject& go) const;
-    /// QUANTO deste objeto o jogador ve neste frame (0 = nada, 1 = por inteiro).
-    /// E a regra completa, num sitio so: a porta geometrica do cone, a luz que
-    /// la chega, a excepcao do monstro. Devolve 1 para tudo o que nao se
-    /// esconde. O sprite E A SOMBRA passam os dois por aqui — uma sombra que
-    /// sobrevive ao objeto que a lanca denuncia o que esta escondido.
-    float VisibilityOfObject(GameObject& go) const;
-
-    // ── TELEMETRIA DE PLAYTEST ───────────────────────────────────────────────
-    // Uma fotografia por segundo (posicoes, sanidade, luz, monstro, FPS) mais a
-    // deteccao de "preso": o jogador manda andar e o personagem nao sai do
-    // sitio. E o que apanha os cantos do mapa onde a colisao prende alguem.
-    void UpdateTelemetry(float dt);
-    /// Estado do monstro neste frame, "" quando nao ha monstro no andar.
-    const char* TelemetryMonsterState(float& outDistToPlayer) const;
-    float telemetrySampleTimer = 0.0f;
-    float telemetryLevelElapsed = 0.0f;      ///< segundos dentro do andar actual
-    float telemetryWalkedPx = 0.0f;          ///< distancia andada no andar
-    float telemetryLitSeconds = 0.0f;        ///< tempo com a luz pessoal acesa
-    Vec2  telemetryLastPos{0.0f, 0.0f};
-    bool  telemetryHasLastPos = false;
-    float telemetryStuckAccum = 0.0f;        ///< tempo a empurrar contra a parede
-    float telemetryStuckCooldown = 0.0f;
-    float telemetryJournalOpenedAt = 0.0f;   ///< `Telemetry::Now()` da abertura
-    /// Sanidade do frame anterior, para apanhar as QUEDAS entre amostras: uma
-    /// morte inteira cabe dentro de um segundo, e a amostra nao a via.
-    float telemetryPrevSanityBig = -1.0f;
-    float telemetryPrevSanitySmall = -1.0f;
-    float telemetryCliffAccum = 0.0f;        ///< queda somada na ultima ~1 s
-    float telemetryCliffCooldown = 0.0f;
-    /// Patamar mais baixo ja anunciado (75/50/25/0), para nao repetir o aviso.
-    int telemetrySanityTier = 0;
-    /// Quieto = nem anda nem interage. E onde o jogador esta perdido.
-    Vec2  telemetryIdleAnchor{0.0f, 0.0f};
-    float telemetryIdleAccum = 0.0f;
-
-    std::unique_ptr<LightTweakPanel> lightTweakPanel;
-    /// `durabilityEnabled` lido de `config/lighting.json` no arranque. Fica
-    /// guardado aqui porque o painel so nasce em `LoadAssets`, muito depois.
-    bool tweakDurabilityOnLoad = true;
-    std::vector<LightInstance> lights;
-    TileMap* tileMapComp = nullptr;
-    /// Quando não há `TileMap`, A* usa esta grade (mundo do estágio ≈ spawn em `LoadAssets`).
-    int navTilePx = 64;
-    int navGridWidthTiles = 0;
-    int navGridHeightTiles = 0;
-    std::unordered_set<int> walkableTileIds{0, 1, 2, 7, 8, 9, 31, 37, 38};
-    std::vector<TopDownShadowEdge> staticShadowEdges;
-    bool staticShadowEdgesBuilt = false;
-    bool renderStaticTileShadows = false;
-    Vec2 smoothedDynamicLightScreenPos{0.0f, 0.0f};
-    bool hasSmoothedDynamicLight = false;
-    int inventoryLightId = -1;
-    Vec2 smoothedTorchLightScreenPos{0.0f, 0.0f};
-    bool hasSmoothedTorchLight = false;
-    bool previewLightLockedToPlayer = false;
-    GameObject* previewLightAnchorPlayer = nullptr;
-    /// Luz de preview que segue o rato ou o jogador (ligada com botão direito). X alterna; luzes fixas no mapa e lanterna continuam.
-    bool cursorPreviewLightEnabled = false;
-    int maxActiveLights = 24;
-    bool lightsEnabled = true;
-    bool shadowsEnabled = true;
-    bool musicMuted = false;
-    
-    SDL_Texture* renderTarget = nullptr;      // Tentar criar o shader olho de peixe
-    SDL_Texture* sceneSnapshot   = nullptr;   // cópia da cena logo depois da escuridão
-    SDL_Texture* occluderScratch = nullptr;   // rascunho para recortar um objeto da cópia
-
-    /// Uma passada do monstro que ainda esta a ecoar no ecra.
-    struct MonsterEcho {
-        Vec2 worldPos;          ///< onde o pe tocou o chao
-        float age = 0.0f;       ///< segundos desde a passada
-        float strength = 1.0f;  ///< 0..1 pela distancia ao jogador
-        bool touched = false;   ///< a frente ja passou por um irmao (revela uma vez)
-    };
-    std::vector<MonsterEcho> monsterEchoes;
-    void UpdateMonsterEchoes(float dt);
-    void RenderMonsterEchoes(SDL_Renderer* renderer) const;
-    /// O monstro deste andar (nullptr quando o andar nao tem nenhum). Procurado
-    /// uma vez e guardado: as ondas perguntam por ele duas vezes por frame.
-    /// A cache e um `weak_ptr` de proposito — um ponteiro cru ficaria pendurado
-    /// no dia em que o objecto do monstro for destruido a meio de um nivel.
-    Monster* FindMonster() const;
-    mutable std::weak_ptr<GameObject> monsterCache;
-
-    /// B: map collision / collider debug + caminho A* ou linha reta do parceiro que segue até o outro (modo dupla junto).
-    bool showMapPhysicsDebug = false;
-
-    /// Última rota planejada para o `companion` alcançar o alvo atrás do líder (só preenchido em `PartyMode::TOGETHER`).
-    std::vector<Vec2> companionFollowPathWorld;
-
-    Inventory inventory;
-    GameObject* hotbarObject = nullptr;
-    GameObject* inventoryWheelObject = nullptr;
-    std::vector<class ItemPickup*> itemPickups;
     std::vector<Jornal*> jornals;
+    Sound jornalInteractSound;                           // som ao interagir com objetos narrativos
 
-    Jornal* reachableJornal = nullptr;
-    Candlestick* reachableCandle = nullptr;
-    Window* reachableWindow = nullptr;
-    Closet* reachableCloset = nullptr;
-    Repairable* reachableRepairable = nullptr;
-    bool repairableInReachNoItem = false;   // no vão da escada sem a tábua (reset por frame)
-    bool journalViewerOpen = false;
-    bool journalViewerClosing = false;
+    // Visualizador de documento.
+    bool  journalViewerOpen = false;
+    bool  journalViewerClosing = false;
     float journalAnimTimer = 0.0f;
     float journalCloseTimer = 0.0f;
     std::string journalViewImagePath;
     SDL_FRect journalSourceScreenRect{0.0f, 0.0f, 0.0f, 0.0f};
     SDL_FRect journalTargetScreenRect{0.0f, 0.0f, 0.0f, 0.0f};
-
-    // ── Zoom do documento (só Jornais marcados "zoomable" no Tiled) ──────────────
-    bool  journalViewZoomable = false;
-    int   journalZoomLevel    = 0;                                      // 0 = normal, 1 = perto, 2 = bem perto
-    float journalZoomCurrent  = 1.0f;                                   // escala mostrada agora (anima até o nível)
-    float journalFocusX       = 0.5f;                                   // ponto do papel que fica no centro (0..1)
-    float journalFocusY       = 0.5f;
+    bool  journalViewZoomable = false;                   // só documentos "zoomable" no Tiled
+    int   journalZoomLevel = 0;                          // 0 normal, 1 perto, 2 bem perto
+    float journalZoomCurrent = 1.0f;
+    float journalFocusX = 0.5f;                          // ponto do papel no centro (0..1)
+    float journalFocusY = 0.5f;
     static constexpr float kJournalZoomLevels[3] = {1.0f, 2.0f, 3.0f};
-    static constexpr float kJournalPanSpeedPx    = 900.0f;              // rolagem, em pixels de tela por segundo
-    static constexpr float kJournalZoomSmoothing = 12.0f;               // maior = chega mais rápido no zoom
-    SDL_FRect GetJournalZoomedRect() const;                             // retângulo do papel com zoom e rolagem
-    void ClampJournalFocus(int winW, int winH);                         // impede rolar para fora do papel
+    static constexpr float kJournalPanSpeedPx    = 900.0f;
+    static constexpr float kJournalZoomSmoothing = 12.0f;
 
-     // ── Pasta de documentos: tela (Tab) ──────────────────────────────────
+    Jornal* FindClosestReachableJornal() const;
+    void TryOpenJournalOnKeyPress();
+    void OpenJournalViewer(Jornal* jornal);
+    void BeginJournalView(const std::string& imagePath, const std::string& soundPath,
+                          float zoomFactor, bool zoomable, const SDL_FRect& sourceRect);
+    void UpdateJournalViewer(float dt);
+    SDL_FRect GetJournalZoomedRect() const;
+    void ClampJournalFocus(int winW, int winH);
+
+    // Pasta (Tab).
     struct FolderFrame {
-        int level    = 0;                                               // andar do documento
-        int order    = 0;                                               // ordem dentro do andar
-        int docIndex = -1;                                              // índice em collectedDocuments; -1 = ainda não encontrado ("?")
+        int level = 0;
+        int order = 0;
+        int docIndex = -1;                               // -1 = ainda não encontrado ("?")
     };
     bool  documentFolderOpen = false;
-    float documentFolderAnim = 0.0f;                                    // 0→1, fade de entrada
-    int   documentFolderSelection = 0;                                  // moldura selecionada
-    float documentFolderScroll = 0.0f;                                  // posição suavizada do carrossel
-    int   documentFolderTotal = 0;                                      // total de documentos do jogo (contador)
+    float documentFolderAnim = 0.0f;                     // 0→1, fade de entrada
+    int   documentFolderSelection = 0;
+    float documentFolderScroll = 0.0f;                   // carrossel suavizado
+    int   documentFolderTotal = 0;                       // total do jogo (contador)
     std::vector<FolderFrame> documentFolderFrames;
-    std::vector<std::pair<int, int>> knownDocumentKeys;                 // (andar, ordem) de cada colecionável até o andar atual
-    int   knownDocumentKeysLevel = -1;                                  // andar em que a varredura foi feita (-1 = nunca)
+    std::vector<std::pair<int, int>> knownDocumentKeys;  // (andar, ordem) dos colecionáveis até aqui
+    int   knownDocumentKeysLevel = -1;                   // andar da última varredura
     static constexpr float kDocumentFolderFadeTime = 0.18f;
     static constexpr float kDocumentFolderScrollSmoothing = 14.0f;
 
@@ -726,79 +599,185 @@ private:
     void RebuildDocumentFolderFrames();
     SDL_FRect GetDocumentFolderCardRect(int index) const;
     void OpenCollectedDocument(CollectedDocument& doc, const SDL_FRect& fromRect);
-    void BeginJournalView(const std::string& imagePath, const std::string& soundPath,
-                          float zoomFactor, bool zoomable, const SDL_FRect& sourceRect);
 
-    ItemPickup* reachablePickup = nullptr;
-    std::unordered_set<int> skippedPickupSpawnIds;
-    std::vector<int> missedUniquePickupIdsAccum;
-    Box* reachablePushBox = nullptr;
-    Box* activePushBox = nullptr;
-    Vec2 pushBoxOffset{0.0f, 0.0f};
-    bool wasPushingLastFrame = false;
+    // ═════════════════════════════════════════════════════════════════════════
+    //  14. Monstro e sanidade
+    // ═════════════════════════════════════════════════════════════════════════
+public:
+    void TriggerMonsterHitFeedback();                    // som + tremor + clarão vermelho (Monster)
+    void SpawnMonsterEcho(const Vec2& worldFootPos, float strength01);   // onda de uma passada (Monster)
+    bool AreAllWindowsOpen() const;                      // monstro dominou o andar
 
-    std::shared_ptr<Mix_Chunk> oceanWavesChunk;
-    StageOceanAmbientController oceanAmbient_;
-    /// Canal das ondas (0 = ambiente dedicado, reservado para não colidir com Mix_PlayChannel(-1) dos SFX).
-    int oceanMixerChannel = -1;
-    float ambientResumeDelay = 0.0f;
-    /// Set true at end of LoadAssets(); LoadingState may call LoadAssets before Start() — Start skips a second load.
-    bool levelContentLoaded = false;
-    LoadMode loadMode = LoadMode::NewGame;
-    bool quitConfirmOpen = false;
-    int quitConfirmSelection = 0;
-    SDL_Rect quitConfirmSaveBtn{0, 0, 0, 0};
-    SDL_Rect quitConfirmCancelBtn{0, 0, 0, 0};
+    float damageFlashTimer = 0.0f;                       // clarão vermelho de dano
+    static constexpr float kDamageFlashDuration = 0.35f;
+    // Morrer com este timer ativo = morte pelo monstro (senão, pela escuridão).
+    float lastMonsterHitTimer = 0.0f;
+    static constexpr float kMonsterHitDeathWindow = 2.0f;
 
-    // Menu de pausa (overlay)
-    bool pauseMenuOpen = false;
-    int pauseMenuSelection = 0;
+    // Overlay de sanidade baixa (rabiscos na tela + aberração cromática).
+    GameObject* sanityOverlayObj = nullptr;
+    int   sanityOverlayFrameIndex = 0;
+    float sanityOverlaySmoothedIntensity = 0.0f;
+    static constexpr int   kSanityOverlayFrameCount = 56;
+    static constexpr float kChromaticAberrationMaxOffsetPx = 14.0f;
+
+private:
+    struct MonsterEcho {                                 // uma passada ainda ecoando na tela
+        Vec2  worldPos;
+        float age = 0.0f;
+        float strength = 1.0f;                           // 0..1 pela distância ao jogador
+        bool  touched = false;                           // a onda já passou por um irmão (revela uma vez)
+    };
+    std::vector<MonsterEcho> monsterEchoes;
+    mutable std::weak_ptr<GameObject> monsterCache;      // weak_ptr: não fica pendurado se o monstro sumir
+    bool windowLockdownActive = false;                   // todas as janelas abertas: velas trancadas
+
+    Monster* FindMonster() const;
+    void UpdateMonsterEchoes(float dt);
+    void RenderMonsterEchoes(SDL_Renderer* renderer) const;
+    void UpdateWindowLockdown(float dt);
+    void UpdateSanityFeedback(float dt);                 // overlay, vertigem, batimento
+    void RenderSanityAberration(SDL_Renderer* renderer);
+    void CheckDefeat();                                  // sanidade zerada / irmão perdido → EndState
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  15. Tutoriais (SaveState.cpp) — um banner por vez; contadores por sessão no .cpp
+    // ═════════════════════════════════════════════════════════════════════════
+public:
+    void RequestTutorial(const std::string& text, bool inventoryHint = false);   // novo entra na fila e o atual sai
+    void UpdateTutorials(float dt);
+    void RenderTutorials(SDL_Renderer* renderer);
+    bool IsInventoryTutorialActive() const { return activeTutTimer > 0.0f && activeTutInventory; }   // a roda mostra as teclas
+
+    std::string activeTutText;
+    float       activeTutTimer = 0.0f;
+    bool        activeTutInventory = false;              // o banner ativo pede as teclas da roda
+    std::string pendingTutText;
+    bool        pendingTutInventory = false;
+    static constexpr float kTutorialDisplayDuration = 8.0f;
+    static constexpr float kTutorialFadeOut = 0.8f;
+    static constexpr int   kMaxTutorialShows = 3;
+
+    // Gatilhos ("armed" = pode disparar de novo).
+    bool  lighterTutArmed = true;
+    bool  swapTutArmed = true;
+    bool  abilityTutArmed = true;
+    bool  swapAfterAbilityPending = false;               // troca enfileirada depois da habilidade
+    bool  repairWarnArmed = true;                        // "preciso de algo para consertar"
+    bool  moveTutDone = false;
+    float noMoveAccum = 0.0f;
+    bool  pickupTutArmed = true;
+    float pickupNearAccum = 0.0f;
+    bool  refuelTutArmed = true;
+    int   prevStackCount = -1;                           // para notar o 1º item novo
+    static constexpr float kSwapTutFarDist  = 660.0f;    // irmãos longe → tutorial de troca
+    static constexpr float kSwapTutNearDist = 340.0f;    // perto de novo → re-arma
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  16. Menus (pausa, configurações, sair)
+    // ═════════════════════════════════════════════════════════════════════════
+public:
+    void RenderQuitConfirmModal(SDL_Renderer* renderer);
+    SDL_Texture* pauseBlurTex = nullptr;                 // cena reduzida para o fundo borrado
+
+private:
+    bool pauseMenuOpen = false;                          // congela o mundo
+    int  pauseMenuSelection = 0;
     static constexpr int kPauseMenuItemCount = 5;        // Continuar / Salvar / Config / Reiniciar / Sair
     SDL_Rect pauseMenuItemRects[kPauseMenuItemCount]{};
-    float saveToastTimer = 0.0f;
+    SettingsMenu settingsMenu;
+    bool quitConfirmOpen = false;
+    int  quitConfirmSelection = 0;
+    SDL_Rect quitConfirmSaveBtn{0, 0, 0, 0};
+    SDL_Rect quitConfirmCancelBtn{0, 0, 0, 0};
+    float saveToastTimer = 0.0f;                         // "Progresso salvo"
     static constexpr float kSaveToastDuration = 2.0f;
 
-    // Painel de configurações (overlay sobre o menu de pausa)
-    bool settingsPanelOpen = false;
-    int settingsSelection = 0;
-    bool settingsDragging = false;                       // arrastando um slider com o mouse
-    static constexpr int kSettingsRowCount = 9;          // Master/Ambiente/Efeitos/Dublagem/Brilho/Video/ReduzirFlashes/Controles/Voltar
-    static constexpr int kSettingsSliderCount = 5;       // as 5 primeiras linhas são sliders
-    SDL_Rect settingsRowRects[kSettingsRowCount]{};
-    SDL_Rect settingsSliderRects[kSettingsSliderCount]{};
+    bool HandleEscapeKey();                              // ESC: cancela combustível ou abre a pausa
+    void HandlePauseMenuInput();
+    void RenderPauseMenu(SDL_Renderer* renderer);
+    bool HandleQuitConfirmInput();
+    void ShowSaveToast() { saveToastTimer = kSaveToastDuration; }
+    void RenderSaveToast(SDL_Renderer* renderer);
+    bool BuildPauseBlurTexture(SDL_Renderer* renderer, int winW, int winH);
+    void DrawSceneBlur(SDL_Renderer* renderer, int winW, int winH, float alpha);
+    void DrawBlurBehindRect(SDL_Renderer* renderer, const SDL_Rect& rect, int winW, int winH);
 
-    // Tela de Controles (remapeamento de teclas — overlay sobre Configurações)
-    bool controlsPanelOpen = false;
-    int controlsSelection = 0;
-    bool awaitingRebind = false;                         // capturando a próxima tecla
-    float rebindInvalidTimer = 0.0f;                    
-    GameAction rebindAction = GameAction::MoveUp;        // ação sendo remapeada
-    static constexpr int kControlsRowCount = InputManager::ActionCount + 2; // ações + Restaurar + Voltar
-    SDL_Rect controlsRowRects[kControlsRowCount]{};
-    int companionStartDelay = 0;
-    int currentLevelIndex = 0;
-    float levelTitleTimer = 0.0f;
-    int levelTitleNumber = 1;
-    bool inventoryInitialized = false;
-    static constexpr float kLevelTitleDuration = 3.0f;
+    // ═════════════════════════════════════════════════════════════════════════
+    //  17. Áudio
+    // ═════════════════════════════════════════════════════════════════════════
+private:
+    Music music;
+    bool  musicMuted = false;
+    std::shared_ptr<Mix_Chunk> oceanWavesChunk;
+    StageOceanAmbientController oceanAmbient_;
+    int   oceanMixerChannel = -1;                        // canal dedicado das ondas
+    float ambientResumeDelay = 0.0f;
 
-    // Tentando arrumar o pathfinding
-    float companionPathRefreshTimer = 0.0f;
-    static constexpr float kCompanionPathRefreshInterval = 0.35f;
-    std::vector<Vec2> cachedCompanionPath;
-    int companionPathIndex = 0;                                          // waypoint atual no caminho em cache (1.1)
-    bool companionHolding = false;                                       // histerese de chegada: seguidor parado no ponto atrás do líder
-    mutable std::vector<GameObject*> dynamicColliderCache;
-    mutable bool dynamicColliderCacheDirty = true;
-    mutable GameObject* monsterNavObstacle = nullptr;   // monstro como obstáculo de nav p/ os irmãos (1.3)
-    void RefreshDynamicColliderCache() const;
+    void UpdateStageMusic(float dt);                     // retoma a trilha se parou sozinha
+    void UpdateOceanAmbient(float dt);
 
-    RadioAsset* reachableRadio = nullptr;
-    RadioAsset* FindClosestReachableRadio() const;
-    void        TryInteractRadioOnKeyPress();
-    
-    //Som que toca quando se interage com objetos narrativos
-    Sound jornalInteractSound;
+    // ═════════════════════════════════════════════════════════════════════════
+    //  18. HUD
+    // ═════════════════════════════════════════════════════════════════════════
+private:
+    FuelFlameHud fuelFlameHud;
+    GameObject* hudLine1 = nullptr;                      // instruções (debug)
+    GameObject* hudLine2 = nullptr;
+    GameObject* hudLine3 = nullptr;
+    GameObject* hudFps = nullptr;                        // FPS (debug)
+    float fpsSmoothed = 60.0f;
+    float fpsUiRefreshTimer = 0.0f;
+
+    void TickOverlayTimers(float dt);                    // timers de tela que descem até zero
+    void UpdateHudInstructions();
+    void UpdateFpsHud(float dt);
+    void RenderLittleBrotherPowerHud(SDL_Renderer* renderer, int winW, int winH);
+    void RenderControlIndicator(SDL_Renderer* renderer);
+    void RenderRepairOverlay(SDL_Renderer* renderer, int winW, int winH);
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  19. Debug (só com Game::debugMode)
+    // ═════════════════════════════════════════════════════════════════════════
+public:
+    bool debugMonsterBlind = false;                      // [I] invisível para o monstro
+    bool debugFreeCam = false;                           // [G] câmera livre no mouse
+    bool IsMonsterBlindDebug() const { return debugMonsterBlind; }
+    bool IsPhysicsDebugOn() const { return showMapPhysicsDebug; }
+
+private:
+    bool showMapPhysicsDebug = false;                    // [B] colisão, colliders, rota do parceiro
+
+    void HandleDebugKeys(InputManager& input);
+    void RenderLightDebugCircles(SDL_Renderer* renderer, const FrameLighting& fl);
+    void RenderDebugStatus(SDL_Renderer* renderer, int winW);
+    void RenderGameplayCollisionDebug(SDL_Renderer* renderer) const;
+    void RenderCompanionFollowPathDebug(SDL_Renderer* renderer) const;
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  20. Telemetria de playtest
+    // ═════════════════════════════════════════════════════════════════════════
+    // Uma amostra por segundo + detecção de "preso", quedas de sanidade e jogador parado.
+private:
+    float telemetrySampleTimer = 0.0f;
+    float telemetryLevelElapsed = 0.0f;                  // segundos no andar
+    float telemetryWalkedPx = 0.0f;
+    float telemetryLitSeconds = 0.0f;
+    Vec2  telemetryLastPos{0.0f, 0.0f};
+    bool  telemetryHasLastPos = false;
+    float telemetryStuckAccum = 0.0f;                    // empurrando contra parede
+    float telemetryStuckCooldown = 0.0f;
+    float telemetryJournalOpenedAt = 0.0f;
+    float telemetryPrevSanityBig = -1.0f;                // para pegar quedas entre amostras
+    float telemetryPrevSanitySmall = -1.0f;
+    float telemetryCliffAccum = 0.0f;
+    float telemetryCliffCooldown = 0.0f;
+    int   telemetrySanityTier = 0;                       // último patamar anunciado (75/50/25/0)
+    Vec2  telemetryIdleAnchor{0.0f, 0.0f};               // parado = nem anda nem interage
+    float telemetryIdleAccum = 0.0f;
+
+    void UpdateTelemetry(float dt);
+    const char* TelemetryMonsterState(float& outDistToPlayer) const;   // "" sem monstro
 };
 
 #endif

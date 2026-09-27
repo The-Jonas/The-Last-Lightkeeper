@@ -1,91 +1,74 @@
+// ─────────────────────────────────────────────────────────────────────────────
+//  StageState — Render do frame e as etapas em que ele se divide.
+//
+//  A cena é desenhada no renderTarget (chão → sombras → objetos → escuridão →
+//  irmãos carimbados), passa pelo ScenePostFx para a tela e, por cima, vêm os
+//  flashes, o HUD, os menus e as ferramentas de debug.
+// ─────────────────────────────────────────────────────────────────────────────
 #include "states/stage/StageState.h"
 #include "states/stage/InternalHelpers.h"
-#include "core/Game.h"
-#include "engine/GameObject.h"
-#include "engine/SpriteRenderer.h"
-#include "math/Rect.h"
-#include "world/TileSet.h"
-#include "world/TileMap.h"
-#include "core/InputManager.h"
-#include "engine/Camera.h"
-#include "engine/Component.h"
-#include "gameplay/Character.h"
-#include "world/Collider.h"
-#include "world/Collision.h"
-#include "core/GameData.h"
-#include "states/EndState.h"
-#include "ui/Text.h"
-#include "lighting/TopDownLightShadows.h"
-#include "lighting/LightShadowProfile.h"
-#include "lighting/ScenePostFx.h"
-#include "gameplay/Item.h"
-#include "gameplay/ItemPickup.h"
-#include "gameplay/HotbarComponent.h"
-#include "gameplay/Box.h"
-#include "gameplay/Monster.h"
-#include "ui/FadeEffect.h"
-#include "gameplay/Repairable.h"
-#include "gameplay/StairTrigger.h"
-#include "core/Resources.h"
 #include "audio/GameSfx.h"
 #include "audio/GameVoice.h"
-#include "gameplay/Window.h"
-#include "gameplay/Jornal.h"
-#include "gameplay/CandleStick.h"
-#include "gameplay/RadioAsset.h"
-#include "gameplay/Closet.h"
-#include <iostream>
-#include <fstream>
+#include "core/Game.h"
+#include "core/Resources.h"
+#include "engine/Camera.h"
+#include "engine/GameObject.h"
+#include "engine/SpriteRenderer.h"
+#include "gameplay/Box.h"
+#include "gameplay/Character.h"
+#include "gameplay/Monster.h"
+#include "gameplay/Repairable.h"
+#include "lighting/LightShadowProfile.h"
+#include "lighting/ScenePostFx.h"
+#include "lighting/TopDownLightShadows.h"
+#include "world/Collider.h"
+#include "world/TileMap.h"
+
+#define INCLUDE_SDL_TTF
+#include "SDL_include.h"
+
 #include <algorithm>
 #include <cmath>
-#include <cstdio>
-#include <cstdint>
-#include <cstdlib>
-#include <ctime>
-#include <array>
-#include <queue>
-#include <limits>
-#include <unordered_map>
+#include <string>
 #include <vector>
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
+using namespace stage_internal;
 
-// Só mexe no ALFA do destino (a cor fica igual): leva o alfa para "cenário"
-// (1.0) onde o sprite tem pixel, apagando a marca de "irmão" que estava embaixo.
-static SDL_BlendMode AlphaOnlyOverBlend() {
+namespace {
+
+constexpr float kPi   = 3.14159265f;
+constexpr int   kHudZ = 100;                         // z a partir do qual o objeto é HUD
+const char*     kUiFont = "Recursos/font/times.ttf";
+
+// Só mexe no ALFA do destino: leva o alfa para "cenário" (1.0) onde o sprite tem
+// pixel, apagando a marca de "irmão" que estava embaixo.
+SDL_BlendMode AlphaOnlyOverBlend() {
     return SDL_ComposeCustomBlendMode(
         SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE,                 SDL_BLENDOPERATION_ADD,
         SDL_BLENDFACTOR_ONE,  SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, SDL_BLENDOPERATION_ADD);
 }
 
-// Mistura que pinta a fonte "por dentro" do alfa do destino:
-// cor = fonte × alfa do destino; o alfa do destino não muda.
-static SDL_BlendMode KeepDstAlphaBlend() {
+// Pinta a fonte "por dentro" do alfa do destino: cor = fonte × alfa do destino.
+SDL_BlendMode KeepDstAlphaBlend() {
     return SDL_ComposeCustomBlendMode(
         SDL_BLENDFACTOR_DST_ALPHA, SDL_BLENDFACTOR_ZERO, SDL_BLENDOPERATION_ADD,
         SDL_BLENDFACTOR_ZERO,      SDL_BLENDFACTOR_ONE,  SDL_BLENDOPERATION_ADD);
 }
 
 // Mistura para cor já multiplicada pelo alfa (o que a KeepDstAlphaBlend produz).
-static SDL_BlendMode PremultipliedBlend() {
+SDL_BlendMode PremultipliedBlend() {
     return SDL_ComposeCustomBlendMode(
         SDL_BLENDFACTOR_ONE, SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, SDL_BLENDOPERATION_ADD,
         SDL_BLENDFACTOR_ONE, SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, SDL_BLENDOPERATION_ADD);
 }
 
-// Garante que a cópia e o rascunho existem e têm o tamanho da cena.
-// Recria se a janela mudou de tamanho. Retorna false se não deu para criar.
-static bool EnsureSceneAux(SDL_Renderer* r, SDL_Texture* scene,
-                           SDL_Texture*& snap, SDL_Texture*& scratch) {
+// Cria (ou recria, se a cena mudou de tamanho) a cópia da cena e o rascunho.
+bool EnsureSceneAux(SDL_Renderer* r, SDL_Texture* scene, SDL_Texture*& snap, SDL_Texture*& scratch) {
     int w = 0, h = 0;
     if (!scene || SDL_QueryTexture(scene, nullptr, nullptr, &w, &h) != 0) return false;
     auto ensure = [&](SDL_Texture*& t) {
         int tw = 0, th = 0;
-        if (t && SDL_QueryTexture(t, nullptr, nullptr, &tw, &th) == 0 && tw == w && th == h) {
-            return true;
-        }
+        if (t && SDL_QueryTexture(t, nullptr, nullptr, &tw, &th) == 0 && tw == w && th == h) return true;
         if (t) SDL_DestroyTexture(t);
         t = SDL_CreateTexture(r, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, w, h);
         return t != nullptr;
@@ -96,28 +79,25 @@ static bool EnsureSceneAux(SDL_Renderer* r, SDL_Texture* scene,
 // Devolve ao sprite os pixels EXATOS que ele tinha logo depois da escuridão
 // (tirados de `snap`), só dentro de `areaIn` e só onde o sprite tem pixel.
 // Respeita o alfa atual do sprite (ex.: pilar apagado pelo FadeEffect).
-static void RestoreSpriteFromSnapshot(SDL_Renderer* r, SDL_Texture* scene, SDL_Texture* snap,
-                                      SDL_Texture* scratch, SpriteRenderer* sprite,
-                                      const SDL_Rect& areaIn) {
+void RestoreSpriteFromSnapshot(SDL_Renderer* r, SDL_Texture* scene, SDL_Texture* snap,
+                               SDL_Texture* scratch, SpriteRenderer* sprite, const SDL_Rect& areaIn) {
     SDL_Texture* tex = sprite->GetTexturePtr();
     if (!tex) return;
 
-    // 0. Recorta a área pelos limites da tela. Se uma parte ficar fora, o
-    //    SDL_RenderCopy recorta só a ORIGEM e estica o que sobrou no destino:
-    //    era isso que esticava e deslocava o pilar e os itens perto da borda.
+    // Recorta pela tela: com parte fora, o SDL_RenderCopy esticava o que sobrava.
     int tw = 0, th = 0;
     SDL_QueryTexture(scene, nullptr, nullptr, &tw, &th);
     const SDL_Rect bounds{0, 0, tw, th};
     SDL_Rect area;
-    if (!SDL_IntersectRect(&areaIn, &bounds, &area)) return;   // totalmente fora da tela
+    if (!SDL_IntersectRect(&areaIn, &bounds, &area)) return;
 
-    // 1. Rascunho: limpa a área para transparente.
+    // 1. Rascunho transparente na área.
     SDL_SetRenderTarget(r, scratch);
     SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
     SDL_SetRenderDrawColor(r, 0, 0, 0, 0);
     SDL_RenderFillRect(r, &area);
 
-    // 2. Desenha o sprite sem mistura: sobra só a silhueta dele (o alfa).
+    // 2. Sprite sem mistura: sobra só a silhueta (o alfa).
     SDL_RenderSetClipRect(r, &area);
     SDL_BlendMode prev = SDL_BLENDMODE_BLEND;
     SDL_GetTextureBlendMode(tex, &prev);
@@ -125,18 +105,18 @@ static void RestoreSpriteFromSnapshot(SDL_Renderer* r, SDL_Texture* scene, SDL_T
     sprite->Render();
     SDL_SetTextureBlendMode(tex, prev);
 
-    // 3. Pinta a cópia da cena por dentro dessa silhueta.
+    // 3. Cópia da cena pintada por dentro da silhueta.
     SDL_SetTextureBlendMode(snap, KeepDstAlphaBlend());
     SDL_RenderCopy(r, snap, &area, &area);
     SDL_RenderSetClipRect(r, nullptr);
 
-    // 4. Cola o recorte de volta na cena.
+    // 4. Recorte colado de volta na cena.
     SDL_SetRenderTarget(r, scene);
     SDL_SetTextureBlendMode(scratch, PremultipliedBlend());
     SDL_RenderCopy(r, scratch, &area, &area);
 
-    // 5. Objeto apagado (FadeEffect, alfa < 255): apaga a marca de "irmão"
-    //    embaixo dele, para o shader desfocá-lo por igual. Só mexe no alfa.
+    // 5. Objeto apagado (alfa < 255): apaga a marca de "irmão" embaixo, para o
+    //    shader desfocá-lo por igual.
     const SDL_Color tint = sprite->GetTint();
     if (tint.a < 255) {
         SDL_RenderSetClipRect(r, &area);
@@ -147,750 +127,643 @@ static void RestoreSpriteFromSnapshot(SDL_Renderer* r, SDL_Texture* scene, SDL_T
         SDL_SetTextureBlendMode(tex, prev);
         SDL_RenderSetClipRect(r, nullptr);
     }
-
     SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
 }
 
-using namespace stage_internal;
-void StageState::Render(){
-    SDL_Renderer* renderer = Game::GetInstance().GetRenderer();
-    int winW = Game::GetInstance().GetWindowsWidth();
-    int winH = Game::GetInstance().GetWindowsHeight();
+// True se uma luz em `screen` com raio `radius` ainda alcança a tela.
+bool LightTouchesScreen(const Vec2& screen, float radius) {
+    Game& g = Game::GetInstance();
+    return screen.x >= -radius && screen.y >= -radius &&
+           screen.x <= g.GetWindowsWidth() + radius && screen.y <= g.GetWindowsHeight() + radius;
+}
 
-    // Já em transição com o quadro congelado: desenha só o efeito zoom-blur.
+// Raio do círculo de debug que mostra até onde uma luz projeta sombra.
+float ShadowDebugRadius(const LightMaskParams& p) {
+    return std::max(24.0f, std::max(8.0f, p.falloffRadiusPx) * std::max(0.4f, p.fatorDicaDeRaio));
+}
+
+// Pé (centro da base da caixa) de um objeto, em coordenadas de tela.
+Vec2 FootOnScreen(const GameObject* go) {
+    const Rect& b = go->box;
+    const float z = Camera::GetZoom();
+    return Vec2((b.x + 0.5f * b.w - Camera::pos.x) * z, (b.y + b.h - Camera::pos.y) * z);
+}
+
+// Contorno de círculo com `segs` segmentos.
+void DrawCircleOutline(SDL_Renderer* r, int cx, int cy, int radius, int segs) {
+    for (int i = 0; i < segs; i++) {
+        const float a0 = (static_cast<float>(i) / segs) * 2.0f * kPi;
+        const float a1 = (static_cast<float>(i + 1) / segs) * 2.0f * kPi;
+        SDL_RenderDrawLine(r, cx + static_cast<int>(std::cos(a0) * radius), cy + static_cast<int>(std::sin(a0) * radius),
+                              cx + static_cast<int>(std::cos(a1) * radius), cy + static_cast<int>(std::sin(a1) * radius));
+    }
+}
+
+// Retângulo cobrindo a tela inteira com a cor e o modo de mistura dados.
+void FillScreen(SDL_Renderer* r, int winW, int winH, SDL_BlendMode mode, Uint8 cr, Uint8 cg, Uint8 cb, Uint8 ca) {
+    SDL_SetRenderDrawBlendMode(r, mode);
+    SDL_SetRenderDrawColor(r, cr, cg, cb, ca);
+    const SDL_Rect full{0, 0, winW, winH};
+    SDL_RenderFillRect(r, &full);
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+    SDL_SetRenderDrawColor(r, 255, 255, 255, 255);
+}
+
+// Desenha um texto de uma linha; devolve a altura (0 se não desenhou).
+int DrawLine(SDL_Renderer* r, TTF_Font* font, const std::string& text, int x, int y, SDL_Color color, int* outW = nullptr) {
+    if (!font) return 0;
+    SDL_Surface* s = TTF_RenderUTF8_Blended(font, text.c_str(), color);
+    if (!s) return 0;
+    const int w = s->w, h = s->h;
+    if (SDL_Texture* t = SDL_CreateTextureFromSurface(r, s)) {
+        const SDL_Rect dst{x, y, w, h};
+        SDL_RenderCopy(r, t, nullptr, &dst);
+        SDL_DestroyTexture(t);
+    }
+    SDL_FreeSurface(s);
+    if (outW) *outW = w;
+    return h;
+}
+
+}  // namespace
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  Render
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Em transição de escada, só o efeito. Senão: cena no renderTarget, pós-processo
+// para a tela e, por cima, flashes, HUD, menus e debug.
+void StageState::Render() {
+    SDL_Renderer* renderer = Game::GetInstance().GetRenderer();
+    const int winW = Game::GetInstance().GetWindowsWidth();
+    const int winH = Game::GetInstance().GetWindowsHeight();
+
     if (sceneTransitionActive && sceneTransitionFrame) {
         RenderSceneTransition(renderer);
         return;
     }
 
-    // Redireciona todos os desenhos a partir de agora para a nossa textura!
+    // ── Cena (no renderTarget) ───────────────────────────────────────────────
     SDL_SetRenderTarget(renderer, renderTarget);
-
-    // 1. PINTA O VAZIO DE PRETO
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
-
-    // 2. DESENHA TODO O CENÁRIO (Parede, Chão)
     level.RenderBackground(renderer);
+    SortObjectsForDrawing();
 
-    // ============================
-    // 3. ORDENAÇÃO Z/Y SORTING
-    // ============================
-    auto compareObjects = [](const std::shared_ptr<GameObject>& a, const std::shared_ptr<GameObject>& b) {
-        
-        // 1. Z-Sort Absoluto
-        if (a->z != b->z) return a->z < b->z;
-
-        // 2. Y-Sort Relativo (Calcula a base real)
-        float base_a = (a->owner != nullptr) ? (a->owner->box.y + a->owner->box.h) : (a->box.y + a->box.h);
-        float base_b = (b->owner != nullptr) ? (b->owner->box.y + b->owner->box.h) : (b->box.y + b->box.h);
-        
-        float sortingY_a = base_a + a->depthOffset;
-        float sortingY_b = base_b + b->depthOffset;
-
-        // =========================================================
-        // A MÁGICA ISOMÉTRICA (ANCORAGEM DE PROFUNDIDADE)
-        // =========================================================
-        Character* charA = a->GetComponent<Character>();
-        Character* charB = b->GetComponent<Character>();
-        
-        bool a_isElevated = (charA && charA->isElevated);
-        bool b_isElevated = (charB && charB->isElevated);
-
-        // Se AMBOS estão na escada, nós ignoramos a âncora falsa. 
-        // Deixamos eles usarem o Y real (base_a e base_b) para que 
-        // quem estiver no degrau de baixo seja desenhado na frente!
-        if (!(a_isElevated && b_isElevated)) {
-            // Caso contrário (seja um personagem contra o cenário, ou um personagem na escada 
-            // e outro no chão), nós forçamos a âncora da escada.
-            if (a_isElevated) sortingY_a = charA->stairAnchorY; 
-            if (b_isElevated) sortingY_b = charB->stairAnchorY;
-        }
-
-        float epsilon = 0.01f; 
-        if (std::abs(sortingY_a - sortingY_b) > epsilon) {
-            return sortingY_a < sortingY_b;
-        }
-        
-        // 3. Fallback
-        return a->sub_z < b->sub_z;
-    };
-    std::sort(objectArray.begin(), objectArray.end(), compareObjects);
-
-    // ===================================================================
-    // 4. LUZES E SOMBRAS VÃO PARA O CHÃO (Antes de desenhar os sprites!)
-    // ===================================================================
-    Game& g = Game::GetInstance();
-    const bool showDebugTools = (lightTweakPanel && lightTweakPanel->visible);
-    if (lightsEnabled) {
-        LightShadowProfile::BeginLightsTiming();
-    }
-
-    const bool playerWantsLightHidden = Character::player && Character::player->hidePersonalLight;
-    const bool lighterFromInventory =
-        inventory.IsActiveLightLighter() && !playerWantsLightHidden;
-    const bool torchIsActuallyLit = inventory.IsUsableLightActive();
-    const bool durabilityOn = lightTweakPanel ? lightTweakPanel->durabilityEnabled : true;
-    const LightMaskParams lighterLightParams =
-        lighterFromInventory && durabilityOn ? inventory.BuildLighterLightParams(lightMaskParams) : lightMaskParams;
-
-    // ── CAMPO DE VISAO DO PERSONAGEM CONTROLADO ──────────────────────────────
-    // Recalcula o cone (direcao suavizada) + o circulo dos pes. Alimenta duas
-    // coisas: o buraco na malha de escuridao e o filtro preto-e-branco final.
-    UpdatePlayerVision(lastFrameDt);
-
-    const bool bigCircleOnlyLight =
-        cursorPreviewLightEnabled && previewLightLockedToPlayer && previewLightAnchorPlayer == bigCharacterObject;
-    const bool smallCircleOnlyLight =
-        cursorPreviewLightEnabled && previewLightLockedToPlayer && previewLightAnchorPlayer == smallCharacterObject;
-    float bigMaxContact = 0.0f;
-    float smallMaxContact = 0.0f;
-    float bigMaxTouch = 0.0f;
-    float smallMaxTouch = 0.0f;
+    if (lightsEnabled) LightShadowProfile::BeginLightsTiming();
+    FrameLighting fl = BuildFrameLighting();
+    UpdatePlayerVision(lastFrameDt);   // cone + círculo dos pés (buraco na escuridão e filtro P&B)
 
     if (lightsEnabled && shadowsEnabled) {
-        Uint64 shadowBlockStart = 0;
-        if (LightShadowProfile::IsActive()) {
-            shadowBlockStart = SDL_GetPerformanceCounter();
-        }
-        struct SpriteShadowCast {
-            Vec2 lightScreen;
-            float touch = 0.0f;
-            float lengthPx = 0.0f;
-            Uint8 alpha = 0;
-            float contact = 0.0f;
-        };
-        std::vector<SpriteShadowCast> bigShadowCasts;
-        std::vector<SpriteShadowCast> smallShadowCasts;
-        bigShadowCasts.reserve(6);
-        smallShadowCasts.reserve(6);
-
-        auto renderShadowsForLight = [&](const Vec2& lightScreen, const LightMaskParams& params) {
-            float touchBig = 0.0f;
-            float touchSmall = 0.0f;
-            IsFootLit(bigCharacterObject, lightScreen, params, &touchBig);
-            IsFootLit(smallCharacterObject, lightScreen, params, &touchSmall);
-            const float distBig = 1.0f - touchBig;
-            const float distSmall = 1.0f - touchSmall;
-
-            float dBigPx = 0.0f, maxBigPx = 1.0f;
-            float dSmallPx = 0.0f, maxSmallPx = 1.0f;
-            if (bigCharacterObject) {
-                const Rect& b = bigCharacterObject->box;
-                const Vec2 foot((b.x + 0.5f * b.w - Camera::pos.x) * Camera::GetZoom(),
-                                (b.y + b.h - Camera::pos.y) * Camera::GetZoom());
-                ComputeShadowDistanceRate(foot, lightScreen, params, &dBigPx, &maxBigPx);
-            }
-            if (smallCharacterObject) {
-                const Rect& b = smallCharacterObject->box;
-                const Vec2 foot((b.x + 0.5f * b.w - Camera::pos.x) * Camera::GetZoom(),
-                                (b.y + b.h - Camera::pos.y) * Camera::GetZoom());
-                ComputeShadowDistanceRate(foot, lightScreen, params, &dSmallPx, &maxSmallPx);
-            }
-
-            const float bigContactRadiusPx = std::max(6.0f, maxBigPx * 0.07f);
-            const float smallContactRadiusPx = std::max(6.0f, maxSmallPx * 0.07f);
-            const float bigContact = (dBigPx <= bigContactRadiusPx) ? Clamp01(1.0f - dBigPx / bigContactRadiusPx) : 0.0f;
-            const float smallContact = (dSmallPx <= smallContactRadiusPx) ? Clamp01(1.0f - dSmallPx / smallContactRadiusPx) : 0.0f;
-            bigMaxContact = std::max(bigMaxContact, bigContact);
-            smallMaxContact = std::max(smallMaxContact, smallContact);
-
-            // ── Iluminação para a SANIDADE ────────────────────────────────
-            // O `touch` acima (medido só no PÉ, com raio de sombra reduzido) é
-            // ótimo para as sombras, mas cruel para a sanidade: o jogador podia
-            // estar visivelmente DENTRO do círculo de luz do castiçal e mesmo
-            // assim tomar dano "no escuro". Aqui medimos de forma generosa e
-            // coerente com o brilho VISÍVEL: pegamos o ponto do CORPO mais perto
-            // da luz (pé ou centro) e um raio casado com o falloff visível,
-            // compensando o zoom da câmera (o `touch` de sombra não compensa e
-            // por isso encolhia a área "iluminada" quando a câmera dava zoom).
-            constexpr float kSanityLitRadiusFrac = 1.25f;
-            auto sanityIllum = [&](GameObject* obj) -> float {
-                if (!obj) return 0.0f;
-                const Rect& bx = obj->box;
-                const float z = Camera::GetZoom();
-                const Vec2 footPt((bx.x + 0.5f * bx.w - Camera::pos.x) * z,
-                                  (bx.y + bx.h - Camera::pos.y) * z);
-                const Vec2 midPt((bx.x + 0.5f * bx.w - Camera::pos.x) * z,
-                                 (bx.y + 0.5f * bx.h - Camera::pos.y) * z);
-                const float d = std::min(footPt.Distance(lightScreen), midPt.Distance(lightScreen));
-                // `falloffRadiusPx` e o raio da luz EM PIXELS DE ECRA (e assim que
-                // a `RadialLightOverlay` o desenha), por isso a compensacao certa
-                // e zoom/zoom-base — que da 1.0 na zoom-base e mantem a bolha da
-                // sanidade casada com o buraco de luz VISIVEL a qualquer zoom.
-                const float zRatio = z / std::max(0.05f, Camera::GetBaseZoom());
-                const float litRadius = std::max(8.0f, params.falloffRadiusPx) * zRatio * kSanityLitRadiusFrac;
-                return Clamp01(1.0f - d / std::max(1.0f, litRadius));
-            };
-
-            // Captura o nível real de luz batendo no sprite (para sombras) e a
-            // iluminação generosa (para a sanidade).
-            bigMaxTouch = std::max(bigMaxTouch, std::max(touchBig, sanityIllum(bigCharacterObject)));
-            smallMaxTouch = std::max(smallMaxTouch, std::max(touchSmall, sanityIllum(smallCharacterObject)));
-
-            // So ha sombra se a luz CHEGAR mesmo ao personagem (ver
-            // `ShadowTouchWeight`). O peso tambem manda na opacidade, por isso
-            // a sombra nasce a desvanecer na borda do alcance em vez de saltar
-            // para o ecra de uma vez.
-            const float weightBig = ShadowTouchWeight(touchBig);
-            if (weightBig > 0.0f) {
-                const float shadowLengthPx = params.shadowMaxLengthPx * distBig;
-                const Uint8 shadowAlpha = static_cast<Uint8>(std::max(0.0f, std::min(255.0f, params.darknessMax * weightBig)));
-                bigShadowCasts.push_back({lightScreen, touchBig, shadowLengthPx, shadowAlpha, bigContact});
-            }
-            const float weightSmall = ShadowTouchWeight(touchSmall);
-            if (weightSmall > 0.0f) {
-                const float shadowLengthPx = params.shadowMaxLengthPx * distSmall;
-                const Uint8 shadowAlpha = static_cast<Uint8>(std::max(0.0f, std::min(255.0f, params.darknessMax * weightSmall)));
-                smallShadowCasts.push_back({lightScreen, touchSmall, shadowLengthPx, shadowAlpha, smallContact});
-            }
-        };
-
-        if (cursorPreviewLightEnabled) {
-            renderShadowsForLight(smoothedDynamicLightScreenPos, lightMaskParams);
-        }
-
-        if (lighterFromInventory && hasSmoothedTorchLight) {
-            renderShadowsForLight(smoothedTorchLightScreenPos, lighterLightParams);
-        }
-
-        if (showDebugTools && cursorPreviewLightEnabled) {
-            const float previewShadowRadius = std::max(24.0f, std::max(8.0f, lightMaskParams.falloffRadiusPx) * std::max(0.4f, lightMaskParams.fatorDicaDeRaio));
-            DrawDebugCircle(g.GetRenderer(), smoothedDynamicLightScreenPos.x, smoothedDynamicLightScreenPos.y, previewShadowRadius, 255, 210, 90, 130);
-            if (lighterFromInventory && hasSmoothedTorchLight) {
-                const float previewShadowRadius = std::max(
-                    24.0f, std::max(8.0f, lighterLightParams.falloffRadiusPx) *
-                               std::max(0.4f, lighterLightParams.fatorDicaDeRaio));
-                DrawDebugCircle(g.GetRenderer(), smoothedTorchLightScreenPos.x, smoothedTorchLightScreenPos.y,
-                                previewShadowRadius * 0.85f, 255, 150, 70, 150);
-            }
-        } else if (showDebugTools && lighterFromInventory && hasSmoothedTorchLight) {
-            const float previewShadowRadius = std::max(
-                24.0f, std::max(8.0f, lighterLightParams.falloffRadiusPx) *
-                           std::max(0.4f, lighterLightParams.fatorDicaDeRaio));
-            DrawDebugCircle(g.GetRenderer(), smoothedTorchLightScreenPos.x, smoothedTorchLightScreenPos.y,
-                            previewShadowRadius * 0.85f, 255, 150, 70, 150);
-        }
-
-        int renderedLights = 0;
-        for (const LightInstance& light : lights) {
-            if (!light.enabled) continue;
-            if (renderedLights >= maxActiveLights) break;
-
-            const Vec2 lightScreen = WorldToScreen(light.worldPos);
-            const float cullRadius = std::max(32.0f, light.params.falloffRadiusPx * 1.6f);
-            if (lightScreen.x < -cullRadius || lightScreen.y < -cullRadius ||
-                lightScreen.x > static_cast<float>(g.GetWindowsWidth()) + cullRadius ||
-                lightScreen.y > static_cast<float>(g.GetWindowsHeight()) + cullRadius) {
-                continue;
-            }
-
-            renderShadowsForLight(lightScreen, light.params);
-            if (showDebugTools) {
-                const float placedShadowRadius = std::max(24.0f, std::max(8.0f, light.params.falloffRadiusPx) * std::max(0.4f, light.params.fatorDicaDeRaio));
-                DrawDebugCircle(g.GetRenderer(), lightScreen.x, lightScreen.y, placedShadowRadius, 120, 220, 255, 95);
-            }
-            renderedLights++;
-        }
-
-        constexpr size_t kMaxSpriteShadowsPerPlayer = 1;
-        std::sort(bigShadowCasts.begin(), bigShadowCasts.end(), [](const SpriteShadowCast& a, const SpriteShadowCast& b) { return a.touch > b.touch; });
-        std::sort(smallShadowCasts.begin(), smallShadowCasts.end(), [](const SpriteShadowCast& a, const SpriteShadowCast& b) { return a.touch > b.touch; });
-        
-        if (bigShadowCasts.size() > kMaxSpriteShadowsPerPlayer) bigShadowCasts.resize(kMaxSpriteShadowsPerPlayer);
-        if (smallShadowCasts.size() > kMaxSpriteShadowsPerPlayer) smallShadowCasts.resize(kMaxSpriteShadowsPerPlayer);
-
-        const bool bigHidden = Character::player && Character::player->hidePersonalLight;
-        const bool smallHidden = Character::littleBrother && Character::littleBrother->hidePersonalLight;
-        
-        for (const SpriteShadowCast& c : bigShadowCasts) {
-            if (!bigCircleOnlyLight && c.contact < 0.50f && !bigHidden) {
-                RenderProjectedSpriteShadow(bigCharacterObject, c.lightScreen, c.touch, c.lengthPx, c.alpha, lightMaskParams);
-            }
-        }
-        for (const SpriteShadowCast& c : smallShadowCasts) {
-            if (!smallCircleOnlyLight && c.contact < 0.50f && !smallHidden) {
-                RenderProjectedSpriteShadow(smallCharacterObject, c.lightScreen, c.touch, c.lengthPx, c.alpha, lightMaskParams);
-            }
-        }
-        
-        UpdateControlledCharacterVisuals(); // Restaura as cores originais pós-sombra
-
-        if (showDebugTools) {
-            DrawPlayerShadowTouchDebug(g.GetRenderer(), bigCharacterObject, 255, 120, 120);
-            DrawPlayerShadowTouchDebug(g.GetRenderer(), smallCharacterObject, 130, 220, 255);
-        }
-
-        if (cursorPreviewLightEnabled && previewLightLockedToPlayer && previewLightAnchorPlayer) {
-            if (bigCharacterObject && previewLightAnchorPlayer == bigCharacterObject) {
-                bigMaxContact = std::max(bigMaxContact, 0.92f);
-            }
-            if (smallCharacterObject && previewLightAnchorPlayer == smallCharacterObject) {
-                smallMaxContact = std::max(smallMaxContact, 0.92f);
-            }
-        }
-
-        if (torchIsActuallyLit && bigCharacterObject) {
-            bigMaxContact = std::max(bigMaxContact, 0.92f);
-        }
-        if (torchIsActuallyLit && smallCharacterObject) {
-            smallMaxContact = std::max(smallMaxContact, 0.92f);
-        }
-        
-
-    if (bigCharacterObject && bigMaxContact > 0.0f && !bigHidden) {
-        DrawContactFootShadow(g.GetRenderer(), bigCharacterObject->box, bigMaxContact);
-    }
-    if (smallCharacterObject && smallMaxContact > 0.0f && !smallHidden) {
-        DrawContactFootShadow(g.GetRenderer(), smallCharacterObject->box, smallMaxContact);
-    }
-        if (LightShadowProfile::IsActive()) {
-            const Uint64 shadowBlockEnd = SDL_GetPerformanceCounter();
-            const double ms = static_cast<double>(shadowBlockEnd - shadowBlockStart) * 1000.0 /
-                              static_cast<double>(SDL_GetPerformanceFrequency());
-            LightShadowProfile::SetSpriteShadowBlockMs(ms);
-        }
+        RenderCharacterShadows(renderer, fl);
     }
 
-    // ===================================================================
-    // 4.5 PRÉ-CALCULA AS LUZES DA TELA E CARIMBA SOMBRAS DOS OBJETOS
-    // ===================================================================
     std::vector<RadialLightOverlay::ScreenLight> screenLights;
-
-    if (lightsEnabled && radialGeometry != nullptr) {
-        screenLights.reserve(static_cast<size_t>(maxActiveLights + 2));
-        constexpr float kCursorLightBlend = 0.28f;
-        constexpr float kTorchLightBlend = 0.28f;
-
-        if (cursorPreviewLightEnabled) {
-            screenLights.push_back({smoothedDynamicLightScreenPos.x, smoothedDynamicLightScreenPos.y, lightMaskShape,
-                                    lightMaskParams, kCursorLightBlend});
-        }
-        if (lighterFromInventory && hasSmoothedTorchLight) {
-            screenLights.push_back({smoothedTorchLightScreenPos.x, smoothedTorchLightScreenPos.y, lightMaskShape,
-                                    lighterLightParams, kTorchLightBlend});
-        }
-        
-        int renderedLights = 0;
-        for (LightInstance& light : lights) {
-            if (!light.enabled) continue;
-            if (renderedLights >= maxActiveLights) break;
-
-            const Vec2 lightScreen = WorldToScreen(light.worldPos);
-            const float cullRadius = std::max(32.0f, light.params.falloffRadiusPx * 1.4f);
-            if (lightScreen.x < -cullRadius || lightScreen.y < -cullRadius ||
-                lightScreen.x > static_cast<float>(g.GetWindowsWidth()) + cullRadius ||
-                lightScreen.y > static_cast<float>(g.GetWindowsHeight()) + cullRadius) {
-                continue;
-            }
-            screenLights.push_back({lightScreen.x, lightScreen.y, light.shape, light.params, light.animationSeed});
-            renderedLights++;
-        }
-        // Reduz as luzes deste frame a circulos de tela. Tem de ser AQUI: as
-        // sombras logo abaixo ja perguntam "chega luz a este ponto?", e com a
-        // conta feita depois delas responderiam com os dados do frame anterior.
-        // `screenLights` esta completo (as luzes da mascara do campo de visao
-        // vao para uma COPIA, mais abaixo, e nunca entram nesta lista).
+    if (lightsEnabled && radialGeometry) {
+        screenLights = CollectScreenLights(fl);
+        // Aqui, antes das sombras: elas já perguntam "chega luz a este ponto?".
         BuildVisionLights(screenLights);
-
-        for (GameObject* obj : testShadowObjects) {
-            if (!obj) continue;
-            if (obj == bigCharacterObject || obj == smallCharacterObject) continue;
-            // Uma sombra e uma pista tao boa como o proprio objeto: se o barril
-            // esta escondido fora do campo de visao, a sombra dele nao pode
-            // ficar no chao a denuncia-lo. Mesma conta do sprite, por isso as
-            // duas coisas aparecem e desaparecem juntas, com a mesma suavidade.
-            const float objVisibility = VisibilityOfObject(*obj);
-            if (objVisibility <= 0.01f) continue;
-
-            Vec2 bestLightScreen;
-            float bestTouch = 0.0f;
-            float bestLengthPx = 0.0f;
-            Uint8 bestAlpha = 0;
-
-            for (const auto& sl : screenLights) {
-                Vec2 lightScreen(sl.x, sl.y);
-                float touch = 0.0f;
-                IsFootLit(obj, lightScreen, sl.params, &touch);
-                // Mesma regra dos irmaos: a luz tem de chegar ao objecto. Uma
-                // vela do outro lado da sala deixava sombra sem iluminar nada.
-                const float weight = ShadowTouchWeight(touch);
-                if (weight > 0.0f && touch > bestTouch) {
-                    bestTouch = touch;
-                    bestLightScreen = lightScreen;
-                    const float distance01 = Clamp01(1.0f - touch);
-                    bestLengthPx = sl.params.shadowMaxLengthPx * distance01;
-                    bestAlpha = static_cast<Uint8>(std::max(0.0f, std::min(255.0f, sl.params.darknessMax * weight)));
-                }
-            }
-
-            if (bestTouch > 0.0f) {
-                const Uint8 fadedAlpha = static_cast<Uint8>(bestAlpha * objVisibility);
-                RenderSingleLightSpriteShadow(obj, bestLightScreen, bestTouch, bestLengthPx, fadedAlpha, lastFrameDt);
-            }
-        }
+        RenderObjectShadows(screenLights);
     }
 
-    // A ORDEM POR QUE A CENA FOI DESENHADA. O acto 6.9 precisa dela para saber
-    // quem ficou A FRENTE de quem: redesenhar um irmao por cima da escuridao e
-    // redesenha-lo por cima de TUDO, e sem esta lista nao havia como voltar a
-    // tapa-lo com o barril que o Y-sort tinha posto a frente dele.
-    struct DrawnSprite {
-        GameObject* obj;
-        SpriteRenderer* sprite;
-        bool stamped;
-        float shown;
-        float light;
-        bool glow;
-    };  
-    std::vector<DrawnSprite> drawOrder;
-    drawOrder.reserve(objectArray.size());
+    const bool stampPassWillRun = scenePostFx && scenePostFx->IsAvailable() &&
+                                  ScenePostFx::NoGrayStampBlendMode() != SDL_BLENDMODE_INVALID;
+    const std::vector<DrawnSprite> drawOrder = RenderWorldObjects(stampPassWillRun);
 
-    const bool stampPassWillRun =
-        scenePostFx && scenePostFx->IsAvailable() &&
-        ScenePostFx::NoGrayStampBlendMode() != SDL_BLENDMODE_INVALID;
-
-    // ===================================================================
-    // 5. AGORA DESENHAMOS A LISTA ORDENADA INTEIRA SEM REGRAS
-    // ===================================================================
-    constexpr int kHudZ = 100;
-    GameObject* interactionFocus = GetInteractionFocus();
-
-    for (const auto& go : objectArray) {
-        if (go->z >= kHudZ) {
-            continue;
-        }
-
-        // ── OBJETOS INTERAGIVEIS ─────────────────────────────────────────────
-        // Olhar para um sitio as escuras nao chega: o objeto so aparece se
-        // houver LUZ ali ou se o personagem estiver mesmo ao pe dele. Longe e
-        // sem luz, a opacidade cai de forma LINEAR com a distancia, em vez de
-        // desaparecer de repente. A interaccao NAO muda — o objeto continua a
-        // poder ser usado se o jogador chegar la.
-        SpriteRenderer* fadeSprite = nullptr;
-        bool stampedThis = false;
-        float stampShown = 1.0f;
-        float stampLight = 1.0f;
-        if (visionFrame.valid && ShouldHideOutsideVision(*go)) {
-            const float shown = (go.get() == interactionFocus) ? 1.0f : VisibilityOfObject(*go);
-            if (shown <= 0.01f) {
-                continue;
-            }
-            if (shown < 0.999f) {
-                fadeSprite = go->GetComponent<SpriteRenderer>();
-                if (fadeSprite) {
-                    fadeSprite->SetTint(255, 255, 255, static_cast<Uint8>(shown * 255.0f));
-                }
-            }
-            if (go->GetComponent<SpriteRenderer>()) {
-                stampShown  = shown;
-                stampLight  = Clamp01(LightAmountAtScreen(WorldToScreen(go->box.Center())));
-                stampedThis = true;
-            }
-        }
-        // Escondido no armário não é carimbado: o redesenho do 6.9 desenharia com alfa
-        // cheio e devolveria a tinta a 255, desfazendo a invisibilidade do EnterCloset.
-        Character* ch = go->GetComponent<Character>();
-        const bool hiddenInCloset = ch && ch->isHidden;
-        if ((go.get() == bigCharacterObject || go.get() == smallCharacterObject) &&
-            visionFrame.valid && !hiddenInCloset) {
-            if (go->GetComponent<SpriteRenderer>()) {
-                stampShown  = 1.0f;
-                stampLight  = 1.0f;
-                stampedThis = true;
-            }
-        }
-
-        SpriteRenderer* hideSprite =
-            (stampedThis && stampPassWillRun) ? go->GetComponent<SpriteRenderer>() : nullptr;
-        SDL_Color hiddenPrev{255, 255, 255, 255};
-        if (hideSprite) {
-            hiddenPrev = hideSprite->GetTint();
-            hideSprite->SetTint(hiddenPrev.r, hiddenPrev.g, hiddenPrev.b, 0);
-        }
-
-        const bool glowThis = RenderInteractionGlowIfNeeded(*go);
-        go->Render();
-
-        if (hideSprite) {
-            hideSprite->SetTint(hiddenPrev.r, hiddenPrev.g, hiddenPrev.b, hiddenPrev.a);
-        }
-
-        if (SpriteRenderer* sr = go->GetComponent<SpriteRenderer>()) {
-            drawOrder.push_back({go.get(), sr, stampedThis, stampShown, stampLight, glowThis});
-        }
-
-        if (fadeSprite) {
-            fadeSprite->SetTint(255, 255, 255, 255);
-        }
+    if (lightsEnabled && radialGeometry) {
+        RenderDarknessAndWallShadows(renderer, screenLights);
+        UpdateIlluminationLevels(fl);
     }
-
-    // ===================================================================
-    // 6. MÁSCARA DE ESCURIDÃO GERAL E SOMBRAS DE PAREDE
-    // ===================================================================
-
-    if (lightsEnabled && radialGeometry != nullptr) {
-    
-        LightOcclusionContext occCtx;
-        if (tileMapComp && tileSet) {
-            occCtx.solidGrid = &tileMapComp->GetLightOcclusionSolid();
-            occCtx.mapWidth = tileMapComp->GetWidth();
-            occCtx.mapHeight = tileMapComp->GetHeight();
-            occCtx.tileWidth = static_cast<float>(tileSet->GetTileWidth());
-            occCtx.tileHeight = static_cast<float>(tileSet->GetTileHeight());
-            occCtx.mapOriginX = mapOrigin.x;
-            occCtx.mapOriginY = mapOrigin.y;
-            occCtx.cameraX = Camera::pos.x;
-            occCtx.cameraY = Camera::pos.y;
-            occCtx.zoom = Camera::GetZoom();
-        }
-        // Joga a escuridão por cima de tudo (chão + sombras + sprites) respeitando os raios de luz.
-        // O campo de visao entra aqui como duas luzes SINTETICAS (cone + circulo dos pes): elas
-        // so abrem o buraco na escuridao — nao entram na lista `screenLights`, logo nao projetam
-        // sombras de sprite nem contam para a sanidade.
-        std::vector<RadialLightOverlay::ScreenLight> maskLights = screenLights;
-        AppendVisionMaskLights(maskLights);
-        radialGeometry->RenderMany(g.GetRenderer(), g.GetWindowsWidth(), g.GetWindowsHeight(), maskLights, occCtx);
-
-
-        if (shadowsEnabled && staticShadowEdgesBuilt && !staticShadowEdges.empty()) {
-            const std::vector<TopDownShadowEdge> noDynamic;
-            const int maxShadowVolumes = shadowsEnabled ? 8 : 0;
-            for (int si = 0; si < static_cast<int>(screenLights.size()) && si < maxShadowVolumes; si++) {
-                const RadialLightOverlay::ScreenLight& sl = screenLights[si];
-
-                if (occCtx.IsEnabled()) {
-                    const float lxWorld = sl.x / occCtx.zoom + occCtx.cameraX;
-                    const float lyWorld = sl.y / occCtx.zoom + occCtx.cameraY;
-                    const int ltx = static_cast<int>((lxWorld - occCtx.mapOriginX) / occCtx.tileWidth);
-                    const int lty = static_cast<int>((lyWorld - occCtx.mapOriginY) / occCtx.tileHeight);
-                    if (ltx >= 0 && ltx < occCtx.mapWidth && lty >= 0 && lty < occCtx.mapHeight) {
-                        if ((*occCtx.solidGrid)[static_cast<size_t>(ltx + lty * occCtx.mapWidth)] != 0) {
-                            continue;
-                        }
-                    }
-                }
-
-                TopDownLightShadows::RenderShadowVolumes(
-                    g.GetRenderer(), sl.x, sl.y,
-                    g.GetWindowsWidth(), g.GetWindowsHeight(),
-                    staticShadowEdges, noDynamic,
-                    90, sl.params.shadowMaxLengthPx,
-                    sl.params.shadowSoftLayers, sl.params.shadowSoftness);
-            }
-        }
-
-        bigLightContact = bigMaxContact;
-        smallLightContact = smallMaxContact;
-
-        // Salva a iluminação real para o sistema de Sanidade ler!
-        const float thunderBoost = GameSfx::GetThunderFlashStrength() * 0.88f;
-
-        // ── SANIDADE INDEPENDENTE ────────────────────────────────────────────
-        // A luz de mão (isqueiro/lâmpada) fica com o irmão GRANDE (ver
-        // GetActiveTorchWorldPos). Ela ilumina por completo só o PORTADOR; o
-        // outro irmão só recebe a luz se estiver perto o bastante. Assim um pode
-        // ficar no escuro (drenando sanidade) enquanto o outro está seguro.
-        this->bigIlluminationLevel   = bigMaxTouch;
-        this->smallIlluminationLevel = smallMaxTouch;
-        if (torchIsActuallyLit && bigCharacterObject) {
-            this->bigIlluminationLevel = std::max(bigMaxTouch, 0.92f);  // portador sempre iluminado
-            if (smallCharacterObject) {
-                const float shareRadius = std::max(1.0f, lightMaskParams.falloffRadiusPx);
-                const float dist = smallCharacterObject->box.Center().Distance(bigCharacterObject->box.Center());
-                const float falloff = std::clamp(1.0f - dist / shareRadius, 0.0f, 1.0f);
-                this->smallIlluminationLevel = std::max(smallMaxTouch, 0.92f * falloff);
-            }
-        }
-
-        if (thunderBoost > 0.01f) {
-            this->bigIlluminationLevel = std::max(this->bigIlluminationLevel, thunderBoost);
-            this->smallIlluminationLevel = std::max(this->smallIlluminationLevel, thunderBoost);
-        }
+    if (lightsEnabled) LightShadowProfile::EndLightsFrame();
+    if (lightsEnabled && shadowsEnabled && fl.showDebugTools) {
+        RenderLightDebugCircles(renderer, fl);
     }
-
-    if (lightsEnabled) {
-        LightShadowProfile::EndLightsFrame();
-    }
-
-    if (lightsEnabled && shadowsEnabled && showDebugTools) {
-        if (cursorPreviewLightEnabled) {
-            const float previewShadowRadius = std::max(24.0f, std::max(8.0f, lightMaskParams.falloffRadiusPx) * std::max(0.4f, lightMaskParams.fatorDicaDeRaio));
-            DrawDebugCircle(g.GetRenderer(), smoothedDynamicLightScreenPos.x, smoothedDynamicLightScreenPos.y, previewShadowRadius, 255, 210, 90, 130);
-        }
-
-        int renderedLights = 0;
-        for (const LightInstance& light : lights) {
-            if (!light.enabled) continue;
-            if (renderedLights >= maxActiveLights) break;
-            const Vec2 lightScreen = WorldToScreen(light.worldPos);
-            const float cullRadius = std::max(32.0f, light.params.falloffRadiusPx * 1.6f);
-            if (lightScreen.x < -cullRadius || lightScreen.y < -cullRadius ||
-                lightScreen.x > static_cast<float>(g.GetWindowsWidth()) + cullRadius ||
-                lightScreen.y > static_cast<float>(g.GetWindowsHeight()) + cullRadius) {
-                continue;
-            }
-            const float placedShadowRadius = std::max(24.0f, std::max(8.0f, light.params.falloffRadiusPx) * std::max(0.4f, light.params.fatorDicaDeRaio));
-            DrawDebugCircle(g.GetRenderer(), lightScreen.x, lightScreen.y, placedShadowRadius, 120, 220, 255, 95);
-            renderedLights++;
-        }
-    }
-
-    // ===================================================================
-    // 6.9 OS IRMAOS: NUNCA ESCUROS, CINZENTOS SEM LUZ, A CORES NA LUZ
-    // ===================================================================
-    // Eles deixaram de ter luz propria (ver `UpdatePlayerVision`), por isso a
-    // malha de escuridao acabou de os pintar de preto como a tudo o resto.
-    // Aqui desfazemos isso em dois passos:
-    //
-    //   1. REDESENHAR o sprite por cima da malha. Volta a ficar com o brilho
-    //      cheio, aconteca o que acontecer a luz da sala — nunca escurece.
-    //      Isto passa por cima de TUDO, inclusive do cenario que estava a
-    //      frente deles; o passo 3 volta a por esse cenario no lugar.
-    //
-    //   2. CARIMBAR a silhueta no canal ALFA, com um valor que E a luz que os
-    //      apanha. O shader le esse alfa: mantem-nos sempre nitidos e devolve
-    //      a COR na medida da luz — sem luz ficam cinzentos como o mapa,
-    //      dentro de uma luz ficam a cores por inteiro.
-    //
-    // A luz e medida so nas fontes REAIS da cena (velas, isqueiro, lamparina):
-    // `includeCarriedLight = false`, senao contariam o circulo que acabamos de
-    // lhes tirar.
     if (stampPassWillRun) {
-        const SDL_BlendMode stampBlend = ScenePostFx::NoGrayStampBlendMode();
-        {
-            const float zoom = Camera::GetZoom();
-            const float ambient = Clamp01(1.0f - lightMaskParams.ambientDarknessMax / 255.0f);
-
-            // Retângulo na tela ocupado pela caixa de um objeto.
-            auto screenRectOf = [&](const GameObject* o) {
-                const Vec2 tl = WorldToScreen(Vec2(o->box.x, o->box.y));
-                return SDL_Rect{ static_cast<int>(std::floor(tl.x)),
-                                static_cast<int>(std::floor(tl.y)),
-                                static_cast<int>(std::ceil(o->box.w * zoom)) + 1,
-                                static_cast<int>(std::ceil(o->box.h * zoom)) + 1 };
-            };
-
-            // Aumenta um retângulo em `frac` de cada lado (borda do contorno).
-            auto grown = [](SDL_Rect r, float frac) {
-                const int dx = static_cast<int>(std::ceil(r.w * frac));
-                const int dy = static_cast<int>(std::ceil(r.h * frac));
-                return SDL_Rect{ r.x - dx, r.y - dy, r.w + dx * 2, r.h + dy * 2 };
-            };
-
-            // Cópia da cena como ela está AGORA: tudo na ordem certa, já com a
-            // escuridão exata. É de onde a repintura tira os pixels verdadeiros.
-            const bool canRestore = EnsureSceneAux(renderer, renderTarget, sceneSnapshot, occluderScratch);
-            if (canRestore) {
-                int sw = 0, sh = 0;
-                SDL_QueryTexture(renderTarget, nullptr, nullptr, &sw, &sh);
-                const SDL_Rect full{0, 0, sw, sh};
-
-                SDL_SetRenderTarget(renderer, sceneSnapshot);
-                SDL_SetTextureBlendMode(renderTarget, SDL_BLENDMODE_NONE);
-                SDL_RenderCopy(renderer, renderTarget, &full, &full);
-                SDL_SetRenderTarget(renderer, renderTarget);
-            }
-
-            // Põe um objeto não carimbado de volta por cima, só dentro de `area`.
-            // Com a cópia: pixels exatos, sem emenda. Sem ela: a tinta aproximada antiga.
-            auto repaintOccluder = [&](const DrawnSprite& d, const SDL_Rect& area) {
-                if (canRestore) {
-                    RestoreSpriteFromSnapshot(renderer, renderTarget, sceneSnapshot,
-                                            occluderScratch, d.sprite, area);
-                    return;
-                }
-                const SDL_Color prevTint = d.sprite->GetTint();
-                const float light = Clamp01(LightAmountAtScreen(WorldToScreen(d.obj->box.Center())));
-                const Uint8 v = static_cast<Uint8>(255.0f * Clamp01(ambient + (1.0f - ambient) * light));
-                SDL_RenderSetClipRect(renderer, &area);
-                d.sprite->SetTint(v, v, v, prevTint.a);
-                d.sprite->Render();
-                d.sprite->SetTint(prevTint.r, prevTint.g, prevTint.b, prevTint.a);
-                SDL_RenderSetClipRect(renderer, nullptr);
-            };
-
-            // Áreas onde um carimbado já foi redesenhado por cima da escuridão.
-            std::vector<SDL_Rect> dirty;
-            dirty.reserve(8);
-
-            // UM laço, na ordem do Y-sort: quem vem depois fica sempre por cima.
-            for (const DrawnSprite& d : drawOrder) {
-                if (!d.sprite || !d.obj) continue;
-
-                if (d.stamped) {
-                    // (0) Contorno de interação, por cima da escuridão.
-                    if (d.glow) {
-                        RenderInteractionGlowIfNeeded(*d.obj);
-                    }
-
-                    // (a) Brilho cheio por cima da escuridão.
-                    d.sprite->SetTint(255, 255, 255, static_cast<Uint8>(d.shown * 255.0f));
-                    d.sprite->Render();
-                    d.sprite->SetTint(255, 255, 255, 255);
-
-                    // (b) Carimbo no alfa com a luz, para o shader.
-                    if (SDL_Texture* tex = d.sprite->GetTexturePtr()) {
-                        const Uint8 stampAlpha = static_cast<Uint8>(1.0f + 254.0f * Clamp01(d.light));
-                        SDL_BlendMode prev = SDL_BLENDMODE_BLEND;
-                        SDL_GetTextureBlendMode(tex, &prev);
-                        if (SDL_SetTextureBlendMode(tex, stampBlend) == 0) {
-                            d.sprite->SetTint(255, 255, 255, stampAlpha);
-                            d.sprite->Render();
-                            d.sprite->SetTint(255, 255, 255, 255);
-                        }
-                        SDL_SetTextureBlendMode(tex, prev);
-                    }
-
-                    const SDL_Rect r = screenRectOf(d.obj);
-                    dirty.push_back(d.glow ? grown(r, 0.10f) : r);
-                    continue;
-                }
-
-                // Não carimbado com contorno (barril, castiçal...): contorno por cima da
-                // escuridão e o sprite devolvido com as cores exatas por cima dele.
-                if (d.glow) {
-                    RenderInteractionGlowIfNeeded(*d.obj);
-                    repaintOccluder(d, screenRectOf(d.obj));
-                    dirty.push_back(grown(screenRectOf(d.obj), 0.10f));
-                    continue;
-                }
-
-                // Não carimbado: só repinta se estiver na FRENTE de uma área redesenhada.
-                // Objetos com FadeEffect entram também: voltam com o alfa que já têm.
-                if (dirty.empty()) continue;
-                if (d.sprite->GetTint().a == 0) continue;   // escondido de propósito (irmão no armário)
-
-                const SDL_Rect mine = screenRectOf(d.obj);
-                SDL_Rect cover{0, 0, 0, 0};
-                bool covers = false;
-                for (const SDL_Rect& r : dirty) {
-                    SDL_Rect inter;
-                    if (!SDL_IntersectRect(&mine, &r, &inter)) continue;
-                    if (!covers) { cover = inter; covers = true; }
-                    else         { SDL_UnionRect(&cover, &inter, &cover); }
-                }
-                if (!covers) continue;
-
-                repaintOccluder(d, cover);
-            }
-        }
+        RenderStampedSprites(renderer, drawOrder);
     }
 
-    // Devolve o controle para o Monitor real!
+    // ── Tela ─────────────────────────────────────────────────────────────────
     SDL_SetRenderTarget(renderer, nullptr);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
+    const bool postFxDrew = PresentScene(renderer, winW, winH);
 
-    // ===================================================================
-    // 6.5 FILTRO PRETO-E-BRANCO FORA DO CAMPO DE VISAO
-    // ===================================================================
-    // A copia normal vai SEMPRE primeiro: alem de deixar o viewport do SDL
-    // montado (necessario para o quad do shader acertar o letterbox do
-    // SDL_RenderSetLogicalSize), garante imagem na tela caso o pos-processamento
-    // nao esteja disponivel neste driver.
-    // BLENDMODE_NONE e obrigatorio: o carimbo acima poe alfa zero nos irmaos e
-    // uma copia com mistura fa-los-ia desaparecer.
+    RenderMonsterEchoes(renderer);   // depois do pós-processo: fora do cone é onde eles servem
+    if (!postFxDrew) RenderBrightnessFallback(renderer, winW, winH);
+    RenderScreenFlashes(renderer, winW, winH);
+    RenderSanityAberration(renderer);
+
+    if (showMapPhysicsDebug) {
+        level.RenderCollisionOverlay(renderer);
+        RenderGameplayCollisionDebug(renderer);
+        RenderCompanionFollowPathDebug(renderer);
+    }
+    if (lightTweakPanel && lightTweakPanel->visible) {
+        lightTweakPanel->Render(renderer, winW, winH);
+    }
+
+    // ── HUD ──────────────────────────────────────────────────────────────────
+    for (const auto& go : objectArray) {
+        if (go->z >= kHudZ) go->Render();
+    }
+    RenderLittleBrotherPowerHud(renderer, winW, winH);
+    RenderControlIndicator(renderer);
+    RenderRepairOverlay(renderer, winW, winH);
+
+    fuelFlameHud.Render(renderer, inventory, winW, winH);   // HUD de jogo fica por baixo dos menus
+    RenderInteractionPrompt(renderer);
+    RenderTutorials(renderer);
+    RenderVoiceSubtitle(renderer);
+    RenderLevelTitleBanner(renderer);
+
+    // ── Overlays ─────────────────────────────────────────────────────────────
+    RenderPauseMenu(renderer);
+    settingsMenu.Render(renderer);
+    RenderQuitConfirmModal(renderer);
+    RenderDocumentFolder(renderer);
+    RenderJournalViewer(renderer);
+    RenderSaveToast(renderer);
+    dialogueBox.Render(renderer, winW, winH);
+
+    if (Game::debugMode) RenderDebugStatus(renderer, winW);
+
+    // Transição que acabou de começar: congela este quadro já composto.
+    if (sceneTransitionActive && !sceneTransitionFrame) {
+        CaptureSceneFrame(renderer);
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  Cena: ordem, luzes e sombras
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Ordena por z; no mesmo z, pela base (Y) com depthOffset; irmão na escada usa a
+// âncora da escada (a menos que os dois estejam nela); empate → sub_z.
+void StageState::SortObjectsForDrawing() {
+    auto baseY = [](const std::shared_ptr<GameObject>& o) {
+        const GameObject* ref = o->owner ? o->owner : o.get();
+        return ref->box.y + ref->box.h + o->depthOffset;
+    };
+    std::sort(objectArray.begin(), objectArray.end(),
+              [&](const std::shared_ptr<GameObject>& a, const std::shared_ptr<GameObject>& b) {
+        if (a->z != b->z) return a->z < b->z;
+
+        float ya = baseY(a), yb = baseY(b);
+        Character* ca = a->GetComponent<Character>();
+        Character* cb = b->GetComponent<Character>();
+        const bool aUp = ca && ca->isElevated;
+        const bool bUp = cb && cb->isElevated;
+        if (!(aUp && bUp)) {
+            if (aUp) ya = ca->stairAnchorY;
+            if (bUp) yb = cb->stairAnchorY;
+        }
+        if (std::abs(ya - yb) > 0.01f) return ya < yb;
+        return a->sub_z < b->sub_z;
+    });
+}
+
+// Estado de luz do frame: isqueiro na mão, luz acesa, parâmetros da luz de mão
+// (com a durabilidade) e se o painel de debug está visível.
+StageState::FrameLighting StageState::BuildFrameLighting() const {
+    FrameLighting fl;
+    const bool lightHidden = Character::player && Character::player->hidePersonalLight;
+    fl.showDebugTools       = lightTweakPanel && lightTweakPanel->visible;
+    fl.lighterFromInventory = inventory.IsActiveLightLighter() && !lightHidden;
+    fl.torchLit             = inventory.IsUsableLightActive();
+    const bool durabilityOn = lightTweakPanel ? lightTweakPanel->durabilityEnabled : true;
+    fl.lighterParams = (fl.lighterFromInventory && durabilityOn)
+                           ? inventory.BuildLighterLightParams(lightMaskParams) : lightMaskParams;
+    return fl;
+}
+
+// Sombras projetadas e de contato dos irmãos (no chão, antes dos sprites) e a
+// luz que chega a cada um — `touch` para a sombra, generosa para a sanidade.
+void StageState::RenderCharacterShadows(SDL_Renderer* renderer, FrameLighting& fl) {
+    const Uint64 blockStart = LightShadowProfile::IsActive() ? SDL_GetPerformanceCounter() : 0;
+
+    struct ShadowCast {
+        Vec2 lightScreen;
+        float touch = 0.0f;
+        float lengthPx = 0.0f;
+        Uint8 alpha = 0;
+        float contact = 0.0f;
+    };
+    std::vector<ShadowCast> bigCasts, smallCasts;
+
+    // Luz para a sanidade: ponto do corpo mais perto da luz (pé ou meio) contra um
+    // raio casado com o brilho VISÍVEL (compensa o zoom relativo à zoom-base).
+    // O `touch` das sombras é medido só no pé e encolhia com o zoom.
+    constexpr float kSanityLitRadiusFrac = 1.25f;
+    auto sanityIllum = [](GameObject* obj, const Vec2& lightScreen, const LightMaskParams& params) {
+        if (!obj) return 0.0f;
+        const Rect& bx = obj->box;
+        const float z = Camera::GetZoom();
+        const Vec2 mid((bx.x + 0.5f * bx.w - Camera::pos.x) * z, (bx.y + 0.5f * bx.h - Camera::pos.y) * z);
+        const float d = std::min(FootOnScreen(obj).Distance(lightScreen), mid.Distance(lightScreen));
+        const float zRatio = z / std::max(0.05f, Camera::GetBaseZoom());
+        const float litRadius = std::max(8.0f, params.falloffRadiusPx) * zRatio * kSanityLitRadiusFrac;
+        return Clamp01(1.0f - d / std::max(1.0f, litRadius));
+    };
+
+    // Mede uma luz contra um irmão: contato, luz recebida e (se a luz chega) a sombra.
+    auto measure = [&](GameObject* obj, const Vec2& lightScreen, const LightMaskParams& params,
+                       float& maxContact, float& maxTouch, std::vector<ShadowCast>& casts) {
+        float touch = 0.0f;
+        IsFootLit(obj, lightScreen, params, &touch);
+        float dPx = 0.0f, maxPx = 1.0f;
+        if (obj) ComputeShadowDistanceRate(FootOnScreen(obj), lightScreen, params, &dPx, &maxPx);
+
+        const float contactRadius = std::max(6.0f, maxPx * 0.07f);
+        const float contact = (dPx <= contactRadius) ? Clamp01(1.0f - dPx / contactRadius) : 0.0f;
+        maxContact = std::max(maxContact, contact);
+        maxTouch   = std::max(maxTouch, std::max(touch, sanityIllum(obj, lightScreen, params)));
+
+        // Só há sombra se a luz CHEGA ao personagem; o peso também dá a opacidade.
+        const float weight = ShadowTouchWeight(touch);
+        if (weight > 0.0f) {
+            const Uint8 alpha = static_cast<Uint8>(std::clamp(params.darknessMax * weight, 0.0f, 255.0f));
+            casts.push_back({lightScreen, touch, params.shadowMaxLengthPx * (1.0f - touch), alpha, contact});
+        }
+    };
+    auto measureLight = [&](const Vec2& lightScreen, const LightMaskParams& params) {
+        measure(bigCharacterObject, lightScreen, params, fl.bigMaxContact, fl.bigMaxTouch, bigCasts);
+        measure(smallCharacterObject, lightScreen, params, fl.smallMaxContact, fl.smallMaxTouch, smallCasts);
+    };
+
+    if (cursorPreviewLightEnabled) {
+        measureLight(smoothedDynamicLightScreenPos, lightMaskParams);
+    }
+    if (fl.lighterFromInventory && hasSmoothedTorchLight) {
+        measureLight(smoothedTorchLightScreenPos, fl.lighterParams);
+    }
+    int counted = 0;
+    for (const LightInstance& light : lights) {
+        if (!light.enabled) continue;
+        if (counted >= maxActiveLights) break;
+        const Vec2 lightScreen = WorldToScreen(light.worldPos);
+        if (!LightTouchesScreen(lightScreen, std::max(32.0f, light.params.falloffRadiusPx * 1.6f))) continue;
+        measureLight(lightScreen, light.params);
+        counted++;
+    }
+
+    // Uma sombra projetada por irmão: a da luz que mais o toca.
+    const bool bigLockedPreview = cursorPreviewLightEnabled && previewLightLockedToPlayer &&
+                                  previewLightAnchorPlayer == bigCharacterObject;
+    const bool smallLockedPreview = cursorPreviewLightEnabled && previewLightLockedToPlayer &&
+                                    previewLightAnchorPlayer == smallCharacterObject;
+    const bool bigHidden   = Character::player && Character::player->hidePersonalLight;
+    const bool smallHidden = Character::littleBrother && Character::littleBrother->hidePersonalLight;
+
+    auto castStrongest = [&](std::vector<ShadowCast>& casts, GameObject* obj, bool skip) {
+        if (casts.empty() || skip) return;
+        const ShadowCast& c = *std::max_element(casts.begin(), casts.end(),
+            [](const ShadowCast& a, const ShadowCast& b) { return a.touch < b.touch; });
+        if (c.contact < 0.50f) {
+            RenderProjectedSpriteShadow(obj, c.lightScreen, c.touch, c.lengthPx, c.alpha, lightMaskParams);
+        }
+    };
+    castStrongest(bigCasts, bigCharacterObject, bigLockedPreview || bigHidden);
+    castStrongest(smallCasts, smallCharacterObject, smallLockedPreview || smallHidden);
+    UpdateControlledCharacterVisuals();   // restaura as cores depois das sombras
+
+    if (fl.showDebugTools) {
+        DrawPlayerShadowTouchDebug(renderer, bigCharacterObject, 255, 120, 120);
+        DrawPlayerShadowTouchDebug(renderer, smallCharacterObject, 130, 220, 255);
+    }
+
+    // Luz presa no irmão ou luz de mão acesa: contato garantido.
+    if (bigLockedPreview && bigCharacterObject)     fl.bigMaxContact   = std::max(fl.bigMaxContact, 0.92f);
+    if (smallLockedPreview && smallCharacterObject) fl.smallMaxContact = std::max(fl.smallMaxContact, 0.92f);
+    if (fl.torchLit) {
+        if (bigCharacterObject)   fl.bigMaxContact   = std::max(fl.bigMaxContact, 0.92f);
+        if (smallCharacterObject) fl.smallMaxContact = std::max(fl.smallMaxContact, 0.92f);
+    }
+    if (bigCharacterObject && fl.bigMaxContact > 0.0f && !bigHidden) {
+        DrawContactFootShadow(renderer, bigCharacterObject->box, fl.bigMaxContact);
+    }
+    if (smallCharacterObject && fl.smallMaxContact > 0.0f && !smallHidden) {
+        DrawContactFootShadow(renderer, smallCharacterObject->box, fl.smallMaxContact);
+    }
+
+    if (LightShadowProfile::IsActive()) {
+        const double ms = static_cast<double>(SDL_GetPerformanceCounter() - blockStart) * 1000.0 /
+                          static_cast<double>(SDL_GetPerformanceFrequency());
+        LightShadowProfile::SetSpriteShadowBlockMs(ms);
+    }
+}
+
+// Luzes que chegam à tela neste frame: preview, luz de mão e as do mapa (até maxActiveLights).
+std::vector<RadialLightOverlay::ScreenLight> StageState::CollectScreenLights(const FrameLighting& fl) const {
+    constexpr float kCursorLightBlend = 0.28f;
+    constexpr float kTorchLightBlend  = 0.28f;
+
+    std::vector<RadialLightOverlay::ScreenLight> out;
+    out.reserve(static_cast<size_t>(maxActiveLights + 2));
+    if (cursorPreviewLightEnabled) {
+        out.push_back({smoothedDynamicLightScreenPos.x, smoothedDynamicLightScreenPos.y, lightMaskShape,
+                       lightMaskParams, kCursorLightBlend});
+    }
+    if (fl.lighterFromInventory && hasSmoothedTorchLight) {
+        out.push_back({smoothedTorchLightScreenPos.x, smoothedTorchLightScreenPos.y, lightMaskShape,
+                       fl.lighterParams, kTorchLightBlend});
+    }
+    int counted = 0;
+    for (const LightInstance& light : lights) {
+        if (!light.enabled) continue;
+        if (counted >= maxActiveLights) break;
+        const Vec2 s = WorldToScreen(light.worldPos);
+        if (!LightTouchesScreen(s, std::max(32.0f, light.params.falloffRadiusPx * 1.4f))) continue;
+        out.push_back({s.x, s.y, light.shape, light.params, light.animationSeed});
+        counted++;
+    }
+    return out;
+}
+
+// Sombra dos objetos de cenário registrados: uma por objeto, da luz que mais o
+// toca, sumindo junto com o objeto fora do campo de visão.
+void StageState::RenderObjectShadows(const std::vector<RadialLightOverlay::ScreenLight>& screenLights) {
+    for (GameObject* obj : testShadowObjects) {
+        if (!obj || obj == bigCharacterObject || obj == smallCharacterObject) continue;
+        const float visibility = VisibilityOfObject(*obj);
+        if (visibility <= 0.01f) continue;
+
+        Vec2 bestLight;
+        float bestTouch = 0.0f, bestLength = 0.0f;
+        Uint8 bestAlpha = 0;
+        for (const auto& sl : screenLights) {
+            const Vec2 lightScreen(sl.x, sl.y);
+            float touch = 0.0f;
+            IsFootLit(obj, lightScreen, sl.params, &touch);
+            const float weight = ShadowTouchWeight(touch);
+            if (weight > 0.0f && touch > bestTouch) {
+                bestTouch  = touch;
+                bestLight  = lightScreen;
+                bestLength = sl.params.shadowMaxLengthPx * Clamp01(1.0f - touch);
+                bestAlpha  = static_cast<Uint8>(std::clamp(sl.params.darknessMax * weight, 0.0f, 255.0f));
+            }
+        }
+        if (bestTouch > 0.0f) {
+            RenderSingleLightSpriteShadow(obj, bestLight, bestTouch, bestLength,
+                                          static_cast<Uint8>(bestAlpha * visibility), lastFrameDt);
+        }
+    }
+}
+
+// Desenha os objetos do mundo na ordem do Y-sort. Interagíveis fora da visão
+// somem/aparecem pela visibilidade; os irmãos e interagíveis que o shader
+// "carimba" são desenhados invisíveis aqui e redesenhados depois da escuridão.
+// Devolve a ordem desenhada (para o passo dos carimbos).
+std::vector<StageState::DrawnSprite> StageState::RenderWorldObjects(bool stampPassWillRun) {
+    std::vector<DrawnSprite> drawOrder;
+    drawOrder.reserve(objectArray.size());
+    GameObject* focus = GetInteractionFocus();
+
+    for (const auto& goPtr : objectArray) {
+        GameObject* go = goPtr.get();
+        if (go->z >= kHudZ) continue;
+        SpriteRenderer* sprite = go->GetComponent<SpriteRenderer>();
+
+        bool  stamped = false;
+        float shown = 1.0f, light = 1.0f;
+        bool  faded = false;
+        if (visionFrame.valid && ShouldHideOutsideVision(*go)) {
+            shown = (go == focus) ? 1.0f : VisibilityOfObject(*go);
+            if (shown <= 0.01f) continue;
+            if (shown < 0.999f && sprite) {
+                sprite->SetTint(255, 255, 255, static_cast<Uint8>(shown * 255.0f));
+                faded = true;
+            }
+            if (sprite) {
+                light = Clamp01(LightAmountAtScreen(WorldToScreen(go->box.Center())));
+                stamped = true;
+            }
+        }
+        // Irmãos: sempre carimbados — menos escondido no armário (o redesenho
+        // devolveria o alfa cheio e desfaria a invisibilidade).
+        Character* ch = go->GetComponent<Character>();
+        if ((go == bigCharacterObject || go == smallCharacterObject) && visionFrame.valid &&
+            !(ch && ch->isHidden) && sprite) {
+            shown = 1.0f;
+            light = 1.0f;
+            stamped = true;
+        }
+
+        SpriteRenderer* hideSprite = (stamped && stampPassWillRun) ? sprite : nullptr;
+        SDL_Color savedTint{255, 255, 255, 255};
+        if (hideSprite) {
+            savedTint = hideSprite->GetTint();
+            hideSprite->SetTint(savedTint.r, savedTint.g, savedTint.b, 0);
+        }
+        const bool glow = RenderInteractionGlowIfNeeded(*go);
+        go->Render();
+        if (hideSprite) hideSprite->SetTint(savedTint.r, savedTint.g, savedTint.b, savedTint.a);
+
+        if (sprite) drawOrder.push_back({go, sprite, stamped, shown, light, glow});
+        if (faded)  sprite->SetTint(255, 255, 255, 255);
+    }
+    return drawOrder;
+}
+
+// Malha de escuridão por cima de tudo (as luzes + o buraco do campo de visão,
+// que não projeta sombra nem conta para a sanidade) e as sombras das paredes.
+void StageState::RenderDarknessAndWallShadows(SDL_Renderer* renderer,
+                                              const std::vector<RadialLightOverlay::ScreenLight>& screenLights) {
+    Game& g = Game::GetInstance();
+    LightOcclusionContext occ;
+    if (tileMapComp && tileSet) {
+        occ.solidGrid  = &tileMapComp->GetLightOcclusionSolid();
+        occ.mapWidth   = tileMapComp->GetWidth();
+        occ.mapHeight  = tileMapComp->GetHeight();
+        occ.tileWidth  = static_cast<float>(tileSet->GetTileWidth());
+        occ.tileHeight = static_cast<float>(tileSet->GetTileHeight());
+        occ.mapOriginX = mapOrigin.x;
+        occ.mapOriginY = mapOrigin.y;
+        occ.cameraX    = Camera::pos.x;
+        occ.cameraY    = Camera::pos.y;
+        occ.zoom       = Camera::GetZoom();
+    }
+
+    std::vector<RadialLightOverlay::ScreenLight> maskLights = screenLights;
+    AppendVisionMaskLights(maskLights);
+    radialGeometry->RenderMany(renderer, g.GetWindowsWidth(), g.GetWindowsHeight(), maskLights, occ);
+
+    if (!shadowsEnabled || !staticShadowEdgesBuilt || staticShadowEdges.empty()) return;
+
+    constexpr int kMaxShadowVolumes = 8;
+    const std::vector<TopDownShadowEdge> noDynamic;
+    const int n = std::min(static_cast<int>(screenLights.size()), kMaxShadowVolumes);
+    for (int i = 0; i < n; i++) {
+        const RadialLightOverlay::ScreenLight& sl = screenLights[i];
+        // Luz dentro de um tile sólido não projeta sombra de parede.
+        if (occ.IsEnabled()) {
+            const int ltx = static_cast<int>((sl.x / occ.zoom + occ.cameraX - occ.mapOriginX) / occ.tileWidth);
+            const int lty = static_cast<int>((sl.y / occ.zoom + occ.cameraY - occ.mapOriginY) / occ.tileHeight);
+            if (ltx >= 0 && ltx < occ.mapWidth && lty >= 0 && lty < occ.mapHeight &&
+                (*occ.solidGrid)[static_cast<size_t>(ltx + lty * occ.mapWidth)] != 0) {
+                continue;
+            }
+        }
+        TopDownLightShadows::RenderShadowVolumes(renderer, sl.x, sl.y, g.GetWindowsWidth(), g.GetWindowsHeight(),
+                                                 staticShadowEdges, noDynamic, 90, sl.params.shadowMaxLengthPx,
+                                                 sl.params.shadowSoftLayers, sl.params.shadowSoftness);
+    }
+}
+
+// Luz que cada irmão recebe, lida pela sanidade. A luz de mão ilumina por
+// inteiro o irmãozão; o irmãozinho só recebe se estiver perto. O clarão do
+// trovão ilumina os dois.
+void StageState::UpdateIlluminationLevels(const FrameLighting& fl) {
+    bigLightContact   = fl.bigMaxContact;
+    smallLightContact = fl.smallMaxContact;
+
+    bigIlluminationLevel   = fl.bigMaxTouch;
+    smallIlluminationLevel = fl.smallMaxTouch;
+    if (fl.torchLit && bigCharacterObject) {
+        bigIlluminationLevel = std::max(fl.bigMaxTouch, 0.92f);
+        if (smallCharacterObject) {
+            const float shareRadius = std::max(1.0f, lightMaskParams.falloffRadiusPx);
+            const float dist = smallCharacterObject->box.Center().Distance(bigCharacterObject->box.Center());
+            smallIlluminationLevel = std::max(fl.smallMaxTouch, 0.92f * std::clamp(1.0f - dist / shareRadius, 0.0f, 1.0f));
+        }
+    }
+    const float thunder = GameSfx::GetThunderFlashStrength() * 0.88f;
+    if (thunder > 0.01f) {
+        bigIlluminationLevel   = std::max(bigIlluminationLevel, thunder);
+        smallIlluminationLevel = std::max(smallIlluminationLevel, thunder);
+    }
+}
+
+// Debug (painel de luz visível): alcance das sombras da luz de preview, da luz de mão e das luzes do mapa.
+void StageState::RenderLightDebugCircles(SDL_Renderer* renderer, const FrameLighting& fl) {
+    if (cursorPreviewLightEnabled) {
+        DrawDebugCircle(renderer, smoothedDynamicLightScreenPos.x, smoothedDynamicLightScreenPos.y,
+                        ShadowDebugRadius(lightMaskParams), 255, 210, 90, 130);
+    }
+    if (fl.lighterFromInventory && hasSmoothedTorchLight) {
+        DrawDebugCircle(renderer, smoothedTorchLightScreenPos.x, smoothedTorchLightScreenPos.y,
+                        ShadowDebugRadius(fl.lighterParams) * 0.85f, 255, 150, 70, 150);
+    }
+    int counted = 0;
+    for (const LightInstance& light : lights) {
+        if (!light.enabled) continue;
+        if (counted >= maxActiveLights) break;
+        const Vec2 s = WorldToScreen(light.worldPos);
+        if (!LightTouchesScreen(s, std::max(32.0f, light.params.falloffRadiusPx * 1.6f))) continue;
+        DrawDebugCircle(renderer, s.x, s.y, ShadowDebugRadius(light.params), 120, 220, 255, 95);
+        counted++;
+    }
+}
+
+// Depois da escuridão, na ordem do Y-sort:
+//  • carimbados (irmãos e interagíveis na visão): redesenhados com brilho cheio
+//    e com a luz que recebem gravada no ALFA — o shader lê isso para mantê-los
+//    nítidos e devolver a cor na medida da luz;
+//  • os demais que estão NA FRENTE de algo redesenhado voltam por cima, com os
+//    pixels exatos da cópia da cena (ou uma tinta aproximada, sem a cópia).
+void StageState::RenderStampedSprites(SDL_Renderer* renderer, const std::vector<DrawnSprite>& drawOrder) {
+    const SDL_BlendMode stampBlend = ScenePostFx::NoGrayStampBlendMode();
+    const float zoom = Camera::GetZoom();
+    const float ambient = Clamp01(1.0f - lightMaskParams.ambientDarknessMax / 255.0f);
+
+    auto screenRectOf = [&](const GameObject* o) {
+        const Vec2 tl = WorldToScreen(Vec2(o->box.x, o->box.y));
+        return SDL_Rect{static_cast<int>(std::floor(tl.x)), static_cast<int>(std::floor(tl.y)),
+                        static_cast<int>(std::ceil(o->box.w * zoom)) + 1,
+                        static_cast<int>(std::ceil(o->box.h * zoom)) + 1};
+    };
+    auto grown = [](SDL_Rect r, float frac) {   // + borda do contorno de interação
+        const int dx = static_cast<int>(std::ceil(r.w * frac));
+        const int dy = static_cast<int>(std::ceil(r.h * frac));
+        return SDL_Rect{r.x - dx, r.y - dy, r.w + dx * 2, r.h + dy * 2};
+    };
+
+    // Cópia da cena como está agora (ordem certa, escuridão exata).
+    const bool canRestore = EnsureSceneAux(renderer, renderTarget, sceneSnapshot, occluderScratch);
+    if (canRestore) {
+        int sw = 0, sh = 0;
+        SDL_QueryTexture(renderTarget, nullptr, nullptr, &sw, &sh);
+        const SDL_Rect full{0, 0, sw, sh};
+        SDL_SetRenderTarget(renderer, sceneSnapshot);
+        SDL_SetTextureBlendMode(renderTarget, SDL_BLENDMODE_NONE);
+        SDL_RenderCopy(renderer, renderTarget, &full, &full);
+        SDL_SetRenderTarget(renderer, renderTarget);
+    }
+
+    auto repaintOccluder = [&](const DrawnSprite& d, const SDL_Rect& area) {
+        if (canRestore) {
+            RestoreSpriteFromSnapshot(renderer, renderTarget, sceneSnapshot, occluderScratch, d.sprite, area);
+            return;
+        }
+        const SDL_Color prev = d.sprite->GetTint();
+        const float light = Clamp01(LightAmountAtScreen(WorldToScreen(d.obj->box.Center())));
+        const Uint8 v = static_cast<Uint8>(255.0f * Clamp01(ambient + (1.0f - ambient) * light));
+        SDL_RenderSetClipRect(renderer, &area);
+        d.sprite->SetTint(v, v, v, prev.a);
+        d.sprite->Render();
+        d.sprite->SetTint(prev.r, prev.g, prev.b, prev.a);
+        SDL_RenderSetClipRect(renderer, nullptr);
+    };
+
+    std::vector<SDL_Rect> dirty;   // áreas já redesenhadas por cima da escuridão
+    dirty.reserve(8);
+
+    for (const DrawnSprite& d : drawOrder) {
+        if (!d.sprite || !d.obj) continue;
+
+        if (d.stamped) {
+            if (d.glow) RenderInteractionGlowIfNeeded(*d.obj);
+
+            d.sprite->SetTint(255, 255, 255, static_cast<Uint8>(d.shown * 255.0f));
+            d.sprite->Render();
+            d.sprite->SetTint(255, 255, 255, 255);
+
+            if (SDL_Texture* tex = d.sprite->GetTexturePtr()) {
+                SDL_BlendMode prev = SDL_BLENDMODE_BLEND;
+                SDL_GetTextureBlendMode(tex, &prev);
+                if (SDL_SetTextureBlendMode(tex, stampBlend) == 0) {
+                    d.sprite->SetTint(255, 255, 255, static_cast<Uint8>(1.0f + 254.0f * Clamp01(d.light)));
+                    d.sprite->Render();
+                    d.sprite->SetTint(255, 255, 255, 255);
+                }
+                SDL_SetTextureBlendMode(tex, prev);
+            }
+            const SDL_Rect r = screenRectOf(d.obj);
+            dirty.push_back(d.glow ? grown(r, 0.10f) : r);
+            continue;
+        }
+
+        // Não carimbado com contorno (barril, castiçal…): contorno por cima e o sprite de volta.
+        if (d.glow) {
+            RenderInteractionGlowIfNeeded(*d.obj);
+            repaintOccluder(d, screenRectOf(d.obj));
+            dirty.push_back(grown(screenRectOf(d.obj), 0.10f));
+            continue;
+        }
+
+        // Não carimbado: só volta se estiver na frente de uma área redesenhada.
+        if (dirty.empty() || d.sprite->GetTint().a == 0) continue;   // alfa 0 = escondido de propósito
+        const SDL_Rect mine = screenRectOf(d.obj);
+        SDL_Rect cover{0, 0, 0, 0};
+        bool covers = false;
+        for (const SDL_Rect& r : dirty) {
+            SDL_Rect inter;
+            if (!SDL_IntersectRect(&mine, &r, &inter)) continue;
+            if (!covers) { cover = inter; covers = true; }
+            else         { SDL_UnionRect(&cover, &inter, &cover); }
+        }
+        if (covers) repaintOccluder(d, cover);
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  Tela: pós-processo e efeitos
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Copia a cena para a tela (sem mistura: os carimbos zeraram o alfa dos irmãos)
+// e aplica o ScenePostFx por cima — P&B fora da visão, gama e ponto de preto do
+// brilho. A cópia vai sempre antes: monta o viewport do letterbox e garante
+// imagem se o shader não existir. True se o pós-processo desenhou.
+bool StageState::PresentScene(SDL_Renderer* renderer, int winW, int winH) {
     SDL_SetTextureBlendMode(renderTarget, SDL_BLENDMODE_NONE);
     SDL_RenderCopy(renderer, renderTarget, nullptr, nullptr);
 
@@ -898,576 +771,330 @@ void StageState::Render(){
         scenePostFx = std::make_unique<ScenePostFx>();
         scenePostFx->Init(renderer);
     }
-    if (scenePostFx->IsAvailable()) {
-        scenePostFx->Render(renderer, renderTarget, winW, winH, visionFrame, visionParams);
-    }
+    if (!scenePostFx->IsAvailable()) return false;
+    scenePostFx->SetGamma(Game::BrightnessGamma());
+    scenePostFx->SetBlackPoint(Game::BrightnessBlackPoint());
+    return scenePostFx->Render(renderer, renderTarget, winW, winH, visionFrame, visionParams);
+}
 
-    // ── ECO DOS PASSOS DO MONSTRO ───────────────────────────────────────────
-    // Tem de ser AQUI, depois do pos-processamento: a malha de escuridao
-    // apagava os aneis e o desfoque borrava-os fora do cone — e e exactamente
-    // fora do cone e no escuro que eles servem para alguma coisa.
-    RenderMonsterEchoes(renderer);
-
-    // Brilho do jogador (overlay): <100 escurece, >100 clareia (lift de sombras).
-    const int brightness = Game::brightnessPercent;
-    if (brightness < 100) {
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-        const Uint8 a = static_cast<Uint8>((100 - brightness) / 100.0f * 175.0f);
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, a);
-        const SDL_Rect r{0, 0, winW, winH};
-        SDL_RenderFillRect(renderer, &r);
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-    } else if (brightness > 100) {
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
-        const Uint8 a = static_cast<Uint8>((brightness - 100) / 50.0f * 95.0f);
-        SDL_SetRenderDrawColor(renderer, 120, 120, 120, a);
-        const SDL_Rect r{0, 0, winW, winH};
-        SDL_RenderFillRect(renderer, &r);
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-    }
-
-    // Flash vermelho de dano (toque do monstro) — decai com damageFlashTimer.
-    if (damageFlashTimer > 0.0f) {
-        const float t = damageFlashTimer / kDamageFlashDuration;
-        // Acessibilidade: atenua o clarão de dano quando "Reduzir flashes" está ligado.
-        const float flashMul = Game::reduceFlashing ? 0.35f : 1.0f;
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-        const Uint8 flashAlpha = static_cast<Uint8>(std::min(255.0f, 150.0f * t * flashMul));
-        SDL_SetRenderDrawColor(renderer, 150, 10, 10, flashAlpha);
-        const SDL_Rect dmgRect{0, 0, winW, winH};
-        SDL_RenderFillRect(renderer, &dmgRect);
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    }
-
-    const float thunderFlash = GameSfx::GetThunderFlashStrength();
-    if (thunderFlash > 0.01f) {
-        // Acessibilidade: o clarão do trovão é o mais forte (aditivo) — reduz bastante.
-        const float thunderMul = Game::reduceFlashing ? 0.25f : 1.0f;
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
-        const Uint8 flashAlpha = static_cast<Uint8>(std::min(255.0f, 230.0f * thunderFlash * thunderMul));
-        SDL_SetRenderDrawColor(renderer, 205, 215, 255, flashAlpha);
-        const SDL_Rect flashRect{0, 0, winW, winH};
-        SDL_RenderFillRect(renderer, &flashRect);
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    }
-
-
-    if (sanityOverlayObj) {
-        SpriteRenderer* overlaySprite = sanityOverlayObj->GetComponent<SpriteRenderer>();
-
-        if (overlaySprite && sanityOverlaySmoothedIntensity > 0.001f) {
-            // Acessibilidade: reduz a aberração cromática (separação RGB enjoativa).
-            const float aberrationMul = Game::reduceFlashing ? 0.3f : 1.0f;
-            const float offsetPx = kChromaticAberrationMaxOffsetPx * sanityOverlaySmoothedIntensity * aberrationMul;
-            const Rect baseBox = sanityOverlayObj->box;
-            const Uint8 baseAlpha = static_cast<Uint8>(std::min(255.0f, 255.0f * sanityOverlaySmoothedIntensity));
-
-            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
-
-            // Canal VERMELHO — desloca para a esquerda
-            sanityOverlayObj->box.x = baseBox.x - offsetPx;
-            sanityOverlayObj->box.y = baseBox.y;
-            overlaySprite->SetTint(255, 30, 30, baseAlpha);
-            overlaySprite->Render();
-
-            // Canal AZUL — desloca para a direita
-            sanityOverlayObj->box.x = baseBox.x + offsetPx;
-            sanityOverlayObj->box.y = baseBox.y;
-            overlaySprite->SetTint(30, 30, 255, baseAlpha);
-            overlaySprite->Render();
-
-            sanityOverlayObj->box = baseBox;
-            overlaySprite->SetTint(255, 255, 255, 255);
-            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-        }
-    }
-
-    // ── FERRAMENTAS DE DEBUG ─────────────────────────────────────────────────
-    // Desenhadas DEPOIS do pos-processamento, na tela: assim o painel de afinacao
-    // e os overlays de colisao mantem a cor e continuam legiveis fora do campo
-    // de visao.
-    if (showMapPhysicsDebug) {
-        SDL_Renderer* dbgR = g.GetRenderer();
-        level.RenderCollisionOverlay(dbgR);
-        RenderGameplayCollisionDebug(dbgR);
-        RenderCompanionFollowPathDebug(dbgR);
-    }
-
-    if (lightTweakPanel && lightTweakPanel->visible) {
-        lightTweakPanel->Render(g.GetRenderer(), g.GetWindowsWidth(), g.GetWindowsHeight());
-    }
-
-    // ====================================
-    // 7. HUD FICA ACIMA DE TUDO (Z >= 100)
-    // ====================================
-
-    for (const auto& go : objectArray) {
-        if (go->z >= kHudZ) {
-            go->Render();
-        }
-    }
-
-    // ============================================================
-    // Barra de sanidade acima da cabeça REMOVIDA de vez (inclusive em debug): o
-    // jogador não vê mais o número/estado da sanidade — o feedback vem só pelos
-    // indicadores de tela (overlay "spider-verse" + batimento cardíaco). A mecânica
-    // de sanidade continua igual; apenas não é mais exibida aqui.
-
-    // ── HUD DO PODER DO IRMÃOZINHO ────────────────────────────────────────────
-    // Mostra uma bola no canto inferior esquerdo quando controlando o irmãozinho.
-    // Cheia = pode usar o poder. Diminuindo = poder ativo. Enchendo = cooldown.
-    // Substitui o hotbar do irmãozão (que não aparece para o irmãozinho).
-    {
-        Character* small = Character::littleBrother;
-        bool isControllingSmall = (controlledCharacter == small && small != nullptr);
- 
-        if (isControllingSmall) {
-            // Lê os timers do poder do irmãozinho
-            float powerTimer  = small->visionPowerTimer;   // tempo restante ativo
-            float cooldown    = small->visionCooldown;     // tempo restante de recarga
-            float kDuration   = Character::kVisionDuration;
-            float kCooldown   = Character::kVisionCooldown;
- 
-            // Calcula o preenchimento (0.0 a 1.0)
-            float fill = 1.0f;
-            if (powerTimer > 0.0f) {
-                // Poder ativo — esvazia conforme o tempo passa
-                fill = powerTimer / kDuration;
-            } else if (cooldown > 0.0f) {
-                // Recarregando — enche conforme o cooldown passa
-                fill = 1.0f - (cooldown / kCooldown);
-            }
-            // Se nem powerTimer nem cooldown > 0, fill = 1.0 (pronto pra usar)
- 
-            // Posição: canto inferior esquerdo, mesmo lugar do hotbar
-            int cx = static_cast<int>(winW * 0.12f + 32.0f);
-            int cy = static_cast<int>(winH - 100.0f);
-            constexpr int kRadius     = 40;   // raio da bola
-            constexpr int kSegments   = 48;   // suavidade do círculo
- 
-            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-
-            // Cor base dependendo do estado
-            Uint8 baseR, baseG, baseB;
-            if (powerTimer > 0.0f) {
-                baseR = 180; baseG = 80;  baseB = 255; // roxo — poder ativo
-            } else if (cooldown > 0.0f) {
-                baseR = 100; baseG = 100; baseB = 120; // cinza — cooldown
-            } else {
-                baseR = 255; baseG = 255; baseB = 255; // branco — pronto
-            }
-
-            // Gradiente radial: centro preto → borda na cor base
-            for (int r = 0; r <= kRadius; r++) {
-                float t       = static_cast<float>(r) / static_cast<float>(kRadius);
-                float tCurved = t * t; // concentra sombra no centro
-
-                Uint8 colR = static_cast<Uint8>(baseR * tCurved);
-                Uint8 colG = static_cast<Uint8>(baseG * tCurved);
-                Uint8 colB = static_cast<Uint8>(baseB * tCurved);
-                Uint8 colA = static_cast<Uint8>(200.0f + 55.0f * tCurved);
-
-                SDL_SetRenderDrawColor(renderer, colR, colG, colB, colA);
-
-                for (int i = 0; i < kSegments; i++) {
-                    float a0 = (static_cast<float>(i)     / kSegments) * 2.0f * 3.14159265f;
-                    float a1 = (static_cast<float>(i + 1) / kSegments) * 2.0f * 3.14159265f;
-                    SDL_RenderDrawLine(renderer,
-                        cx + static_cast<int>(std::cos(a0) * r),
-                        cy + static_cast<int>(std::sin(a0) * r),
-                        cx + static_cast<int>(std::cos(a1) * r),
-                        cy + static_cast<int>(std::sin(a1) * r));
-                }
-            }
-
-            // Preenchimento sólido com gradiente radial — centro escuro, borda brilhante
-            {
-                float startAngle = -3.14159265f / 2.0f;
-                int fillSegs = static_cast<int>(fill * kSegments);
-
-                // Cor da borda (brilhante)
-                SDL_Color edgeColor;
-                // Cor do centro (escura — mesma base mas bem mais escura)
-                SDL_Color centerColor;
-
-                if (powerTimer > 0.0f) {
-                    edgeColor   = {220, 140, 255, 210}; // roxo claro na borda
-                    centerColor = {40,  0,   80,  180}; // roxo escuro no centro
-                } else if (cooldown > 0.0f) {
-                    edgeColor   = {160, 160, 180, 180}; // cinza claro na borda
-                    centerColor = {20,  20,  30,  160}; // quase preto no centro
-                } else {
-                    edgeColor   = {255, 255, 255, 210}; // branco na borda
-                    centerColor = {40,  40,  60,  180}; // azul escuro no centro
-                }
-
-                SDL_Vertex verts[3];
-
-                for (int i = 0; i < fillSegs; i++) {
-                    float a0 = startAngle + (static_cast<float>(i)     / kSegments) * 2.0f * 3.14159265f;
-                    float a1 = startAngle + (static_cast<float>(i + 1) / kSegments) * 2.0f * 3.14159265f;
-
-                    // Centro — cor escura
-                    verts[0].position  = {static_cast<float>(cx), static_cast<float>(cy)};
-                    verts[0].color     = centerColor;
-                    verts[0].tex_coord = {0, 0};
-
-                    // Borda esquerda — cor brilhante
-                    verts[1].position = {
-                        static_cast<float>(cx) + std::cos(a0) * static_cast<float>(kRadius),
-                        static_cast<float>(cy) + std::sin(a0) * static_cast<float>(kRadius)
-                    };
-                    verts[1].color     = edgeColor;
-                    verts[1].tex_coord = {0, 0};
-
-                    // Borda direita — cor brilhante
-                    verts[2].position = {
-                        static_cast<float>(cx) + std::cos(a1) * static_cast<float>(kRadius),
-                        static_cast<float>(cy) + std::sin(a1) * static_cast<float>(kRadius)
-                    };
-                    verts[2].color     = edgeColor;
-                    verts[2].tex_coord = {0, 0};
-
-                    SDL_RenderGeometry(renderer, nullptr, verts, 3, nullptr, 0);
-                }
-            }
-
-            // Borda externa fina
-            SDL_SetRenderDrawColor(renderer, 200, 200, 220, 255);
-            for (int i = 0; i < kSegments; i++) {
-                float a0 = (static_cast<float>(i)     / kSegments) * 2.0f * 3.14159265f;
-                float a1 = (static_cast<float>(i + 1) / kSegments) * 2.0f * 3.14159265f;
-                SDL_RenderDrawLine(renderer,
-                    cx + static_cast<int>(std::cos(a0) * kRadius),
-                    cy + static_cast<int>(std::sin(a0) * kRadius),
-                    cx + static_cast<int>(std::cos(a1) * kRadius),
-                    cy + static_cast<int>(std::sin(a1) * kRadius));
-            }
-
-            // "[F] Usar" ao lado da bola do poder — igual ao irmãozão (que mostra
-            // no slot ativo da roda). Fica VERMELHO (texto + contorno no ícone da
-            // tecla F) quando o poder está em uso ou recarregando (indisponível).
-            {
-                const bool available = (powerTimer <= 0.0f && cooldown <= 0.0f);
-                const SDL_Color kReady{235, 225, 195, 255};
-                const SDL_Color kBusy {220, 55, 45, 255};
-                const SDL_Color col = available ? kReady : kBusy;
-
-                auto keyTex = Resources::GetImage("Recursos/img/hud/key_f.png");
-                auto font   = Resources::GetFont("Recursos/font/times.ttf", 22);
-
-                constexpr int imgSize = 54;
-                constexpr int hintGap = 20;
-                const int iconX = cx + kRadius + hintGap;   // canto sup-esq do ícone
-                const int iconY = cy - imgSize / 2;
-
-                SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-
-                if (keyTex) {
-                    SDL_Rect dst{ iconX, iconY, imgSize, imgSize };
-                    SDL_RenderCopy(renderer, keyTex.get(), nullptr, &dst);
-                    // Contorno vermelho ao redor do ícone da tecla F quando indisponível.
-                    if (!available) {
-                        SDL_SetRenderDrawColor(renderer, kBusy.r, kBusy.g, kBusy.b, 255);
-                        for (int t = 1; t <= 3; ++t) {
-                            SDL_Rect ol{ iconX - t, iconY - t, imgSize + 2 * t, imgSize + 2 * t };
-                            SDL_RenderDrawRect(renderer, &ol);
-                        }
-                    }
-                }
-
-                if (font) {
-                    if (SDL_Surface* s = TTF_RenderUTF8_Blended(font.get(), "Usar", col)) {
-                        if (SDL_Texture* txt = SDL_CreateTextureFromSurface(renderer, s)) {
-                            SDL_Rect td{ iconX + imgSize / 2 - s->w / 2,
-                                         iconY + imgSize + 2, s->w, s->h };
-                            SDL_RenderCopy(renderer, txt, nullptr, &td);
-                            SDL_DestroyTexture(txt);
-                        }
-                        SDL_FreeSurface(s);
-                    }
-                }
-            }
-
-            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-        }
-    }
-    // ── FIM HUD PODER ─────────────────────────────────────────────────────────
-
-    // Indicador "quem estou controlando" — seta apontando para o irmão controlado,
-    // que quica + pisca branco por alguns segundos e some suavemente (4.4).
-    if (controlledCharacter && controlIndicatorTimer > 0.0f) {
-        const float zoom = Camera::GetZoom();
-        const Rect& cbox = controlledCharacter->GetAssociated().box;
-        const int screenX = static_cast<int>((cbox.x - Camera::pos.x) * zoom);
-        const int screenY = static_cast<int>((cbox.y - Camera::pos.y) * zoom);
-        const int charW = static_cast<int>(cbox.w * zoom);
-        const int cx = screenX + charW / 2;
-
-        const float elapsed = kControlIndicatorDuration - controlIndicatorTimer;
-
-        // Quica para cima/baixo.
-        const float bounce = std::sin(elapsed * 9.0f) * 7.0f * zoom;
-
-        // Fade suave: entra em 0.25s, sai (eased) nos últimos 0.7s.
-        float a01 = 1.0f;
-        if (controlIndicatorTimer < 0.7f) a01 = controlIndicatorTimer / 0.7f;
-        else if (elapsed < 0.25f) a01 = elapsed / 0.25f;
-        a01 = a01 * a01 * (3.0f - 2.0f * a01);   // smoothstep (eased-out)
-
-        // Pisca branco (lerp dourado <-> branco).
-        const float flash = 0.5f + 0.5f * std::sin(elapsed * 14.0f);
-        const Uint8 r = static_cast<Uint8>(235 + (255 - 235) * flash);
-        const Uint8 g = static_cast<Uint8>(205 + (255 - 205) * flash);
-        const Uint8 b = static_cast<Uint8>(90 + (255 - 90) * flash);
-        const Uint8 a = static_cast<Uint8>(235 * a01);
-
-        const int w = static_cast<int>(22 * zoom);
-        const int h = static_cast<int>(16 * zoom);
-        const int topY = screenY - static_cast<int>(30 * zoom) + static_cast<int>(bounce);
-
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(renderer, r, g, b, a);
-        for (int row = 0; row < h; ++row) {
-            const float t = (h > 0) ? static_cast<float>(row) / static_cast<float>(h) : 0.0f;
-            const int halfW = static_cast<int>((w / 2) * (1.0f - t));
-            SDL_RenderDrawLine(renderer, cx - halfW, topY + row, cx + halfW, topY + row);
-        }
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    }
-
-    // Overlay de reparo da escada — cobre tudo incluindo HUD
-    for (const auto& goPtr : objectArray) {
-        Repairable* rep = goPtr->GetComponent<Repairable>();
-        if (!rep) continue;
-        float alpha = rep->GetRepairOverlayAlpha();
-        if (alpha > 0.001f) {
-            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-            SDL_SetRenderDrawColor(renderer, 0, 0, 0,
-                static_cast<Uint8>(std::min(255.0f, alpha * 255.0f)));
-            SDL_Rect fs = { 0, 0, winW, winH };
-            SDL_RenderFillRect(renderer, &fs);
-            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-            break; // só um Repairable por vez
-        }
-    }
-
-     // HUD de jogo (fica POR BAIXO dos menus, da pasta e do visualizador).
-    fuelFlameHud.Render(renderer, inventory, Game::GetInstance().GetWindowsWidth(), Game::GetInstance().GetWindowsHeight());
-    RenderInteractionPrompt(renderer);
-    RenderTutorials(renderer);
-    RenderVoiceSubtitle(renderer);
-    RenderLevelTitleBanner(renderer);
-
-    // Overlays que cobrem o jogo.
-    RenderPauseMenu(renderer);
-    RenderSettingsPanel(renderer);
-    RenderControlsPanel(renderer);
-    RenderQuitConfirmModal(renderer);
-    RenderDocumentFolder(renderer);
-    RenderJournalViewer(renderer);
-    RenderSaveToast(renderer);
-    dialogueBox.Render(renderer, Game::GetInstance().GetWindowsWidth(), Game::GetInstance().GetWindowsHeight());
-
-    // Status dos toggles de debug (canto superior direito) — verde=ON, cinza=OFF.
-    if (Game::debugMode) {
-        auto dfont = Resources::GetFont("Recursos/font/times.ttf", 18);
-        if (dfont) {
-            struct DbgLine { std::string text; bool on; };
-            const DbgLine dls[] = {
-                {std::string("[B] Colisao/fisica: ") + (showMapPhysicsDebug ? "ON" : "OFF"), showMapPhysicsDebug},
-                {std::string("[I] Invisivel p/ monstro: ") + (debugMonsterBlind ? "ON" : "OFF"), debugMonsterBlind},
-                {std::string("[G] Camera livre: ") + (debugFreeCam ? "ON" : "OFF"), debugFreeCam},
-            };
-            int yy = 8;
-            for (const auto& dl : dls) {
-                SDL_Color col = dl.on ? SDL_Color{80, 255, 80, 255} : SDL_Color{170, 170, 170, 220};
-                SDL_Surface* sf = TTF_RenderUTF8_Blended(dfont.get(), dl.text.c_str(), col);
-                if (!sf) continue;
-                SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, sf);
-                const int tw = sf->w, th = sf->h;
-                SDL_FreeSurface(sf);
-                if (tex) {
-                    SDL_Rect dst{winW - tw - 10, yy, tw, th};
-                    SDL_RenderCopy(renderer, tex, nullptr, &dst);
-                    SDL_DestroyTexture(tex);
-                    yy += th + 4;
-                }
-            }
-
-            // LEGENDA das cores de colisão — só com [B] ligado. Cada item: um
-            // quadradinho da cor + o que ela significa.
-            if (showMapPhysicsDebug) {
-                struct LegItem { Uint8 r, g, b; const char* label; };
-                const LegItem legend[] = {
-                    {255,   0,   0, "Monstro: HURTBOX (dano ao irmao)"},
-                    {  0, 255, 120, "Monstro: colisao de NAV (CIRCULO)"},
-                    {255, 255,   0, "Monstro: bounds do sprite"},
-                    {255,   0, 255, "Monstro: collider (componente)"},
-                    {  0, 220, 255, "Caixa/barril (empurravel)"},
-                    {255, 190,  70, "Irmaozao: pe/colisao (CIRCULO amarelo)"},
-                    { 90, 255, 200, "Irmaozinho: pe/colisao (CIRCULO verde-agua)"},
-                    {255,  60,  60, "Jogador: HITBOX de dano (CIRCULO vermelho)"},
-                    {255,  60,  60, "Mapa: paredes/colisao estatica"},
-                    {  0, 220, 255, "Mapa: chao/escada"},
-                };
-                auto lfont = Resources::GetFont("Recursos/font/times.ttf", 15);
-                yy += 6;
-                for (const auto& li : legend) {
-                    SDL_Color tcol{225, 225, 230, 235};
-                    SDL_Surface* sf = lfont ? TTF_RenderUTF8_Blended(lfont.get(), li.label, tcol) : nullptr;
-                    const int th = sf ? sf->h : 14;
-                    const int sw = th;   // lado do quadradinho = altura do texto
-                    SDL_Texture* tex = sf ? SDL_CreateTextureFromSurface(renderer, sf) : nullptr;
-                    const int tw = sf ? sf->w : 0;
-                    if (sf) SDL_FreeSurface(sf);
-                    // fundo escuro atrás da linha p/ leitura sobre o cenário
-                    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 150);
-                    SDL_Rect bg{winW - (sw + 6 + tw) - 12, yy - 1, (sw + 6 + tw) + 8, th + 2};
-                    SDL_RenderFillRect(renderer, &bg);
-                    // quadradinho da cor
-                    SDL_SetRenderDrawColor(renderer, li.r, li.g, li.b, 255);
-                    SDL_Rect sw_rect{winW - (sw + 6 + tw) - 8, yy, sw, th};
-                    SDL_RenderFillRect(renderer, &sw_rect);
-                    // rótulo
-                    if (tex) {
-                        SDL_Rect dst{winW - tw - 8, yy, tw, th};
-                        SDL_RenderCopy(renderer, tex, nullptr, &dst);
-                        SDL_DestroyTexture(tex);
-                    }
-                    yy += th + 3;
-                }
-            }
-        }
-    }
-
-    // RenderFinalEscape(renderer);   // ANTIGO: clarões da luz do farol (DESATIVADO)
-
-    // Se a transição acabou de começar, congela ESTE quadro (já composto) para o
-    // efeito zoom-blur dos frames seguintes.
-    if (sceneTransitionActive && !sceneTransitionFrame) {
-        CaptureSceneFrame(renderer);
+// Sem shader, o brilho vira um véu: preto abaixo de 100, cinza aditivo acima.
+void StageState::RenderBrightnessFallback(SDL_Renderer* renderer, int winW, int winH) {
+    const int b = Game::brightnessPercent;
+    if (b < 100) {
+        FillScreen(renderer, winW, winH, SDL_BLENDMODE_BLEND, 0, 0, 0,
+                   static_cast<Uint8>((100 - b) / 100.0f * 175.0f));
+    } else if (b > 100) {
+        FillScreen(renderer, winW, winH, SDL_BLENDMODE_ADD, 120, 120, 120,
+                   static_cast<Uint8>((b - 100) / 50.0f * 95.0f));
     }
 }
 
-void StageState::RenderVoiceSubtitle(SDL_Renderer* renderer) {
-    if (!renderer) {
-        return;
+// Clarão vermelho de dano e clarão do trovão (os dois atenuados com "Reduzir flashes").
+void StageState::RenderScreenFlashes(SDL_Renderer* renderer, int winW, int winH) {
+    if (damageFlashTimer > 0.0f) {
+        const float mul = Game::reduceFlashing ? 0.35f : 1.0f;
+        const float t = damageFlashTimer / kDamageFlashDuration;
+        FillScreen(renderer, winW, winH, SDL_BLENDMODE_BLEND, 150, 10, 10,
+                   static_cast<Uint8>(std::min(255.0f, 150.0f * t * mul)));
     }
-    std::string caption;
-    if (!GameVoice::GetActiveSubtitle(caption)) {
-        return;   // ninguém falando agora
+    const float thunder = GameSfx::GetThunderFlashStrength();
+    if (thunder > 0.01f) {
+        const float mul = Game::reduceFlashing ? 0.25f : 1.0f;
+        FillScreen(renderer, winW, winH, SDL_BLENDMODE_ADD, 205, 215, 255,
+                   static_cast<Uint8>(std::min(255.0f, 230.0f * thunder * mul)));
     }
+}
 
-    const int winW = Game::GetInstance().GetWindowsWidth();
-    const int winH = Game::GetInstance().GetWindowsHeight();
+// Overlay de sanidade com aberração cromática: cópia vermelha à esquerda e
+// azul à direita, afastadas pela intensidade (menos com "Reduzir flashes").
+void StageState::RenderSanityAberration(SDL_Renderer* renderer) {
+    SpriteRenderer* sprite = sanityOverlayObj ? sanityOverlayObj->GetComponent<SpriteRenderer>() : nullptr;
+    if (!sprite || sanityOverlaySmoothedIntensity <= 0.001f) return;
 
-    auto font = Resources::GetFont("Recursos/font/times.ttf", 26);
-    if (!font) {
-        return;
-    }
-    SDL_Color col{235, 232, 220, 255};
-    const Uint32 wrap = static_cast<Uint32>(winW * 0.7f);
-    SDL_Surface* sf = TTF_RenderUTF8_Blended_Wrapped(font.get(), caption.c_str(), col, wrap);
-    if (!sf) {
-        return;
-    }
-    SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, sf);
-    const int tw = sf->w, th = sf->h;
-    SDL_FreeSurface(sf);
-    if (!tex) {
-        return;
-    }
+    const float mul = Game::reduceFlashing ? 0.3f : 1.0f;
+    const float offset = kChromaticAberrationMaxOffsetPx * sanityOverlaySmoothedIntensity * mul;
+    const Rect base = sanityOverlayObj->box;
+    const Uint8 alpha = static_cast<Uint8>(std::min(255.0f, 255.0f * sanityOverlaySmoothedIntensity));
 
-    const int pad = 14;
-    const int boxW = tw + pad * 2;
-    const int boxH = th + pad * 2;
-    const int boxX = (winW - boxW) / 2;
-    const int boxY = winH - boxH - 48;   // barra inferior, acima da borda
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
+    sanityOverlayObj->box.x = base.x - offset;
+    sprite->SetTint(255, 30, 30, alpha);
+    sprite->Render();
+    sanityOverlayObj->box.x = base.x + offset;
+    sprite->SetTint(30, 30, 255, alpha);
+    sprite->Render();
+    sanityOverlayObj->box = base;
+    sprite->SetTint(255, 255, 255, 255);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  HUD
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Bola do poder do irmãozinho (canto inferior esquerdo, no lugar da roda):
+// cheia = pronto, esvaziando = em uso, enchendo = recarga. Ao lado, "[F] Usar",
+// vermelho enquanto indisponível.
+void StageState::RenderLittleBrotherPowerHud(SDL_Renderer* renderer, int winW, int winH) {
+    Character* small = Character::littleBrother;
+    if (!small || controlledCharacter != small) return;
+
+    constexpr int kRadius   = 40;
+    constexpr int kSegments = 48;
+    const float powerTimer = small->visionPowerTimer;
+    const float cooldown   = small->visionCooldown;
+    const bool active = powerTimer > 0.0f;
+    const bool recharging = !active && cooldown > 0.0f;
+
+    float fill = 1.0f;
+    if (active)          fill = powerTimer / Character::kVisionDuration;
+    else if (recharging) fill = 1.0f - cooldown / Character::kVisionCooldown;
+
+    const int cx = static_cast<int>(winW * 0.12f + 32.0f);
+    const int cy = static_cast<int>(winH - 100.0f);
+
+    // Paleta: roxo em uso, cinza recarregando, branco pronto.
+    const SDL_Color base   = active ? SDL_Color{180, 80, 255, 255} : recharging ? SDL_Color{100, 100, 120, 255} : SDL_Color{255, 255, 255, 255};
+    const SDL_Color edge   = active ? SDL_Color{220, 140, 255, 210} : recharging ? SDL_Color{160, 160, 180, 180} : SDL_Color{255, 255, 255, 210};
+    const SDL_Color center = active ? SDL_Color{40, 0, 80, 180}     : recharging ? SDL_Color{20, 20, 30, 160}    : SDL_Color{40, 40, 60, 180};
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 150);   // fundo semitransparente p/ legibilidade
-    SDL_Rect bg{boxX, boxY, boxW, boxH};
-    SDL_RenderFillRect(renderer, &bg);
 
-    SDL_Rect dst{boxX + pad, boxY + pad, tw, th};
-    SDL_RenderCopy(renderer, tex, nullptr, &dst);
-    SDL_DestroyTexture(tex);
+    // Fundo: anéis do preto (centro) até a cor base (borda).
+    for (int r = 0; r <= kRadius; r++) {
+        const float t = static_cast<float>(r) / kRadius;
+        const float t2 = t * t;
+        SDL_SetRenderDrawColor(renderer, static_cast<Uint8>(base.r * t2), static_cast<Uint8>(base.g * t2),
+                               static_cast<Uint8>(base.b * t2), static_cast<Uint8>(200.0f + 55.0f * t2));
+        DrawCircleOutline(renderer, cx, cy, r, kSegments);
+    }
+
+    // Preenchimento em fatias a partir do topo, centro escuro → borda clara.
+    const float start = -kPi / 2.0f;
+    const int fillSegs = static_cast<int>(fill * kSegments);
+    SDL_Vertex v[3];
+    for (int i = 0; i < fillSegs; i++) {
+        const float a0 = start + (static_cast<float>(i) / kSegments) * 2.0f * kPi;
+        const float a1 = start + (static_cast<float>(i + 1) / kSegments) * 2.0f * kPi;
+        v[0] = {{static_cast<float>(cx), static_cast<float>(cy)}, center, {0, 0}};
+        v[1] = {{cx + std::cos(a0) * kRadius, cy + std::sin(a0) * kRadius}, edge, {0, 0}};
+        v[2] = {{cx + std::cos(a1) * kRadius, cy + std::sin(a1) * kRadius}, edge, {0, 0}};
+        SDL_RenderGeometry(renderer, nullptr, v, 3, nullptr, 0);
+    }
+
+    SDL_SetRenderDrawColor(renderer, 200, 200, 220, 255);
+    DrawCircleOutline(renderer, cx, cy, kRadius, kSegments);
+
+    // "[F] Usar"
+    constexpr int kIconSize = 54;
+    constexpr int kIconGap  = 20;
+    const bool available = !active && !recharging;
+    const SDL_Color kReady{235, 225, 195, 255};
+    const SDL_Color kBusy{220, 55, 45, 255};
+    const int iconX = cx + kRadius + kIconGap;
+    const int iconY = cy - kIconSize / 2;
+
+    if (auto keyTex = Resources::GetImage("Recursos/img/hud/key_f.png")) {
+        const SDL_Rect dst{iconX, iconY, kIconSize, kIconSize};
+        SDL_RenderCopy(renderer, keyTex.get(), nullptr, &dst);
+        if (!available) {
+            SDL_SetRenderDrawColor(renderer, kBusy.r, kBusy.g, kBusy.b, 255);
+            for (int t = 1; t <= 3; ++t) {
+                const SDL_Rect ol{iconX - t, iconY - t, kIconSize + 2 * t, kIconSize + 2 * t};
+                SDL_RenderDrawRect(renderer, &ol);
+            }
+        }
+    }
+    if (auto font = Resources::GetFont(kUiFont, 22)) {
+        int tw = 0, th = 0;
+        TTF_SizeUTF8(font.get(), "Usar", &tw, &th);
+        DrawLine(renderer, font.get(), "Usar", iconX + kIconSize / 2 - tw / 2, iconY + kIconSize + 2,
+                 available ? kReady : kBusy);
+    }
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
 }
 
-void StageState::RenderGameplayCollisionDebug(SDL_Renderer* renderer) const {
-    if (!renderer) {
-        return;
+// Seta sobre o irmão controlado ao trocar: quica, pisca dourado↔branco e some.
+void StageState::RenderControlIndicator(SDL_Renderer* renderer) {
+    if (!controlledCharacter || controlIndicatorTimer <= 0.0f) return;
+
+    const float zoom = Camera::GetZoom();
+    const Rect& box = controlledCharacter->GetAssociated().box;
+    const int cx = static_cast<int>((box.x - Camera::pos.x) * zoom) + static_cast<int>(box.w * zoom) / 2;
+    const int screenY = static_cast<int>((box.y - Camera::pos.y) * zoom);
+    const float elapsed = kControlIndicatorDuration - controlIndicatorTimer;
+
+    float a01 = 1.0f;   // entra em 0,25 s, sai nos últimos 0,7 s
+    if (controlIndicatorTimer < 0.7f) a01 = controlIndicatorTimer / 0.7f;
+    else if (elapsed < 0.25f)         a01 = elapsed / 0.25f;
+    a01 = a01 * a01 * (3.0f - 2.0f * a01);
+
+    const float flash = 0.5f + 0.5f * std::sin(elapsed * 14.0f);
+    const int w = static_cast<int>(22 * zoom);
+    const int h = static_cast<int>(16 * zoom);
+    const int topY = screenY - static_cast<int>(30 * zoom) + static_cast<int>(std::sin(elapsed * 9.0f) * 7.0f * zoom);
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, static_cast<Uint8>(235 + 20 * flash), static_cast<Uint8>(205 + 50 * flash),
+                           static_cast<Uint8>(90 + 165 * flash), static_cast<Uint8>(235 * a01));
+    for (int row = 0; row < h; ++row) {
+        const int halfW = static_cast<int>((w / 2) * (1.0f - static_cast<float>(row) / h));
+        SDL_RenderDrawLine(renderer, cx - halfW, topY + row, cx + halfW, topY + row);
     }
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+}
+
+// Tela preta do conserto da escada (cobre até o HUD). Um Repairable por vez.
+void StageState::RenderRepairOverlay(SDL_Renderer* renderer, int winW, int winH) {
+    for (const auto& goPtr : objectArray) {
+        Repairable* rep = goPtr->GetComponent<Repairable>();
+        if (!rep) continue;
+        const float alpha = rep->GetRepairOverlayAlpha();
+        if (alpha > 0.001f) {
+            FillScreen(renderer, winW, winH, SDL_BLENDMODE_BLEND, 0, 0, 0,
+                       static_cast<Uint8>(std::min(255.0f, alpha * 255.0f)));
+            return;
+        }
+    }
+}
+
+// Legenda da fala tocando agora: caixa escura no rodapé, texto quebrado em 70% da tela.
+void StageState::RenderVoiceSubtitle(SDL_Renderer* renderer) {
+    std::string caption;
+    if (!renderer || !GameVoice::GetActiveSubtitle(caption)) return;
+
+    const int winW = Game::GetInstance().GetWindowsWidth();
+    const int winH = Game::GetInstance().GetWindowsHeight();
+    auto font = Resources::GetFont(kUiFont, 26);
+    if (!font) return;
+
+    SDL_Surface* sf = TTF_RenderUTF8_Blended_Wrapped(font.get(), caption.c_str(), SDL_Color{235, 232, 220, 255},
+                                                     static_cast<Uint32>(winW * 0.7f));
+    if (!sf) return;
+    SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, sf);
+    const int tw = sf->w, th = sf->h;
+    SDL_FreeSurface(sf);
+    if (!tex) return;
+
+    constexpr int kPad = 14;
+    const SDL_Rect bg{(winW - tw - kPad * 2) / 2, winH - th - kPad * 2 - 48, tw + kPad * 2, th + kPad * 2};
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 150);
+    SDL_RenderFillRect(renderer, &bg);
+    const SDL_Rect dst{bg.x + kPad, bg.y + kPad, tw, th};
+    SDL_RenderCopy(renderer, tex, nullptr, &dst);
+    SDL_DestroyTexture(tex);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  Debug
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Canto superior direito: estado dos atalhos de debug (verde = ligado) e, com
+// [B], a legenda das cores de colisão.
+void StageState::RenderDebugStatus(SDL_Renderer* renderer, int winW) {
+    auto font = Resources::GetFont(kUiFont, 18);
+    if (!font) return;
+
+    struct Toggle { const char* label; bool on; };
+    const Toggle toggles[] = {
+        {"[B] Colisao/fisica: ",       showMapPhysicsDebug},
+        {"[I] Invisivel p/ monstro: ", debugMonsterBlind},
+        {"[G] Camera livre: ",         debugFreeCam},
+    };
+    int y = 8;
+    for (const Toggle& t : toggles) {
+        const std::string text = std::string(t.label) + (t.on ? "ON" : "OFF");
+        const SDL_Color col = t.on ? SDL_Color{80, 255, 80, 255} : SDL_Color{170, 170, 170, 220};
+        int tw = 0, th = 0;
+        TTF_SizeUTF8(font.get(), text.c_str(), &tw, &th);
+        if (DrawLine(renderer, font.get(), text, winW - tw - 10, y, col) > 0) y += th + 4;
+    }
+    if (!showMapPhysicsDebug) return;
+
+    struct LegendItem { Uint8 r, g, b; const char* label; };
+    const LegendItem legend[] = {
+        {255,   0,   0, "Monstro: HURTBOX (dano ao irmao)"},
+        {  0, 255, 120, "Monstro: colisao de NAV (CIRCULO)"},
+        {255, 255,   0, "Monstro: bounds do sprite"},
+        {255,   0, 255, "Monstro: collider (componente)"},
+        {  0, 220, 255, "Caixa/barril (empurravel)"},
+        {255, 190,  70, "Irmaozao: pe/colisao (CIRCULO amarelo)"},
+        { 90, 255, 200, "Irmaozinho: pe/colisao (CIRCULO verde-agua)"},
+        {255,  60,  60, "Jogador: HITBOX de dano (CIRCULO vermelho)"},
+        {255,  60,  60, "Mapa: paredes/colisao estatica"},
+        {  0, 220, 255, "Mapa: chao/escada"},
+    };
+    auto small = Resources::GetFont(kUiFont, 15);
+    y += 6;
+    for (const LegendItem& li : legend) {
+        int tw = 0, th = 14;
+        if (small) TTF_SizeUTF8(small.get(), li.label, &tw, &th);
+        const int sw = th;                          // quadradinho do tamanho da altura do texto
+        const int left = winW - (sw + 6 + tw) - 8;
+
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 150);
+        const SDL_Rect bg{left - 4, y - 1, sw + 6 + tw + 8, th + 2};
+        SDL_RenderFillRect(renderer, &bg);
+        SDL_SetRenderDrawColor(renderer, li.r, li.g, li.b, 255);
+        const SDL_Rect swatch{left, y, sw, th};
+        SDL_RenderFillRect(renderer, &swatch);
+        DrawLine(renderer, small.get(), li.label, winW - tw - 8, y, SDL_Color{225, 225, 230, 235});
+        y += th + 3;
+    }
+}
+
+// Colliders em arame, coloridos por tipo (irmãozão, irmãozinho, monstro, caixa,
+// cenário). Nos irmãos, em vez do Collider: caixa dos pés e hurtbox.
+void StageState::RenderGameplayCollisionDebug(SDL_Renderer* renderer) const {
+    if (!renderer) return;
     const float z = Camera::GetZoom();
+
+    auto drawWorldRect = [&](const SDL_Rect& wr, Uint8 r, Uint8 g, Uint8 b) {
+        const Vec2 tl = WorldToScreen(Vec2(static_cast<float>(wr.x), static_cast<float>(wr.y)));
+        const SDL_FRect sr{tl.x, tl.y, wr.w * z, wr.h * z};
+        SDL_SetRenderDrawColor(renderer, r, g, b, 210);
+        SDL_RenderDrawRectF(renderer, &sr);
+    };
+
     for (const auto& goPtr : objectArray) {
         GameObject* go = goPtr.get();
-        if (!go) {
-            continue;
-        }
-        Collider* col = go->GetComponent<Collider>();
-        if (!col) {
-            continue;
-        }
+        Collider* col = go ? go->GetComponent<Collider>() : nullptr;
+        if (!col) continue;
         const bool isBig = (go == bigCharacterObject);
         const bool isSmall = (go == smallCharacterObject);
-        // Cor por TIPO de collider (ver a legenda desenhada por RenderDebugToggleStatus):
-        //  laranja=irmãozão · verde-água=irmãozinho · magenta=monstro ·
-        //  ciano=caixa/barril (empurrável) · dourado=footprint de cenário (nav).
-        Uint8 pr, pg, pb;
-        if (isBig) {
-            pr = 255; pg = 190; pb = 70;                 // irmãozão
-        } else if (isSmall) {
-            pr = 90;  pg = 255; pb = 200;                // irmãozinho
-        } else if (go->GetComponent<Monster>() != nullptr) {
-            pr = 255; pg = 0;   pb = 255;                // monstro
-        } else if (go->GetComponent<Box>() != nullptr) {
-            pr = 0;   pg = 220; pb = 255;                // caixa/barril empurrável
-        } else {
-            pr = 255; pg = 215; pb = 0;                  // footprint de cenário (pilar/mesa/armário...)
-        }
-        // Para os IRMÃOS não desenhamos o retângulo do Collider: a colisão real deles
-        // é QUADRADA (caixa dos pés) + hurtbox QUADRADA — desenhadas logo abaixo.
-        if (!isBig && !isSmall) {
-            DrawColliderDebugWire(renderer, col->box, static_cast<float>(go->angleDeg), pr, pg, pb, 215);
-        }
 
+        if (!isBig && !isSmall) {
+            SDL_Color c{255, 215, 0, 255};                                   // cenário
+            if (go->GetComponent<Monster>())  c = {255, 0, 255, 255};
+            else if (go->GetComponent<Box>()) c = {0, 220, 255, 255};
+            DrawColliderDebugWire(renderer, col->box, static_cast<float>(go->angleDeg), c.r, c.g, c.b, 215);
+        }
         if (Character* ch = go->GetComponent<Character>()) {
-            // Caixas AABB estáveis do jogador (não mudam com a animação).
-            auto drawWorldRect = [&](const SDL_Rect& wr, Uint8 cr, Uint8 cg, Uint8 cb) {
-                const Vec2 tl = WorldToScreen(Vec2(static_cast<float>(wr.x), static_cast<float>(wr.y)));
-                SDL_FRect sr{ tl.x, tl.y, wr.w * z, wr.h * z };
-                SDL_SetRenderDrawColor(renderer, cr, cg, cb, 210);
-                SDL_RenderDrawRectF(renderer, &sr);
-            };
-            // Caixa dos PÉS (colisão com o cenário) — verde/amarelo.
-            Uint8 fr = 80, fg = 255, fb = 120;
-            if (isBig)        { fr = 255; fg = 240; fb = 60; }
-            else if (isSmall) { fr = 60;  fg = 255; fb = 180; }
-            drawWorldRect(ch->GetFootRect(), fr, fg, fb);
-            // HURTBOX (dano do monstro) — vermelho.
+            if (isBig)        drawWorldRect(ch->GetFootRect(), 255, 240, 60);
+            else if (isSmall) drawWorldRect(ch->GetFootRect(), 60, 255, 180);
+            else              drawWorldRect(ch->GetFootRect(), 80, 255, 120);
             drawWorldRect(ch->GetHitRect(), 255, 60, 60);
         }
     }
 }
 
-/// Polylinha amarela: rota que o seguidor usa neste frame (A* ou linha reta) — só faz sentido com `PartyMode::TOGETHER`.
+// Rota que o seguidor usa neste frame (A* ou linha reta), em amarelo, com os waypoints.
 void StageState::RenderCompanionFollowPathDebug(SDL_Renderer* renderer) const {
-    if (!renderer || companionFollowPathWorld.size() < 2) {
-        return;
-    }
+    if (!renderer || companionFollowPathWorld.size() < 2) return;
+
     const float z = Camera::GetZoom();
     SDL_BlendMode oldBlend;
     SDL_GetRenderDrawBlendMode(renderer, &oldBlend);
     Uint8 dr, dg, db, da;
     SDL_GetRenderDrawColor(renderer, &dr, &dg, &db, &da);
+
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer, 255, 235, 70, 210);
     for (size_t i = 1; i < companionFollowPathWorld.size(); i++) {

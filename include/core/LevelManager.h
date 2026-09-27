@@ -2,137 +2,110 @@
 #define LEVEL_MANAGER_H
 
 #define INCLUDE_SDL
-#include <vector>
-#include <string>
-#include <unordered_map>
 #include "SDL_include.h"
 #include "nlohmann/json.hpp"
 #include "math/Vec2.h"
 #include "audio/GameSfx.h"
 
+#include <string>
+#include <unordered_map>
+#include <vector>
+
 using json = nlohmann::json;
 
-// Estrutura para Polígonos (diagonais e formas complexas)
-struct Polygon {
+struct Polygon {                                         // paredes diagonais / formas do Tiled
     std::vector<SDL_Point> vertices;
 };
 
-// Estrutura para Círculos (paineis, pilastras redondas)
-struct Circle {
+struct Circle {                                          // pilares redondos; também o pé de quem anda
     Vec2 center;
     float radius;
 };
 
-// Ler as camadas das imagens
-struct ImageLayer {
+struct ImageLayer {                                      // camada de imagem do Tiled (parede, chão)
     SDL_Texture* texture;
     int x, y;
     int w, h;
 };
 
-// Guarda a "receita" de qualquer entidade do jogo
+// "Receita" de uma entidade do mapa (camada Entidades), montada pela SpawnFactory.
 struct EntitySpawn {
-    std::string type;
+    std::string type;                                    // class/type do Tiled
     std::string name;
-    int tiledId = -1;
+    int   tiledId = -1;
     float x, y;
     float w = 0.0f;
     float h = 0.0f;
-    bool isStatic;
-    int z;
-    bool flipH = false;   // flags de espelhamento decodificadas do gid do Tiled
-    bool flipV = false;
-    float rotation = 0.0f; // rotação do objeto no Tiled (graus, horário)
-    int  gid = 0;          // gid absoluto (sem os bits de flip) — resolve a imagem do tileset
-
-    std::unordered_map<std::string, json> properties;
+    bool  isStatic;
+    int   z;
+    bool  flipH = false;                                 // flips decodificados do gid
+    bool  flipV = false;
+    float rotation = 0.0f;                               // graus, horário
+    int   gid = 0;                                       // gid sem os bits de flip (imagem do tileset)
+    std::unordered_map<std::string, json> properties;    // propriedades customizadas
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Mapa de um andar: lê o JSON do Tiled (imagens, colisão, zonas de passos,
+//  entidades, gatilhos) e responde às perguntas de colisão.
+//
+//  Camadas lidas: imagelayer (arte) · Collision (paredes, escada, buraco,
+//  move_levels, stone_floor, repairable_trigger) · Collision_Obj (móveis) ·
+//  FootstepZones (piso de pedra) · Entidades (spawns).
+// ─────────────────────────────────────────────────────────────────────────────
 class LevelManager {
 public:
-    LevelManager();
+    LevelManager() = default;
     ~LevelManager();
 
-    // Carrega o JSON exportado pelo Tiled
-    void LoadLevel(std::string path, SDL_Renderer* renderer);
+    void LoadLevel(const std::string& path, SDL_Renderer* renderer);   // troca o andar inteiro
 
-    // A função principal que o Player vai chamar
+    // ── Colisão ──────────────────────────────────────────────────────────────
+    // isElevated = na escada: só o corrimão (e o buraco, se a escada estiver quebrada) colidem.
     bool CheckCollision(const SDL_Rect& entityBox, bool isElevated = false);
-
-    // Permite testar a colisão enviando um Círculo ao invés de um Retângulo!
     bool CheckCollision(const Circle& entityCircle, bool isElevated = false);
+    Vec2 GetCirclePushVector(const Circle& entityCircle, bool isElevated = false);   // empurrão para sair de dentro
+    bool CheckRepairableTrigger(const SDL_Rect& entityBox);                           // encosta num "repairable_trigger"
 
-    // Gatilho do Repairable: true se a caixa (ex.: pés do irmãozão) encosta em
-    // alguma forma "repairable_trigger" definida no mapa (Tiled).
-    bool CheckRepairableTrigger(const SDL_Rect& entityBox);
+    // ── Consultas ────────────────────────────────────────────────────────────
+    FootstepSurface QueryFootstepSurface(int x, int y, bool isElevated) const;       // escada / pedra / madeira
+    bool GetWorldBounds(float& outMinX, float& outMinY, float& outMaxX, float& outMaxY) const;   // área da arte (limite da câmera)
+    const std::string* GetTileImagePath(int gid) const;                               // imagem do tileset p/ um gid
 
+    // ── Desenho ──────────────────────────────────────────────────────────────
     void RenderBackground(SDL_Renderer* renderer);
-    void RenderDebug(SDL_Renderer* renderer);
-    /// Map collision from Tiled (runtime; not tied to DEBUG preprocessor).
-    void RenderCollisionOverlay(SDL_Renderer* renderer) const;
+    void RenderCollisionOverlay(SDL_Renderer* renderer) const;                        // debug [B]
 
-    // Getters para o sistema de colisão usar depois
-    std::vector<SDL_Rect>& GetRectColliders();
-    std::vector<Polygon>& GetPolyColliders();
-    std::vector<Circle>& GetCircleColliders();
-
-    // Lista de Spawns
-    std::vector<EntitySpawn> entitySpawns;
-    std::vector<EntitySpawn> levelTransitionZones;
-
-    bool escadaConsertada = false;
-    std::string levelLabel;
-
-    FootstepSurface QueryFootstepSurface(int x, int y, bool isElevated) const;
-
-    // Retângulo que a arte do nível ocupa (união de todas as camadas de imagem,
-    // já com os offsets do Tiled). É o que a câmera usa como limite para nunca
-    // mostrar o vazio para lá do mapa. Devolve false quando o nível não tem
-    // nenhuma camada de imagem — nesse caso a câmera fica sem limites.
-    bool GetWorldBounds(float& outMinX, float& outMinY, float& outMaxX, float& outMaxY) const;
-
-    // Caminho da imagem do tileset (o que o Tiled MOSTRA) para um gid; nullptr se
-    // desconhecido. Usado p/ renderizar exatamente a arte do Tiled (ex.: ItemSpawn).
-    const std::string* GetTileImagePath(int gid) const;
-
-    Vec2 GetCirclePushVector(const Circle& entityCircle, bool isElevated = false);
+    std::vector<EntitySpawn> entitySpawns;               // camada Entidades
+    std::vector<EntitySpawn> levelTransitionZones;       // retângulos "move_levels"
+    bool escadaConsertada = false;                       // buraco da escada consertado
 
 private:
-    // Constrói o mapa gid→imagem lendo os tilesets do mapa (inclui .tsx externos).
-    void LoadTilesets(const json& j, const std::string& mapPath);
+    void ClearLevel();                                   // libera texturas e esvazia tudo
+    void LoadTilesets(const json& j, const std::string& mapPath);   // gid → imagem (inclui .tsx)
     void ParseTsx(const std::string& tsxPath, int firstgid);
+    void LoadImageLayer(const json& layer, SDL_Renderer* renderer);
+    void LoadCollisionLayer(const json& layer, float offX, float offY);
+    void LoadStaticObjectLayer(const json& layer, float offX, float offY);
+    void LoadFootstepZones(const json& layer, float offX, float offY);
+    void LoadEntities(const json& layer, float offX, float offY);
+
+    bool CheckRectVsCircle(const SDL_Rect& rect, const Circle& circle) const;
+    bool CheckPolygonVsRect(const Polygon& poly, const SDL_Rect& rect) const;     // serve para côncavos
+    bool CheckPolygonVsCircle(const Polygon& poly, const Circle& circle) const;
+
     std::unordered_map<int, std::string> gidToImagePath;
+    std::vector<ImageLayer> imageLayers;                 // na ordem do Tiled (fundo primeiro)
 
-    // Vetor pra guardar todas as imagens na ordem certa
-    std::vector<ImageLayer> imageLayers;              
-
-    // Funções matemáticas auxiliares para resolver cada tipo de forma
-    bool CheckRectVsCircle(const SDL_Rect& rect, const Circle& circle);
-    bool CheckPolygonVsPolygon(const Polygon& p1, const Polygon& p2);
-    // Retângulo (AABB do jogador) vs polígono — funciona para polígonos CÔNCAVOS
-    // (SAT só serve para convexos). Evita atravessar paredes em L, etc.
-    bool CheckPolygonVsRect(const Polygon& poly, const SDL_Rect& rect);
-
-    // Ferramenta matemática para testar um polígono contra um círculo
-    bool CheckPolygonVsCircle(const Polygon& poly, const Circle& circle);
-    static bool PointInPolygon(const Polygon& poly, int x, int y);
-
-    // Listas de colisores baseadas no que o Tiled exporta
-    std::vector<SDL_Rect> rectColliders;
-    std::vector<Polygon> chaoNormal;
-    std::vector<Polygon> chaoEscada;
-    std::vector<Polygon> chaoBuraco;
-    std::vector<Polygon> floorWoodZones;
-    std::vector<Polygon> floorStoneZones;
-    std::vector<Polygon> repairableTriggers;   // formas "repairable_trigger" (Tiled)
-    int footstepWoodFallbackMinY = 2100;
-    std::vector<Circle> circleColliders;
-
-    // Colisão estática de objetos do cenário (armários, caixas diagonais, etc.)
-    std::vector<Polygon>  objPolyColliders;   // Para objetos com forma irregular/diagonal
-    std::vector<SDL_Rect> objRectColliders;   // Para objetos em posição retangular padrão
-
-    
+    std::vector<SDL_Rect> rectColliders;                 // paredes retangulares
+    std::vector<Circle>   circleColliders;               // pilares redondos
+    std::vector<Polygon>  chaoNormal;                    // paredes em polígono
+    std::vector<Polygon>  chaoEscada;                    // corrimão da escada (valem só em cima dela)
+    std::vector<Polygon>  chaoBuraco;                    // buraco da escada quebrada
+    std::vector<Polygon>  objPolyColliders;              // móveis em polígono (Collision_Obj)
+    std::vector<SDL_Rect> objRectColliders;              // móveis retangulares (Collision_Obj)
+    std::vector<Polygon>  floorStoneZones;               // piso de pedra (só som de passos)
+    std::vector<Polygon>  repairableTriggers;            // zonas de conserto
 };
 
 #endif

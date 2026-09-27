@@ -273,87 +273,8 @@ void StageState::BeginLevelTransition(int targetLevelIndex) {
     if (sceneTransitionActive) {
         return;   // já em transição
     }
-
-    // Último andar: em vez de recarregar, alcançar a escada leva ao EndState
-    // (vitória + créditos). ANTES um clarão/relâmpago tomava a tela — agora usa a
-    // MESMA transição zoom-blur das outras escadas.
-    if (currentLevelIndex == 2) {
-        // --- ANTIGO: sequência de relâmpagos (DESATIVADA — reativar trocando pela
-        //     chamada de BeginSceneTransition abaixo e religando Update/Render):
-        // if (!finalEscapeActive) {
-        //     finalEscapeActive = true;
-        //     finalEscapeTimer = 0.0f;
-        //     finalEscapeStrikeCount = 0;
-        //     GameVoice::StopAll();
-        //     GameSfx::TriggerThunderStrike();   // primeiro estampido imediato
-        // }
-        // return;
-        BeginSceneTransition(targetLevelIndex, /*toEnd=*/true);
-        return;
-    }
-    BeginSceneTransition(targetLevelIndex, /*toEnd=*/false);
-}
-
-void StageState::UpdateFinalEscape(float dt) {
-    finalEscapeTimer += dt;
-
-    // Estampidos de trovão em ritmo acelerado: cada vez mais próximos conforme a
-    // luz do farol "chega". Dispara nos tempos abaixo (proporções da duração).
-    GameSfx::UpdateThunder(dt);
-    static constexpr float kStrikeAt[] = {0.55f, 1.05f, 1.5f, 1.9f, 2.25f, 2.55f, 2.8f, 3.0f};
-    const int totalStrikes = static_cast<int>(sizeof(kStrikeAt) / sizeof(kStrikeAt[0]));
-    while (finalEscapeStrikeCount < totalStrikes &&
-           finalEscapeTimer >= kStrikeAt[finalEscapeStrikeCount]) {
-        GameSfx::TriggerThunderStrike();
-        ++finalEscapeStrikeCount;
-    }
-
-    if (finalEscapeTimer >= kFinalEscapeDuration) {
-        GameSfx::StopAllGameplay();
-        GameVoice::StopAll();
-        GameData::playerVictory = true;
-        GameData::deathByMonster = false;
-        finalEscapeActive = false;
-        popRequested = true;
-        Game::GetInstance().Push(new EndState());
-    }
-}
-
-void StageState::RenderFinalEscape(SDL_Renderer* renderer) {
-    if (!renderer || !finalEscapeActive) {
-        return;
-    }
-
-    const int winW = Game::GetInstance().GetWindowsWidth();
-    const int winH = Game::GetInstance().GetWindowsHeight();
-    const SDL_Rect full{0, 0, winW, winH};
-
-    const float t = std::min(1.0f, finalEscapeTimer / kFinalEscapeDuration);
-
-    // Base: um brilho branco que sobe (ease-in) — a luz do farol se aproximando.
-    float base = t * t;
-
-    // Estroboscópio: picos brancos afiados cuja frequência cresce com o tempo.
-    const float freq = 7.0f + 26.0f * t;
-    const float s = std::sin(finalEscapeTimer * freq);
-    const float strobe = std::pow(std::max(0.0f, s), 6.0f) * (0.65f + 0.35f * t);
-
-    float intensity = std::min(1.0f, base + strobe);
-
-    // Meio segundo final: branco total, garantindo um corte limpo para os créditos.
-    if (finalEscapeTimer > kFinalEscapeDuration - 0.5f) {
-        intensity = 1.0f;
-    }
-
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255,
-                           static_cast<Uint8>(std::min(255.0f, 255.0f * intensity)));
-    SDL_RenderFillRect(renderer, &full);
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-    // PRETO, nao branco: o `SDL_RenderClear` do inicio do frame seguinte usa a
-    // ultima cor de desenho. Deixa-la branca fazia o ecra comecar branco, e
-    // qualquer buraco no quadro congelado virava um clarao.
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    // Último andar: a escada leva ao EndState (vitória + créditos) com a mesma transição.
+    BeginSceneTransition(targetLevelIndex, /*toEnd=*/currentLevelIndex == 2);
 }
 
 // ── Transição de cena "zoom-blur" estilo RE4 ────────────────────────────────

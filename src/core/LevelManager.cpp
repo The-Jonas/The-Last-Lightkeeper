@@ -1,391 +1,120 @@
 #include "core/LevelManager.h"
 #include "core/CrashHandler.h"
 #include "engine/Camera.h"
+
 #include <SDL2/SDL_image.h>
-#include <cmath>
+
 #include <algorithm>
-#include <limits>
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
+#include <cmath>
 #include <fstream>
 #include <iostream>
 
-LevelManager::LevelManager() {
-    // Inicializamos os ponteiros como nulos por segurança
-}
-
-LevelManager::~LevelManager() {
-    // O destrutor limpa todas as texturas do vetor automaticamente
-    for (auto& layer : imageLayers) {
-        if (layer.texture != nullptr) {
-            SDL_DestroyTexture(layer.texture);
-        }
-    }
-    imageLayers.clear();
-    rectColliders.clear();
-    chaoEscada.clear();
-    chaoNormal.clear();
-    chaoBuraco.clear();
-    floorWoodZones.clear();
-    floorStoneZones.clear();
-    repairableTriggers.clear();
-    footstepWoodFallbackMinY = 2100;
-    circleColliders.clear();
-    objPolyColliders.clear();
-    objRectColliders.clear();
-    entitySpawns.clear();
-    levelTransitionZones.clear();
-
-}
-
-void LevelManager::LoadLevel(std::string path, SDL_Renderer* renderer) {
-    CrashHandler::Log("LoadLevel: %s", path.c_str());
-    std::ifstream file(path);
-    if (!file.is_open()) {
-        std::cout << "Erro: Arquivo do mapa nao encontrado -> " << path << std::endl;
-        return;
-    }
-
-    json j;
-    try {
-        file >> j;
-
-        // Limpa a fase anterior
-        for (auto& layer : imageLayers) {
-            if (layer.texture != nullptr) {
-                SDL_DestroyTexture(layer.texture);
-            }
-        }
-        imageLayers.clear();
-        rectColliders.clear();
-        chaoEscada.clear();
-        chaoNormal.clear();
-        chaoBuraco.clear();
-        floorWoodZones.clear();
-        floorStoneZones.clear();
-        repairableTriggers.clear();
-        footstepWoodFallbackMinY = 2100;
-        circleColliders.clear();
-        objPolyColliders.clear();
-        objRectColliders.clear();
-        entitySpawns.clear();
-        levelTransitionZones.clear();
-        levelLabel.clear();
-        gidToImagePath.clear();
-
-        // Resolve gid→imagem (o que o Tiled mostra) a partir dos tilesets do mapa.
-        LoadTilesets(j, path);
-
-        // Se o JSON estiver vazio, aborta com seguranca
-        if (!j.contains("layers")) return;
-
-        if (j.contains("properties") && j["properties"].is_array()) {
-            for (auto& prop : j["properties"]) {
-                const std::string pName = prop.value("name", "");
-                if (pName == "levelLabel" && prop.contains("value")) {
-                    levelLabel = prop["value"].get<std::string>();
-                } else if (pName == "footstepWoodMinY" && prop.contains("value")) {
-                    footstepWoodFallbackMinY = prop["value"].get<int>();
-                }
-            }
-        }
-
-        // Lemos as camadas na ordem em que o Tiled exportou!
-        for (auto& layer : j["layers"]) {
-            std::string layerType = layer.value("type", "");
-
-            // ==========================================
-            // SE FOR UMA CAMADA DE IMAGEM (Chão, Parede)
-            // ==========================================
-            if (layerType == "imagelayer") {
-                ImageLayer imgLayer;
-
-                // Pega o offset se existir (senão é 0)
-                imgLayer.x = layer.value("offsetx", 0);
-                imgLayer.y = layer.value("offsety", 0);
-                imgLayer.w = layer.value("imagewidth", 0);
-                imgLayer.h = layer.value("imageheight", 0);
-
-                std::string imagePath = layer.value("image", "");
-                if (imagePath != "") {
-                    size_t pos = imagePath.find("../");
-                    if (pos != std::string::npos) {
-                        imagePath.replace(pos, 3, "Recursos/");
-                    }
-                    imgLayer.texture = IMG_LoadTexture(renderer, imagePath.c_str());
-                    if (imgLayer.texture) {
-                        imageLayers.push_back(imgLayer);
-                    } else {
-                        std::cout << "Erro ao carregar textura: " << imagePath << std::endl;
-                    }
-                }
-            }
-
-            // ==========================================
-            // SE FOR A CAMADA DE COLISÃO
-            // ==========================================
-            else if (layerType == "objectgroup") {
-                std::string layerName = layer.value("name", "");
-                float layerOffsetX = layer.value("offsetx", 0.0f);
-                float layerOffsetY = layer.value("offsety", 0.0f);
-
-                // Trava de seguranca: Se nao tem objetos, pula!
-                if (!layer.contains("objects")) continue;
-
-                // CAMADA DE COLISÃO FÍSICA (Paredes)
-                if (layerName == "Collision") {
-                    for (auto& obj : layer["objects"]) {
-
-                        std::string type = obj.value("class", obj.value("type", ""));
-
-                        float finalX = obj.value("x", 0.0f) + layerOffsetX;
-                        float finalY = obj.value("y", 0.0f) + layerOffsetY;
-
-                        // GATILHO do Repairable ("repairable_trigger", por name OU type):
-                        // não é parede — é só uma zona de interação. Aceita polígono
-                        // (forma/ângulo desenhado no Tiled) ou retângulo.
-                        if (type == "repairable_trigger" ||
-                            obj.value("name", std::string()) == "repairable_trigger") {
-                            Polygon trig;
-                            if (obj.contains("polygon")) {
-                                for (auto& p : obj["polygon"]) {
-                                    trig.vertices.push_back({ (int)(finalX + p.value("x", 0.0f)),
-                                                              (int)(finalY + p.value("y", 0.0f)) });
-                                }
-                            } else {
-                                const float w = obj.value("width", 0.0f);
-                                const float h = obj.value("height", 0.0f);
-                                if (w > 0.0f && h > 0.0f) {
-                                    trig.vertices.push_back({ (int)finalX,       (int)finalY });
-                                    trig.vertices.push_back({ (int)(finalX + w), (int)finalY });
-                                    trig.vertices.push_back({ (int)(finalX + w), (int)(finalY + h) });
-                                    trig.vertices.push_back({ (int)finalX,       (int)(finalY + h) });
-                                }
-                            }
-                            if (trig.vertices.size() >= 3) {
-                                repairableTriggers.push_back(trig);
-                            }
-                            continue;   // nunca vira colisor/parede
-                        }
-
-                        if (obj.contains("polygon")) {
-                            Polygon poly;
-                            for (auto& p : obj["polygon"]) {
-                                float px = p.value("x", 0.0f);
-                                float py = p.value("y", 0.0f);
-                                poly.vertices.push_back({ (int)(finalX + px), (int)(finalY + py) });
-                            }
-                            // Só adiciona se for um polígono válido (pelo menos um triângulo)
-                            if (poly.vertices.size() >= 3) {
-                                if (type == "Escada") {
-                                    chaoEscada.push_back(poly);
-                                } else if (type == "Buraco") {
-                                    chaoBuraco.push_back(poly); 
-                                } else if (type == "Madeira") {
-                                    floorWoodZones.push_back(poly);
-                                } else {
-                                    chaoNormal.push_back(poly);
-                                }
-                            } 
-
-                        } else if (obj.contains("ellipse")) {
-                            Circle c;
-                            c.radius = obj.value("width", 0.0f) / 2.0f;
-                            c.center.x = finalX + c.radius;
-                            c.center.y = finalY + c.radius;
-                            if (c.radius > 0.0f) circleColliders.push_back(c);
-
-                        } else {
-                            const std::string objName = obj.value("name", "");
-                            if (objName == "move_levels") {
-                                EntitySpawn zone;
-                                zone.name = objName;
-                                zone.tiledId = obj.value("id", -1);
-                                zone.x = finalX;
-                                zone.y = finalY;
-                                zone.w = obj.value("width", 0.0f);
-                                zone.h = obj.value("height", 0.0f);
-                                if (obj.contains("properties")) {
-                                    for (auto& prop : obj["properties"]) {
-                                        const std::string pName = prop.value("name", "");
-                                        if (prop.contains("value")) {
-                                            zone.properties[pName] = prop["value"];
-                                        }
-                                    }
-                                }
-                                if (zone.w > 0.0f && zone.h > 0.0f) {
-                                    levelTransitionZones.push_back(zone);
-                                }
-                            } else if (objName == "stone_floor") {
-                                // Piso de PEDRA (só no 1º andar): zona CAMINHÁVEL,
-                                // usada apenas para escolher o som de passos. NÃO
-                                // entra em rectColliders (senão viraria parede).
-                                const int rw = (int)obj.value("width", 0.0f);
-                                const int rh = (int)obj.value("height", 0.0f);
-                                if (rw > 0 && rh > 0) {
-                                    const int rx = (int)finalX;
-                                    const int ry = (int)finalY;
-                                    Polygon poly;
-                                    poly.vertices.push_back({ rx,      ry });
-                                    poly.vertices.push_back({ rx + rw, ry });
-                                    poly.vertices.push_back({ rx + rw, ry + rh });
-                                    poly.vertices.push_back({ rx,      ry + rh });
-                                    floorStoneZones.push_back(poly);
-                                }
-                            } else {
-                                SDL_Rect r;
-                                r.x = (int)finalX;
-                                r.y = (int)finalY;
-                                r.w = obj.value("width", 0.0f);
-                                r.h = obj.value("height", 0.0f);
-                                if (r.w > 0 && r.h > 0) rectColliders.push_back(r);
-                            }
-                        }
-                    }
-                }
-                else if (layerName == "Collision_Obj") {
-                    for (auto& obj : layer["objects"]) {
-                        float finalX = obj.value("x", 0.0f) + layerOffsetX;
-                        float finalY = obj.value("y", 0.0f) + layerOffsetY;
- 
-                        if (obj.contains("polygon")) {
-                            // Objeto com forma irregular ou diagonal → SAT
-                            Polygon poly;
-                            for (auto& p : obj["polygon"]) {
-                                poly.vertices.push_back({
-                                    (int)(finalX + p.value("x", 0.0f)),
-                                    (int)(finalY + p.value("y", 0.0f))
-                                });
-                            }
-                            if (poly.vertices.size() >= 3)
-                                objPolyColliders.push_back(poly);
- 
-                        } else {
-                            // Objeto retangular padrão → AABB simples
-                            SDL_Rect r;
-                            r.x = (int)finalX;
-                            r.y = (int)finalY;
-                            r.w = (int)obj.value("width",  0.0f);
-                            r.h = (int)obj.value("height", 0.0f);
-                            if (r.w > 0 && r.h > 0)
-                                objRectColliders.push_back(r);
-                        }
-                    }
-                }
-                else if (layerName == "FootstepZones") {
-                    for (auto& obj : layer["objects"]) {
-                        std::string type = obj.value("class", obj.value("type", ""));
-                        float finalX = obj.value("x", 0.0f) + layerOffsetX;
-                        float finalY = obj.value("y", 0.0f) + layerOffsetY;
-
-                        auto storeZone = [&](std::vector<Polygon>& target) {
-                            if (obj.contains("polygon")) {
-                                Polygon poly;
-                                for (auto& p : obj["polygon"]) {
-                                    poly.vertices.push_back({
-                                        static_cast<int>(finalX + p.value("x", 0.0f)),
-                                        static_cast<int>(finalY + p.value("y", 0.0f)),
-                                    });
-                                }
-                                if (poly.vertices.size() >= 3) {
-                                    target.push_back(poly);
-                                }
-                            } else {
-                                const float w = obj.value("width", 0.0f);
-                                const float h = obj.value("height", 0.0f);
-                                if (w <= 0.0f || h <= 0.0f) {
-                                    return;
-                                }
-                                Polygon poly;
-                                poly.vertices.push_back({static_cast<int>(finalX), static_cast<int>(finalY)});
-                                poly.vertices.push_back({static_cast<int>(finalX + w), static_cast<int>(finalY)});
-                                poly.vertices.push_back({static_cast<int>(finalX + w), static_cast<int>(finalY + h)});
-                                poly.vertices.push_back({static_cast<int>(finalX), static_cast<int>(finalY + h)});
-                                target.push_back(poly);
-                            }
-                        };
-
-                        if (type == "Madeira" || type == "Wood") {
-                            storeZone(floorWoodZones);
-                        } else if (type == "Pedra" || type == "Stone") {
-                            storeZone(floorStoneZones);
-                        }
-                    }
-                }
-                
-                
-                // CAMADA DE ENTIDADES (Spawns)
-                else if (layerName == "Entidades") {
-                    for (auto& obj : layer["objects"]){
-                        EntitySpawn spawn;
-
-                        // O Tiled pode ler tanto "type" ou "class". Usarei as duas por segurança
-                        spawn.type = obj.value("class", obj.value("type", ""));
-                        spawn.name = obj.value("name", "");
-                        spawn.tiledId = obj.value("id", -1);
-                        spawn.x = obj.value("x", 0.0f) + layerOffsetX;
-                        spawn.y = obj.value("y", 0.0f) + layerOffsetY;
-
-                        spawn.w = obj.value("width", 0.0f);
-                        spawn.h = obj.value("height", 0.0f);
-                        spawn.rotation = obj.value("rotation", 0.0f);
-
-                        // Valores padrão caso esqueçamos de criar no Tiled
-                        spawn.isStatic = false;
-                        spawn.z = 2;
-
-                        // O Tiled empacota as flags de flip nos 3 bits altos do gid.
-                        // Decodifica horizontal/vertical (a diagonal é rara e ignorada).
-                        const long long rawGid = obj.value("gid", 0LL);
-                        spawn.flipH = (rawGid & 0x80000000LL) != 0;
-                        spawn.flipV = (rawGid & 0x40000000LL) != 0;
-                        // gid absoluto sem os 3 bits altos de flip (H/V/diagonal).
-                        spawn.gid = static_cast<int>(rawGid & 0x1FFFFFFFLL);
-
-                        // Lendo agora as propriedades customizadas
-                        if (obj.contains("properties")) {
-                            for (auto& prop : obj["properties"]) {
-                                std::string pName = prop.value("name", "");
-                                if (pName == "isStatic" && prop.contains("value")) {
-                                    if (prop["value"].is_boolean()) spawn.isStatic = prop["value"].get<bool>();
-                                } 
-                                else if (pName == "z" && prop.contains("value")) {
-                                    if (prop["value"].is_number()) spawn.z = prop["value"].get<int>();
-                                }
-                                else if (prop.contains("value")) {
-                                    spawn.properties[pName] = prop["value"];
-                                }
-                            }    
-                        }
-
-                        // Guarda na lista do mapa!
-                        entitySpawns.push_back(spawn);
-                    }
-                }
-            }
-        }
-    } 
-    catch (const std::exception& e) { 
-        std::cout << "Erro Fatal ao processar o JSON: " << e.what() << std::endl;
-        return;
-    }
-}
-
-// ── Resolução gid→imagem do tileset (arte que o Tiled MOSTRA) ────────────────
 namespace {
+
+constexpr float kPi = 3.14159265f;
+
+// Retângulo do Tiled como polígono de 4 vértices.
+Polygon RectPolygon(float x, float y, float w, float h) {
+    Polygon p;
+    p.vertices = {{static_cast<int>(x), static_cast<int>(y)},
+                  {static_cast<int>(x + w), static_cast<int>(y)},
+                  {static_cast<int>(x + w), static_cast<int>(y + h)},
+                  {static_cast<int>(x), static_cast<int>(y + h)}};
+    return p;
+}
+
+// Pontos de um objeto "polygon" do Tiled, somados à posição (x, y) do objeto.
+Polygon ReadPolygon(const json& obj, float x, float y) {
+    Polygon p;
+    for (const auto& pt : obj["polygon"]) {
+        p.vertices.push_back({static_cast<int>(x + pt.value("x", 0.0f)), static_cast<int>(y + pt.value("y", 0.0f))});
+    }
+    return p;
+}
+
+// Forma de uma zona: o polígono, ou o retângulo (se tiver tamanho). Vazia se nenhum.
+Polygon ReadZoneShape(const json& obj, float x, float y) {
+    if (obj.contains("polygon")) return ReadPolygon(obj, x, y);
+    const float w = obj.value("width", 0.0f), h = obj.value("height", 0.0f);
+    return (w > 0.0f && h > 0.0f) ? RectPolygon(x, y, w, h) : Polygon{};
+}
+
+// class/type do Tiled (o editor grava um ou outro dependendo da versão).
+std::string TiledType(const json& obj) {
+    return obj.value("class", obj.value("type", ""));
+}
+
+// Ponto dentro do polígono (ray casting; serve para côncavos).
+bool PointInPolygon(const Polygon& poly, float px, float py) {
+    const size_t n = poly.vertices.size();
+    if (n < 3) return false;
+    bool inside = false;
+    for (size_t i = 0, j = n - 1; i < n; j = i++) {
+        const float xi = poly.vertices[i].x, yi = poly.vertices[i].y;
+        const float xj = poly.vertices[j].x, yj = poly.vertices[j].y;
+        if (((yi > py) != (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) inside = !inside;
+    }
+    return inside;
+}
+
+// Caixa envolvente do polígono.
+SDL_Rect PolygonBounds(const Polygon& poly) {
+    int minX = poly.vertices[0].x, maxX = minX, minY = poly.vertices[0].y, maxY = minY;
+    for (const auto& v : poly.vertices) {
+        minX = std::min(minX, v.x); maxX = std::max(maxX, v.x);
+        minY = std::min(minY, v.y); maxY = std::max(maxY, v.y);
+    }
+    return SDL_Rect{minX, minY, maxX - minX, maxY - minY};
+}
+
+// Caixas (com borda inclusiva) que não se tocam — descarte rápido.
+bool BoundsApart(const SDL_Rect& a, int bMinX, int bMinY, int bMaxX, int bMaxY) {
+    return a.x + a.w < bMinX || a.x > bMaxX || a.y + a.h < bMinY || a.y > bMaxY;
+}
+
+// Ponto de um segmento mais perto de (px, py). False se o segmento for um ponto.
+bool ClosestOnSegment(float ax, float ay, float bx, float by, float px, float py, float& outX, float& outY) {
+    const float lenSq = (bx - ax) * (bx - ax) + (by - ay) * (by - ay);
+    if (lenSq == 0.0f) return false;
+    const float t = std::clamp(((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / lenSq, 0.0f, 1.0f);
+    outX = ax + t * (bx - ax);
+    outY = ay + t * (by - ay);
+    return true;
+}
+
+// Contornos dos polígonos em coordenadas de tela (debug).
+void DrawPolygons(SDL_Renderer* r, const std::vector<Polygon>& polys, float zoom) {
+    for (const Polygon& poly : polys) {
+        const size_t n = poly.vertices.size();
+        for (size_t i = 0; i < n; i++) {
+            const SDL_Point a = poly.vertices[i], b = poly.vertices[(i + 1) % n];
+            SDL_RenderDrawLineF(r, (a.x - Camera::pos.x) * zoom, (a.y - Camera::pos.y) * zoom,
+                                   (b.x - Camera::pos.x) * zoom, (b.y - Camera::pos.y) * zoom);
+        }
+    }
+}
+
+// Retângulos em coordenadas de tela (debug).
+void DrawRects(SDL_Renderer* r, const std::vector<SDL_Rect>& rects, float zoom) {
+    for (const SDL_Rect& rc : rects) {
+        const SDL_FRect s{(rc.x - Camera::pos.x) * zoom, (rc.y - Camera::pos.y) * zoom, rc.w * zoom, rc.h * zoom};
+        SDL_RenderDrawRectF(r, &s);
+    }
+}
+
+// Diretório de um caminho ("." se não houver).
 std::string DirNameOf(const std::string& p) {
     const auto s = p.find_last_of("/\\");
     return (s == std::string::npos) ? std::string(".") : p.substr(0, s);
 }
 
-// Junta base + rel e colapsa "." e ".." (resolve os "../img/..." dos .tsx).
+// Normaliza barras e colapsa "." e ".." (resolve os "../img/..." dos .tsx).
 std::string NormalizePath(const std::string& raw) {
     std::string p = raw;
-    for (char& c : p) if (c == '\\') c = '/';
+    std::replace(p.begin(), p.end(), '\\', '/');
+    const bool absolute = !p.empty() && p[0] == '/';
     std::vector<std::string> parts;
     size_t start = 0;
-    const bool absolute = (!p.empty() && p[0] == '/');
     while (start <= p.size()) {
         size_t slash = p.find('/', start);
         if (slash == std::string::npos) slash = p.size();
@@ -406,18 +135,243 @@ std::string NormalizePath(const std::string& raw) {
     return out;
 }
 
-// Extrai o valor de attr="..." de uma linha; "" se ausente.
+// Valor de attr="..." numa linha de XML; "" se não houver.
 std::string ExtractAttr(const std::string& line, const std::string& attr) {
     const std::string key = attr + "=\"";
     const auto pos = line.find(key);
     if (pos == std::string::npos) return "";
     const auto begin = pos + key.size();
     const auto end = line.find('"', begin);
-    if (end == std::string::npos) return "";
-    return line.substr(begin, end - begin);
+    return (end == std::string::npos) ? "" : line.substr(begin, end - begin);
 }
-} // namespace
 
+}  // namespace
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  Carregamento
+// ═════════════════════════════════════════════════════════════════════════════
+
+LevelManager::~LevelManager() {
+    ClearLevel();
+}
+
+// Destrói as texturas das camadas e esvazia colisores, zonas e spawns.
+void LevelManager::ClearLevel() {
+    for (auto& layer : imageLayers) {
+        if (layer.texture) SDL_DestroyTexture(layer.texture);
+    }
+    imageLayers.clear();
+    rectColliders.clear();
+    circleColliders.clear();
+    chaoNormal.clear();
+    chaoEscada.clear();
+    chaoBuraco.clear();
+    objPolyColliders.clear();
+    objRectColliders.clear();
+    floorStoneZones.clear();
+    repairableTriggers.clear();
+    entitySpawns.clear();
+    levelTransitionZones.clear();
+    gidToImagePath.clear();
+}
+
+// Lê o JSON do Tiled e reconstrói o andar, camada por camada na ordem do arquivo.
+void LevelManager::LoadLevel(const std::string& path, SDL_Renderer* renderer) {
+    CrashHandler::Log("LoadLevel: %s", path.c_str());
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        std::cout << "Erro: Arquivo do mapa nao encontrado -> " << path << std::endl;
+        return;
+    }
+    try {
+        json j;
+        file >> j;
+        ClearLevel();
+        LoadTilesets(j, path);
+        if (!j.contains("layers")) return;
+
+        for (const auto& layer : j["layers"]) {
+            const std::string type = layer.value("type", "");
+            if (type == "imagelayer") {
+                LoadImageLayer(layer, renderer);
+                continue;
+            }
+            if (type != "objectgroup" || !layer.contains("objects")) continue;
+
+            const std::string name = layer.value("name", "");
+            const float offX = layer.value("offsetx", 0.0f);
+            const float offY = layer.value("offsety", 0.0f);
+            if (name == "Collision")          LoadCollisionLayer(layer, offX, offY);
+            else if (name == "Collision_Obj") LoadStaticObjectLayer(layer, offX, offY);
+            else if (name == "FootstepZones") LoadFootstepZones(layer, offX, offY);
+            else if (name == "Entidades")     LoadEntities(layer, offX, offY);
+        }
+    } catch (const std::exception& e) {
+        std::cout << "Erro Fatal ao processar o JSON: " << e.what() << std::endl;
+    }
+}
+
+// Camada de imagem: carrega a textura (o "../" do Tiled vira "Recursos/") com o offset.
+void LevelManager::LoadImageLayer(const json& layer, SDL_Renderer* renderer) {
+    std::string imagePath = layer.value("image", "");
+    if (imagePath.empty()) return;
+    const size_t pos = imagePath.find("../");
+    if (pos != std::string::npos) imagePath.replace(pos, 3, "Recursos/");
+
+    ImageLayer img;
+    img.x = layer.value("offsetx", 0);
+    img.y = layer.value("offsety", 0);
+    img.w = layer.value("imagewidth", 0);
+    img.h = layer.value("imageheight", 0);
+    img.texture = IMG_LoadTexture(renderer, imagePath.c_str());
+    if (img.texture) imageLayers.push_back(img);
+    else std::cout << "Erro ao carregar textura: " << imagePath << std::endl;
+}
+
+// Camada "Collision". Polígonos: escada, buraco, madeira (ignorado — madeira é o
+// piso padrão) ou parede. Elipses: pilar redondo. Retângulos: "move_levels"
+// (troca de andar), "stone_floor" (piso de pedra, só som) ou parede.
+// "repairable_trigger" (polígono ou retângulo) é só zona de conserto.
+void LevelManager::LoadCollisionLayer(const json& layer, float offX, float offY) {
+    for (const auto& obj : layer["objects"]) {
+        const std::string type = TiledType(obj);
+        const std::string name = obj.value("name", std::string());
+        const float x = obj.value("x", 0.0f) + offX;
+        const float y = obj.value("y", 0.0f) + offY;
+        const float w = obj.value("width", 0.0f);
+        const float h = obj.value("height", 0.0f);
+
+        if (type == "repairable_trigger" || name == "repairable_trigger") {
+            Polygon trig = ReadZoneShape(obj, x, y);
+            if (trig.vertices.size() >= 3) repairableTriggers.push_back(trig);
+            continue;
+        }
+
+        if (obj.contains("polygon")) {
+            Polygon poly = ReadPolygon(obj, x, y);
+            if (poly.vertices.size() < 3) continue;
+            if (type == "Escada")       chaoEscada.push_back(poly);
+            else if (type == "Buraco")  chaoBuraco.push_back(poly);
+            else if (type != "Madeira") chaoNormal.push_back(poly);
+            continue;
+        }
+
+        if (obj.contains("ellipse")) {
+            const float radius = w / 2.0f;
+            if (radius > 0.0f) circleColliders.push_back(Circle{Vec2(x + radius, y + radius), radius});
+            continue;
+        }
+
+        if (name == "move_levels") {
+            EntitySpawn zone;
+            zone.name = name;
+            zone.tiledId = obj.value("id", -1);
+            zone.x = x;
+            zone.y = y;
+            zone.w = w;
+            zone.h = h;
+            if (obj.contains("properties")) {
+                for (const auto& prop : obj["properties"]) {
+                    if (prop.contains("value")) zone.properties[prop.value("name", "")] = prop["value"];
+                }
+            }
+            if (w > 0.0f && h > 0.0f) levelTransitionZones.push_back(zone);
+        } else if (name == "stone_floor") {
+            if (static_cast<int>(w) > 0 && static_cast<int>(h) > 0) floorStoneZones.push_back(RectPolygon(x, y, w, h));
+        } else {
+            const SDL_Rect r{static_cast<int>(x), static_cast<int>(y), static_cast<int>(w), static_cast<int>(h)};
+            if (r.w > 0 && r.h > 0) rectColliders.push_back(r);
+        }
+    }
+}
+
+// Camada "Collision_Obj": móveis — polígono (diagonal/irregular) ou retângulo.
+void LevelManager::LoadStaticObjectLayer(const json& layer, float offX, float offY) {
+    for (const auto& obj : layer["objects"]) {
+        const float x = obj.value("x", 0.0f) + offX;
+        const float y = obj.value("y", 0.0f) + offY;
+        if (obj.contains("polygon")) {
+            Polygon poly = ReadPolygon(obj, x, y);
+            if (poly.vertices.size() >= 3) objPolyColliders.push_back(poly);
+        } else {
+            const SDL_Rect r{static_cast<int>(x), static_cast<int>(y),
+                             static_cast<int>(obj.value("width", 0.0f)), static_cast<int>(obj.value("height", 0.0f))};
+            if (r.w > 0 && r.h > 0) objRectColliders.push_back(r);
+        }
+    }
+}
+
+// Camada "FootstepZones": zonas de pedra ("Pedra"/"Stone"). Madeira é o padrão, não precisa de zona.
+void LevelManager::LoadFootstepZones(const json& layer, float offX, float offY) {
+    for (const auto& obj : layer["objects"]) {
+        const std::string type = TiledType(obj);
+        if (type != "Pedra" && type != "Stone") continue;
+        Polygon zone = ReadZoneShape(obj, obj.value("x", 0.0f) + offX, obj.value("y", 0.0f) + offY);
+        if (zone.vertices.size() >= 3) floorStoneZones.push_back(zone);
+    }
+}
+
+// Camada "Entidades": um EntitySpawn por objeto. "isStatic" e "z" têm campo
+// próprio (padrão false e 2); as demais propriedades vão para `properties`.
+void LevelManager::LoadEntities(const json& layer, float offX, float offY) {
+    for (const auto& obj : layer["objects"]) {
+        EntitySpawn spawn;
+        spawn.type     = TiledType(obj);
+        spawn.name     = obj.value("name", "");
+        spawn.tiledId  = obj.value("id", -1);
+        spawn.x        = obj.value("x", 0.0f) + offX;
+        spawn.y        = obj.value("y", 0.0f) + offY;
+        spawn.w        = obj.value("width", 0.0f);
+        spawn.h        = obj.value("height", 0.0f);
+        spawn.rotation = obj.value("rotation", 0.0f);
+        spawn.isStatic = false;
+        spawn.z        = 2;
+
+        // O Tiled guarda os flips nos 3 bits altos do gid.
+        const long long rawGid = obj.value("gid", 0LL);
+        spawn.flipH = (rawGid & 0x80000000LL) != 0;
+        spawn.flipV = (rawGid & 0x40000000LL) != 0;
+        spawn.gid   = static_cast<int>(rawGid & 0x1FFFFFFFLL);
+
+        if (obj.contains("properties")) {
+            for (const auto& prop : obj["properties"]) {
+                if (!prop.contains("value")) continue;
+                const std::string pName = prop.value("name", "");
+                const json& value = prop["value"];
+                if (pName == "isStatic") {
+                    if (value.is_boolean()) spawn.isStatic = value.get<bool>();
+                } else if (pName == "z") {
+                    if (value.is_number()) spawn.z = value.get<int>();
+                } else {
+                    spawn.properties[pName] = value;
+                }
+            }
+        }
+        entitySpawns.push_back(spawn);
+    }
+}
+
+// gid → imagem para os tilesets do mapa: .tsx externo (relativo ao mapa) ou
+// coleção de imagens embutida.
+void LevelManager::LoadTilesets(const json& j, const std::string& mapPath) {
+    if (!j.contains("tilesets") || !j["tilesets"].is_array()) return;
+    const std::string mapDir = DirNameOf(mapPath);
+    for (const auto& ts : j["tilesets"]) {
+        const int firstgid = ts.value("firstgid", 1);
+        if (ts.contains("source")) {
+            ParseTsx(NormalizePath(mapDir + "/" + ts["source"].get<std::string>()), firstgid);
+        } else if (ts.contains("tiles") && ts["tiles"].is_array()) {
+            for (const auto& tile : ts["tiles"]) {
+                if (tile.contains("image")) {
+                    gidToImagePath[firstgid + tile.value("id", 0)] =
+                        NormalizePath(mapDir + "/" + tile["image"].get<std::string>());
+                }
+            }
+        }
+    }
+}
+
+// Lê um .tsx linha a linha: cada <tile id> seguido de <image source> vira uma entrada.
 void LevelManager::ParseTsx(const std::string& tsxPath, int firstgid) {
     std::ifstream f(tsxPath);
     if (!f.is_open()) {
@@ -436,456 +390,231 @@ void LevelManager::ParseTsx(const std::string& tsxPath, int firstgid) {
         }
         if (line.find("<image ") != std::string::npos && curId >= 0) {
             const std::string src = ExtractAttr(line, "source");
-            if (!src.empty()) {
-                gidToImagePath[firstgid + curId] = NormalizePath(tsxDir + "/" + src);
-            }
+            if (!src.empty()) gidToImagePath[firstgid + curId] = NormalizePath(tsxDir + "/" + src);
         }
     }
 }
 
-void LevelManager::LoadTilesets(const json& j, const std::string& mapPath) {
-    if (!j.contains("tilesets") || !j["tilesets"].is_array()) return;
-    const std::string mapDir = DirNameOf(mapPath);
-    for (const auto& ts : j["tilesets"]) {
-        const int firstgid = ts.value("firstgid", 1);
-        if (ts.contains("source")) {
-            // Tileset externo (.tsx): resolve relativo ao diretório do mapa.
-            const std::string tsxPath = NormalizePath(mapDir + "/" + ts["source"].get<std::string>());
-            ParseTsx(tsxPath, firstgid);
-        } else if (ts.contains("tiles") && ts["tiles"].is_array()) {
-            // Tileset embutido (coleção de imagens): cada tile tem sua própria imagem.
-            for (const auto& tile : ts["tiles"]) {
-                if (tile.contains("image")) {
-                    const int id = tile.value("id", 0);
-                    gidToImagePath[firstgid + id] =
-                        NormalizePath(mapDir + "/" + tile["image"].get<std::string>());
-                }
-            }
-        }
-    }
-}
+// ═════════════════════════════════════════════════════════════════════════════
+//  Consultas
+// ═════════════════════════════════════════════════════════════════════════════
 
 const std::string* LevelManager::GetTileImagePath(int gid) const {
     const auto it = gidToImagePath.find(gid);
     return (it == gidToImagePath.end()) ? nullptr : &it->second;
 }
 
-bool LevelManager::CheckCollision(const SDL_Rect& entityBox, bool isElevated) {
-
-    // Se ele ESTÁ NO CHÃO, ele bate nas coisas normais do chão (Retângulos e Círculos)
-    if (!isElevated) {
-        // Checagem contra retângulos (Mais fácil porque é nativa da SDL)
-        for (const auto& rectCol : rectColliders) {
-            if (SDL_HasIntersection(&entityBox, &rectCol)) {
-                return true;
-            }
-        }
-
-        // Checagem contra Círculos
-        for (const auto& circleCol : circleColliders) {
-            if (CheckRectVsCircle(entityBox, circleCol)) {
-                return true;
-            }
-        }
-
-        // ── objetos estáticos ───────────────────────────────────────
-        for (const auto& rectCol : objRectColliders) {
-            if (SDL_HasIntersection(&entityBox, &rectCol)) return true;
-        }
-        for (const auto& polyCol : objPolyColliders) {
-            // Côncavo-seguro (SAT deixava atravessar polígonos côncavos).
-            if (CheckPolygonVsRect(polyCol, entityBox)) return true;
-        }
-        // ─────────────────────────────────────────────────────────────────
-
-    }
-
-    // ==========================================================
-    // Checagem contra Polígonos do chão — roda sempre (chão normal ou escada).
-    // Escolhe qual lista de polígonos verificar!
-    const auto& listaAtiva = isElevated ? chaoEscada : chaoNormal;
-
-    for (const auto& polyCol : listaAtiva) {
-        if (CheckPolygonVsRect(polyCol, entityBox)) {
-            return true;
-        }
-    }
-
-    // Na escada QUEBRADA, o buraco também colide (igual à versão de círculo).
-    if (isElevated && !escadaConsertada) {
-        for (const auto& polyCol : chaoBuraco) {
-            if (CheckPolygonVsRect(polyCol, entityBox)) return true;
-        }
-    }
-
-    return false; // Se não bateu em nada, o caminho está livre!
-}
-
-bool LevelManager::CheckRepairableTrigger(const SDL_Rect& entityBox) {
-    for (const auto& poly : repairableTriggers) {
-        if (CheckPolygonVsRect(poly, entityBox)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool LevelManager::CheckRectVsCircle(const SDL_Rect& rect, const Circle& circle) {
-    float closestX = std::clamp(circle.center.x, (float)rect.x, (float)(rect.x + rect.w));
-    float closestY = std::clamp(circle.center.y, (float)rect.y, (float)(rect.y + rect.h));
-
-    float distanceX = circle.center.x - closestX;
-    float distanceY = circle.center.y - closestY;
-
-    return (distanceX * distanceX) + (distanceY * distanceY) < (circle.radius * circle.radius);
-}
-
-bool LevelManager::CheckPolygonVsPolygon(const Polygon& p1, const Polygon& p2) {
-    // Trava de segurança: Um poligono precisa de no mínimo 3 pontos para ter volume
-    if (p1.vertices.size() < 3 || p2.vertices.size() < 3) return false;
-
-    // ─── OTIMIZAÇÃO: BROAD PHASE (AABB) ──────────────────────────────────
-    // Cria uma caixa simples ao redor do Polígono 1
-    int minX1 = p1.vertices[0].x, maxX1 = p1.vertices[0].x;
-    int minY1 = p1.vertices[0].y, maxY1 = p1.vertices[0].y;
-    for (const auto& v : p1.vertices) {
-        if (v.x < minX1) minX1 = v.x; else if (v.x > maxX1) maxX1 = v.x;
-        if (v.y < minY1) minY1 = v.y; else if (v.y > maxY1) maxY1 = v.y;
-    }
-
-    // Cria uma caixa simples ao redor do Polígono 2
-    int minX2 = p2.vertices[0].x, maxX2 = p2.vertices[0].x;
-    int minY2 = p2.vertices[0].y, maxY2 = p2.vertices[0].y;
-    for (const auto& v : p2.vertices) {
-        if (v.x < minX2) minX2 = v.x; else if (v.x > maxX2) maxX2 = v.x;
-        if (v.y < minY2) minY2 = v.y; else if (v.y > maxY2) maxY2 = v.y;
-    }
-
-    // Se uma caixa está totalmente isolada da outra, descarta a colisão NA HORA!
-    if (maxX1 < minX2 || minX1 > maxX2 || maxY1 < minY2 || minY1 > maxY2) {
-        return false;
-    }
-    // ─────────────────────────────────────────────────────────────────────
-
-    // Fase Estreita (Narrow Phase):
-    // Primeiro testar os eixos (normais) de ambos os polígonos
-    const Polygon* polys[2] = {&p1, &p2};
-
-    for (int i = 0; i < 2; i++) {
-        const Polygon& poly = *polys[i];
-        for (size_t j = 0; j < poly.vertices.size(); j++) {
-            // Pega o ponto atual e o próximo pra formar aresta
-            SDL_Point pA = poly.vertices[j];
-            SDL_Point pB = poly.vertices[(j + 1) % poly.vertices.size()];
-
-            // Vetor de aresta
-            float edgeX = pB.x - pA.x;
-            float edgeY = pB.y - pA.y;
-
-            // A Normal é o vetor perpendicular à aresta (-Y, X)
-            float normalX = -edgeY;
-            float normalY = edgeX;
-            
-            // Projeta os dois polígonos nesse eixo Normal
-            float minA = std::numeric_limits<float>::max();
-            float maxA = std::numeric_limits<float>::lowest();
-            for (const auto& p : p1.vertices) {
-                // Produto escalar para projetar
-                float projection = (p.x * normalX) + (p.y * normalY);
-                minA = std::min(minA, projection);
-                maxA = std::max(maxA, projection);
-            }
-
-            float minB = std::numeric_limits<float>::max();
-            float maxB = std::numeric_limits<float>::lowest();
-            for (const auto& p : p2.vertices) {
-                float projection = (p.x * normalX) + (p.y * normalY);
-                minB = std::min(minB, projection);
-                maxB = std::max(maxB, projection);
-            }
-
-            // Se as projeções não se sobrepõem, existe um vão entre eles!
-            // Logo, não estão colidindo.
-            if (maxA < minB || maxB < minA) {
-                return false; 
-            }
-        }
-    }
-    
-    // Se testou todos os eixos e nenhuma teve vão livre, estão colidindo.
-    return true;
-}
-
-// Rect (AABB) vs polígono, CÔNCAVO-seguro. Detecta os 3 casos de sobreposição:
-// (1) um canto do rect DENTRO do polígono; (2) um vértice do polígono DENTRO do
-// rect; (3) qualquer aresta do polígono cruzando qualquer aresta do rect. O SAT
-// (CheckPolygonVsPolygon) só vale para convexos e deixava o quadrado atravessar
-// paredes côncavas — este teste é o mesmo tipo de robustez do círculo.
-bool LevelManager::CheckPolygonVsRect(const Polygon& poly, const SDL_Rect& rect) {
-    const size_t n = poly.vertices.size();
-    if (n < 3) return false;
-
-    // Broad phase.
-    int minX = poly.vertices[0].x, maxX = minX, minY = poly.vertices[0].y, maxY = minY;
-    for (const auto& v : poly.vertices) {
-        minX = std::min(minX, v.x); maxX = std::max(maxX, v.x);
-        minY = std::min(minY, v.y); maxY = std::max(maxY, v.y);
-    }
-    if (maxX < rect.x || minX > rect.x + rect.w || maxY < rect.y || minY > rect.y + rect.h) {
-        return false;
-    }
-
-    const float rx = static_cast<float>(rect.x), ry = static_cast<float>(rect.y);
-    const float rw = static_cast<float>(rect.w), rh = static_cast<float>(rect.h);
-    const float corners[4][2] = { {rx, ry}, {rx + rw, ry}, {rx + rw, ry + rh}, {rx, ry + rh} };
-
-    // (1) Algum canto do rect está dentro do polígono? (ponto-no-polígono / ray casting)
-    auto pointInPoly = [&](float px, float py) {
-        bool inside = false;
-        for (size_t i = 0, j = n - 1; i < n; j = i++) {
-            const float xi = poly.vertices[i].x, yi = poly.vertices[i].y;
-            const float xj = poly.vertices[j].x, yj = poly.vertices[j].y;
-            if (((yi > py) != (yj > py)) &&
-                (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) {
-                inside = !inside;
-            }
-        }
-        return inside;
-    };
-    for (const auto& c : corners) {
-        if (pointInPoly(c[0], c[1])) return true;
-    }
-
-    // (2) Algum vértice do polígono está dentro do rect?
-    SDL_Rect r = rect;
-    for (const auto& v : poly.vertices) {
-        SDL_Point p{ v.x, v.y };
-        if (SDL_PointInRect(&p, &r)) return true;
-    }
-
-    // (3) Alguma aresta do polígono cruza alguma aresta do rect?
-    auto segIntersect = [](float ax, float ay, float bx, float by,
-                           float cx, float cy, float dx, float dy) {
-        auto cross = [](float x1, float y1, float x2, float y2) { return x1 * y2 - y1 * x2; };
-        const float d1 = cross(dx - cx, dy - cy, ax - cx, ay - cy);
-        const float d2 = cross(dx - cx, dy - cy, bx - cx, by - cy);
-        const float d3 = cross(bx - ax, by - ay, cx - ax, cy - ay);
-        const float d4 = cross(bx - ax, by - ay, dx - ax, dy - ay);
-        return (((d1 > 0) != (d2 > 0)) && ((d3 > 0) != (d4 > 0)));
-    };
-    for (size_t i = 0; i < n; i++) {
-        const float ax = poly.vertices[i].x, ay = poly.vertices[i].y;
-        const float bx = poly.vertices[(i + 1) % n].x, by = poly.vertices[(i + 1) % n].y;
-        for (int k = 0; k < 4; k++) {
-            const float cx = corners[k][0], cy = corners[k][1];
-            const float dx = corners[(k + 1) % 4][0], dy = corners[(k + 1) % 4][1];
-            if (segIntersect(ax, ay, bx, by, cx, cy, dx, dy)) return true;
-        }
-    }
-    return false;
-}
-
+// União das camadas de imagem. False se o andar não tiver nenhuma (câmera sem limite).
 bool LevelManager::GetWorldBounds(float& outMinX, float& outMinY, float& outMaxX, float& outMaxY) const {
     bool any = false;
-    for (const auto& imgLayer : imageLayers) {
-        if (imgLayer.texture == nullptr || imgLayer.w <= 0 || imgLayer.h <= 0) {
-            continue;
-        }
-        const float minX = static_cast<float>(imgLayer.x);
-        const float minY = static_cast<float>(imgLayer.y);
-        const float maxX = minX + static_cast<float>(imgLayer.w);
-        const float maxY = minY + static_cast<float>(imgLayer.h);
+    for (const auto& img : imageLayers) {
+        if (!img.texture || img.w <= 0 || img.h <= 0) continue;
+        const float x0 = static_cast<float>(img.x), y0 = static_cast<float>(img.y);
+        const float x1 = x0 + img.w, y1 = y0 + img.h;
         if (!any) {
-            outMinX = minX; outMinY = minY; outMaxX = maxX; outMaxY = maxY;
+            outMinX = x0; outMinY = y0; outMaxX = x1; outMaxY = y1;
             any = true;
         } else {
-            outMinX = std::min(outMinX, minX);
-            outMinY = std::min(outMinY, minY);
-            outMaxX = std::max(outMaxX, maxX);
-            outMaxY = std::max(outMaxY, maxY);
+            outMinX = std::min(outMinX, x0); outMinY = std::min(outMinY, y0);
+            outMaxX = std::max(outMaxX, x1); outMaxY = std::max(outMaxY, y1);
         }
     }
     return any;
 }
 
-void LevelManager::RenderBackground(SDL_Renderer* renderer) {
-    float zoom = Camera::GetZoom();
-    // Como o vetor guardou as imagens na ordem do JSON (Parede -> Chão),
-    // ele vai desenhar automaticamente na ordem certa!
-    for (const auto& imgLayer : imageLayers) {
-        if (imgLayer.texture != nullptr) {
-            SDL_Rect destRect = { 
-                (int)((imgLayer.x - Camera::pos.x) * zoom), 
-                (int)((imgLayer.y - Camera::pos.y) * zoom), 
-                (int)(imgLayer.w * zoom), 
-                (int)(imgLayer.h * zoom)
-            };
-            SDL_RenderCopy(renderer, imgLayer.texture, nullptr, &destRect);
-        }
-    }
-}
-
-bool LevelManager::CheckCollision(const Circle& entityCircle, bool isElevated) {
-    
-    // Se está na escada, checa APENAS as coisas da escada
-    if (isElevated) {
-        // 1. Checa as beiradas (Corrimões)
-        for (const auto& polyCol : chaoEscada) {
-            if (CheckPolygonVsCircle(polyCol, entityCircle)) return true;
-        }
-        
-        // 2. Checa o buraco, MAS SÓ SE A ESCADA ESTIVER QUEBRADA!
-        if (!escadaConsertada) {
-            for (const auto& polyCol : chaoBuraco) {
-                if (CheckPolygonVsCircle(polyCol, entityCircle)) return true;
-            }
-        }
-    } 
-    // Se NÃO está na escada, checa as coisas normais do chão
-    else {
-        // Checagem contra Retângulos do Cenário 
-        for (const auto& rectCol : rectColliders) {
-            if (CheckRectVsCircle(rectCol, entityCircle)) return true;
-        }
-
-        // Checagem contra outros Círculos do Cenário
-        for (const auto& circleCol : circleColliders) {
-            float dx = entityCircle.center.x - circleCol.center.x;
-            float dy = entityCircle.center.y - circleCol.center.y;
-            float distSq = (dx * dx) + (dy * dy);
-            float rSum = entityCircle.radius + circleCol.radius;
-            if (distSq < (rSum * rSum)) return true;
-        }
-
-        // Checagem contra Polígonos normais do chão (As paredes de pedra)
-        for (const auto& polyCol : chaoNormal) {
-            if (CheckPolygonVsCircle(polyCol, entityCircle)) return true;
-        }
-
-        // ── objetos estáticos ───────────────────────────────────────
-        for (const auto& rectCol : objRectColliders) {
-            if (CheckRectVsCircle(rectCol, entityCircle)) return true;
-        }
-        for (const auto& polyCol : objPolyColliders) {
-            if (CheckPolygonVsCircle(polyCol, entityCircle)) return true;
-        }
-        // ─────────────────────────────────────────────────────────────────
-    }
-
-    return false; // Caminho livre!
-}
-
-bool LevelManager::CheckPolygonVsCircle(const Polygon& poly, const Circle& circle) {
-    if (poly.vertices.empty()) return false;
-
-    // ─── OTIMIZAÇÃO: BROAD PHASE (AABB) ──────────────────────────────────
-    // Cria a caixa ao redor do polígono do Tiled
-    int minX = poly.vertices[0].x, maxX = poly.vertices[0].x;
-    int minY = poly.vertices[0].y, maxY = poly.vertices[0].y;
-    for (const auto& v : poly.vertices) {
-        if (v.x < minX) minX = v.x; else if (v.x > maxX) maxX = v.x;
-        if (v.y < minY) minY = v.y; else if (v.y > maxY) maxY = v.y;
-    }
-
-    // Cria a caixa virtual ao redor do círculo do Jogador/Monstro
-    int cMinX = circle.center.x - circle.radius;
-    int cMaxX = circle.center.x + circle.radius;
-    int cMinY = circle.center.y - circle.radius;
-    int cMaxY = circle.center.y + circle.radius;
-
-    // Descarta se estiverem longe!
-    if (maxX < cMinX || minX > cMaxX || maxY < cMinY || minY > cMaxY) {
-        return false; 
-    }
-    // ─────────────────────────────────────────────────────────────────────
-
-    // Fase Estreita (Narrow Phase)
-    float cx = (float)circle.center.x;
-    float cy = (float)circle.center.y;
-    float radiusSq = (float)(circle.radius * circle.radius);
-
-    // Teste 1: O centro do círculo está DE DENTRO do polígono? (Ray-casting algorithm)
-    bool inside = false;
-    for (size_t i = 0, j = poly.vertices.size() - 1; i < poly.vertices.size(); j = i++) {
-        float p1x = (float)poly.vertices[i].x, p1y = (float)poly.vertices[i].y;
-        float p2x = (float)poly.vertices[j].x, p2y = (float)poly.vertices[j].y;
-
-        if (((p1y > cy) != (p2y > cy)) &&
-            (cx < (p2x - p1x) * (cy - p1y) / (p2y - p1y) + p1x)) {
-            inside = !inside;
-        }
-    }
-    if (inside) return true;
-
-    // Teste 2: O círculo está esbarrando (raspando) em alguma das paredes do polígono?
-    for (size_t i = 0; i < poly.vertices.size(); i++) {
-        float p1x = (float)poly.vertices[i].x, p1y = (float)poly.vertices[i].y;
-        float p2x = (float)poly.vertices[(i + 1) % poly.vertices.size()].x, p2y = (float)poly.vertices[(i + 1) % poly.vertices.size()].y;
-
-        float lineLenSq = (p2x - p1x) * (p2x - p1x) + (p2y - p1y) * (p2y - p1y);
-        if (lineLenSq == 0) continue; // Previne divisão por zero se a linha for um ponto
-        
-        // Acha o ponto exato da parede que está mais perto do jogador
-        float dot = (((cx - p1x) * (p2x - p1x)) + ((cy - p1y) * (p2y - p1y))) / lineLenSq;
-        
-        float closestX, closestY;
-        if (dot < 0) {
-            closestX = p1x; closestY = p1y;
-        } else if (dot > 1) {
-            closestX = p2x; closestY = p2y;
-        } else {
-            closestX = p1x + (dot * (p2x - p1x));
-            closestY = p1y + (dot * (p2y - p1y));
-        }
-
-        float distX = cx - closestX;
-        float distY = cy - closestY;
-        float distSq = (distX * distX) + (distY * distY);
-
-        if (distSq < radiusSq) return true; // Bateu na parede!
-    }
-
-    return false;
-}
-
-bool LevelManager::PointInPolygon(const Polygon& poly, int x, int y) {
-    if (poly.vertices.size() < 3) {
-        return false;
-    }
-    const float cx = static_cast<float>(x);
-    const float cy = static_cast<float>(y);
-    bool inside = false;
-    for (size_t i = 0, j = poly.vertices.size() - 1; i < poly.vertices.size(); j = i++) {
-        const float p1x = static_cast<float>(poly.vertices[i].x);
-        const float p1y = static_cast<float>(poly.vertices[i].y);
-        const float p2x = static_cast<float>(poly.vertices[j].x);
-        const float p2y = static_cast<float>(poly.vertices[j].y);
-        if (((p1y > cy) != (p2y > cy)) && (cx < (p2x - p1x) * (cy - p1y) / (p2y - p1y) + p1x)) {
-            inside = !inside;
-        }
-    }
-    return inside;
-}
-
+// Escada tem prioridade; depois pedra (zonas); o resto é madeira.
 FootstepSurface LevelManager::QueryFootstepSurface(int x, int y, bool isElevated) const {
-    // Escada tem prioridade.
-    if (isElevated) {
-        return FootstepSurface::Stairs;
-    }
-    // Sobre a PEDRA (zona "stone_floor" — só existe no 1º andar) → som de pedra.
+    if (isElevated) return FootstepSurface::Stairs;
     for (const Polygon& poly : floorStoneZones) {
-        if (PointInPolygon(poly, x, y)) {
-            return FootstepSurface::Stone;
-        }
+        if (PointInPolygon(poly, static_cast<float>(x), static_cast<float>(y))) return FootstepSurface::Stone;
     }
-    // Fora da pedra e fora da escada → MADEIRA (padrão em todos os andares).
     return FootstepSurface::Wood;
 }
 
-void LevelManager::RenderCollisionOverlay(SDL_Renderer* renderer) const {
-    if (!renderer) {
-        return;
+bool LevelManager::CheckRepairableTrigger(const SDL_Rect& entityBox) {
+    return std::any_of(repairableTriggers.begin(), repairableTriggers.end(),
+                       [&](const Polygon& p) { return CheckPolygonVsRect(p, entityBox); });
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  Colisão
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Caixa: no chão bate em paredes, pilares e móveis; sempre nos polígonos do
+// piso atual (chão ou escada); na escada quebrada, também no buraco.
+bool LevelManager::CheckCollision(const SDL_Rect& box, bool isElevated) {
+    if (!isElevated) {
+        for (const auto& r : rectColliders)    if (SDL_HasIntersection(&box, &r)) return true;
+        for (const auto& c : circleColliders)  if (CheckRectVsCircle(box, c)) return true;
+        for (const auto& r : objRectColliders) if (SDL_HasIntersection(&box, &r)) return true;
+        for (const auto& p : objPolyColliders) if (CheckPolygonVsRect(p, box)) return true;
     }
+    for (const auto& p : (isElevated ? chaoEscada : chaoNormal)) {
+        if (CheckPolygonVsRect(p, box)) return true;
+    }
+    if (isElevated && !escadaConsertada) {
+        for (const auto& p : chaoBuraco) if (CheckPolygonVsRect(p, box)) return true;
+    }
+    return false;
+}
+
+// Círculo: na escada só o corrimão (e o buraco, se quebrada); no chão paredes,
+// pilares, polígonos e móveis.
+bool LevelManager::CheckCollision(const Circle& circle, bool isElevated) {
+    if (isElevated) {
+        for (const auto& p : chaoEscada) if (CheckPolygonVsCircle(p, circle)) return true;
+        if (!escadaConsertada) {
+            for (const auto& p : chaoBuraco) if (CheckPolygonVsCircle(p, circle)) return true;
+        }
+        return false;
+    }
+    for (const auto& r : rectColliders) if (CheckRectVsCircle(r, circle)) return true;
+    for (const auto& c : circleColliders) {
+        const float dx = circle.center.x - c.center.x, dy = circle.center.y - c.center.y;
+        const float rSum = circle.radius + c.radius;
+        if (dx * dx + dy * dy < rSum * rSum) return true;
+    }
+    for (const auto& p : chaoNormal)       if (CheckPolygonVsCircle(p, circle)) return true;
+    for (const auto& r : objRectColliders) if (CheckRectVsCircle(r, circle)) return true;
+    for (const auto& p : objPolyColliders) if (CheckPolygonVsCircle(p, circle)) return true;
+    return false;
+}
+
+bool LevelManager::CheckRectVsCircle(const SDL_Rect& rect, const Circle& circle) const {
+    const float cx = std::clamp(circle.center.x, static_cast<float>(rect.x), static_cast<float>(rect.x + rect.w));
+    const float cy = std::clamp(circle.center.y, static_cast<float>(rect.y), static_cast<float>(rect.y + rect.h));
+    const float dx = circle.center.x - cx, dy = circle.center.y - cy;
+    return dx * dx + dy * dy < circle.radius * circle.radius;
+}
+
+// Retângulo vs polígono, servindo para côncavos: um canto do retângulo dentro
+// do polígono, um vértice do polígono dentro do retângulo, ou arestas cruzando.
+bool LevelManager::CheckPolygonVsRect(const Polygon& poly, const SDL_Rect& rect) const {
+    const size_t n = poly.vertices.size();
+    if (n < 3) return false;
+    if (BoundsApart(PolygonBounds(poly), rect.x, rect.y, rect.x + rect.w, rect.y + rect.h)) return false;
+
+    const float rx = rect.x, ry = rect.y, rw = rect.w, rh = rect.h;
+    const float corners[4][2] = {{rx, ry}, {rx + rw, ry}, {rx + rw, ry + rh}, {rx, ry + rh}};
+    for (const auto& c : corners) {
+        if (PointInPolygon(poly, c[0], c[1])) return true;
+    }
+    for (const auto& v : poly.vertices) {
+        if (SDL_PointInRect(&v, &rect)) return true;
+    }
+
+    auto cross = [](float x1, float y1, float x2, float y2) { return x1 * y2 - y1 * x2; };
+    auto segmentsCross = [&](float ax, float ay, float bx, float by, float cx, float cy, float dx, float dy) {
+        const float d1 = cross(dx - cx, dy - cy, ax - cx, ay - cy);
+        const float d2 = cross(dx - cx, dy - cy, bx - cx, by - cy);
+        const float d3 = cross(bx - ax, by - ay, cx - ax, cy - ay);
+        const float d4 = cross(bx - ax, by - ay, dx - ax, dy - ay);
+        return ((d1 > 0) != (d2 > 0)) && ((d3 > 0) != (d4 > 0));
+    };
+    for (size_t i = 0; i < n; i++) {
+        const SDL_Point a = poly.vertices[i], b = poly.vertices[(i + 1) % n];
+        for (int k = 0; k < 4; k++) {
+            if (segmentsCross(a.x, a.y, b.x, b.y, corners[k][0], corners[k][1],
+                              corners[(k + 1) % 4][0], corners[(k + 1) % 4][1])) return true;
+        }
+    }
+    return false;
+}
+
+// Círculo vs polígono: centro dentro do polígono ou alguma aresta a menos de um raio.
+bool LevelManager::CheckPolygonVsCircle(const Polygon& poly, const Circle& circle) const {
+    const size_t n = poly.vertices.size();
+    if (n == 0) return false;
+    if (BoundsApart(PolygonBounds(poly),
+                    static_cast<int>(circle.center.x - circle.radius), static_cast<int>(circle.center.y - circle.radius),
+                    static_cast<int>(circle.center.x + circle.radius), static_cast<int>(circle.center.y + circle.radius))) {
+        return false;
+    }
+    const float cx = circle.center.x, cy = circle.center.y;
+    if (PointInPolygon(poly, cx, cy)) return true;
+
+    const float rSq = circle.radius * circle.radius;
+    for (size_t i = 0; i < n; i++) {
+        const SDL_Point a = poly.vertices[i], b = poly.vertices[(i + 1) % n];
+        float qx, qy;
+        if (!ClosestOnSegment(a.x, a.y, b.x, b.y, cx, cy, qx, qy)) continue;
+        if ((cx - qx) * (cx - qx) + (cy - qy) * (cy - qy) < rSq) return true;
+    }
+    return false;
+}
+
+// Até 4 rodadas resolvendo só a sobreposição MAIS FUNDA de cada vez (evita o
+// empurrão duplo nas quinas e o "ganho de velocidade" nas escadinhas de pixel).
+// Devolve o deslocamento total.
+Vec2 LevelManager::GetCirclePushVector(const Circle& circle, bool isElevated) {
+    float cx = circle.center.x, cy = circle.center.y;
+    const float r = circle.radius;
+
+    for (int iter = 0; iter < 4; iter++) {
+        float maxOverlap = 0.0f;
+        Vec2 bestPush(0.0f, 0.0f);
+
+        // Candidato a empurrão: afastar do ponto (qx, qy), com o alcance `reach`.
+        auto consider = [&](float qx, float qy, float reach) {
+            const float dx = cx - qx, dy = cy - qy;
+            const float distSq = dx * dx + dy * dy;
+            if (distSq <= 0.0001f || distSq >= reach * reach) return;
+            const float dist = std::sqrt(distSq);
+            const float overlap = reach - dist;
+            if (overlap > maxOverlap) {
+                maxOverlap = overlap;
+                bestPush = Vec2(dx / dist * overlap, dy / dist * overlap);
+            }
+        };
+        auto rect = [&](const SDL_Rect& rc) {
+            consider(std::clamp(cx, static_cast<float>(rc.x), static_cast<float>(rc.x + rc.w)),
+                     std::clamp(cy, static_cast<float>(rc.y), static_cast<float>(rc.y + rc.h)), r);
+        };
+        auto poly = [&](const Polygon& p) {
+            const size_t n = p.vertices.size();
+            for (size_t i = 0; i < n; i++) {
+                const SDL_Point a = p.vertices[i], b = p.vertices[(i + 1) % n];
+                float qx, qy;
+                if (ClosestOnSegment(a.x, a.y, b.x, b.y, cx, cy, qx, qy)) consider(qx, qy, r);
+            }
+        };
+
+        if (!isElevated) {
+            for (const auto& rc : rectColliders)    rect(rc);
+            for (const auto& rc : objRectColliders) rect(rc);
+            for (const auto& c : circleColliders)   consider(c.center.x, c.center.y, r + c.radius);
+            for (const auto& p : objPolyColliders)  poly(p);
+        }
+        for (const auto& p : (isElevated ? chaoEscada : chaoNormal)) poly(p);
+        if (isElevated && !escadaConsertada) {
+            for (const auto& p : chaoBuraco) poly(p);
+        }
+
+        if (maxOverlap <= 0.0f) break;
+        cx += bestPush.x;
+        cy += bestPush.y;
+    }
+    return Vec2(cx - circle.center.x, cy - circle.center.y);
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  Desenho
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Camadas de imagem na ordem do Tiled (parede → chão), com câmera e zoom.
+void LevelManager::RenderBackground(SDL_Renderer* renderer) {
+    const float zoom = Camera::GetZoom();
+    for (const auto& img : imageLayers) {
+        if (!img.texture) continue;
+        const SDL_Rect dst{static_cast<int>((img.x - Camera::pos.x) * zoom), static_cast<int>((img.y - Camera::pos.y) * zoom),
+                           static_cast<int>(img.w * zoom), static_cast<int>(img.h * zoom)};
+        SDL_RenderCopy(renderer, img.texture, nullptr, &dst);
+    }
+}
+
+// Debug [B]: cada tipo de colisor/zona numa cor; restaura o estado de desenho do renderer.
+void LevelManager::RenderCollisionOverlay(SDL_Renderer* renderer) const {
+    if (!renderer) return;
     const float zm = Camera::GetZoom();
     SDL_BlendMode oldBlend;
     SDL_GetRenderDrawBlendMode(renderer, &oldBlend);
@@ -893,258 +622,29 @@ void LevelManager::RenderCollisionOverlay(SDL_Renderer* renderer) const {
     SDL_GetRenderDrawColor(renderer, &dr, &dg, &db, &da);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
-    // Retângulos Tiled (mesmo espaço dos sprites: mundo − câmera, com zoom)
-    SDL_SetRenderDrawColor(renderer, 255, 90, 90, 230);
-    for (const auto& r : rectColliders) {
-        SDL_FRect screenRect = {(r.x - Camera::pos.x) * zm, (r.y - Camera::pos.y) * zm, r.w * zm, r.h * zm};
-        SDL_RenderDrawRectF(renderer, &screenRect);
-    }
-
-    // Polígonos — paredes / obstáculos
-    SDL_SetRenderDrawColor(renderer, 255, 60, 60, 235);
-    for (const auto& poly : chaoNormal) {
-        for (size_t i = 0; i < poly.vertices.size(); i++) {
-            SDL_Point p1 = poly.vertices[i];
-            SDL_Point p2 = poly.vertices[(i + 1) % poly.vertices.size()];
-            const float x1 = (static_cast<float>(p1.x) - Camera::pos.x) * zm;
-            const float y1 = (static_cast<float>(p1.y) - Camera::pos.y) * zm;
-            const float x2 = (static_cast<float>(p2.x) - Camera::pos.x) * zm;
-            const float y2 = (static_cast<float>(p2.y) - Camera::pos.y) * zm;
-            SDL_RenderDrawLineF(renderer, x1, y1, x2, y2);
-        }
-    }
-
-    SDL_SetRenderDrawColor(renderer, 0, 220, 255, 230);
-    for (const auto& poly : chaoEscada) {
-        for (size_t i = 0; i < poly.vertices.size(); i++) {
-            SDL_Point p1 = poly.vertices[i];
-            SDL_Point p2 = poly.vertices[(i + 1) % poly.vertices.size()];
-            const float x1 = (static_cast<float>(p1.x) - Camera::pos.x) * zm;
-            const float y1 = (static_cast<float>(p1.y) - Camera::pos.y) * zm;
-            const float x2 = (static_cast<float>(p2.x) - Camera::pos.x) * zm;
-            const float y2 = (static_cast<float>(p2.y) - Camera::pos.y) * zm;
-            SDL_RenderDrawLineF(renderer, x1, y1, x2, y2);
-        }
-    }
-
+    SDL_SetRenderDrawColor(renderer, 255, 90, 90, 230);   DrawRects(renderer, rectColliders, zm);
+    SDL_SetRenderDrawColor(renderer, 255, 60, 60, 235);   DrawPolygons(renderer, chaoNormal, zm);
+    SDL_SetRenderDrawColor(renderer, 0, 220, 255, 230);   DrawPolygons(renderer, chaoEscada, zm);
     if (!escadaConsertada) {
-        SDL_SetRenderDrawColor(renderer, 255, 80, 255, 220);
-        for (const auto& poly : chaoBuraco) {
-            for (size_t i = 0; i < poly.vertices.size(); i++) {
-                SDL_Point p1 = poly.vertices[i];
-                SDL_Point p2 = poly.vertices[(i + 1) % poly.vertices.size()];
-                const float x1 = (static_cast<float>(p1.x) - Camera::pos.x) * zm;
-                const float y1 = (static_cast<float>(p1.y) - Camera::pos.y) * zm;
-                const float x2 = (static_cast<float>(p2.x) - Camera::pos.x) * zm;
-                const float y2 = (static_cast<float>(p2.y) - Camera::pos.y) * zm;
-                SDL_RenderDrawLineF(renderer, x1, y1, x2, y2);
-            }
-        }
+        SDL_SetRenderDrawColor(renderer, 255, 80, 255, 220); DrawPolygons(renderer, chaoBuraco, zm);
     }
+    SDL_SetRenderDrawColor(renderer, 180, 180, 200, 210); DrawPolygons(renderer, floorStoneZones, zm);
+    SDL_SetRenderDrawColor(renderer, 90, 240, 120, 235);  DrawPolygons(renderer, repairableTriggers, zm);
+    SDL_SetRenderDrawColor(renderer, 80, 255, 120, 230);  DrawRects(renderer, objRectColliders, zm);
+    SDL_SetRenderDrawColor(renderer, 40, 200, 80, 235);   DrawPolygons(renderer, objPolyColliders, zm);
 
-    SDL_SetRenderDrawColor(renderer, 255, 140, 80, 230);
-    for (const auto& poly : floorWoodZones) {
-        for (size_t i = 0; i < poly.vertices.size(); i++) {
-            SDL_Point p1 = poly.vertices[i];
-            SDL_Point p2 = poly.vertices[(i + 1) % poly.vertices.size()];
-            const float x1 = (static_cast<float>(p1.x) - Camera::pos.x) * zm;
-            const float y1 = (static_cast<float>(p1.y) - Camera::pos.y) * zm;
-            const float x2 = (static_cast<float>(p2.x) - Camera::pos.x) * zm;
-            const float y2 = (static_cast<float>(p2.y) - Camera::pos.y) * zm;
-            SDL_RenderDrawLineF(renderer, x1, y1, x2, y2);
-        }
-    }
-
-    SDL_SetRenderDrawColor(renderer, 180, 180, 200, 210);
-    for (const auto& poly : floorStoneZones) {
-        for (size_t i = 0; i < poly.vertices.size(); i++) {
-            SDL_Point p1 = poly.vertices[i];
-            SDL_Point p2 = poly.vertices[(i + 1) % poly.vertices.size()];
-            const float x1 = (static_cast<float>(p1.x) - Camera::pos.x) * zm;
-            const float y1 = (static_cast<float>(p1.y) - Camera::pos.y) * zm;
-            const float x2 = (static_cast<float>(p2.x) - Camera::pos.x) * zm;
-            const float y2 = (static_cast<float>(p2.y) - Camera::pos.y) * zm;
-            SDL_RenderDrawLineF(renderer, x1, y1, x2, y2);
-        }
-    }
-
-    // Gatilhos do Repairable (verde)
     SDL_SetRenderDrawColor(renderer, 90, 240, 120, 235);
-    for (const auto& poly : repairableTriggers) {
-        for (size_t i = 0; i < poly.vertices.size(); i++) {
-            SDL_Point p1 = poly.vertices[i];
-            SDL_Point p2 = poly.vertices[(i + 1) % poly.vertices.size()];
-            const float x1 = (static_cast<float>(p1.x) - Camera::pos.x) * zm;
-            const float y1 = (static_cast<float>(p1.y) - Camera::pos.y) * zm;
-            const float x2 = (static_cast<float>(p2.x) - Camera::pos.x) * zm;
-            const float y2 = (static_cast<float>(p2.y) - Camera::pos.y) * zm;
-            SDL_RenderDrawLineF(renderer, x1, y1, x2, y2);
-        }
-    }
-
+    constexpr int kSeg = 36;
     for (const auto& c : circleColliders) {
-        const float cx = (static_cast<float>(c.center.x) - Camera::pos.x) * zm;
-        const float cy = (static_cast<float>(c.center.y) - Camera::pos.y) * zm;
-        const float rad = static_cast<float>(c.radius) * zm;
-        const int kSeg = 36;
+        const float cx = (c.center.x - Camera::pos.x) * zm, cy = (c.center.y - Camera::pos.y) * zm, rad = c.radius * zm;
         for (int i = 0; i < kSeg; i++) {
-            const float a0 = ((float)i / kSeg) * 2.0f * static_cast<float>(M_PI);
-            const float a1 = ((float)(i + 1) / kSeg) * 2.0f * static_cast<float>(M_PI);
-            SDL_RenderDrawLineF(renderer, cx + std::cos(a0) * rad, cy + std::sin(a0) * rad, cx + std::cos(a1) * rad,
-                                cy + std::sin(a1) * rad);
-        }
-    }
-
-    // Objetos estáticos — retângulos (verde claro)
-    SDL_SetRenderDrawColor(renderer, 80, 255, 120, 230);
-    for (const auto& r : objRectColliders) {
-        SDL_FRect screenRect = {
-            (r.x - Camera::pos.x) * zm,
-            (r.y - Camera::pos.y) * zm,
-            r.w * zm,
-            r.h * zm
-        };
-        SDL_RenderDrawRectF(renderer, &screenRect);
-    }
- 
-    // Objetos estáticos — polígonos diagonais (verde escuro)
-    SDL_SetRenderDrawColor(renderer, 40, 200, 80, 235);
-    for (const auto& poly : objPolyColliders) {
-        for (size_t i = 0; i < poly.vertices.size(); i++) {
-            SDL_Point p1 = poly.vertices[i];
-            SDL_Point p2 = poly.vertices[(i + 1) % poly.vertices.size()];
-            SDL_RenderDrawLineF(renderer,
-                (static_cast<float>(p1.x) - Camera::pos.x) * zm,
-                (static_cast<float>(p1.y) - Camera::pos.y) * zm,
-                (static_cast<float>(p2.x) - Camera::pos.x) * zm,
-                (static_cast<float>(p2.y) - Camera::pos.y) * zm);
+            const float a0 = (static_cast<float>(i) / kSeg) * 2.0f * kPi;
+            const float a1 = (static_cast<float>(i + 1) / kSeg) * 2.0f * kPi;
+            SDL_RenderDrawLineF(renderer, cx + std::cos(a0) * rad, cy + std::sin(a0) * rad,
+                                          cx + std::cos(a1) * rad, cy + std::sin(a1) * rad);
         }
     }
 
     SDL_SetRenderDrawBlendMode(renderer, oldBlend);
     SDL_SetRenderDrawColor(renderer, dr, dg, db, da);
-}
-
-Vec2 LevelManager::GetCirclePushVector(const Circle& circle, bool isElevated) {
-    float currentCx = circle.center.x;
-    float currentCy = circle.center.y;
-    float r = circle.radius;
-    float rSq = r * r;
-
-    // Em cada rodada, achamos a colisão MAIS PROFUNDA e resolvemos só ela.
-    // Isso impede o empurrão duplo em quinas e remove o "ganho de velocidade das famigeradas escadinhas de pixels".
-    for (int iter = 0; iter < 4; iter++) {
-        float maxOverlap = 0.0f;
-        Vec2 bestPush(0, 0);
-
-        auto ResolveRect = [&](const SDL_Rect& rect) {
-            float closestX = std::clamp(currentCx, (float)rect.x, (float)(rect.x + rect.w));
-            float closestY = std::clamp(currentCy, (float)rect.y, (float)(rect.y + rect.h));
-            float distX = currentCx - closestX;
-            float distY = currentCy - closestY;
-            float distSq = (distX * distX) + (distY * distY);
-            
-            if (distSq > 0.0001f && distSq < rSq) {
-                float dist = std::sqrt(distSq);
-                float overlap = r - dist;
-                if (overlap > maxOverlap) {
-                    maxOverlap = overlap;
-                    bestPush.x = (distX / dist) * overlap;
-                    bestPush.y = (distY / dist) * overlap;
-                }
-            }
-        };
-
-        auto ResolveCircle = [&](const Circle& other) {
-            float distX = currentCx - other.center.x;
-            float distY = currentCy - other.center.y;
-            float distSq = (distX * distX) + (distY * distY);
-            float rSum = r + other.radius;
-            
-            if (distSq > 0.0001f && distSq < rSum * rSum) {
-                float dist = std::sqrt(distSq);
-                float overlap = rSum - dist;
-                if (overlap > maxOverlap) {
-                    maxOverlap = overlap;
-                    bestPush.x = (distX / dist) * overlap;
-                    bestPush.y = (distY / dist) * overlap;
-                }
-            }
-        };
-
-        auto ResolvePoly = [&](const Polygon& poly) {
-            if (poly.vertices.empty()) return;
-            for (size_t i = 0; i < poly.vertices.size(); i++) {
-                float p1x = (float)poly.vertices[i].x, p1y = (float)poly.vertices[i].y;
-                float p2x = (float)poly.vertices[(i + 1) % poly.vertices.size()].x, p2y = (float)poly.vertices[(i + 1) % poly.vertices.size()].y;
-
-                float lineLenSq = (p2x - p1x) * (p2x - p1x) + (p2y - p1y) * (p2y - p1y);
-                if (lineLenSq == 0) continue;
-                
-                float dot = (((currentCx - p1x) * (p2x - p1x)) + ((currentCy - p1y) * (p2y - p1y))) / lineLenSq;
-                float closestX = std::clamp(dot, 0.0f, 1.0f) * (p2x - p1x) + p1x;
-                float closestY = std::clamp(dot, 0.0f, 1.0f) * (p2y - p1y) + p1y;
-
-                float distX = currentCx - closestX;
-                float distY = currentCy - closestY;
-                float distSq = (distX * distX) + (distY * distY);
-
-                if (distSq > 0.0001f && distSq < rSq) {
-                    float dist = std::sqrt(distSq);
-                    float overlap = r - dist;
-                    if (overlap > maxOverlap) {
-                        maxOverlap = overlap;
-                        bestPush.x = (distX / dist) * overlap;
-                        bestPush.y = (distY / dist) * overlap;
-                    }
-                }
-            }
-        };
-
-        if (!isElevated) {
-            for (const auto& rCol : rectColliders) ResolveRect(rCol);
-            for (const auto& rCol : objRectColliders) ResolveRect(rCol);
-            for (const auto& cCol : circleColliders) ResolveCircle(cCol);
-            for (const auto& pCol : objPolyColliders) ResolvePoly(pCol);
-        }
-
-        const auto& listaAtiva = isElevated ? chaoEscada : chaoNormal;
-        for (const auto& poly : listaAtiva) ResolvePoly(poly);
-
-        if (isElevated && !escadaConsertada) {
-            for (const auto& poly : chaoBuraco) ResolvePoly(poly);
-        }
-
-        // Aplica SOMENTE o maior empurrão dessa iteração
-        if (maxOverlap > 0.0f) {
-            currentCx += bestPush.x;
-            currentCy += bestPush.y;
-        } else {
-            break; // Se não tem mais sobreposição, sai do loop imediatamente!
-        }
-    }
-
-    return Vec2(currentCx - circle.center.x, currentCy - circle.center.y);
-}
-
-// ==========================================================
-// GETTERS DAS LISTAS DE COLISÃO
-// ==========================================================
-
-std::vector<SDL_Rect>& LevelManager::GetRectColliders() {
-    return rectColliders;
-}
-
-std::vector<Polygon>& LevelManager::GetPolyColliders() {
-    return chaoNormal; 
-}
-
-std::vector<Circle>& LevelManager::GetCircleColliders() {
-    return circleColliders;
-}
-
-void LevelManager::RenderDebug(SDL_Renderer* renderer) {
-#ifdef DEBUG
-    RenderCollisionOverlay(renderer);
-#endif
 }

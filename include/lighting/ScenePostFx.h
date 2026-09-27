@@ -48,11 +48,16 @@ public:
     /// Devolve SDL_BLENDMODE_INVALID quando o driver nao suporta a mistura.
     static SDL_BlendMode NoGrayStampBlendMode();
 
+    /// Gama aplicada no fim do filtro (1.0 = neutro). Vem do brilho do jogador.
+    void SetGamma(float g) { gamma = g; }
+
     /// Desenha `sceneTex` no alvo atual com o filtro aplicado.
     /// Devolve false quando nada foi desenhado (quem chama tem de fazer o
     /// `SDL_RenderCopy` normal nesse caso).
     bool Render(SDL_Renderer* renderer, SDL_Texture* sceneTex, int windowW, int windowH,
                 const PlayerVisionFrame& vision, const PlayerVisionParams& params);
+
+    void SetBlackPoint(float b) { blackPoint = b; }
 
 private:
     enum Uniform {
@@ -92,12 +97,16 @@ private:
         U_MONO_LIGHT_GLOW,
         U_LIGHT_COLOR,
         U_VISION_SAT,
+        U_GAMMA,
+        U_BLACK,    
         U_COUNT
     };
 
     bool ready = false;
     bool initTried = false;
     bool flipV = false;
+    float gamma = 1.0f;
+    float blackPoint = 0.0f;
     unsigned int program = 0;
     int uniforms[U_COUNT]{};
     char status[160] = "por iniciar";

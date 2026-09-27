@@ -1,0 +1,5 @@
+{
+  "_leia_me": "Cinzas da tela de calibração (0-255). background = escuro do jogo; symbols = quase invisível, visível, nítido.",
+  "background": 0,
+  "symbols": [12, 17, 28]
+}

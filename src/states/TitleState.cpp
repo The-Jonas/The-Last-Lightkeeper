@@ -1,892 +1,540 @@
 #include "states/TitleState.h"
 #include "states/LoadingState.h"
-#include "core/Telemetry.h"
 #include "states/EndState.h"
+#include "states/stage/StageState.h"
 #include "audio/GameSfx.h"
 #include "audio/GameVoice.h"
-#include "core/SaveManager.h"
-#include "states/stage/StageState.h"
 #include "core/Game.h"
+#include "core/InputManager.h"
+#include "core/Resources.h"
+#include "core/SaveManager.h"
+#include "core/Telemetry.h"
+#include "engine/Camera.h"
 #include "engine/GameObject.h"
 #include "engine/SpriteRenderer.h"
-#include "core/InputManager.h"
-#include "ui/VideoSettings.h"
-#include "engine/Camera.h"
 #include "ui/Text.h"
-#include "core/Resources.h"
-#include "states/CutsceneState.h"
-#include <algorithm>
-#include <cstdio>
-#include <cmath>
-#include <fstream>
 #include "nlohmann/json.hpp"
 
-static const char* kMenuLabels[5] = {
-    "Continuar",
-    "Novo Jogo",
-    "Configurações",
-    "Créditos",
-    "Sair"
-};
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <fstream>
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Helper interno: desenha texto com SDL_ttf
-// ─────────────────────────────────────────────────────────────────────────────
-static void DrawText(SDL_Renderer* r, TTF_Font* font, const char* str,
-                     int x, int y, SDL_Color col, int align = 0, int refW = 0) {
-    if (!r || !font || !str) return;
-    SDL_Surface* sf = TTF_RenderUTF8_Blended(font, str, col);
-    if (!sf) return;
-    SDL_Texture* tex = SDL_CreateTextureFromSurface(r, sf);
-    int w = sf->w, h = sf->h;
-    SDL_FreeSurface(sf);
-    if (!tex) return;
-    int dx = x;
-    if (align == 1) dx = x + (refW - w) / 2;
-    else if (align == 2) dx = x - w;
-    SDL_Rect dst{dx, y, w, h};
-    SDL_RenderCopy(r, tex, nullptr, &dst);
-    SDL_DestroyTexture(tex);
+namespace {
+
+constexpr float kPi        = 3.14159265f;
+constexpr float kDegToRad  = kPi / 180.0f;
+constexpr float kScreenW   = 1920.0f;
+constexpr float kScreenH   = 1080.0f;
+
+const char* kLayoutPath = "Recursos/img/menu/menu_config.json";
+const char* kWallPath   = "Recursos/img/menu/parede.png";
+const char* kLogoPath   = "Recursos/img/menu/LOGO_BRANCA_1.png";
+const char* kMenuFont   = "Recursos/font/Broadsheet_0.ttf";
+const char* kMusicPath  = "Recursos/audio/soundtracks/ES_Make up Your Mind - Hanna Lindgren.mp3";
+
+const char* kMenuLabels[] = {"Continuar", "Novo Jogo", "Configurações", "Créditos", "Sair"};
+const char* kTelemetryLabels[] = {"continuar", "novo_jogo", "opcoes", "creditos", "sair"};
+
+// Deixa a textura com filtragem linear (a arte do menu é grande e é reduzida).
+void SetLinear(const char* path) {
+    if (auto t = Resources::GetImage(path)) {
+        SDL_SetTextureScaleMode(t.get(), SDL_ScaleModeLinear);
+    }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Construtor / Destrutor
-// ─────────────────────────────────────────────────────────────────────────────
-TitleState::TitleState() : State() {
-    InitSliders();
-    for (int i = 0; i < 5; i++) menuTexts[i] = nullptr;
+// Cria um GameObject com sprite que segue a câmera (interface desenhada a 1:1).
+GameObject* MakeSprite(const char* path, int z, float x, float y, float w, float h) {
+    auto* go = new GameObject();
+    go->z = z;
+    auto* sr = new SpriteRenderer(*go, path);
+    sr->SetCameraFollower(true);
+    go->AddComponent(sr);
+    go->box = {x, y, w, h};
+    return go;
 }
 
+}  // namespace
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  Ciclo de vida
+// ═════════════════════════════════════════════════════════════════════════════
+
+TitleState::TitleState() : State() {}
+
+// Libera o que não está no objectArray: textos do menu e alvos do desfoque.
 TitleState::~TitleState() {
-    delete armGO; armGO = nullptr;
-    for (int i = 0; i < 5; i++) { delete menuTexts[i]; menuTexts[i] = nullptr; }
-    if (charBlurFull)  { SDL_DestroyTexture(charBlurFull);  charBlurFull  = nullptr; }
-    for (int i = 0; i < kBlurLevels; ++i) {
-        if (charBlurChain[i]) { SDL_DestroyTexture(charBlurChain[i]); charBlurChain[i] = nullptr; }
-    }
+    for (GameObject*& t : menuTexts) { delete t; t = nullptr; }
+    DestroyBlurTargets();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  LoadConfig
-// ─────────────────────────────────────────────────────────────────────────────
-void TitleState::LoadConfig() {
-    std::ifstream f("Recursos/img/menu/menu_config.json");
-    if (!f.is_open()) { printf("[TitleState] menu_config.json nao encontrado\n"); return; }
-    try {
-        nlohmann::json j; f >> j;
-        auto getf = [&](nlohmann::json& o, const char* k, float& v) {
-            if (o.contains(k)) v = o[k].get<float>();
-        };
-        if (j.contains("character")) { auto& c=j["character"];
-            getf(c,"centerX",kCharCX); getf(c,"bottomY",kCharBottomY);
-            getf(c,"width",kCharW);    getf(c,"height",kCharH);
-            getf(c,"shoulderDX",kShoulderDX); getf(c,"shoulderDY",kShoulderDY); }
-        if (j.contains("logo")) { auto& l=j["logo"];
-            getf(l,"x",kLogoX); getf(l,"y",kLogoY);
-            if (l.contains("width")) { kLogoW=l["width"].get<float>(); kLogoH=kLogoW*(809.0f/2444.0f); } }
-        if (j.contains("menu")) { auto& m=j["menu"];
-            getf(m,"x",kMenuX); getf(m,"startY",kMenuStartY); getf(m,"spacing",kMenuSpacing);
-            if (m.contains("fontSize")) kMenuFontSize=m["fontSize"].get<int>(); }
-        if (j.contains("arm")) { auto& a=j["arm"];
-            getf(a,"width",kArmW); getf(a,"height",kArmH);
-            getf(a,"lanternAlong",kLanternAlong); getf(a,"lanternPerp",kLanternPerp); }
-        if (j.contains("darkness")) kDarknessAlpha=static_cast<Uint8>(j["darkness"].get<int>());
-    } catch(...) { printf("[TitleState] Erro ao parsear menu_config.json\n"); }
+// Chegada ao menu (boot ou fase→menu): limpa sons da fase, monta a tela e toca a música.
+void TitleState::Start() {
+    Camera::ResetView();   // a interface é desenhada a 1:1; o zoom da fase encolheria tudo
+    GameSfx::HardStopAll();
+    GameVoice::StopAll();
+    LoadAssets();
+    StartArray();
+    music.Open(kMusicPath);
+    music.Play();
+    started = true;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Sliders
-// ─────────────────────────────────────────────────────────────────────────────
-void TitleState::InitSliders() {
-    sliders[0]={VolumeSliderKind::Master, "Master",   Game::masterVolumePercent};
-    sliders[1]={VolumeSliderKind::Ambient,"Fundo",    Game::ambientVolumePercent};
-    sliders[2]={VolumeSliderKind::Vfx,   "Efeitos",  Game::sfxVolumePercent};
-    sliders[3]={VolumeSliderKind::Voice, "Dublagem",  Game::voiceVolumePercent};
+void TitleState::Pause() {}
+
+// Volta de um estado empilhado (créditos, loading cancelado): câmera neutra e fade de novo.
+void TitleState::Resume() {
+    Camera::ResetView();
+    Camera::pos = Vec2(0, 0);
+    hasContinueSave = SaveManager::HasSave();
+    menuSelection = hasContinueSave ? kContinue : kNewGame;
+    fadeTimer = Timer();
+    fadeAlpha = 0.0f;
 }
 
-void TitleState::ApplySliderValue(VolumeSliderKind kind, int percent) {
-    switch(kind) {
-    case VolumeSliderKind::Master:  Game::SetMasterVolume(percent);  break;
-    case VolumeSliderKind::Ambient: Game::SetAmbientVolume(percent); break;
-    case VolumeSliderKind::Vfx:     Game::SetSfxVolume(percent);     break;
-    case VolumeSliderKind::Voice:   Game::SetVoiceVolume(percent);   break;
-    case VolumeSliderKind::Count:   break;
-    }
-}
+// ═════════════════════════════════════════════════════════════════════════════
+//  Preparação
+// ═════════════════════════════════════════════════════════════════════════════
 
-TitleState::VolumeSliderUi* TitleState::FindSliderAtPoint(int mx, int my) {
-    SDL_Point pt{mx,my};
-    for (auto& s:sliders)
-        if(SDL_PointInRect(&pt,&s.bar)||SDL_PointInRect(&pt,&s.handle)) return &s;
-    return nullptr;
-}
-
-void TitleState::RecalcSliders(int panelX, int panelY, int panelW) {
-    int baseX = panelX + (panelW - kSliderW) / 2;
-    int baseY = panelY + 120;
-    for (int i=0;i<static_cast<int>(VolumeSliderKind::Count);i++) {
-        auto& s=sliders[i];
-        s.bar={baseX, baseY+i*kSliderRowH, kSliderW, kSliderH};
-        int frac=(s.value*kSliderW)/100;
-        s.handle={s.bar.x+frac-kHandleW/2, s.bar.y-5, kHandleW, kSliderH+10};
-    }
-}
-
-void TitleState::HandleSliderInput(int mx, int my, InputManager& input) {
-    if(input.MousePress(SDL_BUTTON_LEFT))
-        if(auto* h=FindSliderAtPoint(mx,my)) h->dragging=true;
-    for(auto& s:sliders) {
-        if(!s.dragging) continue;
-        if(input.IsMouseDown(SDL_BUTTON_LEFT)) {
-            float frac=std::max(0.0f,std::min(1.0f,
-                static_cast<float>(mx-s.bar.x)/kSliderW));
-            s.value=static_cast<int>(frac*100.0f);
-            ApplySliderValue(s.kind,s.value);
-        } else s.dragging=false;
-    }
-}
-
-void TitleState::RenderSliders(SDL_Renderer* r, int panelX, int panelY) {
-    auto font=Resources::GetFont("Recursos/font/Broadsheet_0.ttf",16);
-    SDL_SetRenderDrawBlendMode(r,SDL_BLENDMODE_BLEND);
-    for(const auto& s:sliders) {
-        SDL_SetRenderDrawColor(r,50,50,50,220);
-        SDL_RenderFillRect(r,&s.bar);
-        SDL_SetRenderDrawColor(r,100,100,100,255);
-        SDL_RenderDrawRect(r,&s.bar);
-        // Preenchimento do slider
-        SDL_Rect filled={s.bar.x,s.bar.y,(s.value*kSliderW)/100,kSliderH};
-        SDL_SetRenderDrawColor(r,180,150,70,220);
-        SDL_RenderFillRect(r,&filled);
-        SDL_SetRenderDrawColor(r,220,190,100,255);
-        SDL_RenderFillRect(r,&s.handle);
-        if(!font) continue;
-        char buf[64];
-        std::snprintf(buf,sizeof(buf),"%s: %d%%",s.label,s.value);
-        DrawText(r,font.get(),buf,s.bar.x,s.bar.y-26,{200,190,160,255});
-    }
-    SDL_SetRenderDrawBlendMode(r,SDL_BLENDMODE_NONE);
-    (void)panelX; (void)panelY;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  LoadAssets
-// ─────────────────────────────────────────────────────────────────────────────
+// Monta a tela e já aponta o braço para a opção inicial (sem giro na entrada).
 void TitleState::LoadAssets() {
-    LoadConfig();
-    PreloadMenuVersion(menuVersion);   // V2 (Luana)
-    
-    // Fundo
-    { auto* go=new GameObject(); go->z=0;
-      auto* sr=new SpriteRenderer(*go,"Recursos/img/menu/parede.png");
-      go->AddComponent(sr); sr->SetCameraFollower(true);
-      go->box={0,0,1920.0f,1080.0f}; AddObject(go); bg=go; }
-      
-    // Logo
-    { auto* go=new GameObject(); go->z=5;
-      auto* sr=new SpriteRenderer(*go,"Recursos/img/menu/LOGO_BRANCA_1.png");
-      go->AddComponent(sr); sr->SetCameraFollower(true);
-      go->box={kLogoX,kLogoY,kLogoW,kLogoH}; AddObject(go); logoGO=go; }
-      
-    // Personagem (usa a versão atual: V1 padrão / V2 Luana)
-    { auto* go=new GameObject(); go->z=10;
-      char bodyPath[192]; BodyFramePath(1, bodyPath, sizeof(bodyPath));
-      auto* sr=new SpriteRenderer(*go, bodyPath);
-      go->AddComponent(sr); sr->SetCameraFollower(true);
-      go->box={0,0,kCharW,kCharH}; AddObject(go); charBodyGO=go; }
-
-    // Braço — fora do objectArray
-    { auto* go=new GameObject();
-      auto* sr=new SpriteRenderer(*go, ArmPath());
-      go->AddComponent(sr); sr->SetCameraFollower(true);
-      go->box={0,0,kArmW,kArmH}; armGO=go; }
-      
-    // Textos — fora do objectArray
-    for(int i=0;i<5;i++) {
-        auto* go=new GameObject();
-        SDL_Color col={220,200,150,0};
-        go->AddComponent(new Text(*go,"Recursos/font/Broadsheet_0.ttf",
-            kMenuFontSize,Text::BLENDED,kMenuLabels[i],col));
-        menuTexts[i]=go;
-    }
-    
-    // Filtragem LINEAR também no fundo e no logo (alta resolução, escalados p/
-    // caber) — evita o aspecto pixelado do downscale nearest-neighbor.
-    if (auto t = Resources::GetImage("Recursos/img/menu/parede.png")) {
-        SDL_SetTextureScaleMode(t.get(), SDL_ScaleModeLinear);
-    }
-    if (auto t = Resources::GetImage("Recursos/img/menu/LOGO_BRANCA_1.png")) {
-        SDL_SetTextureScaleMode(t.get(), SDL_ScaleModeLinear);
-    }
+    LoadLayout();
+    PreloadArt();
+    CreateObjects();
 
     hasContinueSave = SaveManager::HasSave();
+    menuSelection = hasContinueSave ? kContinue : kNewGame;
 
-    // Com save, começa em "Continuar" (0); sem save, em "Novo Jogo" (1).
-    menuSelection = hasContinueSave ? 0 : 1;
-    
-    charFrameIndex=0; charAnimTimer=0.0f;
-    fadeTimer=Timer(); fadeAlpha=0.0f; pulseTimer=0.0f;
-    configOpen=false; configTab=0; awaitingRebind=false; controlsSelection=0;
-    
-    // Isso calcula todas as posições (textos, ombro, etc) para usarmos no cálculo abaixo
+    charFrameIndex = 0;
+    charAnimTimer = 0.0f;
+    fadeTimer = Timer();
+    fadeAlpha = 0.0f;
+    pulseTimer = 0.0f;
+
     LayoutAll();
-    
-    // =========================================================================
-    //  O SNAP DA LANTERNA: Força o braço a nascer mirando no lugar certo
-    // =========================================================================
-    const auto& op = optionPositions[menuSelection];
-    float dx = op.cx - shoulderX;
-    float dy = op.cy - shoulderY;
-    
-    constexpr float kArmAngleOffset = -10.0f; 
-    
-    armAngle = std::atan2(dy, dx) * (180.0f / 3.14159265f) + 180.0f + kArmAngleOffset;
+    armAngle = ArmAngleTo(menuSelection);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  LayoutAll
-// ─────────────────────────────────────────────────────────────────────────────
-void TitleState::LayoutAll() {
-    if(bg) bg->box={Camera::pos.x,Camera::pos.y,1920.0f,1080.0f};
-    if(logoGO) logoGO->box={Camera::pos.x+kLogoX,Camera::pos.y+kLogoY,kLogoW,kLogoH};
-    float charX=Camera::pos.x+kCharCX-kCharW*0.5f;
-    float charY=Camera::pos.y+kCharBottomY-kCharH;
-    if(charBodyGO) charBodyGO->box={charX,charY,kCharW,kCharH};
-    shoulderX=kCharCX+kShoulderDX;
-    shoulderY=(kCharBottomY-kCharH)+kCharH+kShoulderDY;
-    for(int i=0;i<5;i++) {
-        if(!menuTexts[i]) continue;
-        const int slot = hasContinueSave ? i : i - 1;
-        if(slot < 0) continue;   
-        float y=kMenuStartY+slot*kMenuSpacing;
-        menuTexts[i]->box.x=Camera::pos.x+kMenuX;
-        menuTexts[i]->box.y=Camera::pos.y+y;
-        optionPositions[i]={kMenuX+menuTexts[i]->box.w*0.5f, y+menuTexts[i]->box.h*0.5f};
+// Lê menu_config.json; chaves ausentes mantêm o padrão do header.
+void TitleState::LoadLayout() {
+    std::ifstream f(kLayoutPath);
+    if (!f.is_open()) { std::printf("[TitleState] %s nao encontrado\n", kLayoutPath); return; }
+    try {
+        nlohmann::json j;
+        f >> j;
+        auto getf = [](const nlohmann::json& o, const char* k, float& v) {
+            if (o.contains(k)) v = o[k].get<float>();
+        };
+        if (j.contains("character")) {
+            const auto& c = j["character"];
+            getf(c, "centerX", layout.charCX);        getf(c, "bottomY", layout.charBottomY);
+            getf(c, "width", layout.charW);           getf(c, "height", layout.charH);
+            getf(c, "shoulderDX", layout.shoulderDX); getf(c, "shoulderDY", layout.shoulderDY);
+        }
+        if (j.contains("logo")) {
+            const auto& l = j["logo"];
+            getf(l, "x", layout.logoX);
+            getf(l, "y", layout.logoY);
+            if (l.contains("width")) {
+                layout.logoW = l["width"].get<float>();
+                layout.logoH = layout.logoW * (809.0f / 2444.0f);
+            }
+        }
+        if (j.contains("menu")) {
+            const auto& m = j["menu"];
+            getf(m, "x", layout.menuX);
+            getf(m, "startY", layout.menuStartY);
+            getf(m, "spacing", layout.menuSpacing);
+            if (m.contains("fontSize")) layout.menuFontSize = m["fontSize"].get<int>();
+        }
+        if (j.contains("arm")) {
+            const auto& a = j["arm"];
+            getf(a, "width", layout.armW);               getf(a, "height", layout.armH);
+            getf(a, "lanternAlong", layout.lanternAlong); getf(a, "lanternPerp", layout.lanternPerp);
+        }
+        if (j.contains("darkness")) layout.darknessAlpha = static_cast<Uint8>(j["darkness"].get<int>());
+    } catch (...) {
+        std::printf("[TitleState] Erro ao parsear %s\n", kLayoutPath);
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Animacao
-// ─────────────────────────────────────────────────────────────────────────────
-// Caminhos da arte por versão (V1 padrão / V2 Luana). Ambas as versões têm a MESMA
-// proporção, então o layout (kCharW/H, kArmW/H) serve para as duas.
-const char* TitleState::ArmPath() const {
-    return (menuVersion == 1) ? "Recursos/img/menu/luana/braco_irmaozao.png"
-                              : "Recursos/img/menu/braco_irmaozao.png";
-}
-void TitleState::BodyFramePath(int frame1based, char* out, size_t n) const {
-    const char* fmt = (menuVersion == 1)
-        ? "Recursos/img/menu/luana/irmao_costas/Costas_irmaozao_%04d.png"
-        : "Recursos/img/menu/irmao_costas/Costas_irmaozao_%04d.png";
-    std::snprintf(out, n, fmt, frame1based);
-}
-void TitleState::PreloadMenuVersion(int version) {
-    const int saved = menuVersion;
-    menuVersion = version;
-    // Assets do menu são de alta resolução e escalados para caber na tela; sem
-    // filtragem LINEAR o (down)scale nearest-neighbor deixa tudo "pixelado".
-    if (auto t = Resources::GetImage(ArmPath())) {
-        SDL_SetTextureScaleMode(t.get(), SDL_ScaleModeLinear);
-    }
+// Carrega parede, logo, braço e todos os quadros do corpo com filtragem linear.
+void TitleState::PreloadArt() {
+    SetLinear(kWallPath);
+    SetLinear(kLogoPath);
+    SetLinear(ArmPath());
     for (int i = 1; i <= kCharFrames; ++i) {
-        char p[192]; BodyFramePath(i, p, sizeof(p));
-        if (auto t = Resources::GetImage(p)) {
-            SDL_SetTextureScaleMode(t.get(), SDL_ScaleModeLinear);
-        }
-    }
-    menuVersion = saved;
-}
-void TitleState::UpdateCharAnim(float dt) {
-    charAnimTimer+=dt;
-    if(charAnimTimer<kCharFrameSeconds) return;
-    charAnimTimer-=kCharFrameSeconds;
-    charFrameIndex=(charFrameIndex+1)%kCharFrames;
-    if(!charBodyGO) return;
-    auto* sr=charBodyGO->GetComponent<SpriteRenderer>();
-    if(!sr) return;
-    char path[192];
-    BodyFramePath(charFrameIndex+1, path, sizeof(path));   // respeita a versão (V1/V2)
-    Rect saved=charBodyGO->box;
-    sr->Open(path);
-    charBodyGO->box=saved;
-}
-
-void TitleState::UpdateArm(float dt) {
-    const auto& op = optionPositions[menuSelection];
-    float dx = op.cx - shoulderX, dy = op.cy - shoulderY;
-    
-    // COMPENSAÇÃO DE ÂNGULO:
-    // Se muito pra baixo aumente o valor, se muito pra cima abaixe o valor
-    constexpr float kArmAngleOffset = -10.0f; 
-
-    armAngleTarget = std::atan2(dy, dx) * (180.0f / 3.14159265f) + 180.0f + kArmAngleOffset;
-    
-    float diff = armAngleTarget - armAngle;
-    while(diff > 180.0f) diff -= 360.0f;
-    while(diff < -180.0f) diff += 360.0f;
-    armAngle += diff * std::min(1.0f, 7.0f * dt);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Painel de Configuracoes
-// ─────────────────────────────────────────────────────────────────────────────
-void TitleState::OpenConfig() {
-    configOpen=true;
-    configTab=0;
-    awaitingRebind=false;
-    controlsSelection=0;
-}
-
-void TitleState::UpdateConfig(InputManager& input) {
-    if(!configOpen) return;
-
-    // O overlay de vídeo (dropdown + Aplicar) fica por cima e captura o input.
-    if(VideoSettings::IsOpen()) { VideoSettings::HandleInput(input); return; }
-
-    int mx=input.GetMouseX(), my=input.GetMouseY();
-    SDL_Point mp{mx,my};
-
-    // Botao X fechar
-    if(input.MousePress(SDL_BUTTON_LEFT) && SDL_PointInRect(&mp,&configCloseBtn)) {
-        configOpen=false; Game::SaveSettings(); return;
-    }
-    if(input.KeyPress(SDLK_ESCAPE) && !awaitingRebind) {
-        configOpen=false; Game::SaveSettings(); return;
-    }
-
-    // Abas (a aba "Video" é um atalho que abre o overlay de vídeo).
-    if(input.MousePress(SDL_BUTTON_LEFT)) {
-        if(SDL_PointInRect(&mp,&configTabVolume))    { configTab=0; awaitingRebind=false; }
-        if(SDL_PointInRect(&mp,&configTabVideo))     { VideoSettings::Open(); awaitingRebind=false; return; }
-        if(SDL_PointInRect(&mp,&configTabControles)) { configTab=2; awaitingRebind=false; }
-    }
-
-    if(configTab==0) {
-        // Volume
-        const int winW=Game::GetInstance().GetWindowsWidth();
-        const int winH=Game::GetInstance().GetWindowsHeight();
-        const int pw=640, ph=std::max(560, 90 + kControlsRowCount*(36+4) + 30);
-        const int px=(winW-pw)/2, py=(winH-ph)/2;
-        RecalcSliders(px,py,pw);
-        HandleSliderInput(mx,my,input);
-    } else {
-        // Controles — captura de tecla
-        if(awaitingRebind) {
-            if(input.KeyPress(SDLK_ESCAPE)) { awaitingRebind=false; return; }
-            int key=input.PollAnyKeyPressed();
-            if(key!=0) {
-                static const int kAllowed[] = {
-                    SDLK_a,SDLK_b,SDLK_c,SDLK_d,SDLK_e,SDLK_f,SDLK_g,SDLK_h,
-                    SDLK_i,SDLK_j,SDLK_k,SDLK_l,SDLK_m,SDLK_n,SDLK_o,SDLK_p,
-                    SDLK_q,SDLK_r,SDLK_s,SDLK_t,SDLK_u,SDLK_v,SDLK_w,SDLK_x,
-                    SDLK_y,SDLK_z,
-                    SDLK_0,SDLK_1,SDLK_2,SDLK_3,SDLK_4,
-                    SDLK_5,SDLK_6,SDLK_7,SDLK_8,SDLK_9,
-                    SDLK_UP,SDLK_DOWN,SDLK_LEFT,SDLK_RIGHT,
-                    SDLK_RETURN,SDLK_SPACE,SDLK_BACKSPACE,SDLK_TAB,
-                    SDLK_LSHIFT,SDLK_RSHIFT,SDLK_LCTRL,SDLK_RCTRL,
-                    SDLK_LALT,SDLK_RALT,
-                };
-                bool allowed=false;
-                for(int k:kAllowed) if(k==key){allowed=true;break;}
-                if(allowed){ input.SetBinding(rebindAction,key); awaitingRebind=false; rebindInvalidTimer=0.0f; }
-                else { rebindInvalidTimer=2.0f; }
-            }
-            return;
-        }
-        if(input.KeyPress(SDLK_UP)||input.KeyPress(SDLK_w))
-            controlsSelection=(controlsSelection+kControlsRowCount-1)%kControlsRowCount;
-        if(input.KeyPress(SDLK_DOWN)||input.KeyPress(SDLK_s))
-            controlsSelection=(controlsSelection+1)%kControlsRowCount;
-        // Clique nas linhas
-        for(int i=0;i<kControlsRowCount;i++)
-            if(SDL_PointInRect(&mp,&controlsRowRects[i]))
-                controlsSelection=i;
-        bool activate=input.KeyPress(SDLK_RETURN)||input.KeyPress(SDLK_f);
-        if(input.MousePress(SDL_BUTTON_LEFT))
-            for(int i=0;i<kControlsRowCount;i++)
-                if(SDL_PointInRect(&mp,&controlsRowRects[i])) { controlsSelection=i; activate=true; }
-        if(activate) {
-            if(controlsSelection<InputManager::ActionCount) {
-                awaitingRebind=true;
-                rebindAction=static_cast<GameAction>(controlsSelection);
-            } else if(controlsSelection==InputManager::ActionCount) {
-                input.ResetBindingsToDefault();
-            } else {
-                configOpen=false; Game::SaveSettings();
-            }
-        }
+        char path[192];
+        BodyFramePath(i, path, sizeof(path));
+        SetLinear(path);
     }
 }
 
-void TitleState::RenderConfigVolume(SDL_Renderer* r, int px, int py, int pw, int ph) {
-    RenderSliders(r, px, py);
-    (void)ph;
-    auto font=Resources::GetFont("Recursos/font/Broadsheet_0.ttf",14);
-    if(font) DrawText(r,font.get(),"Ajuste os volumes com o mouse",
-        px+pw/2,py+ph-40,{150,150,150,200},1,0);
-}
+// Parede, logo e corpo vão para o objectArray; os textos ficam com este estado.
+void TitleState::CreateObjects() {
+    bg = MakeSprite(kWallPath, 0, 0.0f, 0.0f, kScreenW, kScreenH);
+    AddObject(bg);
 
-void TitleState::RenderConfigVideo(SDL_Renderer* r, int px, int py, int pw, int ph) {
-    auto labelFont=Resources::GetFont("Recursos/font/Broadsheet_0.ttf",18);
-    auto hintFont =Resources::GetFont("Recursos/font/Broadsheet_0.ttf",14);
-    if(!labelFont) return;
-    const int rowH=42, gap=10, contentTop=16;
-    const char* labels[kVideoRowCount]={"Modo de tela","Resolucao","Voltar"};
-    for(int i=0;i<kVideoRowCount;i++) {
-        const int rowY=py+contentTop+i*(rowH+gap);
-        SDL_Rect rr{px+20,rowY,pw-40,rowH};
-        videoRowRects[i]=rr;
-        bool sel=(i==videoSelection);
-        if(sel) {
-            SDL_SetRenderDrawBlendMode(r,SDL_BLENDMODE_BLEND);
-            SDL_SetRenderDrawColor(r,60,55,40,220);
-            SDL_RenderFillRect(r,&rr);
-            SDL_SetRenderDrawBlendMode(r,SDL_BLENDMODE_NONE);
-        }
-        SDL_Color lc=sel?SDL_Color{245,225,180,255}:SDL_Color{180,180,180,255};
-        int ty=rowY+(rowH-20)/2;
-        DrawText(r,labelFont.get(),labels[i],rr.x+12,ty,lc);
-        if(i==0) {
-            const std::string v=std::string("< ")+Game::CurrentDisplayModeLabel()+" >";
-            DrawText(r,labelFont.get(),v.c_str(),rr.x+rr.w-12,ty,lc,2,0);
-        } else if(i==1) {
-            const std::string v=std::string("< ")+Game::CurrentResolutionLabel()+" >";
-            DrawText(r,labelFont.get(),v.c_str(),rr.x+rr.w-12,ty,lc,2,0);
-        }
+    logoGO = MakeSprite(kLogoPath, 5, layout.logoX, layout.logoY, layout.logoW, layout.logoH);
+    AddObject(logoGO);
+
+    char bodyPath[192];
+    BodyFramePath(1, bodyPath, sizeof(bodyPath));
+    charBodyGO = MakeSprite(bodyPath, 10, 0.0f, 0.0f, layout.charW, layout.charH);
+    AddObject(charBodyGO);
+
+    for (int i = 0; i < kOptionCount; ++i) {
+        auto* go = new GameObject();
+        go->AddComponent(new Text(*go, kMenuFont, layout.menuFontSize, Text::BLENDED,
+                                  kMenuLabels[i], SDL_Color{220, 200, 150, 0}));
+        menuTexts[i] = go;
     }
-    if(hintFont)
-        DrawText(r,hintFont.get(),"Aplicam ao reiniciar o jogo",
-            px+pw/2,py+ph-40,{150,150,150,200},1,0);
 }
 
-void TitleState::RenderConfigControles(SDL_Renderer* r, int px, int py, int pw, int ph) {
-    auto labelFont=Resources::GetFont("Recursos/font/Broadsheet_0.ttf",18);
-
-    if(!labelFont) return;
-    
-    const int rowH=36, gap=4, contentTop=10;
-    for(int i=0;i<kControlsRowCount;i++) {
-        const int rowY=py+contentTop+i*(rowH+gap);
-        SDL_Rect rr{px+20,rowY,pw-40,rowH};
-        controlsRowRects[i]=rr;
-        bool sel=(i==controlsSelection);
-        if(sel) {
-            SDL_SetRenderDrawBlendMode(r,SDL_BLENDMODE_BLEND);
-            SDL_SetRenderDrawColor(r,60,55,40,220);
-            SDL_RenderFillRect(r,&rr);
-            SDL_SetRenderDrawBlendMode(r,SDL_BLENDMODE_NONE);
-        }
-        SDL_Color lc=sel?SDL_Color{245,225,180,255}:SDL_Color{180,180,180,255};
-        int ty=rowY+(rowH-20)/2;
-        if(i<InputManager::ActionCount) {
-            auto a=static_cast<GameAction>(i);
-            DrawText(r,labelFont.get(),InputManager::ActionLabel(a),rr.x+12,ty,lc);
-            bool capturing=(awaitingRebind&&rebindAction==a);
-            const char* kn;
-            SDL_Color kc;
-            if (capturing) {
-                if (rebindInvalidTimer > 0.0f) {
-                    kn = "Tecla invalida!";       // erro no lugar do prompt
-                    kc = {255, 80, 80, 255};      // vermelho
-                } else {
-                    kn = "Pressione uma tecla...";
-                    kc = {230, 200, 90, 255};     // amarelo
-                }
-            } else {
-                kn = SDL_GetKeyName(InputManager::GetInstance().GetBinding(a));
-                kc = lc;
-            }
-            DrawText(r, labelFont.get(), kn, rr.x+rr.w-12, ty, kc, 2, 0);
-        } else if(i==InputManager::ActionCount) {
-            DrawText(r,labelFont.get(),"Restaurar padrao",rr.x+12,ty,lc);
-        } else {
-            DrawText(r,labelFont.get(),"Voltar",rr.x+12,ty,lc);
-        }
-        // separador
-        SDL_SetRenderDrawColor(r,60,60,60,120);
-        SDL_RenderDrawLine(r,rr.x,rowY+rowH+gap/2,rr.x+rr.w,rowY+rowH+gap/2);
-    }
-    (void)ph;
-}
-
-void TitleState::RenderConfig(SDL_Renderer* r) {
-    if(!configOpen) return;
-    const int winW=Game::GetInstance().GetWindowsWidth();
-    const int winH=Game::GetInstance().GetWindowsHeight();
-    // kControlsRowCount linhas de 36+4px + 70 header + 20 padding
-    const int pw=640, ph=std::max(560, 90 + kControlsRowCount*(36+4) + 30);
-    const int px=(winW-pw)/2, py=(winH-ph)/2;
-
-    // Fundo escuro semi-transparente
-    SDL_SetRenderDrawBlendMode(r,SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(r,0,0,0,160);
-    SDL_Rect full{0,0,winW,winH};
-    SDL_RenderFillRect(r,&full);
-
-    // Painel
-    SDL_SetRenderDrawColor(r,25,25,30,245);
-    SDL_Rect panel{px,py,pw,ph};
-    SDL_RenderFillRect(r,&panel);
-    SDL_SetRenderDrawColor(r,160,140,90,255);
-    SDL_RenderDrawRect(r,&panel);
-    SDL_SetRenderDrawBlendMode(r,SDL_BLENDMODE_NONE);
-
-    auto titleFont=Resources::GetFont("Recursos/font/Broadsheet_0.ttf",28);
-    auto tabFont  =Resources::GetFont("Recursos/font/Broadsheet_0.ttf",18);
-
-    // Titulo
-    if(titleFont)
-        DrawText(r,titleFont.get(),"Configurações",px,py+18,{220,200,140,255},1,pw);
-
-    // Botao X — canto superior INTERNO do painel
-    configCloseBtn={px+pw-36,py+8,28,28};
-    SDL_SetRenderDrawBlendMode(r,SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(r,120,50,50,200);
-    SDL_RenderFillRect(r,&configCloseBtn);
-    SDL_SetRenderDrawColor(r,200,100,100,255);
-    SDL_RenderDrawRect(r,&configCloseBtn);
-    SDL_SetRenderDrawBlendMode(r,SDL_BLENDMODE_NONE);
-    if(tabFont) DrawText(r,tabFont.get(),"X",
-        configCloseBtn.x,
-        configCloseBtn.y+4,{255,200,200,255},1,configCloseBtn.w);
-
-    // Abas
-    const int tabY=py+56, tabH=30, tabW=pw/3;
-    configTabVolume   ={px,          tabY,tabW,tabH};
-    configTabVideo    ={px+tabW,     tabY,tabW,tabH};
-    configTabControles={px+2*tabW,   tabY,pw-2*tabW,tabH};
-
-    auto drawTab=[&](SDL_Rect tab, const char* label, bool active){
-        SDL_SetRenderDrawBlendMode(r,SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(r,
-            active?50:30, active?48:28, active?40:25, active?230:180);
-        SDL_RenderFillRect(r,&tab);
-        SDL_SetRenderDrawColor(r, active?160:80, active?140:70, active?90:50,255);
-        SDL_RenderDrawRect(r,&tab);
-        SDL_SetRenderDrawBlendMode(r,SDL_BLENDMODE_NONE);
-        SDL_Color tc=active?SDL_Color{240,220,160,255}:SDL_Color{150,150,150,255};
-        if(tabFont) DrawText(r,tabFont.get(),label,tab.x,tab.y+6,tc,1,tab.w);
-    };
-    drawTab(configTabVolume,   "Volume",    configTab==0);
-    drawTab(configTabVideo,    "Video",     configTab==1);
-    drawTab(configTabControles,"Controles", configTab==2);
-
-    // Linha separadora das abas
-    SDL_SetRenderDrawColor(r,160,140,90,180);
-    SDL_RenderDrawLine(r,px,tabY+tabH,px+pw,tabY+tabH);
-
-    // Conteudo da aba (a aba "Video" abre um overlay próprio, não tem conteúdo inline)
-    const int contentPY=tabY+tabH+10;
-    if(configTab==0) RenderConfigVolume(r,px,contentPY,pw,ph-(contentPY-py));
-    else             RenderConfigControles(r,px,contentPY,pw,ph-(contentPY-py));
-
-    // Overlay de vídeo por cima do painel de config.
-    VideoSettings::Render(r);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════════════
 //  Update
-// ─────────────────────────────────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Com as configurações abertas, só elas recebem input; o fundo continua animando.
 void TitleState::Update(float dt) {
-    if (rebindInvalidTimer > 0.0f) rebindInvalidTimer -= dt;
-    InputManager& input=InputManager::GetInstance();
-    hasContinueSave=SaveManager::HasSave();
-    if(!hasContinueSave&&menuSelection==0) menuSelection=1;
+    InputManager& input = InputManager::GetInstance();
+    SDL_ShowCursor(settingsMenu.IsOpen() ? SDL_ENABLE : SDL_DISABLE);
 
-    // Cursor visível SÓ no painel de configurações (sliders com mouse).
-    SDL_ShowCursor(configOpen ? SDL_ENABLE : SDL_DISABLE);
+    fadeTimer.Update(dt);
+    pulseTimer += dt;
 
-    // Config intercepta input primeiro
-    if(configOpen) {
-        UpdateConfig(input);
-        fadeTimer.Update(dt);
-        pulseTimer+=dt;
+    if (settingsMenu.IsOpen()) {
+        settingsMenu.Update(dt);
         UpdateCharAnim(dt);
         UpdateArray(dt);
         return;
     }
 
-    if(input.QuitRequested()||input.KeyPress(ESCAPE_KEY)) {
+    if (input.QuitRequested() || input.KeyPress(ESCAPE_KEY)) {
         Telemetry::SetEndReason(input.QuitRequested() ? "window_close" : "escape_menu");
-        quitRequested=true;
+        quitRequested = true;
+    }
+    if (input.KeyPress(SDLK_w) || input.KeyPress(SDLK_UP))   MoveSelection(-1);
+    if (input.KeyPress(SDLK_s) || input.KeyPress(SDLK_DOWN)) MoveSelection(+1);
+    if (input.KeyPress(SDLK_f) || input.KeyPress(SPACE_KEY) || input.KeyPress(SDLK_RETURN)) {
+        ActivateSelection();
     }
 
-    auto isDisabled=[&](int idx){ return idx==0&&!hasContinueSave; };
-    if(input.KeyPress(SDLK_w)||input.KeyPress(SDLK_UP)) {
-        int next=(menuSelection+4)%5;
-        while(isDisabled(next)&&next!=menuSelection) next=(next+4)%5;
-        menuSelection=next;
-    }
-    if(input.KeyPress(SDLK_s)||input.KeyPress(SDLK_DOWN)) {
-        int next=(menuSelection+1)%5;
-        while(isDisabled(next)&&next!=menuSelection) next=(next+1)%5;
-        menuSelection=next;
-    }
-    if(input.KeyPress(SDLK_f)||input.KeyPress(SPACE_KEY)||input.KeyPress(SDLK_RETURN))
-        ActivateMenuSelection();
-
-    fadeTimer.Update(dt);
-    float t=std::min(1.0f,fadeTimer.Get()/kFadeDuration);
-    fadeAlpha=t*255.0f;
-    Uint8 a=static_cast<Uint8>(fadeAlpha);
-    pulseTimer+=dt;
-    const float pulse=(std::sin(pulseTimer*2.0f)+1.0f)*0.5f;
-
-    for(int i=0;i<5;i++) {
-        if(!menuTexts[i]) continue;
-        Text* txt=menuTexts[i]->GetComponent<Text>();
-        if(!txt) continue;
-        bool sel=(i==menuSelection), dis=isDisabled(i);
-        if(dis) txt->SetColor({80,80,80,static_cast<Uint8>(a/3)});
-        else if(sel) {
-            txt->SetColor({
-                static_cast<Uint8>(200.0f+pulse*55.0f),
-                static_cast<Uint8>(160.0f+pulse*55.0f),
-                static_cast<Uint8>(40.0f +pulse*40.0f), a});
-        } else txt->SetColor({130,130,130,a});
-    }
-
-    LayoutAll(); UpdateCharAnim(dt); UpdateArm(dt); UpdateArray(dt);
+    fadeAlpha = std::min(1.0f, fadeTimer.Get() / kFadeDuration) * 255.0f;
+    UpdateMenuColors();
+    LayoutAll();
+    UpdateCharAnim(dt);
+    UpdateArm(dt);
+    UpdateArray(dt);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Acoes do menu
-// ─────────────────────────────────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════════════
+//  Menu
+// ═════════════════════════════════════════════════════════════════════════════
+
+bool TitleState::IsOptionEnabled(int option) const {
+    return option != kContinue || hasContinueSave;
+}
+
+// Anda uma opção para cima (-1) ou para baixo (+1), com volta, pulando as desativadas.
+void TitleState::MoveSelection(int dir) {
+    int next = (menuSelection + dir + kOptionCount) % kOptionCount;
+    while (!IsOptionEnabled(next) && next != menuSelection) {
+        next = (next + dir + kOptionCount) % kOptionCount;
+    }
+    menuSelection = next;
+}
+
+// Registra a escolha na telemetria e executa a opção.
+void TitleState::ActivateSelection() {
+    const int idx = (menuSelection >= 0 && menuSelection < kOptionCount) ? menuSelection : 0;
+    Telemetry::Event("menu", Telemetry::Fields().Str("choice", kTelemetryLabels[idx])
+                                                .Bool("hasSave", hasContinueSave));
+    switch (menuSelection) {
+    case kContinue: if (hasContinueSave) StartContinue(); break;
+    case kNewGame:  StartNewGame(); break;
+    case kSettings: settingsMenu.Open(); break;
+    case kCredits:  Game::GetInstance().Push(new EndState(/*creditsOnly=*/true)); break;
+    case kQuit:     Telemetry::SetEndReason("quit_menu"); quitRequested = true; break;
+    default: break;
+    }
+}
+
+// Apaga o save antigo e carrega a fase do início.
 void TitleState::StartNewGame() {
     SaveManager::DeleteSave();
     Game::GetInstance().Push(new LoadingState(StageState::LoadMode::NewGame));
 }
+
+// Carrega a fase a partir do save (se ainda existir).
 void TitleState::StartContinue() {
-    if(!SaveManager::HasSave()) return;
+    if (!SaveManager::HasSave()) return;
     Game::GetInstance().Push(new LoadingState(StageState::LoadMode::Continue));
 }
-void TitleState::ActivateMenuSelection() {
-    // Telemetria: por onde o tester entrou no jogo, e quantas vezes voltou ao
-    // menu. `hasSave` diz se "Continuar" estava sequer disponivel.
-    {
-        static const char* kLabels[] = {"continuar", "novo_jogo", "opcoes", "creditos", "sair"};
-        const int idx = (menuSelection >= 0 && menuSelection < 5) ? menuSelection : 0;
-        Telemetry::Event("menu", Telemetry::Fields().Str("choice", kLabels[idx]).Bool("hasSave", hasContinueSave));
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  Layout e animação
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Posiciona parede, logo, corpo e textos; calcula o ombro e o centro de cada opção.
+// Sem save, "Continuar" não ocupa espaço e as outras sobem uma posição.
+void TitleState::LayoutAll() {
+    const float camX = Camera::pos.x, camY = Camera::pos.y;
+    if (bg)     bg->box = {camX, camY, kScreenW, kScreenH};
+    if (logoGO) logoGO->box = {camX + layout.logoX, camY + layout.logoY, layout.logoW, layout.logoH};
+    if (charBodyGO) {
+        charBodyGO->box = {camX + layout.charCX - layout.charW * 0.5f,
+                           camY + layout.charBottomY - layout.charH,
+                           layout.charW, layout.charH};
     }
-    switch(menuSelection) {
-    case 0: if(hasContinueSave) StartContinue(); break;
-    case 1: StartNewGame(); break;
-    case 2: OpenConfig(); break;
-    case 3: Game::GetInstance().Push(new EndState(/*creditsOnly=*/true)); break;
-    case 4: Telemetry::SetEndReason("quit_menu"); quitRequested=true; break;
+
+    shoulderX = layout.charCX + layout.shoulderDX;
+    shoulderY = layout.charBottomY + layout.shoulderDY;
+
+    for (int i = 0; i < kOptionCount; ++i) {
+        if (!menuTexts[i]) continue;
+        const int slot = hasContinueSave ? i : i - 1;
+        if (slot < 0) continue;
+        const float y = layout.menuStartY + slot * layout.menuSpacing;
+        menuTexts[i]->box.x = camX + layout.menuX;
+        menuTexts[i]->box.y = camY + y;
+        optionPositions[i] = {layout.menuX + menuTexts[i]->box.w * 0.5f,
+                              y + menuTexts[i]->box.h * 0.5f};
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Render helpers
-// ─────────────────────────────────────────────────────────────────────────────
-void TitleState::RenderLanternCone(SDL_Renderer* r) {
-    if(fadeAlpha < 10.0f || !r || configOpen) return;
+// Ângulo (graus) do braço para a lanterna mirar no centro da opção.
+float TitleState::ArmAngleTo(int option) const {
+    const OptionPos& op = optionPositions[option];
+    return std::atan2(op.cy - shoulderY, op.cx - shoulderX) / kDegToRad + 180.0f + kArmAngleOffset;
+}
 
-    float rad = (armAngle + 180.0f) * (3.14159265f / 180.0f);
-    float ax = std::cos(rad), ay = std::sin(rad);
-    float perpX = -ay, perpY = ax; 
-    
-    float lx = shoulderX + ax * (kArmW * kLanternAlong) + perpX * kLanternPerp;
-    float ly = shoulderY + ay * (kArmW * kLanternAlong) + perpY * kLanternPerp;
-    const auto& op = optionPositions[menuSelection];
+// Gira o braço pelo caminho mais curto até a opção selecionada.
+void TitleState::UpdateArm(float dt) {
+    float diff = ArmAngleTo(menuSelection) - armAngle;
+    while (diff > 180.0f)  diff -= 360.0f;
+    while (diff < -180.0f) diff += 360.0f;
+    armAngle += diff * std::min(1.0f, kArmTurnSpeed * dt);
+}
+
+// Avança a respiração do irmãozão (troca a textura mantendo a caixa).
+void TitleState::UpdateCharAnim(float dt) {
+    charAnimTimer += dt;
+    if (charAnimTimer < kCharFrameSeconds) return;
+    charAnimTimer -= kCharFrameSeconds;
+    charFrameIndex = (charFrameIndex + 1) % kCharFrames;
+
+    if (!charBodyGO) return;
+    auto* sr = charBodyGO->GetComponent<SpriteRenderer>();
+    if (!sr) return;
+    char path[192];
+    BodyFramePath(charFrameIndex + 1, path, sizeof(path));
+    const Rect saved = charBodyGO->box;
+    sr->Open(path);
+    charBodyGO->box = saved;
+}
+
+// Cores das opções com o fade: desativada apagada, selecionada dourada pulsando, resto cinza.
+void TitleState::UpdateMenuColors() {
+    const Uint8 a = static_cast<Uint8>(fadeAlpha);
+    const float pulse = (std::sin(pulseTimer * 2.0f) + 1.0f) * 0.5f;
+    for (int i = 0; i < kOptionCount; ++i) {
+        if (!menuTexts[i]) continue;
+        Text* txt = menuTexts[i]->GetComponent<Text>();
+        if (!txt) continue;
+        if (!IsOptionEnabled(i)) {
+            txt->SetColor({80, 80, 80, static_cast<Uint8>(a / 3)});
+        } else if (i == menuSelection) {
+            txt->SetColor({static_cast<Uint8>(200.0f + pulse * 55.0f),
+                           static_cast<Uint8>(160.0f + pulse * 55.0f),
+                           static_cast<Uint8>(40.0f + pulse * 40.0f), a});
+        } else {
+            txt->SetColor({130, 130, 130, a});
+        }
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  Desenho
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Ordem: parede e logo → película escura → cone de luz → opções → irmãozão → configurações.
+void TitleState::Render() {
+    SDL_Renderer* r = Game::GetInstance().GetRenderer();
+    if (bg)     bg->Render();
+    if (logoGO) logoGO->Render();
+    RenderDarkness(r);
+    RenderLanternCone(r);
+    RenderMenuTexts();
+    RenderBlurredCharacter(r);
+    settingsMenu.Render(r);
+}
+
+// Escurece parede e logo por igual.
+void TitleState::RenderDarkness(SDL_Renderer* r) {
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(r, 0, 0, 0, layout.darknessAlpha);
+    const SDL_Rect full{0, 0, Game::GetInstance().GetWindowsWidth(), Game::GetInstance().GetWindowsHeight()};
+    SDL_RenderFillRect(r, &full);
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+}
+
+// Feixe aditivo da lente até a opção (trapézio que abre e some) + círculo de luz nela.
+void TitleState::RenderLanternCone(SDL_Renderer* r) {
+    if (fadeAlpha < 10.0f || !r || settingsMenu.IsOpen()) return;
+
+    constexpr float kLensRadius = 35.0f;    // meia largura do feixe na lente
+    constexpr float kSpotRadius = 130.0f;   // raio do círculo na opção
+    constexpr int   kSpotSegs   = 24;
+
+    const float rad = (armAngle + 180.0f) * kDegToRad;
+    const float ax = std::cos(rad), ay = std::sin(rad);
+    const float lx = shoulderX + ax * (layout.armW * layout.lanternAlong) - ay * layout.lanternPerp;
+    const float ly = shoulderY + ay * (layout.armW * layout.lanternAlong) + ax * layout.lanternPerp;
+    const OptionPos& op = optionPositions[menuSelection];
+
+    const Uint8 a = static_cast<Uint8>(fadeAlpha * 0.35f);
+    const SDL_Color lens{255, 230, 140, a};
+    const SDL_Color edge{255, 220, 100, 0};
+
+    const float beam = std::atan2(op.cy - ly, op.cx - lx) + kPi * 0.5f;
+    const float px = std::cos(beam), py = std::sin(beam);
 
     SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_ADD);
 
-    Uint8 a = static_cast<Uint8>(fadeAlpha * 0.35f);
-
-    float ba = std::atan2(op.cy - ly, op.cx - lx);
-
-    // ── 1. O FEIXE DE LUZ (Retângulo Torto) ──────────────────────
-    constexpr float kLensRadius = 35.0f;  // Ajuste se a luz vazar pelas laterais da lanterna
-    constexpr float kSpotRadius = 130.0f; 
-    
-    float pCos = std::cos(ba + 1.57079632f); 
-    float pSin = std::sin(ba + 1.57079632f);
-
     SDL_Vertex v[6];
-    SDL_Color colLens = {255, 230, 140, a};     
-    SDL_Color colSpot = {255, 220, 100, 0};     
-
-    v[0] = {{lx + pCos * kLensRadius, ly + pSin * kLensRadius}, colLens, {0,0}};
-    v[1] = {{lx - pCos * kLensRadius, ly - pSin * kLensRadius}, colLens, {0,0}};
-    v[2] = {{op.cx + pCos * kSpotRadius, op.cy + pSin * kSpotRadius}, colSpot, {0,0}};
-    
-    v[3] = v[1]; 
-    v[4] = {{op.cx - pCos * kSpotRadius, op.cy - pSin * kSpotRadius}, colSpot, {0,0}};
-    v[5] = v[2]; 
-
+    v[0] = {{lx + px * kLensRadius, ly + py * kLensRadius}, lens, {0, 0}};
+    v[1] = {{lx - px * kLensRadius, ly - py * kLensRadius}, lens, {0, 0}};
+    v[2] = {{op.cx + px * kSpotRadius, op.cy + py * kSpotRadius}, edge, {0, 0}};
+    v[3] = v[1];
+    v[4] = {{op.cx - px * kSpotRadius, op.cy - py * kSpotRadius}, edge, {0, 0}};
+    v[5] = v[2];
     SDL_RenderGeometry(r, nullptr, v, 6, nullptr, 0);
 
-    // ── 2. O CÍRCULO ILUMINADO NO TEXTO ───────────────────────────
-    constexpr int kSegs = 24;
     SDL_Vertex sv[3];
-    sv[0] = {{op.cx, op.cy}, {255, 230, 140, static_cast<Uint8>(a * 0.8f)}, {0,0}};
-    for(int i = 0; i < kSegs; i++) {
-        float a0 = (static_cast<float>(i)   / kSegs) * 2.0f * 3.14159265f;
-        float a1 = (static_cast<float>(i+1) / kSegs) * 2.0f * 3.14159265f;
-        sv[1] = {{op.cx + std::cos(a0) * kSpotRadius, op.cy + std::sin(a0) * kSpotRadius}, {255,220,100,0}, {0,0}};
-        sv[2] = {{op.cx + std::cos(a1) * kSpotRadius, op.cy + std::sin(a1) * kSpotRadius}, {255,220,100,0}, {0,0}};
+    sv[0] = {{op.cx, op.cy}, {255, 230, 140, static_cast<Uint8>(a * 0.8f)}, {0, 0}};
+    for (int i = 0; i < kSpotSegs; ++i) {
+        const float a0 = (static_cast<float>(i) / kSpotSegs) * 2.0f * kPi;
+        const float a1 = (static_cast<float>(i + 1) / kSpotSegs) * 2.0f * kPi;
+        sv[1] = {{op.cx + std::cos(a0) * kSpotRadius, op.cy + std::sin(a0) * kSpotRadius}, edge, {0, 0}};
+        sv[2] = {{op.cx + std::cos(a1) * kSpotRadius, op.cy + std::sin(a1) * kSpotRadius}, edge, {0, 0}};
         SDL_RenderGeometry(r, nullptr, sv, 3, nullptr, 0);
     }
 
     SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
 }
 
-void TitleState::RenderArm(SDL_Renderer* r) {
-    if(!armGO||!r) return;
-    auto tex=Resources::GetImage("Recursos/img/menu/braco_irmaozao.png");
-    if(!tex) return;
-    
-    SDL_Point pivot={static_cast<int>(kArmW),static_cast<int>(kArmH*0.5f)};
-    SDL_Rect dst={
-        static_cast<int>(shoulderX+Camera::pos.x-kArmW),
-        static_cast<int>(shoulderY+Camera::pos.y-kArmH*0.5f),
-        static_cast<int>(kArmW), static_cast<int>(kArmH)};
-        
-    SDL_SetTextureAlphaMod(tex.get(), 255);
-    
-    SDL_RenderCopyEx(r,tex.get(),nullptr,&dst,
-        static_cast<double>(armAngle),&pivot,SDL_FLIP_NONE);
-}
-
-// Desenha as opções do menu. Sem save, "Continuar" (item 0) não aparece.
-void TitleState::RenderMenuTexts(SDL_Renderer*) {
-    for(int i=0;i<5;i++) {
-        if(!menuTexts[i]) continue;
-        if(i==0 && !hasContinueSave) continue;
+// Desenha as opções; sem save, "Continuar" não aparece.
+void TitleState::RenderMenuTexts() {
+    for (int i = 0; i < kOptionCount; ++i) {
+        if (!menuTexts[i] || !IsOptionEnabled(i)) continue;
         menuTexts[i]->Render();
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Render
-// ─────────────────────────────────────────────────────────────────────────────
-void TitleState::Render() {
-    SDL_Renderer* r = Game::GetInstance().GetRenderer();
-    
-    // 1. Fundo e Logo (Lá atrás)
-    if(bg)     bg->Render();
-    if(logoGO) logoGO->Render();
-    
-    // 2. Película Escura (Escurece o fundo e a logo)
-    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(r, 0, 0, 0, kDarknessAlpha);
-    SDL_Rect full{0, 0, Game::GetInstance().GetWindowsWidth(),
-                      Game::GetInstance().GetWindowsHeight()};
-    SDL_RenderFillRect(r, &full);
-    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
-    
-    // 3. CONE DE LUZ (Ilumina o fundo ANTES do braço aparecer)
-    RenderLanternCone(r);
-    
-    // 4. Textos do Menu (Brilhando no fim da luz)
-    RenderMenuTexts(r);
-    
-    // 5+6. BRAÇO + CORPO do irmãozão, sempre com o DESFOQUE suave (braço incluso) —
-    // foco nas opções do menu, não na animação de fundo.
-    RenderBlurredCharacter(r);
-
-    // 7. Configurações (Sempre por cima de tudo para não quebrar a UI)
-    RenderConfig(r);
+// Braço com pivô na ponta direita (o ombro), girado em armAngle.
+void TitleState::RenderArm(SDL_Renderer* r) {
+    auto tex = Resources::GetImage(ArmPath());
+    if (!tex || !r) return;
+    const SDL_Point pivot{static_cast<int>(layout.armW), static_cast<int>(layout.armH * 0.5f)};
+    const SDL_Rect dst{static_cast<int>(shoulderX + Camera::pos.x - layout.armW),
+                       static_cast<int>(shoulderY + Camera::pos.y - layout.armH * 0.5f),
+                       static_cast<int>(layout.armW), static_cast<int>(layout.armH)};
+    SDL_SetTextureAlphaMod(tex.get(), 255);
+    SDL_RenderCopyEx(r, tex.get(), nullptr, &dst, static_cast<double>(armAngle), &pivot, SDL_FLIP_NONE);
 }
 
-// Rende braço + corpo em um alvo e aplica um desfoque de verdade via PIRÂMIDE de
-// redução: cada nível é metade do anterior (÷2), e reduzir de metade em metade com
-// filtragem LINEAR faz uma média 2×2 correta a cada passo — o acúmulo vira um
-// borrão liso, sem o aspecto "pixelado" de um único downscale grande. No fim, o
-// nível mais baixo é ampliado de volta para a tela (upscale linear = suave).
+// Braço atrás, corpo na frente.
+void TitleState::RenderCharacter(SDL_Renderer* r) {
+    RenderArm(r);
+    if (charBodyGO) charBodyGO->Render();
+}
+
+// Desfoque por pirâmide: desenha o irmãozão num alvo de tela cheia, reduz ÷2 a
+// cada nível (média 2×2 linear), sobe de volta ×2 por nível e amplia na tela.
+// Sem alvos disponíveis, desenha sem desfoque.
 void TitleState::RenderBlurredCharacter(SDL_Renderer* r) {
     const int winW = Game::GetInstance().GetWindowsWidth();
     const int winH = Game::GetInstance().GetWindowsHeight();
-
-    if (!charBlurFull) {
-        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");   // linear (default dos alvos)
-        charBlurFull = SDL_CreateTexture(r, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, winW, winH);
-        if (charBlurFull) SDL_SetTextureBlendMode(charBlurFull, SDL_BLENDMODE_BLEND);
-        for (int i = 0; i < kBlurLevels; ++i) {
-            const int div = 1 << (i + 1);   // ÷2, ÷4, ÷8
-            const int w = std::max(1, winW / div);
-            const int h = std::max(1, winH / div);
-            charBlurChain[i] = SDL_CreateTexture(r, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, w, h);
-            if (charBlurChain[i]) SDL_SetTextureBlendMode(charBlurChain[i], SDL_BLENDMODE_BLEND);
-        }
-    }
-
-    bool ready = (charBlurFull != nullptr);
-    for (int i = 0; i < kBlurLevels; ++i) ready = ready && (charBlurChain[i] != nullptr);
-    if (!ready) {
-        // Sem alvos disponíveis → desenha sem desfoque (nunca deixa a tela vazia).
-        RenderArm(r);
-        if (charBodyGO) charBodyGO->Render();
+    if (!EnsureBlurTargets(r, winW, winH)) {
+        RenderCharacter(r);
         return;
     }
 
-    SDL_SetTextureScaleMode(charBlurFull, SDL_ScaleModeLinear);
-    for (int i = 0; i < kBlurLevels; ++i) SDL_SetTextureScaleMode(charBlurChain[i], SDL_ScaleModeLinear);
-
     SDL_Texture* prev = SDL_GetRenderTarget(r);
-
-    // 1) Rende braço + corpo em um alvo transparente do tamanho da tela.
-    SDL_SetRenderTarget(r, charBlurFull);
-    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
-    SDL_SetRenderDrawColor(r, 0, 0, 0, 0);
-    SDL_RenderClear(r);
-    RenderArm(r);
-    if (charBodyGO) charBodyGO->Render();
-
-    // 2) DESCE a pirâmide: cada passo ÷2 com filtragem linear = média 2×2 correta.
-    SDL_Texture* src = charBlurFull;
-    for (int i = 0; i < kBlurLevels; ++i) {
-        SDL_SetRenderTarget(r, charBlurChain[i]);
+    auto clearTarget = [r](SDL_Texture* t) {
+        SDL_SetRenderTarget(r, t);
         SDL_SetRenderDrawColor(r, 0, 0, 0, 0);
         SDL_RenderClear(r);
+    };
+
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+    clearTarget(charBlurFull);
+    RenderCharacter(r);
+
+    SDL_Texture* src = charBlurFull;
+    for (int i = 0; i < kBlurLevels; ++i) {
+        clearTarget(charBlurChain[i]);
         SDL_RenderCopy(r, src, nullptr, nullptr);
         src = charBlurChain[i];
     }
-
-    // 3) SOBE a pirâmide em passos ×2 (progressivo). Amplia de 1 em 1 nível — cada
-    // reamostragem linear suaviza a interpolação, evitando o "leque" pixelado de um
-    // único upscale ×16. Reescreve os alvos de cima com o conteúdo reconstruído.
     for (int i = kBlurLevels - 2; i >= 0; --i) {
-        SDL_SetRenderTarget(r, charBlurChain[i]);
-        SDL_SetRenderDrawColor(r, 0, 0, 0, 0);
-        SDL_RenderClear(r);
-        SDL_RenderCopy(r, charBlurChain[i + 1], nullptr, nullptr);   // menor → maior (×2)
+        clearTarget(charBlurChain[i]);
+        SDL_RenderCopy(r, charBlurChain[i + 1], nullptr, nullptr);
     }
 
     SDL_SetRenderTarget(r, prev);
-
-    // 4) Último ×2: do nível ÷2 de volta para a tela cheia (upscale linear = liso).
     const SDL_Rect full{0, 0, winW, winH};
     SDL_SetTextureAlphaMod(charBlurChain[0], 255);
     SDL_RenderCopy(r, charBlurChain[0], nullptr, &full);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Start / Pause / Resume
-// ─────────────────────────────────────────────────────────────────────────────
-void TitleState::Start() {
-    // Este estado desenha a interface a 1:1 (posicao = Camera::pos + offset de
-    // tela): devolve a camera ao neutro para o zoom da fase nao encolher tudo.
-    Camera::ResetView();
-    // Chegando ao menu (boot ou nível→menu): mata qualquer efeito de gameplay que
-    // tenha sobrado (rádio etc.). A música do menu é iniciada logo abaixo.
-    GameSfx::HardStopAll();
-    GameVoice::StopAll();
-    LoadAssets(); StartArray();
-    music.Open("Recursos/audio/soundtracks/ES_Make up Your Mind - Hanna Lindgren.mp3");
-    music.Play();
-    started=true;
+// Cria (uma vez) o alvo de tela cheia e os níveis ÷2..÷16; true se todos existem.
+bool TitleState::EnsureBlurTargets(SDL_Renderer* r, int w, int h) {
+    if (!charBlurFull) {
+        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
+        auto make = [r](int tw, int th) {
+            SDL_Texture* t = SDL_CreateTexture(r, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET,
+                                               std::max(1, tw), std::max(1, th));
+            if (t) {
+                SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND);
+                SDL_SetTextureScaleMode(t, SDL_ScaleModeLinear);
+            }
+            return t;
+        };
+        charBlurFull = make(w, h);
+        for (int i = 0; i < kBlurLevels; ++i) {
+            const int div = 1 << (i + 1);
+            charBlurChain[i] = make(w / div, h / div);
+        }
+    }
+    if (!charBlurFull) return false;
+    for (SDL_Texture* t : charBlurChain) {
+        if (!t) return false;
+    }
+    return true;
 }
-void TitleState::Pause() {}
-void TitleState::Resume() {
-    Camera::ResetView();
-    Camera::pos=Vec2(0,0);
-    hasContinueSave=SaveManager::HasSave();
-    menuSelection = hasContinueSave ? 0 : 1;
-    if(!hasContinueSave) menuSelection=0;
-    InitSliders(); fadeTimer=Timer(); fadeAlpha=0.0f;
-    configOpen=false;
+
+void TitleState::DestroyBlurTargets() {
+    if (charBlurFull) { SDL_DestroyTexture(charBlurFull); charBlurFull = nullptr; }
+    for (SDL_Texture*& t : charBlurChain) {
+        if (t) { SDL_DestroyTexture(t); t = nullptr; }
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  Caminhos da arte
+// ═════════════════════════════════════════════════════════════════════════════
+
+const char* TitleState::ArmPath() {
+    return kUseLuanaArt ? "Recursos/img/menu/luana/braco_irmaozao.png"
+                        : "Recursos/img/menu/braco_irmaozao.png";
+}
+
+// Monta o caminho do quadro `frame1based` (1..kCharFrames) do corpo.
+void TitleState::BodyFramePath(int frame1based, char* out, std::size_t n) {
+    const char* fmt = kUseLuanaArt
+        ? "Recursos/img/menu/luana/irmao_costas/Costas_irmaozao_%04d.png"
+        : "Recursos/img/menu/irmao_costas/Costas_irmaozao_%04d.png";
+    std::snprintf(out, n, fmt, frame1based);
 }

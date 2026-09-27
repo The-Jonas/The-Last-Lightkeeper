@@ -4,12 +4,20 @@
 #include "core/State.h"
 #include "core/Timer.h"
 #include "audio/Music.h"
-#include "core/Game.h"
-#include "core/InputManager.h"
+#include "ui/SettingsMenu.h"
+
+#define INCLUDE_SDL
+#include "SDL_include.h"
+
 #include <array>
+#include <cstddef>
 
 class GameObject;
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Tela de título: parede + logo, o irmãozão de costas (desfocado) apontando a
+//  lanterna para a opção selecionada, e o menu de configurações compartilhado.
+// ─────────────────────────────────────────────────────────────────────────────
 class TitleState : public State {
 public:
     TitleState();
@@ -23,141 +31,106 @@ public:
     void Resume() override;
 
 private:
-    // ── Sliders de volume ─────────────────────────────────────────────────────
-    enum class VolumeSliderKind { Master, Ambient, Vfx, Voice, Count };
-    struct VolumeSliderUi {
-        VolumeSliderKind kind;
-        const char* label;
-        int  value    = 0;
-        bool dragging = false;
-        SDL_Rect bar{0,0,0,0};
-        SDL_Rect handle{0,0,0,0};
+    enum MenuOption { kContinue, kNewGame, kSettings, kCredits, kQuit, kOptionCount };
+
+    // Posições e tamanhos em tela 1920x1080. Os valores abaixo são o padrão;
+    // Recursos/img/menu/menu_config.json sobrescreve o que tiver.
+    struct Layout {
+        float charCX       = 1200.0f;                                       // centro X do irmãozão
+        float charBottomY  = 1080.0f;                                       // pé do irmãozão
+        float charW        = 720.0f;                                        // largura do sprite do corpo
+        float charH        = 694.0f;                                        // altura do sprite do corpo
+        float shoulderDX   = -235.0f;                                       // ombro em relação ao centro X
+        float shoulderDY   = -390.0f;                                       // ombro em relação ao pé
+
+        float logoX        = 100.0f;
+        float logoY        = 60.0f;
+        float logoW        = 860.0f;
+        float logoH        = 860.0f * (809.0f / 2444.0f);                   // proporção da arte do logo
+
+        float menuX        = 350.0f;                                        // X das opções
+        float menuStartY   = 550.0f;                                        // Y da primeira opção visível
+        float menuSpacing  = 80.0f;                                         // distância entre opções
+        int   menuFontSize = 46;
+
+        float armW         = 420.0f;                                        // tamanho do braço (pivô no ombro)
+        float armH         = 261.0f;
+        float lanternAlong = 0.72f;                                         // posição da lente ao longo do braço (0..1)
+        float lanternPerp  = -18.0f;                                        // deslocamento da lente perpendicular ao braço
+
+        Uint8 darknessAlpha = 185;                                          // película escura sobre parede e logo
     };
-    VolumeSliderUi sliders[static_cast<int>(VolumeSliderKind::Count)];
-    static constexpr int kSliderW    = 400;
-    static constexpr int kSliderH    = 14;
-    static constexpr int kHandleW    = 22;
-    static constexpr int kSliderRowH = 60;
-    void InitSliders();
-    void RecalcSliders(int panelX, int panelY, int panelW);
-    void HandleSliderInput(int mx, int my, InputManager& input);
-    void ApplySliderValue(VolumeSliderKind kind, int percent);
-    void RenderSliders(SDL_Renderer* r, int panelX, int panelY);
-    VolumeSliderUi* FindSliderAtPoint(int mx, int my);
 
-    // ── Estado do menu ────────────────────────────────────────────────────────
-    Music music;
+    struct OptionPos { float cx = 0.0f; float cy = 0.0f; };                 // centro de uma opção (tela)
+
+    static constexpr int   kCharFrames       = 5;                           // quadros da respiração do irmãozão
+    static constexpr float kCharFrameSeconds = 0.18f;                       // duração de cada quadro
+    static constexpr float kFadeDuration     = 3.0f;                        // fade-in das opções
+    static constexpr float kArmAngleOffset   = -10.0f;                      // correção da mira (+ desce, − sobe)
+    static constexpr float kArmTurnSpeed     = 7.0f;                        // suavização do giro do braço
+    static constexpr int   kBlurLevels       = 4;                           // pirâmide ÷2, ÷4, ÷8, ÷16
+    static constexpr bool  kUseLuanaArt      = true;                        // true = arte V2 (Luana), false = V1
+
+    // ── Estado ───────────────────────────────────────────────────────────────
+    SettingsMenu settingsMenu;
+    Music  music;
+    Layout layout;
+
     Timer fadeTimer;
-    float fadeAlpha  = 0.0f;
-    float pulseTimer = 0.0f;
-    static constexpr float kFadeDuration = 3.0f;
+    float fadeAlpha  = 0.0f;                                                // 0..255, cresce durante kFadeDuration
+    float pulseTimer = 0.0f;                                                // brilho pulsante da opção selecionada
 
-    bool hasContinueSave = false;
-    int  menuSelection   = 0;
-    // 0=Novo Jogo  1=Continuar  2=Configuracoes  3=Creditos  4=Sair
+    bool hasContinueSave = false;                                           // sem save, "Continuar" some e é pulado
+    int  menuSelection   = kNewGame;
 
-    void StartNewGame();
-    void StartContinue();
-    void ActivateMenuSelection();
+    GameObject* bg         = nullptr;                                       // no objectArray
+    GameObject* logoGO     = nullptr;                                       // no objectArray
+    GameObject* charBodyGO = nullptr;                                       // no objectArray (desenhado à mão, com desfoque)
+    GameObject* menuTexts[kOptionCount] = {};                               // fora do objectArray (dono: este estado)
+    std::array<OptionPos, kOptionCount> optionPositions;
 
-    // ── Assets no objectArray ─────────────────────────────────────────────────
-    GameObject* bg         = nullptr;
-    GameObject* logoGO     = nullptr;
-    GameObject* charBodyGO = nullptr;
-
-    // ── Assets fora do objectArray ────────────────────────────────────────────
-    GameObject* armGO        = nullptr;
-    GameObject* menuTexts[5] = {};  // 5 opcoes
-
-    // ── Animacao do personagem ────────────────────────────────────────────────
-    static constexpr int   kCharFrames       = 5;
-    static constexpr float kCharFrameSeconds = 0.18f;
     float charAnimTimer  = 0.0f;
     int   charFrameIndex = 0;
 
-    // ── Versao da arte do menu ────────────────────────────────────────────────
-    // 1 = V2 (Luana) — versão usada. (V1 mantido nas paths caso se queira voltar.)
-    int  menuVersion = 1;
-    const char* ArmPath() const;
-    void BodyFramePath(int frame1based, char* out, size_t n) const;
-    void PreloadMenuVersion(int version);
+    float armAngle  = 0.0f;                                                 // graus, rotação atual do braço
+    float shoulderX = 0.0f;                                                 // pivô do braço (tela)
+    float shoulderY = 0.0f;
 
-    // ── Braco / lanterna ─────────────────────────────────────────────────────
-    float armAngle       = 0.0f;
-    float armAngleTarget = 0.0f;
-    float shoulderX      = 0.0f;
-    float shoulderY      = 0.0f;
+    SDL_Texture* charBlurFull = nullptr;                                    // braço+corpo em tamanho de tela
+    SDL_Texture* charBlurChain[kBlurLevels] = {};                           // níveis reduzidos do desfoque
 
-    struct OptionPos { float cx = 0; float cy = 0; };
-    std::array<OptionPos, 5> optionPositions;
+    // ── Preparação ───────────────────────────────────────────────────────────
+    void LoadLayout();                                                      // lê menu_config.json para `layout`
+    void PreloadArt();                                                      // carrega a arte com filtragem linear
+    void CreateObjects();                                                   // parede, logo, corpo e textos do menu
 
-    // ── Painel de configuracoes ───────────────────────────────────────────────
-    bool configOpen         = false;
-    int  configTab          = 0;   // 0=Volume  1=Video  2=Controles
-    bool awaitingRebind     = false;
-    GameAction rebindAction = GameAction::MoveUp;
-    int  controlsSelection  = 0;
-    static constexpr int kControlsRowCount = InputManager::ActionCount + 2;
-    SDL_Rect controlsRowRects[InputManager::ActionCount + 2]{};
-    SDL_Rect configCloseBtn{};
-    SDL_Rect configTabVolume{};
-    SDL_Rect configTabVideo{};
-    SDL_Rect configTabControles{};
+    // ── Menu ─────────────────────────────────────────────────────────────────
+    bool IsOptionEnabled(int option) const;                                 // "Continuar" só com save
+    void MoveSelection(int dir);                                            // anda ±1 pulando opções desativadas
+    void ActivateSelection();                                               // executa a opção selecionada
+    void StartNewGame();
+    void StartContinue();
 
-    // Aba "Video": 0=Modo de tela  1=Resolucao  2=Voltar (aplicam ao reiniciar).
-    int  videoSelection = 0;
-    static constexpr int kVideoRowCount = 3;
-    SDL_Rect videoRowRects[kVideoRowCount]{};
+    // ── Layout e animação ────────────────────────────────────────────────────
+    void  LayoutAll();                                                      // posiciona objetos, ombro e opções
+    float ArmAngleTo(int option) const;                                     // ângulo para o braço mirar numa opção
+    void  UpdateArm(float dt);                                              // gira o braço suavemente até a opção
+    void  UpdateCharAnim(float dt);                                         // troca o quadro do corpo
+    void  UpdateMenuColors();                                               // cinza / dourado pulsante / desativado
 
-    void OpenConfig();
-    void UpdateConfig(InputManager& input);
-    void RenderConfig(SDL_Renderer* r);
-    void RenderConfigVolume(SDL_Renderer* r, int px, int py, int pw, int ph);
-    void RenderConfigVideo(SDL_Renderer* r, int px, int py, int pw, int ph);
-    void RenderConfigControles(SDL_Renderer* r, int px, int py, int pw, int ph);
+    // ── Desenho ──────────────────────────────────────────────────────────────
+    void RenderDarkness(SDL_Renderer* r);                                   // película escura
+    void RenderLanternCone(SDL_Renderer* r);                                // feixe + círculo na opção
+    void RenderMenuTexts();                                                 // opções visíveis
+    void RenderArm(SDL_Renderer* r);                                        // braço girado no ombro
+    void RenderCharacter(SDL_Renderer* r);                                  // braço + corpo sem desfoque
+    void RenderBlurredCharacter(SDL_Renderer* r);                           // braço + corpo desfocados
+    bool EnsureBlurTargets(SDL_Renderer* r, int w, int h);                  // cria os alvos do desfoque
+    void DestroyBlurTargets();
 
-    // ── Helpers de layout ────────────────────────────────────────────────────
-    void LoadConfig();
-    void LayoutAll();
-    void UpdateCharAnim(float dt);
-    void UpdateArm(float dt);
-    void RenderLanternCone(SDL_Renderer* r);
-    void RenderArm(SDL_Renderer* r);
-    void RenderMenuTexts(SDL_Renderer* r);
-
-    // Desfoque suave do irmãozão (braço + corpo). Reduz em CADEIA (÷2 por passo, cada
-    // um faz média 2×2 de verdade — sem serrilhado/"pixelado") e amplia com filtragem
-    // linear → foco nas opções do menu, não na animação.
-    void RenderBlurredCharacter(SDL_Renderer* r);
-    SDL_Texture* charBlurFull       = nullptr;   // braço+corpo em tamanho de tela
-    static constexpr int kBlurLevels = 4;        // ÷2, ÷4, ÷8, ÷16
-    SDL_Texture* charBlurChain[kBlurLevels] = {}; // pirâmide de redução
-
-    // ── Layout carregado do JSON ──────────────────────────────────────────────
-    float kCharW       = 720.0f;
-    float kCharH       = 694.0f;
-    float kCharCX      = 1200.0f;
-    float kCharBottomY = 1080.0f;
-    float kShoulderDX  = -235.0f;
-    float kShoulderDY  = -390.0f;
-
-    float kLogoW = 860.0f;
-    float kLogoH = 860.0f * (809.0f / 2444.0f);
-    float kLogoX = 100.0f;
-    float kLogoY =  60.0f;
-
-    float kMenuX       = 350.0f;
-    float kMenuStartY  = 550.0f;
-    float kMenuSpacing =  80.0f;
-    int   kMenuFontSize = 46;
-
-    float kArmW         = 420.0f;
-    float kArmH         = 261.0f;
-    float kLanternAlong = 0.72f;
-    float kLanternPerp  = -18.0f;
-
-    Uint8 kDarknessAlpha = 185;
-    float rebindInvalidTimer = 0.0f;
+    // ── Caminhos da arte (V1 / V2 têm a mesma proporção) ─────────────────────
+    static const char* ArmPath();
+    static void BodyFramePath(int frame1based, char* out, std::size_t n);
 };
 
 #endif
