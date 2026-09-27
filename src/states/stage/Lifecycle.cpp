@@ -53,6 +53,13 @@ void StageState::Start() {
     }
     StartArray();                                                   // Chama Start() de todos os objetos
     RegisterAllCandleLights();
+
+    // A cutscene/loading devolveram a câmera ao neutro (zoom 1, posição 0,0):
+    // reinstala o enquadramento e começa JÁ em cima do jogador.
+    ApplyCameraFraming(true);
+    RefreshCameraTargets();
+    Camera::SnapToTarget();
+    
     companionStartDelay = 2;
 
     //SetMouseConfinedToWindow(true);
@@ -89,6 +96,7 @@ void StageState::Resume() {
     // por isso o enquadramento da fase tem de ser reinstalado ao voltar — senao
     // a fase continuava sem limites de mundo ate ao proximo carregamento.
     ApplyCameraFraming(true);
+    Camera::SnapToTarget();
     ambientResumeDelay = 0.85f;
     GameSfx::NotifyLoadingEnd();
     GameVoice::NotifyLoadingEnd();

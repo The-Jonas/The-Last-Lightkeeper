@@ -16,6 +16,10 @@ public:
     void static Update(float dt);                   // Define a abordagem a ser usada para a câmera durante o jogo
     static float GetZoom();                         // Retorna zoom atual da câmera
 
+    // Coloca a câmera JÁ no alvo atual (foco ou dupla), no zoom-base, sem
+    // interpolar — para o 1º frame de uma fase não "arrastar" até o jogador.
+    static void SnapToTarget();
+
     // ── Zoom-base ───────────────────────────────────────────────────────────
     // Valor para onde a câmera SEMPRE volta. 1.0 = enquadramento antigo (1 pixel
     // de mundo = 1 pixel de tela). Abaixo de 1.0 a câmera afasta e mostra mais

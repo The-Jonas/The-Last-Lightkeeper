@@ -128,6 +128,33 @@ void Camera::ResetView() {
     ResetShake();
 }
 
+void Camera::SnapToTarget() {
+    // Tira o tremor pendente para a posição-base ficar limpa.
+    pos = pos - shakeOffset;
+    shakeOffset = Vec2(0, 0);
+    zoom = baseZoom;
+
+    Vec2 center;
+    if (pairA && pairB) {
+        // Dupla: centro no controlado (se houver), senão no meio dos dois.
+        center = pairPrimary ? pairPrimary->box.Center()
+                             : Vec2((pairA->box.Center().x + pairB->box.Center().x) * 0.5f,
+                                    (pairA->box.Center().y + pairB->box.Center().y) * 0.5f);
+    } else if (focus) {
+        center = focus->box.Center();
+    } else {
+        return;   // sem alvo: não há para onde pular
+    }
+
+    Game& game = Game::GetInstance();
+    const float halfW = (game.GetWindowsWidth()  / zoom) * 0.5f;
+    const float halfH = (game.GetWindowsHeight() / zoom) * 0.5f;
+    pos = Vec2(center.x - halfW, center.y - halfH);
+    ClampPosToWorldBounds();
+}
+// Centra a câmera no alvo instantaneamente (zoom-base, respeitando os limites
+// do mapa). O Camera::Update continua suave a partir daqui.
+
 // Prende a posição-base (sem tremor) dentro do retângulo do mundo. `pos` é o
 // canto superior-esquerdo da vista, e a vista mede janela/zoom em pixels de
 // mundo — por isso o limite da direita é `worldMaxX - viewW`.

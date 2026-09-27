@@ -615,13 +615,13 @@ Game::Game(std::string title) {
     }
 
     //Cria Renderizador
-    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED); // SDL_RENDERER_ACCELERATED, para requisitar o uso de OpenGL ou Direct3D.
+    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC); // SDL_RENDERER_ACCELERATED, para requisitar o uso de OpenGL ou Direct3D.
     if (!renderer) {
         // A dica de backend pode ter escolhido um driver que falha nesta maquina:
         // limpa-a e tenta outra vez com a escolha automatica do SDL.
         std::cerr << "SDL_CreateRenderer (opengl) falhou: " << SDL_GetError() << " — a tentar o backend automatico." << std::endl;
         SDL_SetHint(SDL_HINT_RENDER_DRIVER, "");
-        renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+        renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     }
     if (!renderer) {
         std::cerr << "SDL_CreateRenderer falhou: " << SDL_GetError() << std::endl;
@@ -840,4 +840,4 @@ void Game::Run() {
             SDL_RenderPresent(renderer);
         }
     }
-}
+}
