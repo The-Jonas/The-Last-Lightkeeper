@@ -11,9 +11,9 @@ int FrontCharge(const Inventory::ItemStack& s) {
     return s.durabilities.empty() ? 0 : s.durabilities.front();
 }
 
-// "Flashlight" e "Broken Flashlight" são o MESMO isqueiro (aceso/apagado).
+// O isqueiro (o jogo começa com ele; não há outro no mapa).
 bool IsLighterName(const std::string& name) {
-    return name == "Flashlight" || name == "Broken Flashlight";
+    return name == "Flashlight";
 }
 
 // Carga → tamanho da luz, igual para isqueiro e lamparina: 0% → 48%, 100% → 120%.
@@ -38,15 +38,14 @@ bool CanTakeFuel(const Inventory::ItemStack& s) {
     return s.def.maxDurability <= 0 || s.durabilities.front() < s.def.maxDurability;
 }
 
-// Definição do item pelo nome no catálogo; nomes antigos de combustível viram "Fuel".
+// Definição do item pelo nome no catálogo. Nomes de saves antigos: os de
+// combustível viram "Fuel" e "Broken Flashlight" vira o isqueiro.
 const ItemDef* FindItemDefByName(const std::string& name, const std::vector<ItemDef>& catalog) {
+    std::string wanted = name;
+    if (name == "Lamp Fuel" || name == "Lighter Fuel" || name == "Light Fuel" || name == "Oil Gallon") wanted = "Fuel";
+    if (name == "Broken Flashlight") wanted = "Flashlight";
     for (const ItemDef& def : catalog) {
-        if (def.name == name) return &def;
-    }
-    if (name == "Lamp Fuel" || name == "Lighter Fuel" || name == "Light Fuel" || name == "Oil Gallon") {
-        for (const ItemDef& def : catalog) {
-            if (def.name == "Fuel") return &def;
-        }
+        if (def.name == wanted) return &def;
     }
     return nullptr;
 }
@@ -60,11 +59,9 @@ const ItemDef* FindItemDefByName(const std::string& name, const std::vector<Item
 void Inventory::ClearAll() {
     stacks.clear();
     activeIndex = -1;
-    oilApplyMode = false;
-    oilApplySourceIndex = -1;
-    oilApplyReturnActiveIndex = 0;
-    oilTargetSelection = 0;
     usingDrainAccum = 0.0f;
+    reloadTimer = 0.0f;
+    reloadTargetName.clear();
     isLightToggledOn = false;
 }
 
@@ -89,11 +86,7 @@ bool Inventory::CanAcceptItem(const ItemDef& def) const {
 }
 
 bool Inventory::IsFuelAtMax() const {
-    int units = 0;
-    for (const ItemStack& s : stacks) {
-        if (s.def.HasProperty(ItemProperty::FUEL)) units += s.count;
-    }
-    return units >= kMaxFuelUnits;
+    return GetFuelUnits() >= kMaxFuelUnits;
 }
 
 bool Inventory::HasItem(const std::string& name) const {
@@ -174,13 +167,15 @@ void Inventory::DedupeLightSources() {
 // ═════════════════════════════════════════════════════════════════════════════
 
 // Girar a roda apaga a luz: o item precisa ser ligado de novo ([F]) no centro.
+// "Anterior" traz o item de CIMA da roda; "Próximo", o de BAIXO (a roda desenha
+// o item i-1 em cima e o i+1 embaixo, com o centro em -activeIndex).
 void Inventory::CycleLeft() {
-    activeIndex--;
+    activeIndex++;
     isLightToggledOn = false;
 }
 
 void Inventory::CycleRight() {
-    activeIndex++;
+    activeIndex--;
     isLightToggledOn = false;
 }
 
@@ -265,11 +260,6 @@ bool Inventory::IsActiveItemLighter() const {
     return active && IsLighterName(active->def.name);
 }
 
-bool Inventory::IsActiveItemFuel() const {
-    const ItemStack* active = GetActiveStack();
-    return active && active->def.HasProperty(ItemProperty::FUEL);
-}
-
 bool Inventory::HasDepletedLighter() const {
     return std::any_of(stacks.begin(), stacks.end(), [](const ItemStack& s) {
         return IsLighterName(s.def.name) && s.def.maxDurability > 0 && FrontCharge(s) <= 0;
@@ -332,107 +322,104 @@ void Inventory::TickUsingDurability(float dt) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-//  Reabastecimento
+//  Recarga
 // ═════════════════════════════════════════════════════════════════════════════
 
-std::vector<int> Inventory::GetRefuelTargetIndices() const {
-    std::vector<int> out;
-    for (int i = 0; i < GetStackCount(); ++i) {
-        if (CanTakeFuel(stacks[static_cast<size_t>(i)])) out.push_back(i);
+int Inventory::GetFuelUnits() const {
+    int units = 0;
+    for (const ItemStack& s : stacks) {
+        if (s.def.HasProperty(ItemProperty::FUEL)) units += s.count;
     }
-    return out;
+    return units;
 }
 
-int Inventory::GetRefuelTargetCount() const {
-    return static_cast<int>(GetRefuelTargetIndices().size());
-}
-
-const Inventory::ItemStack* Inventory::GetRefuelTargetStack(int selectionIdx) const {
-    const std::vector<int> targets = GetRefuelTargetIndices();
-    if (selectionIdx < 0 || selectionIdx >= static_cast<int>(targets.size())) return nullptr;
-    return &stacks[static_cast<size_t>(targets[static_cast<size_t>(selectionIdx)])];
-}
-
-void Inventory::RefuelSelectionPrev() {
-    const int n = GetRefuelTargetCount();
-    if (n > 0) oilTargetSelection = (oilTargetSelection - 1 + n) % n;
-}
-
-void Inventory::RefuelSelectionNext() {
-    const int n = GetRefuelTargetCount();
-    if (n > 0) oilTargetSelection = (oilTargetSelection + 1) % n;
-}
-
-// Combustível com carga na mão e alguma luz que caiba óleo: abre o modal,
-// lembrando onde a roda estava para voltar lá.
-bool Inventory::TryPrimeOil() {
-    if (oilApplyMode) return false;
+// A luz na mão, se ainda couber combustível; senão a luz mais vazia (em %) que caiba.
+int Inventory::FindReloadTarget() const {
     const int sel = GetSelectedStackIndex();
-    if (sel < 0) return false;
-    const ItemStack& active = stacks[static_cast<size_t>(sel)];
-    if (!active.def.HasProperty(ItemProperty::FUEL) || FrontCharge(active) <= 0) return false;
-    if (GetRefuelTargetIndices().empty()) return false;
+    if (sel >= 0 && CanTakeFuel(stacks[static_cast<size_t>(sel)])) return sel;
 
-    oilApplyMode = true;
-    oilApplySourceIndex = sel;
-    oilApplyReturnActiveIndex = activeIndex;
-    oilTargetSelection = 0;
+    int best = -1;
+    float bestRatio = 2.0f;
+    for (int i = 0; i < GetStackCount(); ++i) {
+        const ItemStack& s = stacks[static_cast<size_t>(i)];
+        if (!CanTakeFuel(s)) continue;
+        const float ratio = s.def.maxDurability > 0
+                                ? static_cast<float>(FrontCharge(s)) / static_cast<float>(s.def.maxDurability)
+                                : 0.0f;
+        if (ratio < bestRatio) {
+            bestRatio = ratio;
+            best = i;
+        }
+    }
+    return best;
+}
+
+// Começa a recarga: guarda o alvo e apaga a luz (ela volta acesa no fim).
+bool Inventory::BeginReload() {
+    if (IsReloading() || GetFuelUnits() <= 0) return false;
+    const int target = FindReloadTarget();
+    if (target < 0) return false;
+    reloadTargetName = stacks[static_cast<size_t>(target)].def.name;
+    reloadTimer = kReloadDuration;
+    isLightToggledOn = false;
     return true;
 }
 
-// Despeja a unidade de combustível INTEIRA no alvo escolhido (o que não couber
-// se perde), remove-a da bolsa e deixa a luz recarregada na mão.
-bool Inventory::TryCombineOil() {
-    if (!oilApplyMode) return false;
-    if (oilApplySourceIndex < 0 || oilApplySourceIndex >= GetStackCount()) {
-        ExitOilApplyMode();
-        return false;
-    }
-    const std::vector<int> targets = GetRefuelTargetIndices();
-    if (targets.empty()) {
-        ExitOilApplyMode();
-        return false;
-    }
-    if (oilTargetSelection < 0 || oilTargetSelection >= static_cast<int>(targets.size())) oilTargetSelection = 0;
-    const int targetIdx = targets[static_cast<size_t>(oilTargetSelection)];
-    if (targetIdx == oilApplySourceIndex) return false;
+// Conta o tempo; no fim despeja o combustível, põe a luz na mão e acende.
+bool Inventory::TickReload(float dt) {
+    if (!IsReloading()) return false;
+    reloadTimer -= dt;
+    if (reloadTimer > 0.0f) return false;
 
-    ItemStack& oil = stacks[static_cast<size_t>(oilApplySourceIndex)];
-    if (FrontCharge(oil) <= 0) {
-        ExitOilApplyMode();
-        return false;
+    reloadTimer = 0.0f;
+    const int target = FindStackWithName(reloadTargetName);
+    reloadTargetName.clear();
+    if (target < 0 || !PourFuelInto(target)) return false;
+    TryTurnLightOn();
+    return true;
+}
+
+float Inventory::GetReloadProgress() const {
+    if (!IsReloading()) return 0.0f;
+    return std::clamp(1.0f - reloadTimer / kReloadDuration, 0.0f, 1.0f);
+}
+
+void Inventory::CancelReload() {
+    reloadTimer = 0.0f;
+    reloadTargetName.clear();
+}
+
+// Despeja a unidade da FRENTE da 1ª pilha de combustível, inteira (o que não
+// couber se perde), tira ela da bolsa e deixa a luz recarregada na mão.
+bool Inventory::PourFuelInto(int targetIdx) {
+    if (targetIdx < 0 || targetIdx >= GetStackCount()) return false;
+    int fuelIdx = -1;
+    for (int i = 0; i < GetStackCount(); ++i) {
+        const ItemStack& s = stacks[static_cast<size_t>(i)];
+        if (s.def.HasProperty(ItemProperty::FUEL) && s.count > 0 && !s.durabilities.empty()) {
+            fuelIdx = i;
+            break;
+        }
     }
+    if (fuelIdx < 0 || fuelIdx == targetIdx) return false;
 
     ItemStack& target = stacks[static_cast<size_t>(targetIdx)];
+    if (target.durabilities.empty()) target.durabilities.push_back(0);
+    ItemStack& fuel = stacks[static_cast<size_t>(fuelIdx)];
+    const int amount = fuel.durabilities.front();
     const int maxDur = target.def.maxDurability;
-    const int oilAmount = oil.durabilities.front();
-    const int room = (maxDur > 0) ? (maxDur - target.durabilities.front()) : oilAmount;
-    target.durabilities.front() += std::min(room, oilAmount);   // antes do erase (que invalida referências)
+    const int room = (maxDur > 0) ? (maxDur - target.durabilities.front()) : amount;
+    target.durabilities.front() += std::max(0, std::min(room, amount));   // antes do erase (invalida referências)
 
-    oil.durabilities.erase(oil.durabilities.begin());
-    oil.count--;
-    int finalTargetIdx = targetIdx;
-    if (oil.count <= 0) {
-        stacks.erase(stacks.begin() + oilApplySourceIndex);
-        if (oilApplySourceIndex < targetIdx) finalTargetIdx--;
+    fuel.durabilities.erase(fuel.durabilities.begin());
+    fuel.count--;
+    int finalTarget = targetIdx;
+    if (fuel.count <= 0) {
+        stacks.erase(stacks.begin() + fuelIdx);
+        if (fuelIdx < targetIdx) finalTarget--;
     }
-
-    oilApplyMode = false;
-    oilApplySourceIndex = -1;
-    SetSelectedStackIndex(finalTargetIdx);
+    SetSelectedStackIndex(finalTarget);
     return true;
-}
-
-void Inventory::CancelOil() {
-    if (oilApplyMode) ExitOilApplyMode();
-}
-
-// Fecha o modal e devolve a roda à posição de antes.
-void Inventory::ExitOilApplyMode() {
-    oilApplyMode = false;
-    oilApplySourceIndex = -1;
-    oilTargetSelection = 0;
-    activeIndex = oilApplyReturnActiveIndex;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -453,7 +440,6 @@ void Inventory::WriteToSave(SaveGameState& state) const {
     const int selected = GetSelectedStackIndex();
     state.activeStackIndex = selected;
     state.selectedSlot = selected;
-    state.primedOilDurability = 0;   // o modal de combustível não é salvo
 
     state.inventorySlots.clear();
     state.selectedBackpackGroup = -1;
@@ -522,3 +508,4 @@ void Inventory::SelectAfterLegacyLoad(int preferred) {
     if (sel < 0 && !stacks.empty()) sel = 0;
     if (sel >= 0) SetSelectedStackIndex(sel);
 }
+

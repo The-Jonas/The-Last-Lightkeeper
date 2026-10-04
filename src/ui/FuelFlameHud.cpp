@@ -32,6 +32,7 @@ std::string FuelFlameHud::FramePath(int level, int frame) {
 }
 
 void FuelFlameHud::Render(SDL_Renderer* renderer, Inventory& inventory, int windowW, int windowH) {
+    lastRectValid = false;
     if (!renderer) return;
     if (!inventory.IsUsableLightActive()) return;   // Só mostra com a luz ligada
 
@@ -60,4 +61,15 @@ void FuelFlameHud::Render(SDL_Renderer* renderer, Inventory& inventory, int wind
 
     const SDL_Rect dst{ windowW - iconW - marginRight, marginTop, iconW, iconH };
     SDL_RenderCopy(renderer, tex.get(), nullptr, &dst);
+    lastRect = {static_cast<float>(dst.x), static_cast<float>(dst.y),
+                static_cast<float>(dst.w), static_cast<float>(dst.h)};
+    lastRectValid = true;
 }
+
+// Retângulo da última chama desenhada; false se ela não apareceu neste frame.
+bool FuelFlameHud::GetLastRect(SDL_FRect& out) const {
+    if (!lastRectValid) return false;
+    out = lastRect;
+    return true;
+}
+

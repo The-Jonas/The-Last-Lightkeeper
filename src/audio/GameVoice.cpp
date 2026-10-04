@@ -219,7 +219,7 @@ bool VoiceDisabled() {
         if (const char* v = SDL_getenv("TLL_VOICE")) {
             return std::string(v) != "1";
         }
-        return true;   // por omissao: sem dublagem
+        return false;   // por omissao: sem dublagem
     }();
     return disabled;
 }

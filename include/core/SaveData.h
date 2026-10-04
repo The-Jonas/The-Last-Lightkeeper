@@ -93,11 +93,11 @@ struct SaveGameState {
     std::vector<int> litCandleIds;
     std::vector<int> repairedIds;
     int activeStackIndex = -1;
-    int primedOilDurability = 0;
     std::vector<SavedInventoryStack> inventoryStacks;
     std::vector<SavedBoxPos> boxPositions;
     std::vector<SavedDocument> documents;
     std::vector<SavedDialogueEntry> dialogueLog;
+    std::vector<std::string> learnedHints;     // ids das dicas do tutorial já aprendidas
 };
 
 struct SaveFile {
@@ -132,3 +132,5 @@ void to_json(nlohmann::json& j, const SavedDialogueEntry& e);
 void from_json(const nlohmann::json& j, SavedDialogueEntry& e);
 
 #endif
+
+

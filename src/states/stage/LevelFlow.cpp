@@ -16,6 +16,7 @@
 #include "states/LevelTransitionLoadingState.h"
 #include "ui/Text.h"
 #include "ui/InventoryWheel.h"
+#include "ui/HorrorFx.h"
 #include "world/SpawnFactory.h"
 
 #define INCLUDE_SDL_TTF
@@ -180,15 +181,16 @@ void StageState::BuildLevelWorld(const StageFirstLoadData& cfg, bool resetInvent
     if (resetInventory) {
         inventory.ClearAll();
         inventory.AddItem(cfg.startingFlashlight, cfg.startingFlashlightDurability);
-        // Começa APAGADO: o showcase (abaixo) acende sozinho após o nível carregar.
+        // Começa APAGADO: acender é a primeira dica do 1º andar (tutorial/floors/Floor1.cpp).
         inventory.isLightToggledOn = false;
         if (bigComp) {
             bigComp->NotifyInventoryLightChanged();
         }
-        autoLightShowcasePending = true;
-        autoLightShowcaseTimer = kAutoLightShowcaseDelay;
     }
     inventoryInitialized = true;
+
+    // Roteiro de tutorial do andar (um save aplicado depois sobrescreve o que ele mudar).
+    hints.EnterLevel(currentLevelIndex, *this);
 
     // HUD de desenvolvedor (instruções + FPS) — só criado em debugMode; jogadores
     // não veem essas linhas. As referências ficam nullptr fora de debug.
@@ -504,40 +506,116 @@ void StageState::TransitionToLevel(int targetLevelIndex) {
     SaveLevelCheckpoint();
 }
 
+namespace {
+
+// 1 → "I", 4 → "IV"… (andares do farol; acima de 39 volta a ser número).
+std::string ToRoman(int n) {
+    if (n <= 0 || n >= 40) return std::to_string(n);
+    static const std::pair<int, const char*> kTable[] = {{10, "X"}, {9, "IX"}, {5, "V"}, {4, "IV"}, {1, "I"}};
+    std::string out;
+    for (const auto& [value, glyph] : kTable) {
+        while (n >= value) { out += glyph; n -= value; }
+    }
+    return out;
+}
+
+// Texto em textura com alpha aplicado (TTF ignora o alpha da cor). Devolve w/h.
+SDL_Texture* MakeTitleText(SDL_Renderer* r, TTF_Font* font, const char* text, SDL_Color color, int& w, int& h) {
+    w = h = 0;
+    SDL_Surface* s = TTF_RenderUTF8_Blended(font, text, color);
+    if (!s) return nullptr;
+    SDL_Texture* t = SDL_CreateTextureFromSurface(r, s);
+    w = s->w;
+    h = s->h;
+    SDL_FreeSurface(s);
+    return t;
+}
+
+// Faixa horizontal escura que some para cima e para baixo (gradiente em 2 quads).
+void DrawTitleBand(SDL_Renderer* r, float winW, float cy, float halfH, Uint8 alpha) {
+    auto v = [](float x, float y, Uint8 a) {
+        SDL_Vertex vx;
+        vx.position = {x, y};
+        vx.color = {0, 0, 0, a};
+        vx.tex_coord = {0.0f, 0.0f};
+        return vx;
+    };
+    const SDL_Vertex verts[6] = {
+        v(0.0f, cy - halfH, 0), v(winW, cy - halfH, 0),
+        v(0.0f, cy, alpha),     v(winW, cy, alpha),
+        v(0.0f, cy + halfH, 0), v(winW, cy + halfH, 0),
+    };
+    const int idx[12] = {0, 1, 2, 1, 3, 2, 2, 3, 4, 3, 5, 4};
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+    SDL_RenderGeometry(r, nullptr, verts, 6, idx, 12);
+}
+
+}  // namespace
+
+// Título do andar: faixa escura, "A N D A R" pequeno e o numeral romano grande,
+// com sombra de sangue, risco embaixo e um tremor leve. Entra assentando
+// (escala 1.08 → 1.0) com fade, segura e sai com fade — nunca corta seco.
 void StageState::RenderLevelTitleBanner(SDL_Renderer* renderer) {
     if (!renderer || levelTitleTimer <= 0.0f) {
         return;
     }
 
-    const int winW = Game::GetInstance().GetWindowsWidth();
-    const int winH = Game::GetInstance().GetWindowsHeight();
-    const float t = levelTitleTimer / kLevelTitleDuration;
-    const Uint8 alpha = static_cast<Uint8>(255.0f * std::min(1.0f, t * 2.0f));
+    const float elapsed = kLevelTitleDuration - levelTitleTimer;
+    float a = 1.0f;
+    if (elapsed < kLevelTitleFadeIn)              a = elapsed / kLevelTitleFadeIn;
+    else if (levelTitleTimer < kLevelTitleFadeOut) a = levelTitleTimer / kLevelTitleFadeOut;
+    a = std::max(0.0f, std::min(1.0f, a));
+    a = a * a * (3.0f - 2.0f * a);                                       // smoothstep
+    const float settle = std::min(1.0f, elapsed / kLevelTitleFadeIn);
+    const float scale = 1.08f - 0.08f * settle * settle * (3.0f - 2.0f * settle);
 
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, static_cast<Uint8>(alpha * 0.45f));
-    const SDL_Rect backdrop{0, 0, winW, winH};
-    SDL_RenderFillRect(renderer, &backdrop);
+    const float u = Game::UiScale();
+    const float winW = static_cast<float>(Game::GetInstance().GetWindowsWidth());
+    const float winH = static_cast<float>(Game::GetInstance().GetWindowsHeight());
+    const float cy = winH * 0.42f;
 
-    char label[32];
-    std::snprintf(label, sizeof(label), "Andar %d", levelTitleNumber);
-
-    auto font = Resources::GetFont("Recursos/font/times.ttf", 72);
-    if (!font) {
+    auto smallFont = Resources::GetFont("Recursos/font/times.ttf", std::max(14, static_cast<int>(std::lround(30.0f * u))));
+    auto bigFont   = Resources::GetFont("Recursos/font/times.ttf", std::max(40, static_cast<int>(std::lround(150.0f * u))));
+    if (!smallFont || !bigFont) {
         return;
     }
 
-    SDL_Color color{230, 220, 180, alpha};
-    SDL_Surface* surface = TTF_RenderUTF8_Blended(font.get(), label, color);
-    if (!surface) {
-        return;
+    DrawTitleBand(renderer, winW, cy, 190.0f * u, static_cast<Uint8>(200.0f * a));
+
+    const std::string numeral = ToRoman(levelTitleNumber);
+    int sw = 0, sh = 0, bw = 0, bh = 0;
+    SDL_Texture* small  = MakeTitleText(renderer, smallFont.get(), "A N D A R", SDL_Color{190, 170, 140, 255}, sw, sh);
+    SDL_Texture* big    = MakeTitleText(renderer, bigFont.get(), numeral.c_str(), SDL_Color{232, 218, 190, 255}, bw, bh);
+    SDL_Texture* shadow = MakeTitleText(renderer, bigFont.get(), numeral.c_str(), SDL_Color{110, 12, 10, 255}, bw, bh);
+
+    const float bigW = bw * scale, bigH = bh * scale;
+    const float bigTop = cy - bigH * 0.5f + 12.0f * u;
+    const float jx = HorrorFx::Jitter(elapsed, 0.5f) * 1.5f * u;
+    const float jy = HorrorFx::Jitter(elapsed, 0.9f) * 1.5f * u;
+
+    if (small) {
+        SDL_SetTextureAlphaMod(small, static_cast<Uint8>(255.0f * a));
+        const SDL_FRect d{(winW - sw) * 0.5f, bigTop - sh - 4.0f * u, static_cast<float>(sw), static_cast<float>(sh)};
+        SDL_RenderCopyF(renderer, small, nullptr, &d);
+    }
+    if (shadow) {
+        SDL_SetTextureAlphaMod(shadow, static_cast<Uint8>(200.0f * a));
+        const SDL_FRect d{(winW - bigW) * 0.5f + 5.0f * u - jx, bigTop + 5.0f * u - jy, bigW, bigH};
+        SDL_RenderCopyF(renderer, shadow, nullptr, &d);
+    }
+    if (big) {
+        SDL_SetTextureAlphaMod(big, static_cast<Uint8>(255.0f * a));
+        const SDL_FRect d{(winW - bigW) * 0.5f + jx, bigTop + jy, bigW, bigH};
+        SDL_RenderCopyF(renderer, big, nullptr, &d);
     }
 
-    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_Rect dst{(winW - surface->w) / 2, (winH - surface->h) / 2, surface->w, surface->h};
-    SDL_FreeSurface(surface);
-    if (texture) {
-        SDL_RenderCopy(renderer, texture, nullptr, &dst);
-        SDL_DestroyTexture(texture);
-    }
+    const float lineHalf = std::max(bigW, 260.0f * u) * 0.75f;
+    HorrorFx::DrawScratchLine(renderer, winW * 0.5f - lineHalf, winW * 0.5f + lineHalf, bigTop + bigH * 0.92f,
+                              4.0f, SDL_Color{110, 12, 10, static_cast<Uint8>(230.0f * a)}, elapsed);
+
+    if (small)  SDL_DestroyTexture(small);
+    if (big)    SDL_DestroyTexture(big);
+    if (shadow) SDL_DestroyTexture(shadow);
 }
+
+

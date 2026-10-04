@@ -94,15 +94,36 @@ void StageState::HandlePartyInput() {
     }
 }
 
+// Junto (o parceiro segue) ou separado (fica parado). Usado por roteiros de andar.
+void StageState::SetPartyTogether(bool together) {
+    partyMode = together ? PartyMode::TOGETHER : PartyMode::INDEPENDENT;
+}
+
+// Longe demais: alterna o medo do irmãozinho e a bronca do irmãozão; volta a
+// valer quando eles se aproximam (o cooldown global de voz evita repetição).
+void StageState::UpdateFarApartVoice() {
+    if (!IsPartyReady() || !bigCharacterObject || !smallCharacterObject) return;
+    const float dist = bigCharacterObject->box.Center().Distance(smallCharacterObject->box.Center());
+    if (dist > kFarVoiceDistance && farVoiceArmed) {
+        if (scoldTurn) GameVoice::OnScoldFear();
+        else           GameVoice::OnBrothersTooFar();
+        scoldTurn = !scoldTurn;
+        farVoiceArmed = false;
+    }
+    if (dist < kFarVoiceRearmDist) farVoiceArmed = true;
+}
+
 void StageState::IssueMovementFromInput(Character* character, GameObject* object) {
     if (!character || !object) {
         return;
     }
 
     // Nao reseta o speed multiplier se estiver empurrando uma caixa
-    // (o peso da caixa deve ser mantido enquanto empurra)
+    // (o peso da caixa deve ser mantido enquanto empurra). Recarregando a luz,
+    // o irmãozão anda devagar.
     if (character->currentState != Character::ActionState::PUSHING_BOX) {
-        character->SetSpeedMultiplier(1.0f);
+        const bool reloading = character == bigCharacter && inventory.IsReloading();
+        character->SetSpeedMultiplier(reloading ? Inventory::kReloadSpeedMul : 1.0f);
     }
 
     InputManager& input = InputManager::GetInstance();
@@ -324,3 +345,5 @@ void StageState::UpdateHudInstructions() {
         hudFps->box.y = Camera::pos.y + startY + lineGap * 3.0f;
     }
 }
+
+

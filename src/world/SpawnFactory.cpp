@@ -26,6 +26,10 @@
 #include <cstdlib> 
 
 namespace {
+
+constexpr int kFuelMinPercent = 60;                      // frasco de combustível: 50% a 100% cheio
+constexpr int kFuelMaxPercent = 100;
+
 // Propaga o flip do tile (decodificado do gid no Tiled) para o objeto. Inócuo em
 // objetos sem sprite (só define flags que o SpriteRenderer usa se houver sprite).
 void ApplyTiledFlip(GameObject* obj, const EntitySpawn& spawn) {
@@ -309,11 +313,14 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
         }
 
         if (foundDef) {
+            // Lamparina vem vazia; combustível vem com kFuelMinPercent..kFuelMaxPercent
+            // do máximo (cada frasco vale diferente); o resto, cheio.
             int spawnDurability = foundDef->maxDurability;
             if (foundDef->name == "Lamp") {
                 spawnDurability = 0;
-            } else if (foundDef->HasProperty(ItemProperty::LIGHT_SOURCE)) {
-                spawnDurability = 1 + (rand() % 100);
+            } else if (foundDef->HasProperty(ItemProperty::FUEL) && foundDef->maxDurability > 0) {
+                const int percent = kFuelMinPercent + rand() % (kFuelMaxPercent - kFuelMinPercent + 1);
+                spawnDurability = std::max(1, foundDef->maxDurability * percent / 100);
             }
 
 

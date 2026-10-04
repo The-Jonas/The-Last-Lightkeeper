@@ -51,7 +51,7 @@ void PlayRandomPickupSound() {
 
 // Nome do item em português para a origem no log ("Ao pegar: Tábua de madeira").
 std::string ItemLabelPt(const std::string& name) {
-    if (name == "Flashlight" || name == "Broken Flashlight") return "Isqueiro";
+    if (name == "Flashlight")       return "Isqueiro";
     if (name == "Lamp")             return "Lamparina";
     if (name == "Fuel")             return "Combustível";
     if (name == "Apple")            return "Maçã";
@@ -112,8 +112,12 @@ void VoiceForPickup(PickupOutcome outcome, const std::string& itemName, bool oil
     case PickupOutcome::Blocked:
         // Óleo além do limite de combustível: "minha bolsa tá pesada".
         // Qualquer outro bloqueio: "não consigo".
-        if (oilAtMax) GameVoice::OnBagFull();
-        else          GameVoice::OnActionBlocked();
+        if (oilAtMax) {
+            // O tutorial cuida: fala na caixa ("não consigo carregar mais…") + anel na roda.
+            if (StageState* stage = Game::TryGetStageState()) stage->Hints().NotifyFuelLimitHit();
+        } else {
+            GameVoice::OnActionBlocked();
+        }
         break;
     case PickupOutcome::PickedUpAndFilled:
         if (woodPlank) GameVoice::OnPickupWoodPlank();
@@ -190,19 +194,6 @@ ItemPickup* HotbarComponent::FindClosestReachablePickup() const {
 
 void HotbarComponent::TryCycleWheel() {
     InputManager& input = InputManager::GetInstance();
-
-    // Modo de reabastecimento: as setas / A / D navegam entre as fontes de luz
-    // do modal central (e NÃO giram a roda). Confirmar é com [F] (TryUse...).
-    if (inventory.IsOilPrimed()) {
-        if (input.ActionPress(GameAction::CyclePrev) || input.ActionPress(GameAction::MoveLeft)) {
-            inventory.RefuelSelectionPrev();
-        }
-        if (input.ActionPress(GameAction::CycleNext) || input.ActionPress(GameAction::MoveRight)) {
-            inventory.RefuelSelectionNext();
-        }
-        return;
-    }
-
     bool cycled = false;
     if (input.ActionPress(GameAction::CyclePrev)) {
         inventory.CycleLeft();
@@ -226,28 +217,11 @@ void HotbarComponent::TryUseActiveItemOnKeyPress() {
         return;
     }
 
-    if (inventory.IsOilPrimed()) {
-        // In oil-apply mode, F pours the oil into the centered lighter/lamp. On
-        // an empty or invalid slot it does nothing (the oil is kept). ESC, which
-        // exits this mode, is handled in the stage update.
-        if (inventory.TryCombineOil()) {
-            if (bigCharacter) {
-                bigCharacter->NotifyInventoryLightChanged();
-            }
-        }
-        return;
-    }
-
     const Inventory::ItemStack* active = inventory.GetActiveStack();
     if (!active) return;
 
-    if (active->def.HasProperty(ItemProperty::FUEL)) {
-        // Sem nenhuma fonte de luz com espaço (tudo cheio), avisa em vez de ignorar o F.
-        if (!inventory.TryPrimeOil()) {
-            GameVoice::OnActionBlocked();
-        }
-        return;
-    }
+    // Combustível não se "usa" com [F]: recarregar é só pelo [R].
+    if (active->def.HasProperty(ItemProperty::FUEL)) return;
 
     if (!active->def.HasProperty(ItemProperty::LIGHT_SOURCE)) return;
 
@@ -340,7 +314,6 @@ void HotbarComponent::TryPickupOnKeyPress() {
 }
 
 void HotbarComponent::Update(float dt) {
-    (void)dt;
     if (!controlledCharacterPtr || !*controlledCharacterPtr || !bigCharacter) {
         return;
     }
@@ -352,9 +325,41 @@ void HotbarComponent::Update(float dt) {
         return;
     }
 
+    // Recarregando: a roda, o [F] e pegar itens ficam travados até terminar.
+    if (inventory.IsReloading()) {
+        UpdateReload(dt);
+        return;
+    }
+    if (InputManager::GetInstance().ActionPress(GameAction::Reload)) {
+        StartReload();
+        return;
+    }
+
     TryCycleWheel();
     TryUseActiveItemOnKeyPress();
     TryPickupOnKeyPress();
 }
 
+// [R]: apaga a luz e começa a recarga. Sem combustível ou com tudo cheio: "não consigo".
+void HotbarComponent::StartReload() {
+    const bool wasLighterOn = inventory.IsActiveLightLighter();
+    if (!inventory.BeginReload()) {
+        GameVoice::OnActionBlocked();
+        return;
+    }
+    if (wasLighterOn) GameSfx::PlayLighterToggle(false);
+    if (bigCharacter) bigCharacter->NotifyInventoryLightChanged();
+    Telemetry::Event("reload_start", Telemetry::Fields().Int("fuelUnits", inventory.GetFuelUnits()));
+}
+
+// Conta a recarga; no fim a luz volta acesa (com o som do isqueiro, se for ele).
+void HotbarComponent::UpdateReload(float dt) {
+    if (!inventory.TickReload(dt)) return;
+    if (inventory.IsActiveLightLighter()) GameSfx::PlayLighterToggle(true);
+    if (bigCharacter) bigCharacter->NotifyInventoryLightChanged();
+    Telemetry::Event("reload_done", Telemetry::Fields().Num("charge", inventory.GetSelectedLightFuelRatio()));
+}
+
 void HotbarComponent::Render() {}
+
+

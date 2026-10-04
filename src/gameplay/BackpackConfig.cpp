@@ -56,9 +56,11 @@ const BackpackGroupDef* BackpackConfig::GetGroup(int groupIndex) const {
 BackpackConfig DefaultBackpackConfig() {
     BackpackConfig cfg;
     cfg.groups = {
-        {"lighter", 3, 1, {"Flashlight", "Broken Flashlight"}},
+        {"lighter", 3, 1, {"Flashlight"}},
         {"fuel", 2, 0, {"Fuel", "Lamp Fuel", "Lighter Fuel", "Light Fuel", "Oil Gallon"}},
         {"lamp", 1, 2, {"Lamp"}},
     };
     return cfg;
 }
+
+

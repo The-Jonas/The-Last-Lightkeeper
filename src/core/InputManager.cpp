@@ -31,6 +31,7 @@ void InputManager::InitDefaultBindings() {
     bindings[static_cast<int>(GameAction::CycleNext)]   = SDLK_RIGHT;  // próximo item
     bindings[static_cast<int>(GameAction::SwapBrother)] = SDLK_LCTRL;
     bindings[static_cast<int>(GameAction::ToggleMode)]  = SDLK_q;
+    bindings[static_cast<int>(GameAction::Reload)]      = SDLK_r;
 }
 
 InputManager::~InputManager(){
@@ -209,6 +210,7 @@ const char* InputManager::ActionName(GameAction action) {
     case GameAction::CycleNext:   return "cycle_next";
     case GameAction::SwapBrother: return "swap_brother";
     case GameAction::ToggleMode:  return "toggle_mode";
+    case GameAction::Reload:      return "reload";
     default:                      return "";
     }
 }
@@ -225,6 +227,8 @@ const char* InputManager::ActionLabel(GameAction action) {
     case GameAction::CycleNext:   return "Próximo item";
     case GameAction::SwapBrother: return "Trocar irmão controlado";
     case GameAction::ToggleMode:  return "Modo Dupla (Perseguir/Parar)";
+    case GameAction::Reload:      return "Recarregar luz";
     default:                      return "";
     }
 }
+

@@ -21,6 +21,7 @@
 #include "gameplay/RadioAsset.h"
 #include "states/stage/FirstLoadData.h"
 #include "states/stage/OceanAmbientController.h"
+#include "tutorial/HintSystem.h"
 #include "math/Vec2.h"
 #include "ui/FuelFlameHud.h"
 #include "ui/DialogueBox.h"
@@ -58,9 +59,10 @@ class Monster;
 //   6. Navegação e colisão      13. Documentos e pasta      20. Telemetria
 //   7. Luz e sombras            14. Monstro e sanidade
 //
-//  Arquivos: Update.cpp (frame), Render.cpp (desenho), SaveState.cpp (save,
-//  menus, tutoriais), LevelFlow.cpp (andares), JournalViewer.cpp (documentos),
+//  Arquivos: Update.cpp (frame), Render.cpp (desenho), SaveState.cpp (save e
+//  menus), LevelFlow.cpp (andares), JournalViewer.cpp (documentos),
 //  Navigation.cpp, Lighting.cpp, BoxInteraction.cpp, MonsterEcho.cpp…
+//  Tutorial: src/tutorial/ (HintSystem, roteiros por andar).
 // ─────────────────────────────────────────────────────────────────────────────
 class StageState : public State {
     friend class SpawnFactory;
@@ -123,7 +125,9 @@ private:
     int   currentLevelIndex = 0;
     float levelTitleTimer = 0.0f;
     int   levelTitleNumber = 1;
-    static constexpr float kLevelTitleDuration = 3.0f;
+    static constexpr float kLevelTitleDuration = 4.2f;
+    static constexpr float kLevelTitleFadeIn   = 0.9f;
+    static constexpr float kLevelTitleFadeOut  = 1.3f;
     TileSet* tileSet;                                    // tileset ativo no mapa
     std::unique_ptr<TileSet> dungeonTileSet;
     Vec2  mapOrigin{0.0f, 0.0f};
@@ -162,6 +166,7 @@ public:
     // Tira o personagem de dentro de colisão (ex.: saindo do armário), testando
     // a geometria do mapa e os tiles.
     void UnstickCharacter(Character* c);
+    void SetPartyTogether(bool together);                // false = irmãozinho fica parado (roteiro do 1º andar)
 
     // Seta "quem estou controlando": aparece no início e a cada troca.
     float controlIndicatorTimer = 0.0f;
@@ -200,6 +205,13 @@ private:
     void EnforceMaxDistance();                           // distância máxima entre os dois
     void SwapControlledCharacter();
     void UpdateControlledCharacterVisuals();             // destaque de quem está sob controle
+
+    // Fala ao se afastarem demais: alterna o medo do irmãozinho e a bronca do irmãozão.
+    bool farVoiceArmed = true;                           // re-arma quando voltam a ficar perto
+    bool scoldTurn = false;
+    static constexpr float kFarVoiceDistance  = 660.0f;
+    static constexpr float kFarVoiceRearmDist = 340.0f;
+    void UpdateFarApartVoice();
 
     // ═════════════════════════════════════════════════════════════════════════
     //  5. Câmera
@@ -287,11 +299,6 @@ public:
     std::vector<GameObject*> testShadowObjects;
     void RegisterTestShadowObject(GameObject* go) { testShadowObjects.push_back(go); }
 
-    // Jogo novo: começa com a luz apagada e ela acende sozinha após alguns segundos.
-    bool  autoLightShowcasePending = false;
-    float autoLightShowcaseTimer = 0.0f;
-    static constexpr float kAutoLightShowcaseDelay = 2.0f;
-
 private:
     std::vector<LightInstance> lights;
     RadialLightOverlay* radialGeometry;                  // malha de escuridão
@@ -318,7 +325,6 @@ private:
     void CreateLightAtCursor();
     void RegisterAllCandleLights();
     void ApplyLitCandleIds(const std::vector<int>& litIds, bool extinguishOthers = true);
-    void UpdateAutoLightShowcase(float dt);
     void UpdatePreviewLightAnchor(InputManager& input);  // botão direito prende a luz de preview num irmão
     void UpdateLightSmoothing(float dt, InputManager& input);
 
@@ -401,6 +407,7 @@ public:
     void SetReachableCloset(Closet* c) { reachableCloset = c; }                  // Closet::Update
     void SetReachableRepairable(Repairable* r) { reachableRepairable = r; }      // Repairable::Update
     void SetRepairableInReachNoItem(bool v) { repairableInReachNoItem = v; }     // no vão sem a tábua (aviso)
+    void SetRepairableNeedsHeldItem(const std::string& item) { repairableHeldItemNeeded = item; }   // tem, mas não na mão
 
     bool IsPushBoxCloserThanItem(ItemPickup* item, Box* box) const;
     bool IsJornalCloserThanItemAndBox(Jornal* jornal, ItemPickup* item, Box* box) const;
@@ -421,6 +428,7 @@ private:
     RadioAsset*  reachableRadio = nullptr;
     Repairable*  reachableRepairable = nullptr;
     bool         repairableInReachNoItem = false;
+    std::string  repairableHeldItemNeeded;               // item que falta pôr na mão para consertar ("" = nada)
 
     float GetInteractableDistance(const GameObject& obj) const;
     bool  RenderInteractionGlowIfNeeded(GameObject& go);
@@ -510,10 +518,6 @@ public:
         std::string dialogueContext;
     };
     std::vector<CollectedDocument> collectedDocuments;   // sempre ordenada por order
-    bool documentTutorialShown = false;
-    static constexpr const char* kDocumentTutorialText =
-        "Documento guardado na pasta. [Tab] abre seus documentos.";
-
     void CollectJornal(Jornal* jornal);
     void RemoveCollectedJornalsFromWorld();
     void RenderJournalViewer(SDL_Renderer* renderer);
@@ -522,9 +526,6 @@ public:
             if (d.unread) return true;
         }
         return false;
-    }
-    bool IsDocumentTutorialActive() const {
-        return activeTutTimer > 0.0f && activeTutText == kDocumentTutorialText;
     }
 
     // Aba "Diálogos" da pasta.
@@ -641,37 +642,14 @@ private:
     void CheckDefeat();                                  // sanidade zerada / irmão perdido → EndState
 
     // ═════════════════════════════════════════════════════════════════════════
-    //  15. Tutoriais (SaveState.cpp) — um banner por vez; contadores por sessão no .cpp
+    //  15. Tutoriais (src/tutorial/) — dicas diegéticas, roteiro por andar
     // ═════════════════════════════════════════════════════════════════════════
 public:
-    void RequestTutorial(const std::string& text, bool inventoryHint = false);   // novo entra na fila e o atual sai
-    void UpdateTutorials(float dt);
-    void RenderTutorials(SDL_Renderer* renderer);
-    bool IsInventoryTutorialActive() const { return activeTutTimer > 0.0f && activeTutInventory; }   // a roda mostra as teclas
+    HintSystem& Hints() { return hints; }                // HUD (anéis, teclas) e eventos de gameplay
 
-    std::string activeTutText;
-    float       activeTutTimer = 0.0f;
-    bool        activeTutInventory = false;              // o banner ativo pede as teclas da roda
-    std::string pendingTutText;
-    bool        pendingTutInventory = false;
-    static constexpr float kTutorialDisplayDuration = 8.0f;
-    static constexpr float kTutorialFadeOut = 0.8f;
-    static constexpr int   kMaxTutorialShows = 3;
-
-    // Gatilhos ("armed" = pode disparar de novo).
-    bool  lighterTutArmed = true;
-    bool  swapTutArmed = true;
-    bool  abilityTutArmed = true;
-    bool  swapAfterAbilityPending = false;               // troca enfileirada depois da habilidade
-    bool  repairWarnArmed = true;                        // "preciso de algo para consertar"
-    bool  moveTutDone = false;
-    float noMoveAccum = 0.0f;
-    bool  pickupTutArmed = true;
-    float pickupNearAccum = 0.0f;
-    bool  refuelTutArmed = true;
-    int   prevStackCount = -1;                           // para notar o 1º item novo
-    static constexpr float kSwapTutFarDist  = 660.0f;    // irmãos longe → tutorial de troca
-    static constexpr float kSwapTutNearDist = 340.0f;    // perto de novo → re-arma
+private:
+    HintSystem hints;
+    HintContext BuildHintContext() const;                // src/tutorial/HintContext.cpp
 
     // ═════════════════════════════════════════════════════════════════════════
     //  16. Menus (pausa, configurações, sair)
@@ -693,7 +671,7 @@ private:
     float saveToastTimer = 0.0f;                         // "Progresso salvo"
     static constexpr float kSaveToastDuration = 2.0f;
 
-    bool HandleEscapeKey();                              // ESC: cancela combustível ou abre a pausa
+    bool HandleEscapeKey();                              // ESC: abre a pausa
     void HandlePauseMenuInput();
     void RenderPauseMenu(SDL_Renderer* renderer);
     bool HandleQuitConfirmInput();
@@ -734,6 +712,7 @@ private:
     void UpdateFpsHud(float dt);
     void RenderLittleBrotherPowerHud(SDL_Renderer* renderer, int winW, int winH);
     void RenderControlIndicator(SDL_Renderer* renderer);
+    void RenderReloadProgress(SDL_Renderer* renderer);   // arco da recarga da luz sobre o irmãozão
     void RenderRepairOverlay(SDL_Renderer* renderer, int winW, int winH);
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -781,3 +760,4 @@ private:
 };
 
 #endif
+

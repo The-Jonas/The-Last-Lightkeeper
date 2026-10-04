@@ -160,7 +160,6 @@ void to_json(json& j, const SaveGameState& s) {
              {"using", SerializeOptionalSlot(s.usingItem)},
              {"slots", slots},
              {"activeStackIndex", s.activeStackIndex},
-             {"primedOilDurability", s.primedOilDurability},
              {"inventoryStacks", s.inventoryStacks},
              {"escadaConsertada", s.escadaConsertada},
              {"removedPickupIds", s.removedPickupIds},
@@ -170,7 +169,8 @@ void to_json(json& j, const SaveGameState& s) {
              {"repairedIds", s.repairedIds},
              {"boxPositions", s.boxPositions},
              {"documents", s.documents},
-             {"dialogueLog", s.dialogueLog}};
+             {"dialogueLog", s.dialogueLog},
+             {"learnedHints", s.learnedHints}};
 }
 
 void from_json(const json& j, SaveGameState& s) {
@@ -206,11 +206,11 @@ void from_json(const json& j, SaveGameState& s) {
     s.litCandleIds = j.value("litCandleIds", std::vector<int>{});
     s.repairedIds = j.value("repairedIds", std::vector<int>{});
     s.activeStackIndex = j.value("activeStackIndex", -1);
-    s.primedOilDurability = j.value("primedOilDurability", 0);
     s.inventoryStacks = j.value("inventoryStacks", std::vector<SavedInventoryStack>{});
     s.boxPositions = j.value("boxPositions", std::vector<SavedBoxPos>{});
     s.documents = j.value("documents", std::vector<SavedDocument>{});
     s.dialogueLog = j.value("dialogueLog", std::vector<SavedDialogueEntry>{});
+    s.learnedHints = j.value("learnedHints", std::vector<std::string>{});
 }
 
 void to_json(json& j, const SaveFile& f) {
@@ -232,3 +232,5 @@ void to_json(json& j, const SaveFile& f) {
             from_json(j["current"], f.current);
         }
     }
+
+

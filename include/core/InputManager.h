@@ -37,6 +37,7 @@ enum class GameAction {
     MoveUp, MoveDown, MoveLeft, MoveRight,
     Interact, UseItem, CyclePrev, CycleNext,
     SwapBrother, ToggleMode,
+    Reload,                                                         // recarregar a luz com combustível (R)
     Count
 };
 
@@ -113,3 +114,4 @@ private:
 
 
 #endif
+

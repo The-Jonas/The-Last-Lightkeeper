@@ -16,6 +16,7 @@
 #include "engine/SpriteRenderer.h"
 #include "gameplay/Box.h"
 #include "gameplay/Character.h"
+#include "gameplay/Item.h"
 #include "gameplay/Monster.h"
 #include "gameplay/Repairable.h"
 #include "lighting/LightShadowProfile.h"
@@ -23,6 +24,7 @@
 #include "lighting/TopDownLightShadows.h"
 #include "world/Collider.h"
 #include "world/TileMap.h"
+#include "ui/HorrorFx.h"
 
 #define INCLUDE_SDL_TTF
 #include "SDL_include.h"
@@ -268,11 +270,16 @@ void StageState::Render() {
     }
     RenderLittleBrotherPowerHud(renderer, winW, winH);
     RenderControlIndicator(renderer);
+    RenderReloadProgress(renderer);
     RenderRepairOverlay(renderer, winW, winH);
 
     fuelFlameHud.Render(renderer, inventory, winW, winH);   // HUD de jogo fica por baixo dos menus
+    SDL_FRect fuelRect;
+    if (fuelFlameHud.GetLastRect(fuelRect)) hints.ReportHudRect(HudSlot::Fuel, fuelRect);
     RenderInteractionPrompt(renderer);
-    RenderTutorials(renderer);
+    if (!IsPlayerInputFrozen()) {
+        hints.Render(renderer, [this](const Vec2& w) { return WorldToScreen(w); });   // teclas no mundo + anéis
+    }
     RenderVoiceSubtitle(renderer);
     RenderLevelTitleBanner(renderer);
 
@@ -297,21 +304,20 @@ void StageState::Render() {
 //  Cena: ordem, luzes e sombras
 // ═════════════════════════════════════════════════════════════════════════════
 
-// Ordena por z; no mesmo z, pela base (Y) com depthOffset; irmão na escada usa a
-// âncora da escada (a menos que os dois estejam nela); empate → sub_z.
+// Ordena por z; no mesmo z, pela base (Y) com depthOffset; quem está na escada
+// (irmão ou monstro) usa a âncora da escada (a menos que os dois estejam nela);
+// empate → sub_z.
 void StageState::SortObjectsForDrawing() {
     auto baseY = [](const std::shared_ptr<GameObject>& o) {
         const GameObject* ref = o->owner ? o->owner : o.get();
         return ref->box.y + ref->box.h + o->depthOffset;
     };
-
     // True se o objeto está em cima da escada; `anchor` recebe a base dela.
     auto onStairs = [](const std::shared_ptr<GameObject>& o, float& anchor) {
         if (Character* c = o->GetComponent<Character>()) { anchor = c->stairAnchorY; return c->isElevated; }
         if (Monster* m = o->GetComponent<Monster>())     { anchor = m->stairAnchorY; return m->isElevated; }
         return false;
     };
-
     std::sort(objectArray.begin(), objectArray.end(),
               [&](const std::shared_ptr<GameObject>& a, const std::shared_ptr<GameObject>& b) {
         if (a->z != b->z) return a->z < b->z;
@@ -924,6 +930,26 @@ void StageState::RenderLittleBrotherPowerHud(SDL_Renderer* renderer, int winW, i
 }
 
 // Seta sobre o irmão controlado ao trocar: quica, pisca dourado↔branco e some.
+// Recarga da luz: arco de progresso com o ícone do combustível sobre o irmãozão.
+void StageState::RenderReloadProgress(SDL_Renderer* renderer) {
+    if (!inventory.IsReloading() || !bigCharacterObject || IsPlayerInputFrozen()) return;
+
+    std::string fuelIcon;
+    for (int i = 0; i < inventory.GetStackCount(); ++i) {
+        const Inventory::ItemStack* st = inventory.GetStack(i);
+        if (st && st->def.HasProperty(ItemProperty::FUEL)) {
+            fuelIcon = st->def.spritePath;
+            break;
+        }
+    }
+    const float u = Game::UiScale();
+    const Rect& box = bigCharacterObject->box;
+    const Vec2 head = WorldToScreen(Vec2(box.x + box.w * 0.5f, box.y));
+    const float radius = 24.0f * u;
+    HorrorFx::DrawProgressArc(renderer, head.x, head.y - radius - 12.0f * u, radius,
+                              inventory.GetReloadProgress(), fuelIcon, 1.0f, SDL_GetTicks() * 0.001f);
+}
+
 void StageState::RenderControlIndicator(SDL_Renderer* renderer) {
     if (!controlledCharacter || controlIndicatorTimer <= 0.0f) return;
 
@@ -1116,3 +1142,4 @@ void StageState::RenderCompanionFollowPathDebug(SDL_Renderer* renderer) const {
     SDL_SetRenderDrawBlendMode(renderer, oldBlend);
     SDL_SetRenderDrawColor(renderer, dr, dg, db, da);
 }
+

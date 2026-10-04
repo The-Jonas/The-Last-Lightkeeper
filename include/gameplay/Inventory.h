@@ -16,7 +16,8 @@ enum class HeldPropVisual { None, Lighter, Lamp };
 //
 //  Fontes de luz (isqueiro, lamparina) são únicas por tipo e recarregáveis —
 //  esgotadas ficam com carga 0 na bolsa. Combustível é limitado a
-//  kMaxFuelUnits e é despejado numa fonte de luz pelo modal de reabastecimento.
+//  kMaxFuelUnits; [R] gasta uma unidade inteira numa luz (o que não couber se
+//  perde), com a luz apagada por kReloadDuration s.
 //
 //  activeIndex é um contador SEM limite (a roda anima continuamente); o item na
 //  mão é derivado dele por GetSelectedStackIndex — nunca indexe stacks com ele.
@@ -31,6 +32,8 @@ public:
 
     static constexpr int kMaxCapacity  = 6;              // itens na bolsa (o 7º é recusado)
     static constexpr int kMaxFuelUnits = 2;              // combustíveis na bolsa
+    static constexpr float kReloadDuration = 2.0f;       // s com a luz apagada recarregando
+    static constexpr float kReloadSpeedMul = 0.5f;       // velocidade do irmãozão durante a recarga
 
     // ── Itens ────────────────────────────────────────────────────────────────
     bool AddItem(const ItemDef& def, int durability);    // false se CanAcceptItem recusar
@@ -62,7 +65,6 @@ public:
     bool IsActiveLightLighter() const;                   // idem, e é o isqueiro
     bool IsActiveLightLamp() const;                      // idem, e é a lamparina
     bool IsActiveItemLighter() const;                    // isqueiro na mão, aceso ou não (som de ligar)
-    bool IsActiveItemFuel() const;                       // combustível na mão (tutorial)
     bool HasDepletedLighter() const;                     // isqueiro com carga 0 ("sua luz apagou")
     HeldPropVisual GetHeldPropVisual() const;            // o que o sprite segura (só acesa aparece)
     float GetSelectedLightFuelRatio() const;             // carga da luz na mão, 0..1
@@ -70,17 +72,15 @@ public:
     LightMaskParams BuildLampLightParams(const LightMaskParams& base) const;      // mesma curva do isqueiro
     void TickUsingDurability(float dt);                  // gasta carga com a luz acesa (lamparina dura 2x)
 
-    // ── Reabastecimento ([F] no combustível abre o modal) ────────────────────
-    bool IsOilPrimed() const { return oilApplyMode; }    // modal aberto
-    bool TryPrimeOil();                                  // abre o modal (combustível na mão e alvo disponível)
-    bool TryCombineOil();                                // despeja no alvo escolhido (gasta a unidade inteira)
-    void CancelOil();
-    std::vector<int> GetRefuelTargetIndices() const;     // fontes de luz que ainda cabem óleo
-    int  GetRefuelTargetCount() const;
-    int  GetRefuelSelection() const { return oilTargetSelection; }
-    const ItemStack* GetRefuelTargetStack(int selectionIdx) const;
-    void RefuelSelectionPrev();
-    void RefuelSelectionNext();
+    // ── Recarga ([R]) ────────────────────────────────────────────────────────
+    int   GetFuelUnits() const;                          // unidades de combustível na bolsa
+    int   FindReloadTarget() const;                      // luz na mão se couber; senão a mais vazia; -1 nenhuma
+    bool  CanReload() const { return GetFuelUnits() > 0 && FindReloadTarget() >= 0; }
+    bool  BeginReload();                                 // apaga a luz e começa a contar; false se não dá
+    bool  TickReload(float dt);                          // true no frame em que termina (já despejou e acendeu)
+    bool  IsReloading() const { return reloadTimer > 0.0f; }
+    float GetReloadProgress() const;                     // 0..1 da recarga atual
+    void  CancelReload();                                // troca de andar/morte: nada é gasto
 
     // ── Save ─────────────────────────────────────────────────────────────────
     void WriteToSave(SaveGameState& state) const;
@@ -89,13 +89,11 @@ public:
 private:
     std::vector<ItemStack> stacks;
     int   activeIndex = -1;
-    bool  oilApplyMode = false;
-    int   oilApplySourceIndex = -1;                      // pilha do combustível sendo despejado
-    int   oilApplyReturnActiveIndex = 0;                 // posição da roda para voltar ao sair
-    int   oilTargetSelection = 0;                        // índice em GetRefuelTargetIndices
     float usingDrainAccum = 0.0f;
+    float reloadTimer = 0.0f;                            // > 0 = recarregando (conta para baixo)
+    std::string reloadTargetName;                        // luz que vai receber (pelo nome: índices podem mudar)
 
-    void ExitOilApplyMode();
+    bool  PourFuelInto(int targetIdx);                   // gasta a unidade da frente; a luz fica na mão
     void DedupeLightSources();                           // cura saves com isqueiro/lamparina duplicados
     void SelectAfterLegacyLoad(int preferred);           // escolha do item na mão ao ler save antigo
     int  FindStackWithName(const std::string& name) const;
@@ -103,3 +101,4 @@ private:
 };
 
 #endif
+

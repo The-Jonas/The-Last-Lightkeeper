@@ -1,11 +1,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  StageState — save/load, confirmação de saída, prompt de interação, menu de
-//  pausa, aviso de "progresso salvo" e tutoriais.
+//  pausa e aviso de "progresso salvo". (Tutoriais: src/tutorial/.)
 // ─────────────────────────────────────────────────────────────────────────────
 #include "states/stage/StageState.h"
 #include "states/stage/FirstLoadData.h"
 #include "states/LoadingState.h"
-#include "audio/GameVoice.h"
 #include "core/Game.h"
 #include "core/InputManager.h"
 #include "core/Resources.h"
@@ -21,7 +20,6 @@
 #include "gameplay/RadioAsset.h"
 #include "gameplay/Repairable.h"
 #include "gameplay/Window.h"
-#include "ui/KeyGlyphs.h"
 
 #define INCLUDE_SDL_TTF
 #include "SDL_include.h"
@@ -45,19 +43,6 @@ const char* kPauseMenuIcons[]  = {
     "Recursos/img/menu/pause/icon_reiniciar.png",
     "Recursos/img/menu/pause/icon_voltar.png",
 };
-
-// ── Tutoriais: contadores POR SESSÃO (valem entre andares e instâncias) ──────
-int  sLighterTutShown      = 0;
-int  sSwapTutShown         = 0;
-int  sAbilityTutShown      = 0;
-int  sMoveTutShown         = 0;
-int  sPickupTutShown       = 0;
-int  sRefuelTutShown       = 0;
-int  sCycleTutShown        = 0;      // trocar item na roda (1x)
-int  sLighterEmptyTutShown = 0;      // "sua luz apagou" (1x)
-int  sLampTutShown         = 0;      // explicação da lamparina (1x)
-bool sFarVoiceArmed        = true;   // fala de medo/bronca ao se afastarem (sem limite)
-bool sScoldTurn            = false;  // alterna medo do irmãozinho / bronca do irmãozão
 
 // Posição e tamanho do modal de sair e dos seus dois botões (input e render usam o mesmo).
 void QuitConfirmLayout(SDL_Rect& panel, SDL_Rect& saveBtn, SDL_Rect& cancelBtn) {
@@ -154,7 +139,7 @@ std::vector<ItemDef> BuildItemCatalog(const StageFirstLoadData& cfg) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 // Fotografa o andar atual: irmãos, inventário, itens, caixas, velas, consertos,
-// documentos e log de diálogos.
+// documentos, log de diálogos e as dicas já aprendidas.
 SaveGameState StageState::CaptureSaveState() const {
     SaveGameState state;
     state.big = CaptureCharacter(bigCharacterObject, bigCharacter);
@@ -235,6 +220,7 @@ SaveGameState StageState::CaptureSaveState() const {
         state.dialogueLog.push_back(std::move(se));
     }
 
+    state.learnedHints = hints.GetLearnedList();
     return state;
 }
 
@@ -310,7 +296,7 @@ void StageState::ApplySaveState(const SaveGameState& state) {
     }
     dialogueLogSelection = std::max(0, static_cast<int>(dialogueLog.size()) - 1);
 
-    documentTutorialShown = !collectedDocuments.empty();   // já viu o tutorial ao pegar o 1º
+    hints.SetLearnedList(state.learnedHints);
     knownDocumentKeysLevel = -1;                           // refaz a contagem na próxima abertura
     RemoveCollectedJornalsFromWorld();
 
@@ -991,311 +977,5 @@ void StageState::RenderSaveToast(SDL_Renderer* renderer) {
     const SDL_Rect d{x, y, tw, th};
     SDL_RenderCopy(renderer, t, nullptr, &d);
     SDL_DestroyTexture(t);
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  Tutoriais
-// ═════════════════════════════════════════════════════════════════════════════
-
-// Pede a exibição de um tutorial. UM por vez: se já houver outro na tela, força o
-// atual a fazer fade-out e enfileira o novo. `inventoryHint` marca os tutoriais
-// que devem mostrar as teclas da roda de itens enquanto estiverem na tela.
-void StageState::RequestTutorial(const std::string& text, bool inventoryHint) {
-    if (text.empty()) return;
-    if (activeTutText == text || pendingTutText == text) return;
-    Telemetry::Event("tutorial", Telemetry::Fields().Int("level", currentLevelIndex).Str("text", text));
-    if (activeTutTimer > 0.0f) {
-        pendingTutText      = text;
-        pendingTutInventory = inventoryHint;
-        if (activeTutTimer > kTutorialFadeOut) activeTutTimer = kTutorialFadeOut;
-    } else {
-        activeTutText      = text;
-        activeTutInventory = inventoryHint;
-        activeTutTimer     = kTutorialDisplayDuration;
-    }
-}
-
-// Avança o banner ativo (promove o da fila ao acabar) e checa cada gatilho:
-// movimento, pegar item, trocar item, luz apagou, lamparina, combustível,
-// isqueiro, troca de irmão (+ falas), habilidade e o aviso da escada.
-void StageState::UpdateTutorials(float dt) {
-    // Um tutorial por vez: conta o tempo do ATIVO; ao zerar, promove o pendente.
-    if (activeTutTimer > 0.0f) {
-        activeTutTimer -= dt;
-        if (activeTutTimer <= 0.0f) {
-            activeTutTimer = 0.0f;
-            activeTutText.clear();
-            activeTutInventory = false;
-            if (!pendingTutText.empty()) {
-                activeTutText       = pendingTutText;
-                activeTutInventory  = pendingTutInventory;
-                pendingTutText.clear();
-                pendingTutInventory = false;
-                activeTutTimer      = kTutorialDisplayDuration;
-            }
-        }
-    }
-
-    InputManager& imTut = InputManager::GetInstance();
-
-    // Tutorial de MOVIMENTO (WASD): só no começo. Some para sempre assim que o
-    // jogador anda pela primeira vez; se ficar parado por uns segundos sem nunca
-    // ter andado, mostra a dica uma vez.
-    if (!moveTutDone) {
-        const bool movingInput = imTut.ActionDown(GameAction::MoveUp)   ||
-                                 imTut.ActionDown(GameAction::MoveDown) ||
-                                 imTut.ActionDown(GameAction::MoveLeft) ||
-                                 imTut.ActionDown(GameAction::MoveRight);
-        if (movingInput) {
-            moveTutDone = true;   // não dispara de novo — mas NÃO some o banner já mostrado
-        } else if (IsPartyReady() && !IsPlayerInputFrozen()) {
-            noMoveAccum += dt;
-            if (noMoveAccum > 3.0f && sMoveTutShown < 1) {
-                sMoveTutShown++;
-                moveTutDone = true;
-                const std::string up = KeyName(GameAction::MoveUp, "W");
-                const std::string lf = KeyName(GameAction::MoveLeft, "A");
-                const std::string dn = KeyName(GameAction::MoveDown, "S");
-                const std::string rt = KeyName(GameAction::MoveRight, "D");
-                RequestTutorial("Use [" + up + "] [" + lf + "] [" + dn + "] [" + rt + "] para se mover");
-            }
-        }
-    }
-
-    // Tutorial de PEGAR ITEM (E): controlando o irmãozão e parado perto de um
-    // item por um tempinho sem pegá-lo.
-    {
-        const bool nearPickup = controlledCharacter == bigCharacter &&
-                                GetReachablePickup() != nullptr && !IsPlayerInputFrozen();
-        if (nearPickup) {
-            pickupNearAccum += dt;
-            if (pickupNearAccum > 1.2f && pickupTutArmed &&
-                sPickupTutShown < kMaxTutorialShows) {
-                sPickupTutShown++;
-                pickupTutArmed = false;
-                RequestTutorial("Pressione [" + KeyName(GameAction::Interact, "E") + "] para pegar o item");
-            }
-        } else {
-            pickupNearAccum = 0.0f;
-            pickupTutArmed = true;   // re-arma ao se afastar
-        }
-    }
-
-    // Tutorial de TROCAR ITEM na roda (1/3): dispara ao pegar o primeiro item
-    // novo, quando a roda passa a ter mais de um item para alternar. Só uma vez
-    // por sessão. prevStackCount começa em -1 para ignorar o item inicial.
-    {
-        const int stackCount = inventory.GetStackCount();
-        if (prevStackCount < 0) {
-            prevStackCount = stackCount;            // baseline: ignora o isqueiro inicial
-        } else if (stackCount > prevStackCount) {
-            if (sCycleTutShown < 1 && stackCount >= 2 &&
-                controlledCharacter == bigCharacter) {
-                sCycleTutShown++;
-                const std::string prev = KeyName(GameAction::CyclePrev, "Left");
-                const std::string next = KeyName(GameAction::CycleNext, "Right");
-                RequestTutorial("Use [" + prev + "] e [" + next + "] para trocar de item na mochila", true);
-            }
-            prevStackCount = stackCount;
-        } else if (stackCount < prevStackCount) {
-            prevStackCount = stackCount;            // usou/combinou algo; acompanha
-        }
-    }
-
-    // Aviso "luz apagou": quando a fonte de luz chega a zero pela 1ª vez, avisa
-    // que é preciso combustível para reabastecer. Só uma vez por sessão.
-    {
-        if (sLighterEmptyTutShown < 1 && controlledCharacter == bigCharacter &&
-            inventory.HasDepletedLighter()) {
-            sLighterEmptyTutShown++;
-            RequestTutorial("Sua luz apagou! Use combustivel para reabastece-la", true);
-        }
-    }
-
-    // Explicação da LAMPARINA ao pegá-la (1x por sessão): ilumina mais e dura mais,
-    // porém ocupa as duas mãos — não dá para empurrar objetos com ela.
-    {
-        if (sLampTutShown < 1 && controlledCharacter == bigCharacter &&
-            inventory.HasItem("Lamp")) {
-            sLampTutShown++;
-            RequestTutorial("A lamparina ilumina mais forte e dura mais, mas ocupa as duas maos "
-                            "(voce nao pode empurrar objetos)");
-        }
-    }
-
-    // Tutorial de REABASTECER (F): só quando o jogador está SEGURANDO o
-    // combustível (item selecionado na roda). Ensina a despejá-lo no isqueiro.
-    {
-        const bool holdingOil = controlledCharacter == bigCharacter &&
-                                inventory.IsActiveItemFuel();
-        if (holdingOil && refuelTutArmed &&
-            sRefuelTutShown < kMaxTutorialShows) {
-            sRefuelTutShown++;
-            refuelTutArmed = false;
-            RequestTutorial("Combustivel: aperte [" + KeyName(GameAction::UseItem, "F") +
-                            "], escolha o item com [" + KeyName(GameAction::MoveLeft, "A") +
-                            "]/[" + KeyName(GameAction::MoveRight, "D") +
-                            "] e [" + KeyName(GameAction::UseItem, "F") + "] para confirmar", true);
-        }
-        if (!holdingOil) {
-            refuelTutArmed = true;
-        }
-    }
-
-    // Tutorial do isqueiro ("aperte F para acender"): só aparece quando o
-    // jogador está MORRENDO no escuro (drenando sanidade por falta de luz) E
-    // está com o ISQUEIRO na mão (item selecionado) mas apagado. SÓ para o
-    // irmãozão — é ele quem usa o isqueiro/itens.
-    {
-        // Mesma darknessThreshold usada na sanidade (Character.cpp): abaixo de
-        // 10% de luz o personagem está no escuro drenando sanidade.
-        const float controlledIllum = (controlledCharacter == bigCharacter)
-                                           ? bigIlluminationLevel
-                                           : smallIlluminationLevel;
-        const bool dyingInShadow = controlledIllum < 0.1f;
-
-        // Não dispara durante o showcase inicial: como a luz é acesa
-        // automaticamente logo no começo, ensinar "aperte F para ligar" nesse
-        // momento confunde. O tutorial fica adiado até o showcase terminar (e,
-        // naturalmente, só reaparece quando a luz apaga de novo).
-        // Só ensina "aperte F para acender" se o isqueiro AINDA TEM COMBUSTÍVEL.
-        // Se a durabilidade acabou, apertar F não liga a luz — então não mostra.
-        const Inventory::ItemStack* activeStack = inventory.GetActiveStack();
-        const bool lighterHasFuel = activeStack && !activeStack->durabilities.empty() &&
-                                    activeStack->durabilities.front() > 0;
-
-        const bool cond = !autoLightShowcasePending &&
-                          controlledCharacter == bigCharacter &&
-                          inventory.IsActiveItemLighter() &&
-                          lighterHasFuel &&
-                          !inventory.IsUsableLightActive() &&
-                          dyingInShadow;
-        if (cond && lighterTutArmed && sLighterTutShown < kMaxTutorialShows) {
-            sLighterTutShown++;
-            lighterTutArmed = false;
-            RequestTutorial("Pressione [" + KeyName(GameAction::UseItem, "F") + "] para ligar seu isqueiro", true);
-        }
-        if (!cond) {
-            lighterTutArmed = true;   // re-arma quando a condição passa
-        }
-    }
-
-    // Tutorial de troca: irmãos longe demais (distância linear).
-    if (IsPartyReady() && bigCharacterObject && smallCharacterObject) {
-        const float dist = bigCharacterObject->box.Center().Distance(smallCharacterObject->box.Center());
-        const bool cond = dist > kSwapTutFarDist;
-        if (cond && swapTutArmed && sSwapTutShown < kMaxTutorialShows) {
-            sSwapTutShown++;
-            swapTutArmed = false;
-            RequestTutorial("Pressione [" + KeyName(GameAction::SwapBrother, "Ctrl") + "] para trocar de personagem");
-        }
-        if (dist < kSwapTutNearDist) {
-            swapTutArmed = true;
-        }
-
-        // Ao se afastarem demais, alterna entre o MEDO do irmãozinho e a
-        // REPREENSÃO do irmãozão ("para de ser medroso") — assim as duas falas
-        // de bronca também entram em jogo. Sem o limite de 3x do tutorial — o
-        // cooldown global de voz já evita repetição.
-        if (cond && sFarVoiceArmed) {
-            if (sScoldTurn) {
-                GameVoice::OnScoldFear();
-            } else {
-                GameVoice::OnBrothersTooFar();
-            }
-            sScoldTurn = !sScoldTurn;
-            sFarVoiceArmed = false;
-        }
-        if (dist < kSwapTutNearDist) {
-            sFarVoiceArmed = true;
-        }
-    }
-
-    // Tutorial da habilidade do irmãozinho: aparece ao assumir o controle dele
-    // (ex.: ao começar o 2º andar controlando o irmãozinho).
-    if (IsPartyReady() && smallCharacter && controlledCharacter == smallCharacter) {
-        if (abilityTutArmed && sAbilityTutShown < kMaxTutorialShows) {
-            sAbilityTutShown++;
-            abilityTutArmed = false;
-            RequestTutorial("Pressione [" + KeyName(GameAction::UseItem, "F") + "] para usar a habilidade do irmaozinho");
-            // Enfileira o tutorial de TROCA para logo após este — mas só será
-            // exibido quando a tela de tutoriais ficar vazia (ver bloco abaixo).
-            if (sSwapTutShown < kMaxTutorialShows) {
-                swapAfterAbilityPending = true;
-            }
-        }
-    } else {
-        abilityTutArmed = true;   // re-arma ao voltar a controlar o irmãozão
-    }
-
-    // Tutorial de TROCA enfileirado após o da habilidade: só dispara quando NÃO há
-    // nenhum tutorial na tela (nem ativo nem pendente), para não cortar o banner
-    // atual — espera o que estiver tocando terminar por completo.
-    if (swapAfterAbilityPending && activeTutText.empty() && activeTutTimer <= 0.0f &&
-        pendingTutText.empty()) {
-        swapAfterAbilityPending = false;
-        if (sSwapTutShown < kMaxTutorialShows) {
-            sSwapTutShown++;
-            swapTutArmed = false;
-            RequestTutorial("Pressione [" + KeyName(GameAction::SwapBrother, "Ctrl") + "] para trocar de personagem");
-        }
-    }
-
-    // Aviso do vão da escada: chegou no ponto de conserto SEM a tábua de madeira.
-    // Avisa uma vez por aproximação; re-arma ao se afastar (repairableInReachNoItem
-    // é recomputado a cada frame pelo Repairable::Update).
-    if (repairableInReachNoItem && controlledCharacter == bigCharacter) {
-        if (repairWarnArmed) {
-            repairWarnArmed = false;
-            RequestTutorial("Preciso de algo para consertar esse buraco...");
-        }
-    } else {
-        repairWarnArmed = true;   // re-arma ao sair de perto (ou trocar de personagem)
-    }
-}
-
-// Banner do tutorial ativo (um por vez), com fade in/out e as teclas em imagem.
-void StageState::RenderTutorials(SDL_Renderer* renderer) {
-    if (!renderer || IsPlayerInputFrozen() || activeTutText.empty() || activeTutTimer <= 0.0f) {
-        return;
-    }
-
-    const float timer   = activeTutTimer;
-    const float elapsed = kTutorialDisplayDuration - timer;
-    float a01 = 1.0f;
-    if (timer < kTutorialFadeOut) a01 = timer / kTutorialFadeOut;   // fade out
-    else if (elapsed < 0.4f)      a01 = elapsed / 0.4f;             // fade in
-    a01 = a01 * a01 * (3.0f - 2.0f * a01);                          // smoothstep
-
-    // Escala p/ a resolução: fonte/margens/posição proporcionais (consistente
-    // em telas grandes e cabendo em resoluções baixas).
-    const float u = Game::UiScale();
-    auto font = Resources::GetFont(kUiFont,
-                                   std::max(12, static_cast<int>(std::lround(24.0f * u))));
-    if (!font) return;
-    SDL_Color col{245, 232, 200, 255};
-    const Uint8 alpha = static_cast<Uint8>(255.0f * a01);
-
-    // As TECLAS da dica saem em imagem, nao escritas: "[F]" vira a arte da
-    // tecla F (ver ui/KeyGlyphs.h). A medida vem da mesma funcao que desenha,
-    // por isso a caixa de fundo nunca fica torta em relacao ao conteudo.
-    int tw = 0, th = 0;
-    KeyGlyphs::Measure(font.get(), activeTutText, KeyGlyphs::kDefaultKeyScale, tw, th);
-    if (tw <= 0 || th <= 0) return;
-
-    const int winW = Game::GetInstance().GetWindowsWidth();
-    const int padX = static_cast<int>(std::lround(22 * u));
-    const int padY = static_cast<int>(std::lround(12 * u));
-    const int y = static_cast<int>(std::lround(140 * u));
-    const int x = (winW - tw) / 2;
-    const SDL_Rect bg{x - padX, y - padY, tw + padX * 2, th + padY * 2};
-
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, 18, 18, 24, static_cast<Uint8>(200.0f * a01));
-    SDL_RenderFillRect(renderer, &bg);
-    SDL_SetRenderDrawColor(renderer, 200, 180, 110, static_cast<Uint8>(220.0f * a01));
-    SDL_RenderDrawRect(renderer, &bg);
-    KeyGlyphs::Draw(renderer, font.get(), activeTutText, x, y, col, alpha, KeyGlyphs::kDefaultKeyScale);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }

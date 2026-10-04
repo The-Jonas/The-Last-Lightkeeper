@@ -325,11 +325,7 @@ void StageState::CollectJornal(Jornal* jornal) {
         .Int("level", currentLevelIndex)
         .Str("image", jornal->GetImagePath()));
 
-    if (!documentTutorialShown) {
-        documentTutorialShown = true;
-        RequestTutorial(kDocumentTutorialText);
-    }
-    
+    // A fala do 1º documento sai do tutorial (CommonHints) ao notar a pasta crescer.
     jornals.erase(std::remove(jornals.begin(), jornals.end(), jornal), jornals.end());
     if (reachableJornal == jornal) reachableJornal = nullptr;
     jornal->GetAssociated().RequestDelete();
@@ -1237,3 +1233,5 @@ void StageState::RenderDialogueLogTab(SDL_Renderer* renderer, float a) {
 // Aba Diálogos: lista das conversas à esquerda e a selecionada em balões à
 // direita (Martin à esquerda, Luke à direita, com retrato da emoção). O painel
 // rola quando o foco está nele; as dicas somem enquanto um replay toca.
+
+

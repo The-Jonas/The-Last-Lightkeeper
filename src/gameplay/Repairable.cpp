@@ -94,15 +94,20 @@ void Repairable::Update(float dt) {
 
     if (onTrigger && bigChar->isElevated) {
 
-        // Só mostra o prompt se tiver o item necessário no inventário; caso
-        // contrário, sinaliza o aviso "preciso de uma tábua para consertar".
-        if (requiredItem.empty() || stage->GetInventory().HasItem(requiredItem)) {
+        // O item precisa estar NA MÃO (centro da roda). Na mão: prompt "[E] Consertar".
+        // Na bolsa mas não na mão: dica de segurar. Sem o item: "preciso de algo…".
+        Inventory& inventory = stage->GetInventory();
+        const Inventory::ItemStack* held = inventory.GetActiveStack();
+        const bool holding = requiredItem.empty() || (held && held->def.name == requiredItem);
+        if (holding) {
             stage->SetReachableRepairable(this);
+        } else if (inventory.HasItem(requiredItem)) {
+            stage->SetRepairableNeedsHeldItem(requiredItem);
         } else {
             stage->SetRepairableInReachNoItem(true);
         }
-        
-        if (!stage->IsPlayerInputFrozen() &&
+
+        if (holding && !stage->IsPlayerInputFrozen() &&
             InputManager::GetInstance().ActionPress(GameAction::Interact)) {
 
             if (!requiredItem.empty()) {

@@ -75,8 +75,8 @@ void StageState::TriggerMonsterHitFeedback() {
 //  Update
 // ═════════════════════════════════════════════════════════════════════════════
 
-// Ordem: áudio e eventos agendados → overlays que congelam o mundo (transição,
-// documento, pasta, sair, pausa) → input de gameplay → objetos → posições e
+// Ordem: áudio, eventos agendados e dicas do tutorial → overlays que congelam o
+// mundo (transição, documento, pasta, sair, pausa) → input de gameplay → objetos → posições e
 // câmera → luzes → colisões → efeitos de sanidade → derrota.
 void StageState::Update(float dt) {
     lastFrameDt = dt;
@@ -99,6 +99,7 @@ void StageState::Update(float dt) {
 
     UpdatePendingWindowBreak(dt);
     UpdateOceanAmbient(dt);
+    hints.Update(*this, BuildHintContext(), dt);   // antes dos overlays: a dica vê a pasta abrir
 
     const Vec2 prevBigPos   = bigCharacterObject   ? Vec2(bigCharacterObject->box.x, bigCharacterObject->box.y)     : Vec2(0.0f, 0.0f);
     const Vec2 prevSmallPos = smallCharacterObject ? Vec2(smallCharacterObject->box.x, smallCharacterObject->box.y) : Vec2(0.0f, 0.0f);
@@ -121,7 +122,6 @@ void StageState::Update(float dt) {
     }
 
     TickOverlayTimers(dt);
-    UpdateAutoLightShowcase(dt);
 
     if (HandleEscapeKey()) {
         return;
@@ -142,8 +142,8 @@ void StageState::Update(float dt) {
         HandleDebugKeys(input);
     }
 
-    // Movimento e parceiro. Com o modal de combustível aberto, A/D escolhem o item.
-    if (!inventory.IsOilPrimed() && IsPartyReady()) {
+    // Movimento e parceiro.
+    if (IsPartyReady()) {
         HandlePartyInput();
         IssueMovementFromInput(controlledCharacter, controlledCharacterObject);
         if (companionStartDelay > 0) {
@@ -162,7 +162,7 @@ void StageState::Update(float dt) {
     TryInteractCandleOnKeyPress();
     TryInteractWindowOnKeyPress();
     TryInteractRadioOnKeyPress();
-    UpdateTutorials(dt);
+    UpdateFarApartVoice();
 
     UpdateInventoryLight();
     UpdateMonsterEchoes(dt);
@@ -173,6 +173,7 @@ void StageState::Update(float dt) {
     reachableCloset = nullptr;
     reachableRepairable = nullptr;
     repairableInReachNoItem = false;
+    repairableHeldItemNeeded.clear();
     UpdateArray(dt);
 
     UpdateWindowLockdown(dt);
@@ -286,32 +287,12 @@ void StageState::TickOverlayTimers(float dt) {
     TickDown(controlIndicatorTimer, dt);
 }
 
-// Jogo novo: acende a luz sozinha alguns segundos após o andar abrir (se o jogador não acendeu).
-void StageState::UpdateAutoLightShowcase(float dt) {
-    if (!autoLightShowcasePending) return;
-    autoLightShowcaseTimer -= dt;
-    if (autoLightShowcaseTimer > 0.0f) return;
-
-    autoLightShowcasePending = false;
-    if (inventory.IsUsableLightActive()) return;
-    const bool isLighter = inventory.IsActiveItemLighter();
-    if (inventory.TryTurnLightOn()) {
-        if (bigCharacter) bigCharacter->NotifyInventoryLightChanged();
-        if (isLighter) GameSfx::PlayLighterToggle(true);
-    }
-}
-
-// ESC: cancela o combustível preparado, ou abre a pausa (silenciando os loops de
-// gameplay, já que o mundo para). Com a pausa aberta o ESC fica para ela.
+// ESC: abre a pausa (silenciando os loops de gameplay, já que o mundo para).
+// Com a pausa aberta o ESC fica para ela.
 // True = o frame acabou aqui.
 bool StageState::HandleEscapeKey() {
     if (!InputManager::GetInstance().KeyPress(ESCAPE_KEY)) return false;
 
-    if (inventory.IsOilPrimed()) {
-        inventory.CancelOil();
-        if (bigCharacter) bigCharacter->NotifyInventoryLightChanged();
-        return true;
-    }
     if (!pauseMenuOpen) {
         pauseMenuOpen = true;
         pauseMenuSelection = 0;
@@ -583,3 +564,4 @@ void StageState::UpdateWindowLockdown(float /*dt*/) {
     }
     if (allOpen) GameSfx::PlayCandleBlowOut();
 }
+

@@ -55,12 +55,6 @@ StageFirstLoadData EmbeddedDefaults() {
     d.startingFlashlightDurability = 16;   // 20% dos 80 de maxDurability
 
     ItemDef apple{"Apple", "Recursos/img/items/apple.png", -1, false, 1, {}};
-    ItemDef brokenFlashlight{"Broken Flashlight",
-                             "Recursos/img/items/Isqueiro.png",
-                             80,
-                             true,
-                             2,
-                             {{ItemProperty::LIGHT_SOURCE, 1.0f}}};
     ItemDef fuel{"Fuel", "Recursos/img/items/combustivel.png", 100, false, 3, {{ItemProperty::FUEL, 100.0f}}};
     ItemDef lamp{"Lamp",
                  "Recursos/img/items/0106_ASSET_LAMPARINA_PERSPECTIVA_APAGADA_FLV.png.png",
@@ -68,7 +62,7 @@ StageFirstLoadData EmbeddedDefaults() {
                  true,
                  4,
                  {{ItemProperty::LIGHT_SOURCE, 1.0f}}};
-    d.pickupCycle = {apple, brokenFlashlight, fuel, lamp,
+    d.pickupCycle = {apple, fuel, lamp,
                      ItemDef{"Tabua de Madeira", "Recursos/img/cenario/tabua-item.png", 0, false, 5, {}}};
 
     d.startingFlashlight =
@@ -237,3 +231,5 @@ const LevelDef& GetLevelDef(const StageFirstLoadData& cfg, int index) {
     fallback.displayNumber = index + 1;
     return fallback;
 }
+
+

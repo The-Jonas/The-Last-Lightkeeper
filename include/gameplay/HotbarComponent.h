@@ -38,6 +38,10 @@ private:
     void TryPickupOnKeyPress();
     void TryCycleWheel();
     void TryUseActiveItemOnKeyPress();
+    void StartReload();                                  // [R]: começa a recarga
+    void UpdateReload(float dt);                         // conta o tempo e reacende no fim
 };
 
 #endif
+
+
