@@ -713,6 +713,7 @@ void StageState::OpenDocumentFolder() {
     if (bigCharacter)   bigCharacter->ForceStop();
     if (smallCharacter) smallCharacter->ForceStop();
     GameSfx::StopAllGameplayAudio();   // mesmo motivo do menu de pausa: o mundo para
+    GameSfx::PlayBagOpen();            // abre a mochila para pegar a pasta
 
     // Começa no documento "novo" mais antigo; sem novos, mantém a última posição.
     const int n = static_cast<int>(documentFolderFrames.size());
@@ -741,6 +742,7 @@ void StageState::CloseDocumentFolder() {
         dialogueReplayActive = false;
     }
     documentFolderOpen = false;
+    GameSfx::PlayBagClose();           // guarda a pasta e fecha a mochila
 }
 
 
@@ -790,6 +792,7 @@ void StageState::UpdateDocumentFolder(float dt) {
     // [Q] alterna entre as abas Documentos e Diálogos.
     if (input.ActionPress(GameAction::ToggleMode)) {
         documentFolderTab = 1 - documentFolderTab;
+        GameSfx::PlayPaperFlip();
         if (documentFolderTab == 1) {
             dialogueLogSelection  = std::max(0, static_cast<int>(dialogueLog.size()) - 1);   // a mais recente
             dialogueLogFocusPanel = false;
@@ -805,8 +808,10 @@ void StageState::UpdateDocumentFolder(float dt) {
     if (n > 0 && !collectedDocuments.empty()) {
         const bool left  = input.ActionPress(GameAction::MoveLeft)  || input.ActionPress(GameAction::CyclePrev) || input.KeyPress(SDLK_LEFT);
         const bool right = input.ActionPress(GameAction::MoveRight) || input.ActionPress(GameAction::CycleNext) || input.KeyPress(SDLK_RIGHT);
+        const int before = documentFolderSelection;
         if (left)  documentFolderSelection = std::max(0, documentFolderSelection - 1);
         if (right) documentFolderSelection = std::min(n - 1, documentFolderSelection + 1);
+        if (documentFolderSelection != before) GameSfx::PlayPaperFlip();   // só se mudou (na ponta não folheia)
 
         if (input.ActionPress(GameAction::Interact) || input.KeyPress(SDLK_RETURN)) {
             const FolderFrame& f = documentFolderFrames[documentFolderSelection];

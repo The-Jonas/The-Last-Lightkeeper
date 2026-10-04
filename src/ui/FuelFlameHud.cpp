@@ -46,7 +46,11 @@ void FuelFlameHud::Render(SDL_Renderer* renderer, Inventory& inventory, int wind
 
     const float ratio = inventory.GetSelectedLightFuelRatio();   
 
-    auto tex = Resources::GetImage(FramePath(LevelForRatio(ratio), currentFrame));
+    const int level = LevelForRatio(ratio);
+    static const float kGlowByLevel[5] = {1.0f, 1.0f, 0.8f, 0.62f, 0.45f};   // índice = nível 1..4
+    lastGlow = kGlowByLevel[level];
+    lastFramePath = FramePath(level, currentFrame);
+    auto tex = Resources::GetImage(lastFramePath);
     if (!tex) return;
 
     // Mesma escala da caixa de dialogo: a MENOR das razoes contra 1920x1080.

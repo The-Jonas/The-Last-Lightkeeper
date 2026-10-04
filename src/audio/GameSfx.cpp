@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cmath>
 #include <fstream>
+#include <string>
 
 namespace {
 
@@ -24,16 +25,101 @@ constexpr int kChannelMonsterSteps   = 8;  // passos do monstro
 constexpr int kChannelMonsterCreak   = 9;  // rangidos de madeira (esporádicos)
 constexpr int kChannelHeartbeat      = 10; // batimento cardíaco (sanidade baixa)
 constexpr int kChannelWindowBreak = 11;
+constexpr int kChannelHudFireLoop  = 12;   // crepitar da aura da chama na HUD
+constexpr int kChannelHudFireStart = 13;   // "fwoosh" quando a aura acende
 constexpr int kChannelMonsterStep0   = 32; // passos por-frame: pool rotativo GRANDE (32..47),
 constexpr int kMonsterStepPoolCount  = 16; // separado da voz/one-shots p/ os passos se SOBREPOREM sem se cortar
 //9+ → one-shots livres (Mix_PlayChannel(-1, ...) usa a partir daqui)
 
-constexpr const char* kBoxStartPath = "Recursos/audio/SFX/CAIXAS/CAIXA_Madeira.mp3";
-constexpr const char* kBoxStopPath = "Recursos/audio/SFX/CAIXAS/CAIXA_Madeira2.mp3";
-constexpr const char* kBoxMovingLoopPath = "Recursos/audio/SFX/CAIXAS/CAIXA_MADEIRALONGO.mp3";
+// Caixas/barris: "empurrar" é o tranco curto do começo (o arrasto entra junto, em
+// loop); "parar" é o assentar ao soltar. Variações sorteadas.
+constexpr int kBoxStartCount = 3;
+constexpr const char* kBoxStartPaths[kBoxStartCount] = {
+    "Recursos/audio/SFX/CAIXAS/caixa_empurrar_1.ogg",
+    "Recursos/audio/SFX/CAIXAS/caixa_empurrar_2.ogg",
+    "Recursos/audio/SFX/CAIXAS/caixa_empurrar_3.ogg",
+};
+constexpr int kBoxStopCount = 2;
+constexpr const char* kBoxStopPaths[kBoxStopCount] = {
+    "Recursos/audio/SFX/CAIXAS/caixa_parar_1.ogg",
+    "Recursos/audio/SFX/CAIXAS/caixa_parar_2.ogg",
+};
+constexpr const char* kBoxMovingLoopPath = "Recursos/audio/SFX/CAIXAS/caixa_arrastar_loop.ogg";
+constexpr int kBoxLoopFadeMs = 90;          // soltar/parar o arrasto sem clique
 
 constexpr const char* kLighterOnPath = "Recursos/audio/SFX/ISQUEIRO/ISQUEIRO_ ABRINDO.mp3";
 constexpr const char* kLighterOffPath = "Recursos/audio/SFX/ISQUEIRO/ISQUEIRO_FECHANDO.mp3";
+// Isqueiro com variações: "acender" = abrir a tampa + riscar a roda num arquivo só;
+// kLighterFlameAt diz em que segundo do arquivo a chama pega (a luz acende ali).
+// Sem os arquivos novos, cai nos dois antigos acima.
+constexpr int kLighterVariants = 4;
+constexpr const char* kLighterIgnitePaths[kLighterVariants] = {
+    "Recursos/audio/SFX/ISQUEIRO/isqueiro_acender_1.ogg",
+    "Recursos/audio/SFX/ISQUEIRO/isqueiro_acender_2.ogg",
+    "Recursos/audio/SFX/ISQUEIRO/isqueiro_acender_3.ogg",
+    "Recursos/audio/SFX/ISQUEIRO/isqueiro_acender_4.ogg",
+};
+constexpr float kLighterFlameAt[kLighterVariants] = {0.479f, 0.627f, 0.489f, 0.569f};   // medido no pico do risco
+constexpr const char* kLighterClosePaths[kLighterVariants] = {
+    "Recursos/audio/SFX/ISQUEIRO/isqueiro_fechar_1.ogg",
+    "Recursos/audio/SFX/ISQUEIRO/isqueiro_fechar_2.ogg",
+    "Recursos/audio/SFX/ISQUEIRO/isqueiro_fechar_3.ogg",
+    "Recursos/audio/SFX/ISQUEIRO/isqueiro_fechar_4.ogg",
+};
+constexpr const char* kReloadPourPath = "Recursos/audio/SFX/ISQUEIRO/recarga_fluido.ogg";   // 2 s = Inventory::kReloadDuration
+constexpr const char* kLampReloadPath = "Recursos/audio/pickup/recarga_lamparina.ogg";      // galão: "glub glub", 2 s
+
+// Lamparina: abrir (acender) e fechar (apagar), cliques de metal.
+constexpr int kLampToggleCount = 3;
+constexpr const char* kLampOnPaths[kLampToggleCount] = {
+    "Recursos/audio/pickup/lamparina_abrir_1.ogg",
+    "Recursos/audio/pickup/lamparina_abrir_2.ogg",
+    "Recursos/audio/pickup/lamparina_abrir_3.ogg",
+};
+constexpr const char* kLampOffPaths[kLampToggleCount] = {
+    "Recursos/audio/pickup/lamparina_fechar_1.ogg",
+    "Recursos/audio/pickup/lamparina_fechar_2.ogg",
+    "Recursos/audio/pickup/lamparina_fechar_3.ogg",
+};
+
+// Coletar item: som próprio por tipo; o resto usa os genéricos.
+constexpr int kPickupGenericCount = 7;
+constexpr const char* kPickupGenericPaths[kPickupGenericCount] = {
+    "Recursos/audio/pickup/coletar_1.ogg", "Recursos/audio/pickup/coletar_2.ogg",
+    "Recursos/audio/pickup/coletar_3.ogg", "Recursos/audio/pickup/coletar_4.ogg",
+    "Recursos/audio/pickup/coletar_5.ogg", "Recursos/audio/pickup/coletar_6.ogg",
+    "Recursos/audio/pickup/coletar_7.ogg",
+};
+constexpr int kPickupFuelCount = 6;
+constexpr const char* kPickupFuelPaths[kPickupFuelCount] = {
+    "Recursos/audio/pickup/coletar_combustivel_1.ogg", "Recursos/audio/pickup/coletar_combustivel_2.ogg",
+    "Recursos/audio/pickup/coletar_combustivel_3.ogg", "Recursos/audio/pickup/coletar_combustivel_4.ogg",
+    "Recursos/audio/pickup/coletar_combustivel_5.ogg", "Recursos/audio/pickup/coletar_combustivel_6.ogg",
+};
+constexpr int kPickupLampCount = 4;
+constexpr const char* kPickupLampPaths[kPickupLampCount] = {
+    "Recursos/audio/pickup/coletar_lamparina_1.ogg", "Recursos/audio/pickup/coletar_lamparina_2.ogg",
+    "Recursos/audio/pickup/coletar_lamparina_3.ogg", "Recursos/audio/pickup/coletar_lamparina_4.ogg",
+};
+constexpr int kPickupPlankCount = 3;
+constexpr const char* kPickupPlankPaths[kPickupPlankCount] = {
+    "Recursos/audio/pickup/coletar_tabua_1.ogg", "Recursos/audio/pickup/coletar_tabua_2.ogg",
+    "Recursos/audio/pickup/coletar_tabua_3.ogg",
+};
+
+// Passos avulsos (um por pisada, tocados no quadro da animação em que o pé toca o chão).
+constexpr int kStepVariants = 6;
+constexpr const char* kStepPaths[3][kStepVariants] = {   // [FootstepSurface][variação]
+    {"Recursos/audio/SFX/PASSOS/passo_pedra_1.ogg", "Recursos/audio/SFX/PASSOS/passo_pedra_2.ogg",
+     "Recursos/audio/SFX/PASSOS/passo_pedra_3.ogg", "Recursos/audio/SFX/PASSOS/passo_pedra_4.ogg",
+     "Recursos/audio/SFX/PASSOS/passo_pedra_5.ogg", "Recursos/audio/SFX/PASSOS/passo_pedra_6.ogg"},
+    {"Recursos/audio/SFX/PASSOS/passo_madeira_1.ogg", "Recursos/audio/SFX/PASSOS/passo_madeira_2.ogg",
+     "Recursos/audio/SFX/PASSOS/passo_madeira_3.ogg", "Recursos/audio/SFX/PASSOS/passo_madeira_4.ogg",
+     "Recursos/audio/SFX/PASSOS/passo_madeira_5.ogg", "Recursos/audio/SFX/PASSOS/passo_madeira_6.ogg"},
+    {"Recursos/audio/SFX/PASSOS/passo_escada_1.ogg", "Recursos/audio/SFX/PASSOS/passo_escada_2.ogg",
+     "Recursos/audio/SFX/PASSOS/passo_escada_3.ogg", "Recursos/audio/SFX/PASSOS/passo_escada_4.ogg",
+     "Recursos/audio/SFX/PASSOS/passo_escada_5.ogg", "Recursos/audio/SFX/PASSOS/passo_escada_6.ogg"},
+};
 
 constexpr const char* kFootstepStonePath = "Recursos/audio/SFX/PASSOS/PASSOS_pedra.mp3";
 constexpr const char* kFootstepWoodPath = "Recursos/audio/SFX/PASSOS/PASSOS_Madeira.mp3";
@@ -46,16 +132,43 @@ constexpr const char* kThunderPaths[] = {
     "Recursos/audio/SFX/TROVAO/trovao_4.mp3",
 };
 
-constexpr const char* kWindowBreakPath = "Recursos/audio/SFX/JANELA/JANELA_QUEBRANDO.mp3";
+constexpr const char* kWindowBreakPath = "Recursos/audio/SFX/JANELA/janela_quebrar.ogg";
 
 constexpr const char* kCandleLoopPath = "Recursos/audio/SFX/VELA/FOGO_VELA.mp3";
 constexpr const char* kCandleLightUpPath = "Recursos/audio/SFX/VELA/VELA_ACENDENDO.mp3";
 constexpr const char* kCandleBlowPlayerPath = "Recursos/audio/SFX/VELA/VELA_APAGANDO_JOGADOR.mp3";
 
-constexpr const char* kWindowOpenPath = "Recursos/audio/SFX/JANELA/JANELA_ABRINDO.mp3";
-constexpr const char* kWindowClosePath = "Recursos/audio/SFX/JANELA/JANELA_FECHANDO.mp3";
-constexpr const char* kWindLoopPath = "Recursos/audio/SFX/JANELA/VENTO_LOOP.wav";
-constexpr const char* kCandleBlowPath = "Recursos/audio/SFX/JANELA/VELA_APAGANDO.wav";
+constexpr const char* kWindowOpenPath = "Recursos/audio/SFX/JANELA/janela_abrir.ogg";
+constexpr const char* kWindowClosePath = "Recursos/audio/SFX/JANELA/janela_fechar.ogg";
+constexpr const char* kWindLoopPath = "Recursos/audio/SFX/JANELA/vento_loop.ogg";
+constexpr const char* kCandleBlowPath = "Recursos/audio/SFX/JANELA/vela_apagando.ogg";
+
+constexpr const char* kHudFireLoopPath  = "Recursos/audio/SFX/HUD/fogo_destaque_loop.ogg";
+constexpr const char* kHudFireStartPath = "Recursos/audio/SFX/HUD/fogo_destaque_inicio.ogg";
+// Mochila: zíper ao abrir/fechar a pasta, vasculhar ao trocar de item, papel ao
+// folhear a pasta. Variações sorteadas (sem repetir a anterior) para não cansar.
+constexpr const char* kBagOpenPath  = "Recursos/audio/SFX/MOCHILA/mochila_abrir.ogg";
+constexpr const char* kBagClosePath = "Recursos/audio/SFX/MOCHILA/mochila_fechar.ogg";
+constexpr const char* kItemCyclePaths[] = {
+    "Recursos/audio/SFX/MOCHILA/item_trocar_1.ogg",
+    "Recursos/audio/SFX/MOCHILA/item_trocar_2.ogg",
+    "Recursos/audio/SFX/MOCHILA/item_trocar_3.ogg",
+    "Recursos/audio/SFX/MOCHILA/item_trocar_4.ogg",
+};
+constexpr int kItemCycleCount = 4;
+constexpr const char* kPaperPaths[] = {
+    "Recursos/audio/SFX/MOCHILA/papel_1.ogg",
+    "Recursos/audio/SFX/MOCHILA/papel_2.ogg",
+    "Recursos/audio/SFX/MOCHILA/papel_3.ogg",
+};
+constexpr int kPaperCount = 3;
+constexpr float kBagZipGain    = 0.80f;   // zíper da mochila
+constexpr float kItemCycleGain = 0.60f;   // vasculhar (troca de item): discreto, repete muito
+constexpr float kPaperGain     = 0.55f;   // folhear a pasta
+
+constexpr float kHudFireLoopGain  = 0.55f;   // crepitar: fundo, não notificação
+constexpr float kHudFireStartGain = 0.70f;   // "fwoosh" de entrada
+constexpr float kHudFireStartAt   = 0.01f;   // nível abaixo do qual a aura conta como apagada
 
 constexpr const char* kRepairPath = "Recursos/audio/SFX/ESCADA/reparando.mp3";
 
@@ -91,11 +204,31 @@ constexpr float kThunderFlashDuration = 0.42f;
 constexpr float kPostLoadingThunderDelay = 12.0f;
 constexpr int kFootstepVolumePercent = 100;
 
-Sound gBoxStartSound;
-Sound gBoxStopSound;
+Sound gBoxStartSounds[kBoxStartCount];
+Sound gBoxStopSounds[kBoxStopCount];
+int   gLastBoxStart = -1;
+int   gLastBoxStop = -1;
+int   gBoxStartChannel = -1;   // tranco em curso (não empilha em arrancadas rápidas)
 Sound gBoxMovingLoopSound;
 Sound gLighterOnSound;
 Sound gLighterOffSound;
+Sound gLighterIgniteSounds[kLighterVariants];
+Sound gLighterCloseSounds[kLighterVariants];
+int   gLastLighterIgnite = -1;
+int   gLastLighterClose = -1;
+int   gLighterChannel = -1;          // canal do "acender" em curso (cancelar no meio)
+Sound gReloadPourSound;
+Sound gLampReloadSound;
+Sound gLampOnSounds[kLampToggleCount];
+Sound gLampOffSounds[kLampToggleCount];
+int   gLastLampOn = -1, gLastLampOff = -1;
+Sound gPickupGenericSounds[kPickupGenericCount];
+Sound gPickupFuelSounds[kPickupFuelCount];
+Sound gPickupLampSounds[kPickupLampCount];
+Sound gPickupPlankSounds[kPickupPlankCount];
+int   gLastPickupGeneric = -1, gLastPickupFuel = -1, gLastPickupLamp = -1, gLastPickupPlank = -1;
+Sound gStepSounds[3][kStepVariants];
+int   gLastStep[3] = {-1, -1, -1};
 Sound gFootstepStoneSound;
 Sound gFootstepWoodSound;
 Sound gFootstepStairsSound;
@@ -119,6 +252,18 @@ Sound gWoodCreakSounds[kWoodCreakCount];
 float gWoodCreakTimer = 0.0f;   // conta até o próximo rangido
 Sound gHeartbeatSound;
 bool  gHeartbeatActive = false;
+Sound gBagOpenSound;
+Sound gBagCloseSound;
+Sound gItemCycleSounds[kItemCycleCount];
+Sound gPaperSounds[kPaperCount];
+int   gLastItemCycle = -1;   // variação tocada por último (não repete)
+int   gLastPaper = -1;
+int   gItemCycleChannel = -1;   // canal do vasculhar em curso (troca rápida corta o anterior)
+int   gPaperChannel = -1;
+Sound gHudFireLoopSound;
+Sound gHudFireStartSound;
+bool  gHudFireLoopActive = false;
+float gHudFireLastLevel = 0.0f;   // nível do frame anterior (o "fwoosh" só ao sair do zero)
 
 bool gMonsterStepsActive = false;
 bool gWindLoopActive = false;
@@ -138,15 +283,43 @@ bool FileExists(const char* path) {
     return f.good();
 }
 
+// Abre cada arquivo da lista que existir (os que faltam ficam fechados e são pulados).
+void OpenAll(Sound* sounds, const char* const* paths, int count) {
+    for (int i = 0; i < count; ++i) {
+        if (FileExists(paths[i])) sounds[i].Open(paths[i]);
+    }
+}
+
 void EnsureLoaded() {
     if (gLoaded) {
         return;
     }
-    gBoxStartSound.Open(kBoxStartPath);
-    gBoxStopSound.Open(kBoxStopPath);
+    for (int i = 0; i < kBoxStartCount; ++i) {
+        if (FileExists(kBoxStartPaths[i])) gBoxStartSounds[i].Open(kBoxStartPaths[i]);
+    }
+    for (int i = 0; i < kBoxStopCount; ++i) {
+        if (FileExists(kBoxStopPaths[i])) gBoxStopSounds[i].Open(kBoxStopPaths[i]);
+    }
     gBoxMovingLoopSound.Open(kBoxMovingLoopPath);
     gLighterOnSound.Open(kLighterOnPath);
     gLighterOffSound.Open(kLighterOffPath);
+    for (int i = 0; i < kLighterVariants; ++i) {
+        if (FileExists(kLighterIgnitePaths[i])) gLighterIgniteSounds[i].Open(kLighterIgnitePaths[i]);
+        if (FileExists(kLighterClosePaths[i]))  gLighterCloseSounds[i].Open(kLighterClosePaths[i]);
+    }
+    if (FileExists(kReloadPourPath)) gReloadPourSound.Open(kReloadPourPath);
+    if (FileExists(kLampReloadPath)) gLampReloadSound.Open(kLampReloadPath);
+    OpenAll(gLampOnSounds, kLampOnPaths, kLampToggleCount);
+    OpenAll(gLampOffSounds, kLampOffPaths, kLampToggleCount);
+    OpenAll(gPickupGenericSounds, kPickupGenericPaths, kPickupGenericCount);
+    OpenAll(gPickupFuelSounds, kPickupFuelPaths, kPickupFuelCount);
+    OpenAll(gPickupLampSounds, kPickupLampPaths, kPickupLampCount);
+    OpenAll(gPickupPlankSounds, kPickupPlankPaths, kPickupPlankCount);
+    for (int sfc = 0; sfc < 3; ++sfc) {
+        for (int i = 0; i < kStepVariants; ++i) {
+            if (FileExists(kStepPaths[sfc][i])) gStepSounds[sfc][i].Open(kStepPaths[sfc][i]);
+        }
+    }
     gFootstepStoneSound.Open(kFootstepStonePath);
     gFootstepWoodSound.Open(kFootstepWoodPath);
     gFootstepStairsSound.Open(kFootstepStairsPath);
@@ -177,6 +350,16 @@ void EnsureLoaded() {
         if (FileExists(kWoodCreakPaths[i])) gWoodCreakSounds[i].Open(kWoodCreakPaths[i]);
     }
     if (FileExists(kHeartbeatPath)) gHeartbeatSound.Open(kHeartbeatPath);
+    if (FileExists(kBagOpenPath))  gBagOpenSound.Open(kBagOpenPath);
+    if (FileExists(kBagClosePath)) gBagCloseSound.Open(kBagClosePath);
+    for (int i = 0; i < kItemCycleCount; ++i) {
+        if (FileExists(kItemCyclePaths[i])) gItemCycleSounds[i].Open(kItemCyclePaths[i]);
+    }
+    for (int i = 0; i < kPaperCount; ++i) {
+        if (FileExists(kPaperPaths[i])) gPaperSounds[i].Open(kPaperPaths[i]);
+    }
+    if (FileExists(kHudFireLoopPath))  gHudFireLoopSound.Open(kHudFireLoopPath);
+    if (FileExists(kHudFireStartPath)) gHudFireStartSound.Open(kHudFireStartPath);
     for (int i = 0; i < kThunderCount; ++i) {
         gThunderSounds[i].Open(kThunderPaths[i]);
     }
@@ -209,14 +392,6 @@ void PlaySound(Sound& sound) {
     }
 }
 
-// Este MESMO som já está tocando agora? Verifica o canal em que ele tocou por
-// último E confirma que o chunk daquele canal ainda é o dele (o canal pode ter
-// sido reaproveitado por outro efeito). Usado para não empilhar o mesmo som.
-bool IsSoundPlaying(Sound& sound) {
-    const int ch = sound.GetChannel();
-    return ch >= 0 && Mix_Playing(ch) && Mix_GetChunk(ch) == sound.GetChunk();
-}
-
 Sound& FootstepSound(FootstepSurface surface) {
     switch (surface) {
     case FootstepSurface::Wood:
@@ -231,7 +406,7 @@ Sound& FootstepSound(FootstepSurface surface) {
 
 void StopBoxMovingLoop() {
     if (gBoxMovingLoopActive) {
-        gBoxMovingLoopSound.Stop();
+        gBoxMovingLoopSound.FadeOut(kBoxLoopFadeMs);
         gBoxMovingLoopActive = false;
     }
 }
@@ -252,6 +427,54 @@ void StartBoxMovingLoop() {
     if (gBoxMovingLoopSound.PlayLoopedOnChannel(kChannelBox) >= 0) {
         gBoxMovingLoopActive = true;
         ApplySfxVolume(gBoxMovingLoopSound);
+    }
+}
+
+// Toca um som num canal livre com o volume do barramento × gain. Devolve o canal (-1 = falhou).
+int PlayWithGain(Sound& sound, float gain) {
+    if (gGameplayMuted) return -1;
+    EnsureLoaded();
+    if (!sound.IsOpen()) return -1;
+    const int ch = Mix_PlayChannel(-1, sound.GetChunk(), 0);
+    if (ch >= 0) Mix_Volume(ch, static_cast<int>(SfxChannelVolume() * gain));
+    return ch;
+}
+
+// Sorteia uma variação aberta diferente da última; -1 se nenhuma abriu.
+int PickVariation(Sound* sounds, int count, int last) {
+    int open = 0;
+    for (int i = 0; i < count; ++i) if (sounds[i].IsOpen()) ++open;
+    if (open == 0) return -1;
+    for (int tries = 0; tries < 8; ++tries) {
+        const int i = std::rand() % count;
+        if (sounds[i].IsOpen() && (i != last || open == 1)) return i;
+    }
+    for (int i = 0; i < count; ++i) if (sounds[i].IsOpen()) return i;
+    return -1;
+}
+
+// Uma variação sorteada; se a anterior ainda toca no `channel`, corta antes
+// (trocar rápido não empilha barulho).
+void PlayVariation(Sound* sounds, int count, int& last, int& channel, float gain) {
+    if (gGameplayMuted) return;
+    EnsureLoaded();
+    const int i = PickVariation(sounds, count, last);
+    if (i < 0) return;
+    for (int k = 0; k < count && channel >= 0; ++k) {
+        if (Mix_Playing(channel) && Mix_GetChunk(channel) == sounds[k].GetChunk()) {
+            Mix_HaltChannel(channel);
+            break;
+        }
+    }
+    last = i;
+    channel = PlayWithGain(sounds[i], gain);
+}
+
+// Corta o crepitar da aura da HUD (pausa, morte, carregamento).
+void StopHudFireLoop() {
+    if (gHudFireLoopActive) {
+        Mix_HaltChannel(kChannelHudFireLoop);
+        gHudFireLoopActive = false;
     }
 }
 
@@ -411,8 +634,12 @@ void NotifyBoxSlide() {
     if (!gBoxIsMoving) {
         // Não empilha o "início de arrasto" se ele ainda estiver tocando (arrancadas
         // rápidas / re-grude faziam o CAIXA_Madeira soar 2–3x seguidas).
-        if (!IsSoundPlaying(gBoxStartSound)) {
-            PlaySound(gBoxStartSound);
+        if (gBoxStartChannel < 0 || !Mix_Playing(gBoxStartChannel)) {
+            const int i = PickVariation(gBoxStartSounds, kBoxStartCount, gLastBoxStart);
+            if (i >= 0) {
+                gLastBoxStart = i;
+                gBoxStartChannel = PlayWithGain(gBoxStartSounds[i], 1.0f);
+            }
         }
         gBoxIsMoving = true;
     }
@@ -444,7 +671,11 @@ void NotifyBoxPushEnd() {
 
     if (gBoxIsMoving) {
         StopBoxMovingLoop();
-        PlaySound(gBoxStopSound);
+        const int i = PickVariation(gBoxStopSounds, kBoxStopCount, gLastBoxStop);
+        if (i >= 0) {
+            gLastBoxStop = i;
+            PlayWithGain(gBoxStopSounds[i], 1.0f);
+        }
         gBoxIsMoving = false;
         return;
     }
@@ -452,8 +683,91 @@ void NotifyBoxPushEnd() {
     StopBoxMovingLoop();
 }
 
+// Ligar = PlayLighterIgnite (sem esperar a chama); desligar = fechar a tampa.
 void PlayLighterToggle(bool turningOn) {
-    PlaySound(turningOn ? gLighterOnSound : gLighterOffSound);
+    if (turningOn) {
+        PlayLighterIgnite();
+        return;
+    }
+    CancelLighterIgnite();
+    EnsureLoaded();
+    const int i = PickVariation(gLighterCloseSounds, kLighterVariants, gLastLighterClose);
+    if (i < 0) { PlaySound(gLighterOffSound); return; }
+    gLastLighterClose = i;
+    PlayWithGain(gLighterCloseSounds[i], 1.0f);
+}
+
+// Abre a tampa e risca (variação sorteada). Devolve em quantos segundos a chama
+// pega no som — quem chama acende a luz nesse instante. 0 = acender já.
+float PlayLighterIgnite() {
+    if (gGameplayMuted) return 0.0f;
+    EnsureLoaded();
+    const int i = PickVariation(gLighterIgniteSounds, kLighterVariants, gLastLighterIgnite);
+    if (i < 0) { PlaySound(gLighterOnSound); return 0.0f; }
+    gLastLighterIgnite = i;
+    gLighterChannel = PlayWithGain(gLighterIgniteSounds[i], 1.0f);
+    return gLighterChannel >= 0 ? kLighterFlameAt[i] : 0.0f;
+}
+
+// Corta um "acender" que ainda está tocando (apertou [F] de novo, trocou de item…).
+void CancelLighterIgnite() {
+    if (gLighterChannel < 0 || !Mix_Playing(gLighterChannel)) return;
+    for (int i = 0; i < kLighterVariants; ++i) {
+        if (Mix_GetChunk(gLighterChannel) == gLighterIgniteSounds[i].GetChunk()) {
+            Mix_HaltChannel(gLighterChannel);
+            break;
+        }
+    }
+    gLighterChannel = -1;
+}
+
+// Recarga (2 s): fluido escorrendo no isqueiro; na lamparina, o galão despejando.
+void PlayReloadPour(bool lampTarget) {
+    PlayWithGain(lampTarget && gLampReloadSound.IsOpen() ? gLampReloadSound : gReloadPourSound, 1.0f);
+}
+
+// Lamparina acendendo (abrir) ou apagando (fechar).
+void PlayLampToggle(bool turningOn) {
+    if (gGameplayMuted) return;
+    EnsureLoaded();
+    Sound* pool = turningOn ? gLampOnSounds : gLampOffSounds;
+    int& last = turningOn ? gLastLampOn : gLastLampOff;
+    const int i = PickVariation(pool, kLampToggleCount, last);
+    if (i < 0) return;
+    last = i;
+    PlayWithGain(pool[i], 1.0f);
+}
+
+// Coletar: o som depende do item (combustível, lamparina, tábua); o resto, genérico.
+void PlayItemPickup(const std::string& itemName) {
+    if (gGameplayMuted) return;
+    EnsureLoaded();
+    Sound* pool = gPickupGenericSounds;
+    int count = kPickupGenericCount;
+    int* last = &gLastPickupGeneric;
+    if (itemName == "Fuel")                  { pool = gPickupFuelSounds;  count = kPickupFuelCount;  last = &gLastPickupFuel; }
+    else if (itemName == "Lamp")             { pool = gPickupLampSounds;  count = kPickupLampCount;  last = &gLastPickupLamp; }
+    else if (itemName == "Tabua de Madeira") { pool = gPickupPlankSounds; count = kPickupPlankCount; last = &gLastPickupPlank; }
+    int i = PickVariation(pool, count, *last);
+    if (i < 0 && pool != gPickupGenericSounds) {          // sem o específico: cai no genérico
+        pool = gPickupGenericSounds; count = kPickupGenericCount; last = &gLastPickupGeneric;
+        i = PickVariation(pool, count, *last);
+    }
+    if (i < 0) return;
+    *last = i;
+    PlayWithGain(pool[i], 1.0f);
+}
+
+// Uma pisada na superfície (variação sorteada, sem repetir a anterior). Pisadas
+// podem se sobrepor: a cauda de uma não corta a próxima.
+void PlayFootstep(FootstepSurface surface) {
+    if (gGameplayMuted) return;
+    EnsureLoaded();
+    const int sfc = static_cast<int>(surface);
+    const int i = PickVariation(gStepSounds[sfc], kStepVariants, gLastStep[sfc]);
+    if (i < 0) return;
+    gLastStep[sfc] = i;
+    PlayWithGain(gStepSounds[sfc][i], kFootstepVolumePercent / 100.0f);
 }
 
 void UpdateBigBrotherFootsteps(float dt, float moveSpeed, bool isBigBrother, FootstepSurface surface) {
@@ -578,6 +892,7 @@ void PlayCandleBlowOut() {
 // Loops de gameplay SEM o vento (o vento é disparado por evento de janela e não
 // seria re-armado sozinho). Público (declarado no header) para o PAUSAR usar.
 void StopAllGameplayAudio() {
+    StopHudFireLoop();        // não zera o nível: ao despausar o crepitar volta sem repetir o "fwoosh"
     StopFootstepLoop();
     StopCandleLoop();
     StopBoxMovingLoop();
@@ -705,6 +1020,7 @@ void HardStopAll() {
     for (int ch = 0; ch < 48; ++ch) ClearChannelSpatial(ch);
     gHeartbeatActive = false;
     gBoxIsMoving = false;
+    gHudFireLastLevel = 0.0f;   // próximo destaque da chama começa com o "fwoosh"
 }
 
 void UpdateHeartbeat(float intensity01) {
@@ -725,6 +1041,35 @@ void UpdateHeartbeat(float intensity01) {
     Mix_Volume(kChannelHeartbeat, static_cast<int>(SfxChannelVolume() * v));
 }
 
+void PlayBagOpen()   { PlayWithGain(gBagOpenSound, kBagZipGain); }
+void PlayBagClose()  { PlayWithGain(gBagCloseSound, kBagZipGain); }
+void PlayItemCycle() { PlayVariation(gItemCycleSounds, kItemCycleCount, gLastItemCycle, gItemCycleChannel, kItemCycleGain); }
+void PlayPaperFlip() { PlayVariation(gPaperSounds, kPaperCount, gLastPaper, gPaperChannel, kPaperGain); }
+
+// Som da aura da chama na HUD. level01 = força do destaque (fade da aura × brilho
+// da chama): 0 desliga. Saindo do zero toca o "fwoosh"; enquanto > 0 o crepitar
+// fica em loop com o volume seguindo o nível. Chamar todo frame.
+void UpdateHudFireAura(float level01) {
+    const float level = std::max(0.0f, std::min(1.0f, level01));
+    if (gGameplayMuted || level <= kHudFireStartAt) {
+        StopHudFireLoop();
+        gHudFireLastLevel = gGameplayMuted ? 0.0f : level;
+        return;
+    }
+    EnsureLoaded();
+    if (gHudFireLastLevel <= kHudFireStartAt && gHudFireStartSound.IsOpen()) {
+        if (Mix_PlayChannel(kChannelHudFireStart, gHudFireStartSound.GetChunk(), 0) >= 0) {
+            Mix_Volume(kChannelHudFireStart, static_cast<int>(SfxChannelVolume() * kHudFireStartGain));
+        }
+    }
+    gHudFireLastLevel = level;
+    if (!gHudFireLoopSound.IsOpen()) return;
+    if (!gHudFireLoopActive) {
+        gHudFireLoopActive = gHudFireLoopSound.PlayLoopedOnChannel(kChannelHudFireLoop) >= 0;
+    }
+    Mix_Volume(kChannelHudFireLoop, static_cast<int>(SfxChannelVolume() * kHudFireLoopGain * level));
+}
+
 void PlayCandleLightUp() { PlaySound(gCandleLightUpSound); }
 void PlayCandleBlow()    { PlaySound(gCandleBlowPlayerSound); }
 void PlayRepair() { PlaySound(gRepairSound); }
@@ -733,3 +1078,5 @@ void PlayClosetClose() { PlaySound(gClosetCloseSound); }
 
 
 } // namespace GameSfx
+
+

@@ -111,6 +111,8 @@ void Floor1Script::UpdateFearAndJoin(StageState& stage, HintSystem& hints, const
     join.label      = "Chamar";
     join.anchor     = ctx.smallHead;
     join.hasAnchor  = true;
+    join.anchor2    = ctx.bigHead;                       // também no irmãozão: longe, ele não leria a do pequeno
+    join.hasAnchor2 = true;
     hints.Stuck(join);
 }
 

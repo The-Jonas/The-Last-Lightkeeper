@@ -40,6 +40,11 @@ private:
     void TryUseActiveItemOnKeyPress();
     void StartReload();                                  // [R]: começa a recarga
     void UpdateReload(float dt);                         // conta o tempo e reacende no fim
+    void BeginLighterIgnite();                           // abre e risca; a luz só acende quando a chama pega no som
+    void CancelLighterIgnite(bool playClose);            // desiste no meio (fecha a tampa se playClose)
+    void UpdateLighterIgnite(float dt);                  // conta até a chama e acende
+
+    float igniteTimer = -1.0f;                           // >= 0: isqueiro acendendo, s até a chama
 };
 
 #endif

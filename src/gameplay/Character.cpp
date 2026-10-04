@@ -35,6 +35,10 @@ constexpr const char* kIrmaozinhoWalkRoot = "Recursos/img/personagens/irmaozinho
 constexpr float kIrmaozaoMovingSpeedThreshold = 5.0f;
 constexpr int kIrmaozaoStripFrameCount = 6;
 constexpr float kIrmaozaoStripFrameSeconds = 0.11f;
+// Quadros da caminhada (0..5) em que um pé toca o chão: um passo por pé por ciclo.
+// Se o som vier adiantado/atrasado em relação ao desenho, é só trocar estes índices.
+constexpr int kStepContactFrameA = 0;
+constexpr int kStepContactFrameB = 3;
 } // namespace
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -364,6 +368,7 @@ void Character::Update(float dt) {
             stripFrameIndex = 0;
             stripAnimTimer = 0.0f;
             RefreshAnimSprite();
+            PlayStepIfContactFrame();                    // começou a andar: o 1º pé já pisa
         }
 
         if (newDirection != currentDirection) {
@@ -380,16 +385,11 @@ void Character::Update(float dt) {
             stripAnimTimer -= kIrmaozaoStripFrameSeconds;
             stripFrameIndex = (stripFrameIndex + 1) % kIrmaozaoStripFrameCount;
             RefreshAnimSprite();
+            PlayStepIfContactFrame();
         }
     }
 
-    // ── Efeitos Sonoros ───────────────────────────────────────────────────────
-    StageState* stage = Game::TryGetStageState();
-    if (irmaozaoIdleStrips && stage && currentState != ActionState::INTERACTING) {
-        const Vec2 foot = GetFootCircleCenter();
-        const FootstepSurface surface = stage->level.QueryFootstepSurface(static_cast<int>(foot.x), static_cast<int>(foot.y), isElevated);
-        GameSfx::UpdateBigBrotherFootsteps(dt, speed.Magnitude(), true, surface);
-    }
+    // Passos: tocados pela animação (PlayStepIfContactFrame), não mais em loop.
 
     // ── Sistema de Sanidade ───────────────────────────────────────────────────
     UpdateSanity(dt);
@@ -599,4 +599,17 @@ void Character::SetSpeedMultiplier(float multiplier) {
 
 void Character::SetBaseSpeed(float speed) {
     if (speed > 0.0f) linearSpeed = speed;
+}
+
+// Toca uma pisada se a caminhada acabou de chegar num quadro de contato (só o
+// irmãozão andando de verdade; empurrando caixa ou interagindo o som é outro).
+// A superfície vem do mapa embaixo do pé (pedra, madeira, escada).
+void Character::PlayStepIfContactFrame() {
+    if (!irmaozaoIdleStrips || !stripWasMoving || playingPickLampAnim) return;
+    if (currentState == ActionState::INTERACTING || currentState == ActionState::PUSHING_BOX) return;
+    if (stripFrameIndex != kStepContactFrameA && stripFrameIndex != kStepContactFrameB) return;
+    StageState* stage = Game::TryGetStageState();
+    if (!stage) return;
+    const Vec2 foot = GetFootCircleCenter();
+    GameSfx::PlayFootstep(stage->level.QueryFootstepSurface(static_cast<int>(foot.x), static_cast<int>(foot.y), isElevated));
 }

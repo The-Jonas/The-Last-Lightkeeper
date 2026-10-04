@@ -59,6 +59,7 @@ public:
 
     // ── Luz ──────────────────────────────────────────────────────────────────
     bool isLightToggledOn = false;                       // luz de mão ligada pelo jogador
+    bool CanTurnLightOn() const;                         // o item na mão é luz com carga (dá para acender)
     bool TryTurnLightOn();                               // liga se o item na mão for luz com carga
     bool TryActivateBestLight();                         // garante uma luz acesa (isqueiro antes da lamparina)
     bool IsUsableLightActive() const;                    // luz na mão, ligada e com carga

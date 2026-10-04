@@ -223,9 +223,15 @@ const Inventory::ItemStack* Inventory::GetActiveStack() const {
 //  Luz
 // ═════════════════════════════════════════════════════════════════════════════
 
-bool Inventory::TryTurnLightOn() {
+// Dá para acender: o item na mão é fonte de luz e ainda tem carga.
+bool Inventory::CanTurnLightOn() const {
     const ItemStack* active = GetActiveStack();
-    if (!active || !active->def.HasProperty(ItemProperty::LIGHT_SOURCE) || FrontCharge(*active) <= 0) return false;
+    return active && active->def.HasProperty(ItemProperty::LIGHT_SOURCE) && FrontCharge(*active) > 0;
+}
+
+// Acende a luz na mão, se der.
+bool Inventory::TryTurnLightOn() {
+    if (!CanTurnLightOn()) return false;
     isLightToggledOn = true;
     return true;
 }

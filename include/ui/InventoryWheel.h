@@ -21,9 +21,9 @@ private:
     float bobTimer = 0.0f;
 
     static constexpr float kTopSlotOffsetX    = -25.0f;         // um pouco pra esquerda
-    static constexpr float kTopSlotOffsetY    =  55.0f;         // mais pra baixo
+    static constexpr float kTopSlotOffsetY    =  30.0f;         // mais pra baixo
     static constexpr float kBottomSlotOffsetX =  26.0f;         // mais pra direita (mais perto do centro)
-    static constexpr float kBottomSlotOffsetY =  -28.0f;        // sem ajuste vertical por enquanto
+    static constexpr float kBottomSlotOffsetY =  -10.0f;        // sem ajuste vertical por enquanto
 
     float keyHintAlpha = 0.0f;                                  // 0 = teclas escondidas, 1 = visíveis
     static constexpr float kKeyHintFadeDuration = 0.4f;
@@ -34,11 +34,13 @@ private:
     static constexpr float kSlotSize = 88.0f;
     static constexpr float kIconSize = 62.0f;
     static constexpr float kArcRadius = 150.0f;                 // raio do arco vertical
-    static constexpr float kAnchorXFraction = 0.085f;           // X do slot ATIVO (borda esquerda)
+    static constexpr float kAnchorXFraction = 0.16f;            // X do slot ATIVO (borda esquerda)
     static constexpr float kAnchorYFraction = 0.76f;            // Y do slot ATIVO (mais para baixo do canto)
     static constexpr float kSlideSpeed = 10.0f;
-    static constexpr float kChargeRingFrac = 0.46f;             // raio do brilho de carga / tamanho do slot (ajuste à moldura)
-    static constexpr float kChargeLowRatio = 0.25f;             // abaixo disso o brilho fica vermelho e pulsa
+    static constexpr float kFuelFillFrac   = 0.44f;             // raio do "líquido" do frasco / tamanho do slot (fica sob a moldura)
+    static constexpr float kChargeLowRatio = 0.25f;             // abaixo disso o líquido fica vermelho e pulsa
+    static constexpr float kFuelFillAlpha    = 0.35f;           // opacidade do líquido (0..1)
+    static constexpr float kFuelSurfaceAlpha = 0.60f;           // opacidade da linha da superfície
 
     float GetAnchorX() const;
     float GetAnchorY() const;
@@ -54,8 +56,8 @@ private:
     void DrawCycleKeyHints(SDL_Renderer* renderer, float fadeAlpha);
 
     // Slot da pasta de documentos 
-    static constexpr float kFolderMarginX  = 24.0f;    // distância da borda esquerda (px em UiScale 1)
-    static constexpr float kFolderMarginY  = 24.0f;    // distância da borda de baixo
+    static constexpr float kFolderMarginX  = 120.0f;    // distância da borda esquerda (px em UiScale 1)
+    static constexpr float kFolderMarginY  = 140.0f;     // distância da borda de baixo
     static constexpr float kFolderSlotSize = 90.0f;
     float folderHintAlpha = 0.0f;                       // fade da tecla [Tab]
     void DrawDocumentFolderSlot(SDL_Renderer* renderer);

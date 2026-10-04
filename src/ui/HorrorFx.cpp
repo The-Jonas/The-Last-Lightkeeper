@@ -5,10 +5,13 @@
 #include "ui/KeyGlyphs.h"
 
 #define INCLUDE_SDL_TTF
+#define INCLUDE_SDL_IMAGE
 #include "SDL_include.h"
 
 #include <algorithm>
 #include <cmath>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -61,28 +64,18 @@ void DrawThickPolyline(SDL_Renderer* renderer, const std::vector<SDL_FPoint>& pt
                        idx.data(), static_cast<int>(idx.size()));
 }
 
-// Aura de sangue em volta de um círculo: anel em degradê (transparente dentro,
-// vermelho escuro no raio, sumindo para fora), com a borda de fora irregular.
-void DrawBloodAura(SDL_Renderer* renderer, float cx, float cy, float radius, float spread, Uint8 alpha, int boil) {
-    constexpr int kSegments = 48;
+// Disco cheio (leque de triângulos) numa cor só.
+void FillDisc(SDL_Renderer* renderer, float cx, float cy, float radius, SDL_Color c) {
+    constexpr int kSegments = 24;
     std::vector<SDL_Vertex> verts;
     std::vector<int> idx;
-    verts.reserve(kSegments * 3);
-    idx.reserve(kSegments * 12);
-    const float inner = std::max(0.0f, radius - spread * 0.35f);
+    verts.reserve(kSegments + 1);
+    verts.push_back(Vert(cx, cy, c.r, c.g, c.b, c.a));
     for (int i = 0; i < kSegments; ++i) {
         const float ang = kTwoPi * static_cast<float>(i) / kSegments;
-        const float cs = std::cos(ang), sn = std::sin(ang);
-        const float outer = radius + spread * (0.7f + 0.5f * Hash01(i * 17 + boil * 5));   // escorrendo irregular
-        verts.push_back(Vert(cx + cs * inner,  cy + sn * inner,  90, 4, 4, 0));
-        verts.push_back(Vert(cx + cs * radius, cy + sn * radius, 120, 8, 8, alpha));
-        verts.push_back(Vert(cx + cs * outer,  cy + sn * outer,  70, 2, 2, 0));
+        verts.push_back(Vert(cx + std::cos(ang) * radius, cy + std::sin(ang) * radius, c.r, c.g, c.b, c.a));
     }
-    for (int i = 0; i < kSegments; ++i) {
-        const int a = i * 3, b = ((i + 1) % kSegments) * 3;
-        idx.insert(idx.end(), {a, b, a + 1, b, b + 1, a + 1,             // de dentro até o raio
-                               a + 1, b + 1, a + 2, b + 1, b + 2, a + 2});   // do raio para fora
-    }
+    for (int i = 0; i < kSegments; ++i) idx.insert(idx.end(), {0, 1 + i, 1 + (i + 1) % kSegments});
     SDL_RenderGeometry(renderer, nullptr, verts.data(), static_cast<int>(verts.size()),
                        idx.data(), static_cast<int>(idx.size()));
 }
@@ -95,6 +88,149 @@ SDL_FRect FitInside(SDL_Texture* tex, float x, float y, float size) {
     const float s = size / static_cast<float>(std::max(w, h));
     const float dw = w * s, dh = h * s;
     return {x + (size - dw) * 0.5f, y + (size - dh) * 0.5f, dw, dh};
+}
+
+
+// ── Brilho "assado" da chama ────────────────────────────────────────────────
+// O brilho em volta da chama da HUD é gerado UMA vez por PNG (cada sprite de
+// nível/quadro tem o seu) e guardado: alpha do PNG reduzido → espalhado para
+// cima (labareda) → desfocado → pintado em degradê vertical (amarelo embaixo,
+// laranja no meio, vermelho na ponta). Na tela é só um RenderCopy aditivo.
+constexpr int   kGlowWorkPx   = 96;                      // lado maior do PNG reduzido (o brilho é borrado: pouco detalhe basta)
+constexpr float kGlowPadSide  = 0.55f;                   // margem lateral, em frações da largura da chama
+constexpr float kGlowPadTop   = 0.85f;                   // margem em cima (a luz sobe mais)
+constexpr float kGlowPadBot   = 0.30f;                   // margem embaixo
+constexpr float kGlowRiseKeep = 0.95f;                   // por pixel: quanto da luz "sobe" (maior = labaredas mais altas)
+constexpr float kGlowNearR    = 0.06f;                   // desfoque do brilho colado no contorno (fração do lado)
+constexpr float kGlowFarR     = 0.12f;                   // desfoque do halo largo
+constexpr float kGlowNearGain = 1.8f;                    // força do brilho colado
+constexpr float kGlowFarGain  = 2.2f;                    // força do halo largo
+constexpr float kGlowGamma    = 0.75f;                   // < 1 = o brilho fraco alcança mais longe
+constexpr float kGlowSpan     = 1.25f;                   // altura do degradê, em alturas da chama a partir da base
+constexpr float kGlowOrangeAt = 0.40f;                   // onde o degradê vira laranja (0 base → 1 topo)
+
+struct FlameGlow {
+    SDL_Texture* tex = nullptr;                          // vive o jogo todo (poucas texturas pequenas)
+    float padSide = 0, padTop = 0;                       // margens em pixels de trabalho
+    int   workW = 0, workH = 0;                          // tamanho do PNG reduzido (sem margens)
+};
+
+// Desfoque de caixa separável, 3 passadas (≈ gaussiano). Raio em pixels.
+void BoxBlur(std::vector<float>& img, int w, int h, int radius) {
+    if (radius < 1) return;
+    std::vector<float> tmp(img.size());
+    const float inv = 1.0f / static_cast<float>(radius * 2 + 1);
+    for (int pass = 0; pass < 3; ++pass) {
+        for (int y = 0; y < h; ++y) {                    // horizontal
+            float acc = 0.0f;
+            for (int k = -radius; k <= radius; ++k) acc += img[y * w + std::min(std::max(k, 0), w - 1)];
+            for (int x = 0; x < w; ++x) {
+                tmp[y * w + x] = acc * inv;
+                acc += img[y * w + std::min(x + radius + 1, w - 1)] - img[y * w + std::max(x - radius, 0)];
+            }
+        }
+        for (int x = 0; x < w; ++x) {                    // vertical
+            float acc = 0.0f;
+            for (int k = -radius; k <= radius; ++k) acc += tmp[std::min(std::max(k, 0), h - 1) * w + x];
+            for (int y = 0; y < h; ++y) {
+                img[y * w + x] = acc * inv;
+                acc += tmp[std::min(y + radius + 1, h - 1) * w + x] - tmp[std::max(y - radius, 0) * w + x];
+            }
+        }
+    }
+}
+
+// Mistura duas cores (t 0..1).
+void LerpColor(const float a[3], const float b[3], float t, float out[3]) {
+    for (int i = 0; i < 3; ++i) out[i] = a[i] + (b[i] - a[i]) * t;
+}
+
+// Gera (ou devolve do cache) o brilho com a forma do PNG em `path`.
+const FlameGlow* GetFlameGlow(SDL_Renderer* renderer, const std::string& path) {
+    static std::unordered_map<std::string, FlameGlow> cache;
+    auto it = cache.find(path);
+    if (it != cache.end()) return it->second.tex ? &it->second : nullptr;
+    FlameGlow& glow = cache[path];                       // falha também fica no cache (não tenta todo frame)
+
+    SDL_Surface* loaded = IMG_Load(path.c_str());
+    if (!loaded) return nullptr;
+    SDL_Surface* src = SDL_ConvertSurfaceFormat(loaded, SDL_PIXELFORMAT_RGBA32, 0);
+    SDL_FreeSurface(loaded);
+    if (!src) return nullptr;
+
+    // 1) Alpha do PNG reduzido para kGlowWorkPx (média da área de cada pixel).
+    const float scale = std::min(1.0f, static_cast<float>(kGlowWorkPx) / std::max(src->w, src->h));
+    const int ww = std::max(1, static_cast<int>(std::ceil(src->w * scale)));
+    const int wh = std::max(1, static_cast<int>(std::ceil(src->h * scale)));
+    const int padS = static_cast<int>(ww * kGlowPadSide);
+    const int padT = static_cast<int>(wh * kGlowPadTop);
+    const int padB = static_cast<int>(wh * kGlowPadBot);
+    const int cw = ww + padS * 2, ch = wh + padT + padB;
+    std::vector<float> shape(static_cast<size_t>(cw) * ch, 0.0f);
+    SDL_LockSurface(src);
+    const Uint8* px = static_cast<const Uint8*>(src->pixels);
+    for (int y = 0; y < wh; ++y) {
+        const int sy0 = static_cast<int>(y / scale), sy1 = std::max(sy0 + 1, std::min(src->h, static_cast<int>((y + 1) / scale)));
+        for (int x = 0; x < ww; ++x) {
+            const int sx0 = static_cast<int>(x / scale), sx1 = std::max(sx0 + 1, std::min(src->w, static_cast<int>((x + 1) / scale)));
+            float sum = 0.0f;
+            int n = 0;
+            for (int sy = sy0; sy < sy1 && sy < src->h; ++sy)
+                for (int sx = sx0; sx < sx1 && sx < src->w; ++sx, ++n) sum += px[sy * src->pitch + sx * 4 + 3];
+            shape[(y + padT) * cw + (x + padS)] = n ? sum / (255.0f * n) : 0.0f;
+        }
+    }
+    SDL_UnlockSurface(src);
+    SDL_FreeSurface(src);
+
+    // 2) Labareda: a luz de cada pixel "sobe", apagando aos poucos.
+    std::vector<float> risen = shape;
+    for (int x = 0; x < cw; ++x)
+        for (int y = ch - 2; y >= 0; --y)
+            risen[y * cw + x] = std::max(risen[y * cw + x], risen[(y + 1) * cw + x] * kGlowRiseKeep);
+
+    // 3) Dois desfoques: brilho colado no contorno + halo largo.
+    std::vector<float> nearGlow = shape, farGlow = risen;
+    const int side = std::max(ww, wh);
+    BoxBlur(nearGlow, cw, ch, std::max(1, static_cast<int>(side * kGlowNearR)));
+    BoxBlur(farGlow, cw, ch, std::max(1, static_cast<int>(side * kGlowFarR)));
+
+    // 4) Degradê vertical pela altura da chama: amarelo na base → laranja → vermelho na ponta.
+    static const float kYellow[3] = {255, 215, 90};
+    static const float kOrange[3] = {255, 120, 25};
+    static const float kRed[3]    = {200, 30, 10};
+    SDL_Surface* out = SDL_CreateRGBSurfaceWithFormat(0, cw, ch, 32, SDL_PIXELFORMAT_RGBA32);
+    if (!out) return nullptr;
+    SDL_LockSurface(out);
+    Uint8* op = static_cast<Uint8*>(out->pixels);
+    const float flameBottom = static_cast<float>(padT + wh);
+    const float span = wh * kGlowSpan;                                // da base da chama até onde fica vermelho
+    for (int y = 0; y < ch; ++y) {
+        const float up = std::min(1.0f, std::max(0.0f, (flameBottom - y) / span));   // 0 base → 1 topo
+        float c[3];
+        if (up < kGlowOrangeAt) LerpColor(kYellow, kOrange, up / kGlowOrangeAt, c);
+        else                    LerpColor(kOrange, kRed, (up - kGlowOrangeAt) / (1.0f - kGlowOrangeAt), c);
+        for (int x = 0; x < cw; ++x) {
+            const int i = y * cw + x;
+            const float v = std::min(1.0f, nearGlow[i] * kGlowNearGain + farGlow[i] * kGlowFarGain);
+            Uint8* o = op + y * out->pitch + x * 4;
+            o[0] = static_cast<Uint8>(c[0]);
+            o[1] = static_cast<Uint8>(c[1]);
+            o[2] = static_cast<Uint8>(c[2]);
+            o[3] = static_cast<Uint8>(255.0f * std::pow(v, kGlowGamma));
+        }
+    }
+    SDL_UnlockSurface(out);
+    glow.tex = SDL_CreateTextureFromSurface(renderer, out);
+    SDL_FreeSurface(out);
+    if (!glow.tex) return nullptr;
+    SDL_SetTextureBlendMode(glow.tex, SDL_BLENDMODE_ADD);
+    SDL_SetTextureScaleMode(glow.tex, SDL_ScaleModeLinear);           // ampliado sem serrilhado
+    glow.padSide = static_cast<float>(padS);
+    glow.padTop  = static_cast<float>(padT);
+    glow.workW = ww;
+    glow.workH = wh;
+    return &glow;
 }
 
 }  // namespace
@@ -208,8 +344,11 @@ void DrawKeyHint(SDL_Renderer* renderer, const std::string& keys, const std::vec
     const float a = alpha * Flicker(time, x * 0.01f);
     const float jx = Jitter(time, 0.31f) * u;
     const float jy = Jitter(time, 0.77f) * u;
-    float left = (anchor == HintAnchor::BottomCenter) ? x - totalW * 0.5f : x;
-    const float top = ((anchor == HintAnchor::BottomCenter) ? y - totalH : y - totalH * 0.5f) + jy;
+    float left = (anchor == HintAnchor::LeftMiddle) ? x : x - totalW * 0.5f;
+    float top = y - totalH * 0.5f;                       // LeftMiddle
+    if (anchor == HintAnchor::BottomCenter) top = y - totalH;
+    if (anchor == HintAnchor::TopCenter)    top = y;
+    top += jy;
     left += jx;
 
     DrawSmudge(renderer, left + totalW * 0.5f, top + totalH * 0.5f, totalW * 0.62f + 22.0f * u, totalH * 0.9f,
@@ -269,36 +408,51 @@ void DrawScratchLine(SDL_Renderer* renderer, float x1, float x2, float y, float 
                       SDL_Color{color.r, color.g, color.b, static_cast<Uint8>(color.a * 0.6f)});
 }
 
-// Aura de sangue por trás + dois traços por volta: um grosso cor de sangue seco e
-// um fino claro, ambos com o raio "fervendo" a cada 0,1 s. A volta não fecha certinho: passa um pouco do
-// começo, como risco feito à mão.
-void DrawAttentionRing(SDL_Renderer* renderer, const SDL_FRect& target, float alpha, float time) {
+// Bolinhas da cabeça até a nuvem, depois a nuvem: todos os círculos primeiro em
+// cor clara um pouco maiores (vira o contorno da união) e por cima em escuro.
+void DrawThoughtBubble(SDL_Renderer* renderer, float headX, float headY, const std::string& iconPath,
+                       float alpha, float time) {
     if (!renderer || alpha <= 0.01f) return;
     const float u = Game::UiScale();
-    const float cx = target.x + target.w * 0.5f;
-    const float cy = target.y + target.h * 0.5f;
-    const float pulse = 0.5f + 0.5f * std::sin(time * 3.2f);
-    const float baseR = std::max(target.w, target.h) * 0.5f + (14.0f + 4.0f * pulse) * u;
-    const float a = alpha * (0.65f + 0.35f * pulse) * Flicker(time, 1.7f);
-    const int boil = static_cast<int>(std::floor(time / 0.1f));
+    const int boil = static_cast<int>(std::floor(time / 0.12f));
+    auto wob = [&](int salt) { return (Hash01(salt * 23 + boil * 7) * 2.0f - 1.0f) * 1.5f * u; };
 
-    auto stroke = [&](float startAngle, float sweep, float noisePx, float thickness, SDL_Color c, int salt) {
-        constexpr int kPoints = 44;
-        std::vector<SDL_FPoint> pts;
-        pts.reserve(kPoints + 1);
-        for (int i = 0; i <= kPoints; ++i) {
-            const float t = static_cast<float>(i) / kPoints;
-            const float ang = startAngle + sweep * t;
-            const float r = baseR + (Hash01(i * 13 + boil * 97 + salt) * 2.0f - 1.0f) * noisePx * u;
-            pts.push_back({cx + std::cos(ang) * r, cy + std::sin(ang) * r});
-        }
-        DrawThickPolyline(renderer, pts, thickness * u, c);
+    const float R = 34.0f * u;                           // tamanho da nuvem
+    const float cx = headX + 46.0f * u;
+    const float cy = headY - 96.0f * u;
+    struct Blob { float x, y, r; };
+    std::vector<Blob> blobs = {
+        {headX + 8.0f * u,  headY - 14.0f * u, 4.0f * u},   // bolinhas subindo
+        {headX + 18.0f * u, headY - 32.0f * u, 6.0f * u},
+        {headX + 30.0f * u, headY - 54.0f * u, 9.0f * u},
+        {cx,             cy,             R * 0.80f},        // nuvem
+        {cx - R * 0.70f, cy + 6.0f * u,  R * 0.60f},
+        {cx + R * 0.70f, cy + 6.0f * u,  R * 0.60f},
+        {cx - R * 0.35f, cy - R * 0.45f, R * 0.60f},
+        {cx + R * 0.35f, cy - R * 0.45f, R * 0.60f},
+        {cx,             cy + R * 0.35f, R * 0.55f},
     };
-
+    const Uint8 a = static_cast<Uint8>(255.0f * alpha);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    DrawBloodAura(renderer, cx, cy, baseR, (26.0f + 10.0f * pulse) * u, static_cast<Uint8>(150.0f * a), boil);
-    stroke(-1.9f, kTwoPi * 1.08f, 2.5f, 9.0f, SDL_Color{105, 12, 10, static_cast<Uint8>(235.0f * a)}, 3);
-    stroke(-1.6f, kTwoPi * 1.03f, 3.5f, 3.0f, SDL_Color{215, 195, 165, static_cast<Uint8>(180.0f * a)}, 11);
+    for (size_t i = 0; i < blobs.size(); ++i) {
+        FillDisc(renderer, blobs[i].x + wob(static_cast<int>(i)), blobs[i].y + wob(static_cast<int>(i) + 40),
+                 blobs[i].r + 2.5f * u, SDL_Color{205, 190, 165, a});
+    }
+    for (size_t i = 0; i < blobs.size(); ++i) {
+        FillDisc(renderer, blobs[i].x + wob(static_cast<int>(i)), blobs[i].y + wob(static_cast<int>(i) + 40),
+                 blobs[i].r, SDL_Color{18, 14, 14, a});
+    }
+
+    if (!iconPath.empty()) {
+        if (auto icon = Resources::GetImage(iconPath)) {
+            const float size = R * 1.25f;
+            const SDL_FRect dst = FitInside(icon.get(), cx - size * 0.5f + wob(90), cy - size * 0.5f + wob(91), size);
+            SDL_SetTextureAlphaMod(icon.get(), static_cast<Uint8>(a * Flicker(time, 3.1f)));
+            SDL_SetTextureColorMod(icon.get(), 225, 215, 200);
+            SDL_RenderCopyF(renderer, icon.get(), nullptr, &dst);
+            SDL_SetTextureColorMod(icon.get(), 255, 255, 255);
+        }
+    }
 }
 
 // Fundo: volta inteira bem apagada. Por cima: o arco do progresso em cor de
@@ -336,6 +490,112 @@ void DrawProgressArc(SDL_Renderer* renderer, float cx, float cy, float radius, f
             SDL_SetTextureColorMod(icon.get(), 255, 255, 255);
         }
     }
+}
+
+// Degradê radial: centro na cor `c` (alpha c.a), borda transparente.
+void DrawRadialGlow(SDL_Renderer* renderer, float cx, float cy, float radius, SDL_Color c) {
+    constexpr int kSegments = 40;
+    std::vector<SDL_Vertex> verts;
+    std::vector<int> idx;
+    verts.reserve(kSegments + 1);
+    verts.push_back(Vert(cx, cy, c.r, c.g, c.b, c.a));
+    for (int i = 0; i < kSegments; ++i) {
+        const float ang = kTwoPi * static_cast<float>(i) / kSegments;
+        verts.push_back(Vert(cx + std::cos(ang) * radius, cy + std::sin(ang) * radius, c.r, c.g, c.b, 0));
+    }
+    for (int i = 0; i < kSegments; ++i) idx.insert(idx.end(), {0, 1 + i, 1 + (i + 1) % kSegments});
+    SDL_RenderGeometry(renderer, nullptr, verts.data(), static_cast<int>(verts.size()),
+                       idx.data(), static_cast<int>(idx.size()));
+}
+
+// Destaque de brasa em modo aditivo (soma luz, como brilho de verdade).
+// Round: halo redondo + silhueta acesa (slots da roda, pasta).
+// Silhouette: o brilho com a forma do próprio desenho (GetFlameGlow), preso
+// pela base, respirando e "lambendo" para cima. Por cima, fagulhas subindo.
+void DrawEmberAura(SDL_Renderer* renderer, const SDL_FRect& target, const std::string& maskPath,
+                   AuraShape shape, float intensity, float alpha, float time) {
+    if (!renderer || alpha <= 0.01f) return;
+    const float u = Game::UiScale();
+    const float cx = target.x + target.w * 0.5f;
+    const float cy = target.y + target.h * 0.5f;
+    const float radius = std::max(target.w, target.h) * 0.5f;
+    const float power = std::max(0.0f, std::min(1.0f, intensity));
+    const float breath = 0.82f + 0.18f * std::sin(time * 2.6f);        // "respira" devagar
+    const float a = alpha * breath * Flicker(time, 4.2f) * power;
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
+    const FlameGlow* glow = (shape == AuraShape::Silhouette && !maskPath.empty())
+                                ? GetFlameGlow(renderer, maskPath) : nullptr;
+    if (glow) {
+        // Pixel de trabalho → tela, e a base da chama como âncora.
+        const float k = target.w / static_cast<float>(glow->workW);
+        int tw = 0, th = 0;
+        SDL_QueryTexture(glow->tex, nullptr, nullptr, &tw, &th);
+        const float fullW = tw * k, fullH = th * k;
+        const float baseY = target.y + target.h;                       // base da chama na tela
+        const float baseInTex = (glow->padTop + glow->workH) * k;      // base da chama dentro da textura
+        // Camada 1: o brilho parado, colado no desenho. Camada 2: a mesma luz
+        // esticada para cima e balançando, fraca — é ela que dá a vida.
+        for (int layer = 0; layer < 2; ++layer) {
+            const float lick = (layer == 0) ? 1.0f : 1.06f + 0.08f * std::sin(time * 4.3f) + 0.04f * std::sin(time * 7.1f);
+            const float sway = (layer == 0) ? 0.0f : std::sin(time * 2.7f) * 3.0f * u;
+            const float la = (layer == 0) ? 1.0f : 0.45f * Flicker(time, 9.7f);
+            const float w = fullW * (layer == 0 ? 1.0f : 1.03f);
+            const float h = fullH * lick;
+            const SDL_FRect dst{cx - w * 0.5f + sway, baseY - baseInTex * lick, w, h};
+            SDL_SetTextureAlphaMod(glow->tex, static_cast<Uint8>(std::min(255.0f, 255.0f * a * la)));
+            SDL_RenderCopyF(renderer, glow->tex, nullptr, &dst);
+        }
+    } else {
+        std::shared_ptr<SDL_Texture> mask = maskPath.empty() ? nullptr : Resources::GetWhiteMaskImage(maskPath);
+        DrawRadialGlow(renderer, cx, cy, radius * 2.1f, SDL_Color{200, 40, 10, static_cast<Uint8>(150.0f * a)});
+        DrawRadialGlow(renderer, cx, cy, radius * 1.35f, SDL_Color{255, 150, 30, static_cast<Uint8>(170.0f * a)});
+        if (mask) {
+            // Silhueta um pouco maior, brilhando em amarelo-alaranjado.
+            SDL_SetTextureBlendMode(mask.get(), SDL_BLENDMODE_ADD);
+            SDL_SetTextureColorMod(mask.get(), 255, 170, 50);
+            for (int i = 0; i < 2; ++i) {
+                const float scale = (i == 0) ? 1.16f : 1.08f;
+                const float w = target.w * scale, h = target.h * scale;
+                const SDL_FRect dst{cx - w * 0.5f, cy - h * 0.5f, w, h};
+                SDL_SetTextureAlphaMod(mask.get(), static_cast<Uint8>((i == 0 ? 110.0f : 170.0f) * a));
+                SDL_RenderCopyF(renderer, mask.get(), nullptr, &dst);
+            }
+            SDL_SetTextureBlendMode(mask.get(), SDL_BLENDMODE_BLEND);   // a máscara é compartilhada (destaque de interação)
+            SDL_SetTextureColorMod(mask.get(), 255, 255, 255);
+            SDL_SetTextureAlphaMod(mask.get(), 255);
+        }
+    }
+
+    // Fagulhas: cada uma num ciclo próprio (sobe, gira, esfria do amarelo ao
+    // vermelho e some). Na chama nascem do corpo do fogo e sobem mais alto;
+    // quantas aparecem acompanha a força da chama.
+    const bool flame = (glow != nullptr);
+    const int kEmbers = flame ? 6 + static_cast<int>(6.0f * power) : 7;
+    for (int e = 0; e < kEmbers; ++e) {
+        const float speed = 0.35f + 0.25f * Hash01(e * 3 + 1);
+        const float cycle = time * speed + Hash01(e * 7 + 2);
+        const float life = cycle - std::floor(cycle);                    // 0 nasce → 1 apaga
+        const int   gen = static_cast<int>(std::floor(cycle));           // cada volta, outra posição
+        const float spread = flame ? 0.75f : 0.9f;
+        const float startX = cx + (Hash01(e * 11 + gen * 31) - 0.5f) * target.w * spread;
+        const float x = startX + std::sin(life * 6.0f + e) * 6.0f * u;
+        const float startY = flame ? target.y + target.h * (0.35f + 0.3f * Hash01(e * 5 + gen * 13)) : cy - radius * 0.3f;
+        const float rise = flame ? radius * 2.4f : radius * 1.8f;
+        const float y = startY - life * rise;
+        const float size = (2.5f + 2.5f * Hash01(e * 13 + gen * 17)) * u * (1.0f - 0.5f * life);
+        const float ang = life * 4.0f + e;
+        const Uint8 g = static_cast<Uint8>(200.0f * (1.0f - life));      // amarelo → vermelho
+        const Uint8 ea = static_cast<Uint8>(230.0f * alpha * (1.0f - life) * (flame ? 0.4f + 0.6f * power : 1.0f));
+        SDL_Vertex q[4];
+        for (int k = 0; k < 4; ++k) {
+            const float qa = ang + kTwoPi * 0.25f * static_cast<float>(k);
+            q[k] = Vert(x + std::cos(qa) * size, y + std::sin(qa) * size * 0.8f, 255, g, 30, ea);
+        }
+        const int qi[6] = {0, 1, 2, 0, 2, 3};
+        SDL_RenderGeometry(renderer, nullptr, q, 4, qi, 6);
+    }
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 }
 
 }  // namespace HorrorFx

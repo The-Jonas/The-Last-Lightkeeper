@@ -140,6 +140,7 @@ private:
     std::string IrmaozaoPickLampStripPath(Direction dir, int frameIndex) const;
     
     void RefreshAnimSprite();
+    void PlayStepIfContactFrame();                       // pisada no quadro em que o pé toca o chão
     void EnsureBaselineBox();
     void RestoreCollisionBox(float centerX, float footY);
 
@@ -148,3 +149,4 @@ private:
 };
 
 #endif
+

@@ -43,11 +43,14 @@ struct HintSpec {
     std::string label;                       // ação curta ao lado da tecla ("Usar item")
     Vec2  anchor;                            // ponto no MUNDO; a tecla fica logo acima
     bool  hasAnchor = false;
-    HudSlot anchorHud = HudSlot::None;       // ou ancorada à DIREITA de um elemento da HUD
+    Vec2  anchor2;                           // 2ª cópia da mesma tecla (ex.: sobre os dois irmãos)
+    bool  hasAnchor2 = false;
+    HudSlot anchorHud = HudSlot::None;       // ou ancorada a um elemento da HUD…
+    bool  belowHud = false;                  // …embaixo dele (false = à direita)
     HudSlot ring    = HudSlot::None;         // anel de atenção num elemento da HUD
     HudSlot hudKeys = HudSlot::None;         // pede à HUD as próprias teclas (roda, pasta)
     int   priority = 1;                      // maior toma a vez de uma menor (2 = sobrevivência: luz)
-    float linger = 0.0f;                     // segundos que a tecla continua na tela depois de aprendida
+    float linger = 0.0f;                     // s que a tecla continua na tela depois de aprendida
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -68,7 +71,8 @@ public:
 
     void EnterLevel(int levelIndex, StageState& stage);  // troca o roteiro e zera os tempos do andar
     void Update(StageState& stage, const HintContext& ctx, float dt);
-    // worldToScreen converte as âncoras; desenha teclas, ícones e anéis da HUD.
+    void RenderUnderHud(SDL_Renderer* renderer);         // aura de brasa nos elementos da HUD (antes da HUD)
+    // worldToScreen converte as âncoras; desenha teclas, ícones e balão (depois da HUD).
     void Render(SDL_Renderer* renderer, const std::function<Vec2(const Vec2&)>& worldToScreen);
 
     // ── Usado pelos roteiros ─────────────────────────────────────────────────
@@ -79,6 +83,7 @@ public:
     void Say(StageState& stage, const std::string& id, const std::string& context,
              const std::vector<DialogueBox::Line>& lines);   // fala na caixa + histórico
     void FocusHud(HudSlot slot, float seconds);          // anel de atenção por um tempo
+    void ShowThought(const std::string& iconPath, float seconds);   // balão de pensamento sobre o irmãozão
     bool IsSilent() const { return silent; }
     void HoldCommonBeats() { commonHeld = true; }        // o andar está no meio de uma cena: comuns esperam
     bool CommonBeatsHeld() const { return commonHeld; }
@@ -95,7 +100,11 @@ public:
                                    DialogueBox::Emotion listener = DialogueBox::Emotion::Normal);
 
     // ── Usado pela HUD ───────────────────────────────────────────────────────
-    void ReportHudRect(HudSlot slot, const SDL_FRect& rect);   // onde o elemento está neste frame
+    // Onde o elemento está neste frame e o PNG da silhueta dele (para a aura).
+    // silhouette: a aura segue a forma do PNG (a chama) em vez de um halo redondo;
+    // glow 0..1: força do brilho (a chama mais fraca brilha menos).
+    void ReportHudRect(HudSlot slot, const SDL_FRect& rect, const std::string& maskPath = "",
+                       bool silhouette = false, float glow = 1.0f);
     bool WantsHudKeys(HudSlot slot) const;               // a HUD deve mostrar as próprias teclas
     bool HasGlyphAt(HudSlot slot) const;                 // uma dica está desenhada ao lado do elemento
     void NotifyFuelLimitHit() { fuelLimitHit = true; }   // HotbarComponent: 3º combustível recusado
@@ -120,6 +129,7 @@ private:
 
     void TickFades(float dt);
     void ReleaseOwner();                                 // a dica da vez saiu: abre o respiro
+    void UpdateAuraSound();                              // crepitar da aura da chama (GameSfx)
     void RenderHint(SDL_Renderer* renderer, const Runtime& rt,
                     const std::function<Vec2(const Vec2&)>& worldToScreen) const;
 
@@ -138,12 +148,21 @@ private:
     bool  overlayOpen = false;                           // pausa/pasta: até os anéis somem
     bool  fuelLimitHit = false;
     bool  commonHeld = false;                            // HoldCommonBeats neste frame
+    std::string thoughtIcon;                             // item do balão de pensamento
+    float thoughtTimer = 0.0f;                           // s restantes do balão
+    float thoughtAlpha = 0.0f;
+    Vec2  thoughtAnchor;                                 // cabeça do irmãozão (mundo), do último Update
     float gapTimer = 0.0f;                               // > 0 = respiro: nenhuma dica nova aparece
 
     float hudFocus[static_cast<int>(HudSlot::Count)] = {};       // s restantes de anel
     float hudRingAlpha[static_cast<int>(HudSlot::Count)] = {};
     SDL_FRect hudRect[static_cast<int>(HudSlot::Count)] = {};
-    bool  hudRectValid[static_cast<int>(HudSlot::Count)] = {};
+    bool  hudRectValid[static_cast<int>(HudSlot::Count)] = {};       // informado neste frame
+    std::string hudMask[static_cast<int>(HudSlot::Count)];          // PNG da silhueta do elemento
+    bool  hudSilhouette[static_cast<int>(HudSlot::Count)] = {};     // aura no formato do PNG
+    float hudGlow[static_cast<int>(HudSlot::Count)] = {};           // força do brilho 0..1
+    SDL_FRect hudLastRect[static_cast<int>(HudSlot::Count)] = {};   // do frame anterior (a aura vem antes da HUD)
+    bool  hudLastValid[static_cast<int>(HudSlot::Count)] = {};
 };
 
 #endif

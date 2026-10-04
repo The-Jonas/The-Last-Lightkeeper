@@ -572,7 +572,7 @@ void StageState::RenderLevelTitleBanner(SDL_Renderer* renderer) {
     const float u = Game::UiScale();
     const float winW = static_cast<float>(Game::GetInstance().GetWindowsWidth());
     const float winH = static_cast<float>(Game::GetInstance().GetWindowsHeight());
-    const float cy = winH * 0.42f;
+    const float cy = winH * 0.15f;
 
     auto smallFont = Resources::GetFont("Recursos/font/times.ttf", std::max(14, static_cast<int>(std::lround(30.0f * u))));
     auto bigFont   = Resources::GetFont("Recursos/font/times.ttf", std::max(40, static_cast<int>(std::lround(150.0f * u))));

@@ -1021,12 +1021,12 @@
                         {
                          "name":"empty",
                          "type":"float",
-                         "value":0.7
+                         "value":0
                         }, 
                         {
                          "name":"interactive",
                          "type":"bool",
-                         "value":false
+                         "value":true
                         }, 
                         {
                          "name":"type",

@@ -1,5 +1,6 @@
 #include "tutorial/HintSystem.h"
 
+#include "audio/GameSfx.h"
 #include "core/Game.h"
 #include "core/Telemetry.h"
 #include "states/stage/StageState.h"
@@ -13,6 +14,8 @@ namespace {
 constexpr float kHintFadeIn  = 1.2f;                     // s até a tecla aparecer inteira (surge devagar)
 constexpr float kHintFadeOut = 0.6f;
 constexpr float kRingFade    = 0.35f;
+constexpr float kAuraSoundFloor    = 0.35f;              // volume do crepitar com a chama no mínimo (fração)
+constexpr float kAuraSoundWeakGlow = 0.70f;              // abaixo deste brilho o crepitar começa a falhar
 constexpr float kAnchorGapPx = 8.0f;                     // folga entre a âncora e a base da tecla
 
 int SlotIndex(HudSlot slot) { return static_cast<int>(slot); }
@@ -62,6 +65,9 @@ void HintSystem::Update(StageState& stage, const HintContext& ctx, float dt) {
 
     for (auto& kv : hints) kv.second.touched = false;
     if (!silent) gapTimer = std::max(0.0f, gapTimer - dt);
+    thoughtAnchor = ctx.bigHead;
+    thoughtTimer = std::max(0.0f, thoughtTimer - dt);
+    thoughtAlpha = (thoughtTimer > 0.0f && !ctx.overlayOpen) ? 1.0f : 0.0f;   // sem fade: semitransparente, as bolhas sobrepostas formam uma "flor"
 
     stageInUpdate = &stage;
     commonHeld = false;
@@ -78,6 +84,7 @@ void HintSystem::Update(StageState& stage, const HintContext& ctx, float dt) {
         }
     }
     TickFades(dt);
+    UpdateAuraSound();
 }
 
 // Escalada de uma dica: conta o tempo travado, fala, depois mostra a tecla.
@@ -186,6 +193,12 @@ void HintSystem::FocusHud(HudSlot slot, float seconds) {
     hudFocus[SlotIndex(slot)] = std::max(hudFocus[SlotIndex(slot)], seconds);
 }
 
+// Balão de pensamento com um item (ex.: o combustível que falta) por `seconds`.
+void HintSystem::ShowThought(const std::string& iconPath, float seconds) {
+    thoughtIcon = iconPath;
+    thoughtTimer = std::max(thoughtTimer, seconds);
+}
+
 bool HintSystem::IsIdle() const {
     return !silent && owner.empty() && gapTimer <= 0.0f;
 }
@@ -212,11 +225,16 @@ DialogueBox::Line HintSystem::Small(const std::string& text, DialogueBox::Emotio
     return {DialogueBox::Speaker::LittleBrother, DialogueBox::Speaker::BigBrother, e, listener, text};
 }
 
-// A HUD avisa onde está neste frame (vale até o próximo Render).
-void HintSystem::ReportHudRect(HudSlot slot, const SDL_FRect& rect) {
+// A HUD avisa onde está neste frame e qual PNG é a silhueta dela.
+void HintSystem::ReportHudRect(HudSlot slot, const SDL_FRect& rect, const std::string& maskPath,
+                               bool silhouette, float glow) {
     if (slot == HudSlot::None) return;
-    hudRect[SlotIndex(slot)] = rect;
-    hudRectValid[SlotIndex(slot)] = true;
+    const int i = SlotIndex(slot);
+    hudRect[i] = rect;
+    hudRectValid[i] = true;
+    hudMask[i] = maskPath;
+    hudSilhouette[i] = silhouette;
+    hudGlow[i] = glow;
 }
 
 // True enquanto a dica da vez pede as teclas desse elemento (ex.: as da roda).
@@ -267,6 +285,17 @@ void HintSystem::TickFades(float dt) {
     }
 }
 
+// Som da aura da chama: segue o fade da aura e o brilho do nível da chama; com a
+// chama fraca o crepitar também falha (oscila), como o fogo prestes a apagar.
+void HintSystem::UpdateAuraSound() {
+    const int fuel = SlotIndex(HudSlot::Fuel);
+    float level = hudLastValid[fuel] ? hudRingAlpha[fuel] : 0.0f;
+    const float glow = hudGlow[fuel];
+    level *= kAuraSoundFloor + (1.0f - kAuraSoundFloor) * glow;
+    if (glow < kAuraSoundWeakGlow) level *= HorrorFx::Flicker(clock * 1.6f, 2.3f);
+    GameSfx::UpdateHudFireAura(level);
+}
+
 // Tecla + ícone + rótulo: acima da âncora no mundo, ou à direita do elemento da HUD.
 void HintSystem::RenderHint(SDL_Renderer* renderer, const Runtime& rt,
                             const std::function<Vec2(const Vec2&)>& worldToScreen) const {
@@ -282,25 +311,51 @@ void HintSystem::RenderHint(SDL_Renderer* renderer, const Runtime& rt,
     if (s.anchorHud != HudSlot::None) {
         if (!hudRectValid[hud]) return;                  // elemento escondido neste frame
         const SDL_FRect& r = hudRect[hud];
-        HorrorFx::DrawKeyHint(renderer, s.keys, icons, s.label, r.x + r.w + 18.0f * u, r.y + r.h * 0.5f,
-                              HorrorFx::HintAnchor::LeftMiddle, rt.alpha, clock);
-    } else if (s.hasAnchor) {
-        const Vec2 screen = worldToScreen(s.anchor);
-        HorrorFx::DrawKeyHint(renderer, s.keys, icons, s.label, screen.x, screen.y - kAnchorGapPx * u,
-                              HorrorFx::HintAnchor::BottomCenter, rt.alpha, clock);
+        if (s.belowHud) {
+            HorrorFx::DrawKeyHint(renderer, s.keys, icons, s.label, r.x + r.w * 0.5f, r.y + r.h + 14.0f * u,
+                                  HorrorFx::HintAnchor::TopCenter, rt.alpha, clock);
+        } else {
+            HorrorFx::DrawKeyHint(renderer, s.keys, icons, s.label, r.x + r.w + 18.0f * u, r.y + r.h * 0.5f,
+                                  HorrorFx::HintAnchor::LeftMiddle, rt.alpha, clock);
+        }
+    } else {
+        for (int i = 0; i < 2; ++i) {
+            if (!(i == 0 ? s.hasAnchor : s.hasAnchor2)) continue;
+            const Vec2 screen = worldToScreen(i == 0 ? s.anchor : s.anchor2);
+            HorrorFx::DrawKeyHint(renderer, s.keys, icons, s.label, screen.x, screen.y - kAnchorGapPx * u,
+                                  HorrorFx::HintAnchor::BottomCenter, rt.alpha, clock);
+        }
     }
 }
 
-// Todas as teclas ainda visíveis (a que sai faz fade) e os anéis da HUD.
+// Todas as teclas ainda visíveis (a que sai faz fade) e o balão de pensamento.
 void HintSystem::Render(SDL_Renderer* renderer, const std::function<Vec2(const Vec2&)>& worldToScreen) {
     if (!renderer) return;
     for (const auto& kv : hints) RenderHint(renderer, kv.second, worldToScreen);
 
+    if (thoughtAlpha > 0.01f) {
+        const Vec2 head = worldToScreen(thoughtAnchor);
+        HorrorFx::DrawThoughtBubble(renderer, head.x, head.y, thoughtIcon, thoughtAlpha, clock);
+    }
+
+    // Guarda onde a HUD estava: a aura do próximo frame é desenhada antes dela.
     for (int i = 1; i < SlotIndex(HudSlot::Count); ++i) {
-        if (hudRectValid[i] && hudRingAlpha[i] > 0.01f) {
-            HorrorFx::DrawAttentionRing(renderer, hudRect[i], hudRingAlpha[i], clock);
-        }
+        hudLastRect[i] = hudRect[i];
+        hudLastValid[i] = hudRectValid[i];
         hudRectValid[i] = false;                         // a HUD informa de novo no próximo frame
+    }
+}
+
+// A aura de brasa por TRÁS dos elementos da HUD (só o que vaza em volta aparece). Usa a
+// posição do frame anterior, porque a HUD só informa a dela ao se desenhar.
+void HintSystem::RenderUnderHud(SDL_Renderer* renderer) {
+    if (!renderer) return;
+    for (int i = 1; i < SlotIndex(HudSlot::Count); ++i) {
+        if (hudLastValid[i] && hudRingAlpha[i] > 0.01f) {
+            HorrorFx::DrawEmberAura(renderer, hudLastRect[i], hudMask[i],
+                                    hudSilhouette[i] ? HorrorFx::AuraShape::Silhouette : HorrorFx::AuraShape::Round,
+                                    hudGlow[i], hudRingAlpha[i], clock);
+        }
     }
 }
 

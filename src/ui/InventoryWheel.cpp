@@ -40,60 +40,27 @@ SDL_FRect FitIconRect(SDL_Texture* tex, float boxX, float boxY, float boxW, floa
     return dst;
 }
 
-// #7 SDL não tem círculo nativo. Preenche um disco por varredura de linhas
-// horizontais (uma por linha de pixel), respeitando o alpha.
-void FillCircle(SDL_Renderer* r, float cx, float cy, float radius,
-                Uint8 cr, Uint8 cg, Uint8 cb, Uint8 ca) {
-    if (radius <= 0.0f) return;
-    SDL_SetRenderDrawColor(r, cr, cg, cb, ca);
+// Disco "cheio de líquido": preenche o círculo de baixo até `ratio` da altura,
+// uma linha de pixel por vez, com uma linha mais clara na superfície.
+void DrawFuelFill(SDL_Renderer* r, float cx, float cy, float radius, float ratio,
+                  SDL_Color body, SDL_Color surface) {
+    if (radius <= 0.0f || ratio <= 0.0f) return;
+    const float levelY = cy + radius - 2.0f * radius * std::min(1.0f, ratio);
     const int rad = static_cast<int>(radius);
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+    bool first = true;
     for (int dy = -rad; dy <= rad; ++dy) {
+        const float y = cy + static_cast<float>(dy);
+        if (y < levelY) continue;
         const float dxf = std::sqrt(std::max(0.0f, radius * radius - static_cast<float>(dy) * dy));
-        const SDL_FRect line{cx - dxf, cy + static_cast<float>(dy), dxf * 2.0f, 1.0f};
+        const SDL_Color& c = first ? surface : body;
+        SDL_SetRenderDrawColor(r, c.r, c.g, c.b, c.a);
+        const SDL_FRect line{cx - dxf, y, dxf * 2.0f, first ? 2.0f : 1.0f};
         SDL_RenderFillRectF(r, &line);
+        first = false;
     }
 }
 
-// Anel de durabilidade "bonito e consistente": um TRACK escuro completo (sempre
-// círculo inteiro) + um arco colorido proporcional, começando no topo e drenando
-// no sentido horário, com PONTAS ARREDONDADAS. Linhas radiais densas p/ suavidade.
-void DrawDurabilityRing(SDL_Renderer* ren, float cx, float cy, float rOuter, float thickness,
-                        float ratio, Uint8 fr, Uint8 fg, Uint8 fb, Uint8 alpha, bool drawTrack = true) {
-    ratio = std::max(0.0f, std::min(1.0f, ratio));
-    const float rInner = std::max(0.0f, rOuter - thickness);
-    const float rMid   = (rOuter + rInner) * 0.5f;
-    const float twoPi  = 2.0f * static_cast<float>(M_PI);
-    const int   segments = std::max(200, static_cast<int>(rOuter * 9.0f));
-    const float start  = -static_cast<float>(M_PI) * 0.5f;   // topo (12h)
-    const int   filled = static_cast<int>(std::ceil(segments * ratio));
-    const Uint8 trackA = static_cast<Uint8>(std::min(255.0f, alpha * 0.45f));
-
-    // 1) Track completo (fundo) — desenhado inteiro para consistência visual.
-    SDL_SetRenderDrawColor(ren, 52, 52, 60, trackA);
-    for (int i = 0; drawTrack && i < segments; ++i) {
-        const float t = start + twoPi * (static_cast<float>(i) + 0.5f) / segments;
-        const float cs = std::cos(t), sn = std::sin(t);
-        SDL_RenderDrawLineF(ren, cx + rInner * cs, cy + rInner * sn, cx + rOuter * cs, cy + rOuter * sn);
-    }
-
-    // 2) Arco preenchido (colorido) por cima.
-    SDL_SetRenderDrawColor(ren, fr, fg, fb, alpha);
-    for (int i = 0; i < filled; ++i) {
-        const float t = start + twoPi * (static_cast<float>(i) + 0.5f) / segments;
-        const float cs = std::cos(t), sn = std::sin(t);
-        SDL_RenderDrawLineF(ren, cx + rInner * cs, cy + rInner * sn, cx + rOuter * cs, cy + rOuter * sn);
-    }
-
-    // 3) Pontas ARREDONDADAS do arco (início no topo + fim proporcional). Quando
-    // CHEIO (ratio≈1) o anel já é um círculo completo — não desenha as pontas,
-    // senão o cap do início e o do fim se sobrepõem num "calombo" no topo.
-    if (filled > 0 && ratio < 0.999f) {
-        const float capR = thickness * 0.5f;
-        FillCircle(ren, cx + rMid * std::cos(start), cy + rMid * std::sin(start), capR, fr, fg, fb, alpha);
-        const float endT = start + twoPi * ratio;
-        FillCircle(ren, cx + rMid * std::cos(endT), cy + rMid * std::sin(endT), capR, fr, fg, fb, alpha);
-    }
-}
 } // namespace
 
 InventoryWheel::InventoryWheel(GameObject& associated, Inventory& inventory)
@@ -205,6 +172,23 @@ void InventoryWheel::DrawSlot(SDL_Renderer* renderer, int stackIndex, float x, f
 
     
     
+    // Combustível: o fundo do slot "enche" de baixo para cima na proporção do que
+    // tem no frasco, ATRÁS da moldura (que cobre a borda). Luzes não têm: a carga
+    // delas só aparece (vaga) na chama da HUD.
+    if (const Inventory::ItemStack* fuel = (stackIndex >= 0) ? inventory.GetStack(stackIndex) : nullptr) {
+        if (fuel->def.HasProperty(ItemProperty::FUEL) && fuel->def.maxDurability > 0 && !fuel->durabilities.empty()) {
+            const float ratio = std::max(0.0f, std::min(1.0f, static_cast<float>(fuel->durabilities.front()) /
+                                                              static_cast<float>(fuel->def.maxDurability)));
+            const bool low = ratio < kChargeLowRatio;
+            const float a = alpha * (low ? 0.75f + 0.25f * std::sin(bobTimer * 6.0f) : 1.0f);
+            const SDL_Color body    = low ? SDL_Color{150, 30, 20, static_cast<Uint8>(a * kFuelFillAlpha)}
+                                          : SDL_Color{190, 125, 45, static_cast<Uint8>(a * kFuelFillAlpha)};
+            const SDL_Color surface = low ? SDL_Color{220, 70, 50, static_cast<Uint8>(a * kFuelSurfaceAlpha)}
+                                          : SDL_Color{245, 190, 100, static_cast<Uint8>(a * kFuelSurfaceAlpha)};
+            DrawFuelFill(renderer, x, y, scaledSize * kFuelFillFrac, ratio, body, surface);
+        }
+    }
+
     auto frameTex = Resources::GetImage(isActive
     ? "Recursos/img/ui/hud_items/bola_maior.png"
     : "Recursos/img/ui/hud_items/bola_menor.png");
@@ -218,23 +202,6 @@ void InventoryWheel::DrawSlot(SDL_Renderer* renderer, int stackIndex, float x, f
 
     const Inventory::ItemStack* stack = inventory.GetStack(stackIndex);
     if (!stack) return;
-
-    // Combustível: o contorno do slot acende na proporção do que tem no frasco,
-    // começando no topo — cheio = volta inteira brilhando. Abaixo de 25% fica
-    // vermelho e pulsa. Luzes NÃO têm: a carga delas só aparece (vaga) na chama da HUD.
-    if (stack->def.HasProperty(ItemProperty::FUEL) && stack->def.maxDurability > 0 &&
-        !stack->durabilities.empty()) {
-        const float ratio = std::max(0.0f, std::min(1.0f, static_cast<float>(stack->durabilities.front()) /
-                                                          static_cast<float>(stack->def.maxDurability)));
-        const bool low = ratio < kChargeLowRatio;
-        const float pulse = low ? 0.65f + 0.35f * std::sin(bobTimer * 6.0f) : 1.0f;
-        const Uint8 cr = low ? 205 : 245, cg = low ? 55 : 185, cb = low ? 35 : 95;
-        const float rOuter = scaledSize * kChargeRingFrac;
-        const float a = std::min(255.0f, alpha) * pulse;
-        DrawDurabilityRing(renderer, x, y, rOuter + 3.0f * scale, 9.0f * scale, ratio, cr, cg, cb,
-                           static_cast<Uint8>(a * 0.30f), false);                                // brilho largo
-        DrawDurabilityRing(renderer, x, y, rOuter, 3.5f * scale, ratio, cr, cg, cb, static_cast<Uint8>(a));   // traço
-    }
 
     const float iconSize = kIconSize * scale;
     const float iconX = slotX + (scaledSize - iconSize) * 0.5f;
@@ -261,7 +228,8 @@ void InventoryWheel::DrawDocumentFolderSlot(SDL_Renderer* renderer) {
     const float cx   = kFolderMarginX * u + size * 0.5f;
     const float cy   = winH - kFolderMarginY * u - size * 0.5f;
 
-    stage->Hints().ReportHudRect(HudSlot::Folder, SDL_FRect{cx - size * 0.5f, cy - size * 0.5f, size, size});
+    stage->Hints().ReportHudRect(HudSlot::Folder, SDL_FRect{cx - size * 0.5f, cy - size * 0.5f, size, size},
+                                 "Recursos/img/ui/hud_items/bola_maior.png");
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
     // Moldura redonda — mesma arte do slot ATIVO da roda.
@@ -438,10 +406,11 @@ void InventoryWheel::Render() {
     }
 
     if (StageState* stage = Game::TryGetStageState()) {
-        // O anel do tutorial abraça o slot do item na mão.
+        // A aura do tutorial usa o slot do item na mão (silhueta da moldura).
         const float half = kSlotSize * 0.5f * Game::UiScale();
         stage->Hints().ReportHudRect(HudSlot::Wheel,
-                                     SDL_FRect{activeSlotX - half, activeSlotY - half, 2 * half, 2 * half});
+                                     SDL_FRect{activeSlotX - half, activeSlotY - half, 2 * half, 2 * half},
+                                     "Recursos/img/ui/hud_items/bola_maior.png");
     }
     DrawDocumentFolderSlot(renderer);
 

@@ -1,6 +1,8 @@
 #ifndef GAME_SFX_H
 #define GAME_SFX_H 
 
+#include <string>
+
 enum class FootstepSurface { Stone, Wood, Stairs };
 
 namespace GameSfx {
@@ -39,8 +41,14 @@ void NotifyBoxSlide();
 void MaintainBoxPushLoop();
 void PauseBoxPushLoop();     // pausa o loop de arrasto (parou de mover) — sem o "thud" de soltar
 void NotifyBoxPushEnd();
-void PlayLighterToggle(bool turningOn);
-void UpdateBigBrotherFootsteps(float dt, float moveSpeed, bool isBigBrother, FootstepSurface surface);
+void PlayLighterToggle(bool turningOn);   // ligar: abrir+riscar (sem sincronizar a luz); desligar: fechar
+float PlayLighterIgnite();                // abrir+riscar; devolve em quantos s a chama pega no som (0 = já)
+void CancelLighterIgnite();               // corta o "acender" que ainda está tocando
+void PlayReloadPour(bool lampTarget);     // recarga (2 s): fluido no isqueiro / galão na lamparina
+void PlayLampToggle(bool turningOn);      // lamparina: abrir (acender) / fechar (apagar)
+void PlayItemPickup(const std::string& itemName);   // coletar: específico por item ou genérico
+void PlayFootstep(FootstepSurface surface);   // uma pisada (chamada no quadro de contato da animação)
+void UpdateBigBrotherFootsteps(float dt, float moveSpeed, bool isBigBrother, FootstepSurface surface);   // antigo (loop contínuo): substituído por PlayFootstep, pode ser removido
 void UpdateThunder(float dt);
 void UpdateCandleProximity(bool playerNearCandle);
 
@@ -70,6 +78,16 @@ void StopMonsterFootsteps();
 /// acompanha a sanidade baixa. Chamar todo frame durante o gameplay.
 void UpdateHeartbeat(float intensity01);
 
+// MOCHILA
+void PlayBagOpen();     // zíper abrindo (abrir a pasta de documentos)
+void PlayBagClose();    // zíper fechando (guardar a pasta)
+void PlayItemCycle();   // vasculhar a mochila (trocar o item da roda); variação sorteada
+void PlayPaperFlip();   // folhear papel (navegar na pasta); variação sorteada
+
+/// Aura da chama na HUD: level01 0→1 (0 = sem destaque). Saindo do zero toca o
+/// "fwoosh"; depois mantém o crepitar em loop com volume = level. Chamar todo frame.
+void UpdateHudFireAura(float level01);
+
 // FUNÇÕES DA JANELA E DO VENTO
 /// Abrir/fechar janela. Com uma POSICAO no mundo o som passa a vir do lado
 /// certo e a baixar com a distancia — e o que diz ao jogador QUAL das janelas
@@ -91,3 +109,5 @@ int CurrentSfxVolume();
 } // namespace GameSfx
 
 #endif
+
+

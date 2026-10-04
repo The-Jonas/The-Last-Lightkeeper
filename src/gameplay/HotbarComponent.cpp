@@ -7,10 +7,12 @@
 #include "gameplay/Character.h"
 #include "gameplay/ItemPickup.h"
 #include "states/stage/StageState.h"
+#include "states/stage/FirstLoadData.h"
 #include "audio/Sound.h"
 #include "audio/GameSfx.h"
 #include "audio/GameVoice.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 
@@ -20,34 +22,18 @@ namespace {
 // ou pega que ENCHEU a bolsa (dispara fala diferente).
 enum class PickupOutcome { Blocked, PickedUp, PickedUpAndFilled };
 
-const char* kPickupSounds[] = {
-    "Recursos/audio/pickup/pickup_1.mp3",
-    "Recursos/audio/pickup/pickup_2.mp3",
-    "Recursos/audio/pickup/pickup_3.mp3",
-    "Recursos/audio/pickup/pickup_4.mp3",
-    "Recursos/audio/pickup/pickup_5.mp3",
-    "Recursos/audio/pickup/pickup_6.mp3",
-};
-constexpr int kPickupSoundCount = 6;
-
-Sound gPickupSounds[kPickupSoundCount];
-bool gPickupSoundsLoaded = false;
-
-void PlayRandomPickupSound() {
-    if (!gPickupSoundsLoaded) {
-        for (int i = 0; i < kPickupSoundCount; i++) {
-            gPickupSounds[i].Open(kPickupSounds[i]);
+// Sprite do combustível (do catálogo de itens), para o balão "preciso de combustível".
+const std::string& FuelIconPath() {
+    static const std::string path = [] {
+        for (const ItemDef& def : LoadStageFirstLoadData().pickupCycle) {
+            if (def.HasProperty(ItemProperty::FUEL)) return def.spritePath;
         }
-        gPickupSoundsLoaded = true;
-    }
-    const int idx = rand() % kPickupSoundCount;
-    gPickupSounds[idx].Play();
-    // Pegar item é um VFX → passa pelo barramento de efeitos (master × VFX).
-    const int ch = gPickupSounds[idx].GetChannel();
-    if (ch >= 0) {
-        Mix_Volume(ch, GameSfx::CurrentSfxVolume());
-    }
+        return std::string();
+    }();
+    return path;
 }
+
+constexpr float kNoFuelThoughtSeconds = 2.5f;           // s do balão quando aperta [R] sem combustível
 
 // Nome do item em português para a origem no log ("Ao pegar: Tábua de madeira").
 std::string ItemLabelPt(const std::string& name) {
@@ -87,7 +73,7 @@ PickupOutcome PerformPickup(Inventory& inventory, ItemPickup* closest, std::vect
     const int pickupTiledId = closest->GetAssociated().tiledId;
 
     closest->Destroy();
-    PlayRandomPickupSound();
+    GameSfx::PlayItemPickup(def.name);                 // som próprio do item (ou genérico)
     CrashHandler::Log("pegou item: %s", def.name.c_str());
     Telemetry::Event("item_pickup", Telemetry::Fields()
         .Str("item", def.name)
@@ -209,6 +195,9 @@ void HotbarComponent::TryCycleWheel() {
     if (cycled && bigCharacter) {
         bigCharacter->NotifyInventoryLightChanged();
     }
+    if (cycled && inventory.GetStackCount() >= 2) {
+        GameSfx::PlayItemCycle();   // vasculhando a mochila (com 1 item só não há o que trocar)
+    }
 }
 
 void HotbarComponent::TryUseActiveItemOnKeyPress() {
@@ -225,21 +214,52 @@ void HotbarComponent::TryUseActiveItemOnKeyPress() {
 
     if (!active->def.HasProperty(ItemProperty::LIGHT_SOURCE)) return;
 
+    // [F] no meio do "acender": desiste e fecha a tampa.
+    if (igniteTimer >= 0.0f) {
+        CancelLighterIgnite(true);
+        return;
+    }
+
     const bool wasOn = inventory.isLightToggledOn;
     // Decide "is this a lighter?" from the item type, NOT from the lit state:
     // IsActiveLightLighter() requires the light to already be on, so it would be
     // false at the moment we turn it ON (no turn-on sound would play).
     const bool isLighter = inventory.IsActiveItemLighter();
     if (wasOn) {
-        inventory.isLightToggledOn = false;
-        if (isLighter) {
-            GameSfx::PlayLighterToggle(false);
-        }
+        inventory.isLightToggledOn = false;              // fechar é imediato
+        if (isLighter) GameSfx::PlayLighterToggle(false);
+        else           GameSfx::PlayLampToggle(false);
+    } else if (isLighter) {
+        if (inventory.CanTurnLightOn()) BeginLighterIgnite();   // a luz vem com a chama do som
     } else if (inventory.TryTurnLightOn()) {
-        if (isLighter) {
-            GameSfx::PlayLighterToggle(true);
-        }
+        GameSfx::PlayLampToggle(true);                   // lamparina: acende na hora
     }
+}
+
+// Toca abrir+riscar e espera o instante em que a chama pega no som.
+void HotbarComponent::BeginLighterIgnite() {
+    igniteTimer = std::max(0.0f, GameSfx::PlayLighterIgnite());
+}
+
+// Desiste do acender em curso (trocou de item, [F] de novo, recarga…).
+void HotbarComponent::CancelLighterIgnite(bool playClose) {
+    if (igniteTimer < 0.0f) return;
+    igniteTimer = -1.0f;
+    GameSfx::CancelLighterIgnite();
+    if (playClose) GameSfx::PlayLighterToggle(false);
+}
+
+// Conta até a chama; se o isqueiro saiu da mão (ou ficou sem carga), desiste.
+void HotbarComponent::UpdateLighterIgnite(float dt) {
+    if (igniteTimer < 0.0f) return;
+    if (!inventory.IsActiveItemLighter() || inventory.IsReloading()) {
+        CancelLighterIgnite(false);
+        return;
+    }
+    igniteTimer -= dt;
+    if (igniteTimer > 0.0f) return;
+    igniteTimer = -1.0f;
+    if (inventory.TryTurnLightOn() && bigCharacter) bigCharacter->NotifyInventoryLightChanged();
 }
 
 void HotbarComponent::TryPickupOnKeyPress() {
@@ -317,6 +337,7 @@ void HotbarComponent::Update(float dt) {
     if (!controlledCharacterPtr || !*controlledCharacterPtr || !bigCharacter) {
         return;
     }
+    UpdateLighterIgnite(dt);                             // a chama pega mesmo se trocar de irmão no meio
     if (*controlledCharacterPtr != bigCharacter) {
         return;
     }
@@ -340,14 +361,27 @@ void HotbarComponent::Update(float dt) {
     TryPickupOnKeyPress();
 }
 
-// [R]: apaga a luz e começa a recarga. Sem combustível ou com tudo cheio: "não consigo".
+// [R]: apaga a luz e começa a recarga. Sem combustível: o irmãozão "pensa" no
+// combustível (balão sobre a cabeça). Com tudo cheio: "não consigo".
 void HotbarComponent::StartReload() {
     const bool wasLighterOn = inventory.IsActiveLightLighter();
+    const bool wasLampOn = inventory.IsActiveLightLamp();
+    const bool wasIgniting = igniteTimer >= 0.0f;
+    const int  target = inventory.FindReloadTarget();
+    const bool lampTarget = target >= 0 && inventory.GetStack(target)->def.name == "Lamp";
     if (!inventory.BeginReload()) {
-        GameVoice::OnActionBlocked();
+        StageState* stage = Game::TryGetStageState();
+        if (inventory.GetFuelUnits() == 0 && stage) {
+            stage->Hints().ShowThought(FuelIconPath(), kNoFuelThoughtSeconds);
+        } else {
+            GameVoice::OnActionBlocked();
+        }
         return;
     }
-    if (wasLighterOn) GameSfx::PlayLighterToggle(false);
+    if (wasIgniting)       CancelLighterIgnite(true);   // estava abrindo: fecha a tampa
+    else if (wasLighterOn) GameSfx::PlayLighterToggle(false);
+    else if (wasLampOn)    GameSfx::PlayLampToggle(false);
+    GameSfx::PlayReloadPour(lampTarget);                 // fluido escorrendo durante os 2 s
     if (bigCharacter) bigCharacter->NotifyInventoryLightChanged();
     Telemetry::Event("reload_start", Telemetry::Fields().Int("fuelUnits", inventory.GetFuelUnits()));
 }
@@ -355,7 +389,13 @@ void HotbarComponent::StartReload() {
 // Conta a recarga; no fim a luz volta acesa (com o som do isqueiro, se for ele).
 void HotbarComponent::UpdateReload(float dt) {
     if (!inventory.TickReload(dt)) return;
-    if (inventory.IsActiveLightLighter()) GameSfx::PlayLighterToggle(true);
+    // O isqueiro reabre e risca: a luz volta só quando a chama pega (a lamparina, na hora).
+    if (inventory.IsActiveLightLighter()) {
+        inventory.isLightToggledOn = false;
+        BeginLighterIgnite();
+    } else if (inventory.IsActiveLightLamp()) {
+        GameSfx::PlayLampToggle(true);
+    }
     if (bigCharacter) bigCharacter->NotifyInventoryLightChanged();
     Telemetry::Event("reload_done", Telemetry::Fields().Num("charge", inventory.GetSelectedLightFuelRatio()));
 }

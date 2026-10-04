@@ -265,6 +265,7 @@ void StageState::Render() {
     }
 
     // ── HUD ──────────────────────────────────────────────────────────────────
+    if (!IsPlayerInputFrozen()) hints.RenderUnderHud(renderer);   // aura de brasa, por trás da HUD
     for (const auto& go : objectArray) {
         if (go->z >= kHudZ) go->Render();
     }
@@ -275,10 +276,13 @@ void StageState::Render() {
 
     fuelFlameHud.Render(renderer, inventory, winW, winH);   // HUD de jogo fica por baixo dos menus
     SDL_FRect fuelRect;
-    if (fuelFlameHud.GetLastRect(fuelRect)) hints.ReportHudRect(HudSlot::Fuel, fuelRect);
+    if (fuelFlameHud.GetLastRect(fuelRect)) {
+        hints.ReportHudRect(HudSlot::Fuel, fuelRect, fuelFlameHud.GetLastFramePath(),
+                            /*silhouette=*/true, fuelFlameHud.GetLastGlow());   // aura no formato da chama
+    }
     RenderInteractionPrompt(renderer);
     if (!IsPlayerInputFrozen()) {
-        hints.Render(renderer, [this](const Vec2& w) { return WorldToScreen(w); });   // teclas no mundo + anéis
+        hints.Render(renderer, [this](const Vec2& w) { return WorldToScreen(w); });   // teclas no mundo + balão
     }
     RenderVoiceSubtitle(renderer);
     RenderLevelTitleBanner(renderer);

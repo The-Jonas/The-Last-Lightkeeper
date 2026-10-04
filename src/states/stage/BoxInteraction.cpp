@@ -392,6 +392,8 @@ void StageState::TryInteractCandleOnKeyPress() {
     if (inventory.TryActivateBestLight()) {
         if (!wasLightActive && inventory.IsActiveLightLighter()) {
             GameSfx::PlayLighterToggle(true);
+        } else if (!wasLightActive && inventory.IsActiveLightLamp()) {
+            GameSfx::PlayLampToggle(true);
         }
         if (bigCharacter) {
             bigCharacter->NotifyInventoryLightChanged();
@@ -719,3 +721,5 @@ bool StageState::RenderInteractionGlowIfNeeded(GameObject& go) {
     }
     return false;
 }
+
+

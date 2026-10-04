@@ -60,6 +60,7 @@ void CommonHints::UpdateDocuments(StageState& stage, HintSystem& hints, const Hi
     folder.keys       = "[Tab]";                         // tecla fixa (TAB_KEY), não é uma ação remapeável
     folder.label      = "Documentos";
     folder.anchorHud  = HudSlot::Folder;
+    folder.belowHud   = true;
     folder.ring       = HudSlot::Folder;
     hints.Stuck(folder);
     
