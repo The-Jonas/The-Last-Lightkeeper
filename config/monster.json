@@ -29,5 +29,6 @@
   "hunt_ignore_light_chance": 0.85,
   "sanity_damage_dark": 80,
   "sanity_damage_lit": 50,
+  "vocal_cooldown": 8,
   "damage_cooldown_time": 1.5
 }

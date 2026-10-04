@@ -1062,6 +1062,11 @@
                          "name":"zoomFactor",
                          "type":"float",
                          "value":1
+                        }, 
+                        {
+                         "name":"zoomable",
+                         "type":"bool",
+                         "value":true
                         }],
                  "rotation":0,
                  "type":"JornalSpawn",
@@ -1152,7 +1157,7 @@
                         {
                          "name":"depthOffset",
                          "type":"float",
-                         "value":250
+                         "value":300
                         }, 
                         {
                          "name":"heightLevel",

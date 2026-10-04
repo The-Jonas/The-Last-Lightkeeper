@@ -571,7 +571,7 @@ void Game::CreateWindowAndRenderer(const std::string& title) {
     }
 
     SDL_RenderSetVSync(renderer, vsync ? 1 : 0);
-    SDL_RenderSetLogicalSize(renderer, resW, resH);
+    SDL_RenderSetLogicalSize(renderer, kReferenceW, kReferenceH);
     SDL_ShowCursor(SDL_DISABLE);   // o mouse continua mirando a lanterna
 
     SDL_RendererInfo info;
@@ -580,8 +580,8 @@ void Game::CreateWindowAndRenderer(const std::string& title) {
         std::cout << "[Render] backend SDL: " << info.name << std::endl;
     }
 
-    windowsWidth  = resW;
-    windowsHeight = resH;
+    windowsWidth  = kReferenceW;   
+    windowsHeight = kReferenceH;
 }
 
 // Evento "env" da telemetria: máquina do tester e configurações com que abriu.

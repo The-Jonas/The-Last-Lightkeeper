@@ -6,6 +6,7 @@
 #include "engine/Camera.h"
 #include "engine/SpriteRenderer.h"
 #include "gameplay/Character.h"
+#include "gameplay/StairTrigger.h"
 #include "gameplay/Window.h"
 #include "states/stage/StageState.h"
 
@@ -115,6 +116,7 @@ void Monster::LoadTuning() {
         {"sanity_damage_dark",         &Tuning::sanityDamageDark},
         {"sanity_damage_lit",          &Tuning::sanityDamageLit},
         {"damage_cooldown_time",       &Tuning::damageCooldownTime},
+        {"vocal_cooldown",             &Tuning::vocalCooldown},
     };
 
     try {
@@ -147,6 +149,7 @@ void Monster::ApplyAnimFrame() {
 // detecção de preso → passos/eco → dano.
 void Monster::Update(float dt) {
     TickTimers(dt);
+    UpdateStairState(dt);
     LogDebugState(dt);
 
     if (state == MonsterState::UNSTUCK) {
@@ -185,8 +188,7 @@ void Monster::TickTimers(float dt) {
     windowRadarTimer += dt;
 
     TickDown(postSabotageIdleTimer, dt);
-    TickDown(spotSoundCooldown, dt);
-    TickDown(huntScreamTimer, dt);
+    TickDown(vocalCooldown, dt);
     TickDown(noiseCooldownTimer, dt);
     TickDown(damageCooldown, dt);
     TickDown(visionRevealTimer, dt);
@@ -207,7 +209,7 @@ void Monster::LogDebugState(float dt) {
     debugLogTimer = 0.0f;
     const Vec2 c = associated.box.Center();
     std::cout << "[MONSTER] state=" << StateName(state) << " hasMemory=" << hasMemory
-              << " pos=(" << c.x << "," << c.y << ")\n";
+              << " elevated=" << isElevated << " pos=(" << c.x << "," << c.y << ")\n";
 }
 
 // Na luz (fora da carência de perseguição): foge — a menos que, perseguindo ou
@@ -239,9 +241,11 @@ bool Monster::UpdateLightSensor() {
 bool Monster::UpdateSightSensor() {
     if (state == MonsterState::HUNT || state == MonsterState::FLEE_LIGHT) return false;
     Vec2 seen;
-    if (!CanSeeLitBrother(seen)) return false;
+    bool seenElevated = false;
+    if (!CanSeeLitBrother(seen, seenElevated)) return false;
 
     lastKnownPlayerPos = seen;
+    lastKnownElevated = seenElevated;
     hasMemory = true;
     memoryDecayTimer = 0.0f;
     if (state != MonsterState::CHASE) TransitionTo(MonsterState::CHASE);
@@ -297,7 +301,7 @@ void Monster::UpdateBoredom(float dt, bool sawBrother) {
 // tempos procura uma janela fechada no escuro para abrir.
 void Monster::UpdateWindowRadar() {
     const bool idle = state == MonsterState::PATROL || state == MonsterState::INVESTIGATE;
-    if (!idle || hasMemory || postSabotageIdleTimer > 0.0f) return;
+    if (!idle || hasMemory || isElevated || postSabotageIdleTimer > 0.0f) return;
 
     const float interval = strategicMode ? tuning.strategicRadarInterval : tuning.windowRadarInterval;
     if (windowRadarTimer < interval) return;
@@ -428,6 +432,7 @@ void Monster::TransitionTo(MonsterState next) {
     stateTimer = 0.0f;
     currentPath.clear();
     pathStep = 0;
+    stairCrossing.active = false;   // a entrada do novo estado decide a rota
     stuckTimer = 0.0f;
     stuckRefPos = associated.box.Center();
 
@@ -439,7 +444,7 @@ void Monster::TransitionTo(MonsterState next) {
 
         case MonsterState::INVESTIGATE:
             moveSpeed = tuning.speedInvestigate;
-            RequestPath(lastKnownPlayerPos);
+            RequestPath(lastKnownPlayerPos, lastKnownElevated);
             break;
 
         case MonsterState::CHASE:
@@ -447,19 +452,13 @@ void Monster::TransitionTo(MonsterState next) {
             chaseGraceTimer = firstChaseGraceGiven ? tuning.chaseGraceDuration : tuning.firstChaseGraceDuration;
             firstChaseGraceGiven = true;
             chaseNoSightTimer = 0.0f;
-            if (changed && spotSoundCooldown <= 0.0f) {
-                GameSfx::PlayMonsterSpot();
-                spotSoundCooldown = kSpotSoundCooldown;
-            }
+            if (changed) TryVocalize(false);
             break;
 
         case MonsterState::HUNT:
             moveSpeed = tuning.speedHunt;
             chaseGraceTimer = tuning.chaseGraceDuration;
-            if (changed && huntScreamTimer <= 0.0f) {
-                GameSfx::PlayMonsterScream();
-                huntScreamTimer = kHuntScreamInterval;
-            }
+            if (changed) TryVocalize(true);
             break;
 
         case MonsterState::UNSTUCK:
@@ -476,7 +475,7 @@ void Monster::TransitionTo(MonsterState next) {
                 fleeLightAvoidTimer = tuning.fleeLightAvoidTime;
                 const Vec2 away = associated.box.Center() - lightPos;
                 if (away.Magnitude() > 0.001f) {
-                    RequestPath(associated.box.Center() + away.Normalized() * tuning.fleeDistance);
+                    RequestPath(associated.box.Center() + away.Normalized() * tuning.fleeDistance, isElevated);
                 }
             }
             break;
@@ -535,7 +534,7 @@ void Monster::UpdateInvestigate(float dt) {
     }
     if (pathRefreshTimer >= kPathRefreshInterval) {
         pathRefreshTimer = 0.0f;
-        RequestPath(lastKnownPlayerPos);
+        RequestPath(lastKnownPlayerPos, lastKnownElevated);
     }
 }
 
@@ -543,13 +542,15 @@ void Monster::UpdateInvestigate(float dt) {
 // rota) → investiga o último lugar.
 void Monster::UpdateChase(float dt) {
     Vec2 seen;
-    if (CanSeeLitBrother(seen)) {
+    bool seenElevated = false;
+    if (CanSeeLitBrother(seen, seenElevated)) {
         lastKnownPlayerPos = seen;
+        lastKnownElevated = seenElevated;
         memoryDecayTimer = 0.0f;
         chaseNoSightTimer = 0.0f;
         if (pathRefreshTimer >= kPathRefreshInterval) {
             pathRefreshTimer = 0.0f;
-            RequestPath(seen);
+            RequestPath(seen, seenElevated);
         }
         MoveAlongPath(dt, moveSpeed);
         return;
@@ -567,15 +568,13 @@ void Monster::UpdateHunt(float dt) {
         TransitionTo(MonsterState::INVESTIGATE);
         return;
     }
-    if (huntScreamTimer <= 0.0f) {
-        GameSfx::PlayMonsterScream();
-        huntScreamTimer = kHuntScreamInterval;
-    }
+    TryVocalize(true);   // grita de novo só se a caçada passar do cooldown
     if (Character::player && pathRefreshTimer >= kPathRefreshInterval) {
         pathRefreshTimer = 0.0f;
         const Vec2 playerPos = Character::player->GetAssociated().box.Center();
-        RequestPath(playerPos);
         lastKnownPlayerPos = playerPos;
+        lastKnownElevated = Character::player->isElevated;
+        RequestPath(playerPos, lastKnownElevated);
     }
     MoveAlongPath(dt, moveSpeed);
     if (stateTimer >= kHuntMaxTime) TransitionTo(MonsterState::INVESTIGATE);
@@ -612,11 +611,11 @@ void Monster::UpdateFleeLight(float dt) {
         const float angle = baseAngle + (static_cast<float>(i) / kTries) * 2.0f * kPi;
         const Vec2 candidate = myPos + Vec2(std::cos(angle), std::sin(angle)) * tuning.fleeDistance;
         if (!IsWorldPosInAnyLight(candidate)) {
-            RequestPath(candidate);
+            RequestPath(candidate, isElevated);
             return;
         }
     }
-    RequestPath(myPos + Vec2(std::cos(baseAngle), std::sin(baseAngle)) * tuning.fleeDistance);
+    RequestPath(myPos + Vec2(std::cos(baseAngle), std::sin(baseAngle)) * tuning.fleeDistance, isElevated);
 }
 
 // Sai de dentro da parede andando para longe do irmãozão, sem colisão. Livre
@@ -641,8 +640,11 @@ void Monster::UpdateUnstuck(float dt) {
             [&](const Vec2& a, const Vec2& b) { return myPos.Distance(a) < myPos.Distance(b); });
         associated.box.x = p.x - associated.box.w / 2.0f;
         associated.box.y = p.y - associated.box.h / 2.0f;
+        isElevated = false;            // pontos de patrulha ficam no chão
+        hasPrevCenter = false;         // o teleporte não conta como passo pela escada
     }
     damageCooldown = tuning.damageCooldownTime;   // não fere quem estiver colado na saída
+    if (isElevated && !FootOnStairs()) isElevated = false;   // saiu da escada sem passar pelo tapete
     TransitionTo(MonsterState::PATROL);
 }
 
@@ -701,6 +703,15 @@ void Monster::UpdateSabotageWindow(float dt) {
     } else if (dist > kSabotageGiveUpDist && stateTimer >= 2.0f) {
         GiveUpWindow(restAfterFail);
     }
+}
+
+// Grito (caçada) ou rosnado (avistou alguém), um de cada vez: os dois dividem o
+// mesmo cooldown, para nunca soarem em sequência.
+void Monster::TryVocalize(bool scream) {
+    if (vocalCooldown > 0.0f) return;
+    if (scream) GameSfx::PlayMonsterScream();
+    else        GameSfx::PlayMonsterSpot();
+    vocalCooldown = tuning.vocalCooldown;
 }
 
 // Solta a janela, dá um descanso ao radar e volta a patrulhar.
@@ -766,6 +777,7 @@ void Monster::NotifyNoise(Vec2 noiseWorldPos) {
 
     noiseCooldownTimer = tuning.noiseCooldown;
     lastKnownPlayerPos = noiseWorldPos;
+    lastKnownElevated = false;
     hasMemory = true;
     memoryDecayTimer = 0.0f;
     if (state != MonsterState::INVESTIGATE) TransitionTo(MonsterState::INVESTIGATE);
@@ -778,8 +790,8 @@ void Monster::NotifyCollision(GameObject& /*other*/) {}
 //  Sensores
 // ═════════════════════════════════════════════════════════════════════════════
 
-// Toque num irmão visível (não escondido, não interagindo): dano de sanidade
-// (menor na luz), memória, feedback na tela e caçada.
+// Toque num irmão visível (não escondido, não interagindo) NO MESMO NÍVEL da
+// escada: dano de sanidade (menor na luz), memória, feedback na tela e caçada.
 void Monster::CheckDamageCollision() {
     if (state == MonsterState::UNSTUCK || damageCooldown > 0.0f) return;
     StageState* stage = Game::TryGetStageState();
@@ -793,6 +805,7 @@ void Monster::CheckDamageCollision() {
 
     auto tryHit = [&](Character* c, float illumination, const char* who) {
         if (!c || c->isHidden || c->currentState == Character::ActionState::INTERACTING) return false;
+        if (c->isElevated != isElevated) return false;   // embaixo da escada não alcança quem está em cima
         const SDL_Rect hb = c->GetHitRect();
         if (SDL_HasIntersection(&hb, &dmgBox) != SDL_TRUE) return false;
 
@@ -801,6 +814,7 @@ void Monster::CheckDamageCollision() {
         c->sanity = std::max(0.0f, c->sanity - damage);
         const Vec2 p = c->GetAssociated().box.Center();
         lastKnownPlayerPos = p;
+        lastKnownElevated = c->isElevated;
         Telemetry::Event("monster_hit", Telemetry::Fields()
             .Str("victim", who).Bool("lit", lit).Num("damage", damage)
             .Num("sanityAfter", c->sanity).Pos("", p.x, p.y));
@@ -819,7 +833,8 @@ void Monster::CheckDamageCollision() {
 }
 
 // Algum irmão iluminado, não escondido, dentro do alcance e com linha livre.
-bool Monster::CanSeeLitBrother(Vec2& outPos) const {
+// Devolve também se ele está em cima da escada (para a rota dar a volta).
+bool Monster::CanSeeLitBrother(Vec2& outPos, bool& outElevated) const {
     StageState* stage = Game::TryGetStageState();
     if (!stage || stage->IsMonsterBlindDebug()) return false;
 
@@ -830,13 +845,14 @@ bool Monster::CanSeeLitBrother(Vec2& outPos) const {
         if (myPos.Distance(pos) > tuning.sightRadius) return false;
         if (!stage->HasWalkableLine(myPos, pos, &associated, kSightLosRadius)) return false;
         outPos = pos;
+        outElevated = c->isElevated;
         return true;
     };
     return check(Character::player, stage->bigIlluminationLevel) ||
            check(Character::littleBrother, stage->smallIlluminationLevel);
 }
 
-// Ponto dentro do raio de alguma luz do mapa ou da luz de mão (+ margem).
+// Ponto dentro do raio de alguma luz do mundo (velas, lamparina) + margem. O isqueiro não conta.
 bool Monster::IsWorldPosInAnyLight(Vec2 worldPos, float extraRadius) const {
     StageState* stage = Game::TryGetStageState();
     if (!stage) return false;
@@ -844,13 +860,10 @@ bool Monster::IsWorldPosInAnyLight(Vec2 worldPos, float extraRadius) const {
         if (!light.enabled || light.params.falloffRadiusPx <= 0.0f) continue;
         if (worldPos.Distance(light.worldPos) < light.params.falloffRadiusPx + extraRadius) return true;
     }
-    Vec2 torchPos;
-    float torchRadius = 0.0f;
-    return stage->GetActiveTorchWorldPos(torchPos, torchRadius) &&
-           worldPos.Distance(torchPos) < torchRadius + extraRadius;
+    return false;
 }
 
-// O corpo (90% da caixa) dentro de fleeLightRadiusFraction do raio de alguma luz.
+// O corpo (90% da caixa) dentro de fleeLightRadiusFraction do raio de alguma luz do mundo.
 bool Monster::IsSelfInLight() const {
     StageState* stage = Game::TryGetStageState();
     if (!stage) return false;
@@ -867,13 +880,10 @@ bool Monster::IsSelfInLight() const {
             return true;
         }
     }
-    Vec2 torchPos;
-    float torchRadius = 0.0f;
-    return stage->GetActiveTorchWorldPos(torchPos, torchRadius) &&
-           DistanceFromRectToPoint(body, torchPos) < torchRadius * tuning.fleeLightRadiusFraction;
+    return false;
 }
 
-// Posição da luz acesa mais próxima (do mapa ou a luz de mão). False se não houver nenhuma.
+// Posição da luz do mundo acesa mais próxima. False se não houver nenhuma.
 bool Monster::FindNearestLight(Vec2& outLightPos) const {
     StageState* stage = Game::TryGetStageState();
     if (!stage) return false;
@@ -884,13 +894,18 @@ bool Monster::FindNearestLight(Vec2& outLightPos) const {
         const float d = myPos.Distance(light.worldPos);
         if (d < best) { best = d; outLightPos = light.worldPos; }
     }
-    Vec2 torchPos;
-    float torchRadius = 0.0f;
-    if (stage->GetActiveTorchWorldPos(torchPos, torchRadius) && myPos.Distance(torchPos) < best) {
-        best = myPos.Distance(torchPos);
-        outLightPos = torchPos;
-    }
     return best < 1e8f;
+}
+
+// Pés dentro da área de algum objeto de escada (Escada / Escada_Quebrada).
+bool Monster::FootOnStairs() const {
+    StageState* stage = Game::TryGetStageState();
+    if (!stage) return false;
+    const Vec2 foot(associated.box.Center().x, associated.box.y + associated.box.h);
+    for (const auto& goPtr : stage->GetObjectArray()) {
+        if (goPtr && goPtr->isStairs && goPtr->box.Contains(foot)) return true;
+    }
+    return false;
 }
 
 // Janela fechada, no escuro, mais próxima dentro do alcance do radar.
@@ -923,14 +938,26 @@ bool Monster::AnyBrotherHidden() {
 //  Caminho
 // ═════════════════════════════════════════════════════════════════════════════
 
-// A* até o destino (com o pé circular do monstro). Destino inválido = sem rota;
-// A* vazio mas destino perto = anda reto; já em cima do 1º nó = pula ele.
-void Monster::RequestPath(Vec2 destination) {
+// Rota até o destino. Outro nível da escada → dá a volta pela entrada dela
+// (PlanStairCrossing). Na escada → reto (é uma rampa entre corrimãos). No chão
+// → A* com o pé circular: destino inválido = sem rota; A* vazio mas destino
+// perto = anda reto; já em cima do 1º nó = pula ele. Durante uma travessia,
+// pedidos novos esperam ela terminar.
+void Monster::RequestPath(Vec2 destination, bool destElevated) {
+    if (stairCrossing.active) return;
     StageState* stage = Game::TryGetStageState();
     if (!stage) return;
 
     currentPath.clear();
     pathStep = 0;
+    if (destElevated != isElevated) {
+        PlanStairCrossing(destElevated);
+        return;
+    }
+    if (isElevated) {
+        currentPath.push_back(destination);
+        return;
+    }
     if (!stage->IsWorldPosNavigableFor(destination, &associated, kNavFootRadius)) return;
 
     const Vec2 myPos = associated.box.Center();
@@ -953,6 +980,75 @@ void Monster::MoveAlongPath(float dt, float speed) {
     }
     associated.box.x += dir.x / dist * speed * dt;
     associated.box.y += dir.y / dist * speed * dt;
+}
+
+// Vai até a entrada da escada mais próxima (A* no chão; reto se já estiver na
+// escada) e atravessa o tapete em linha reta — subindo vira "em cima", descendo
+// volta ao chão, igual aos irmãos. Os pontos são dos PÉS; o caminho usa o centro.
+bool Monster::PlanStairCrossing(bool goingUp) {
+    StageState* stage = Game::TryGetStageState();
+    if (!stage) return false;
+
+    const Vec2 myPos = associated.box.Center();
+    const Vec2 footToCenter(0.0f, -associated.box.h * 0.5f);
+    bool found = false;
+    Vec2 entry, exit;
+    float bestDist = 1e30f;
+    for (const auto& goPtr : stage->GetObjectArray()) {
+        StairTrigger* st = goPtr ? goPtr->GetComponent<StairTrigger>() : nullptr;
+        if (!st) continue;
+        const Rect& z = st->GetZone();
+        const float cx = z.x + z.w * 0.5f;
+        const Vec2 below(cx, z.y + z.h + kStairApproachPx);
+        const Vec2 above(cx, z.y - kStairApproachPx);
+        const Vec2 e = (goingUp ? below : above) + footToCenter;
+        const float d = myPos.Distance(e);
+        if (d < bestDist) {
+            bestDist = d;
+            entry = e;
+            exit = (goingUp ? above : below) + footToCenter;
+            found = true;
+        }
+    }
+    if (!found) return false;
+
+    currentPath.clear();
+    pathStep = 0;
+    if (!isElevated) {
+        currentPath = stage->FindPathWorld(myPos, entry, &associated, 4096, kNavFootRadius);
+        if (currentPath.size() > 1 && myPos.Distance(currentPath[0]) <= kPathSkipFirstNode) pathStep = 1;
+    }
+    if (currentPath.empty()) currentPath.push_back(entry);
+    currentPath.push_back(exit);
+    stairCrossing = StairCrossing{true, goingUp, 0.0f};
+    return true;
+}
+
+// Mede a velocidade vertical (do frame anterior), aplica os gatilhos de escada
+// pelos pés e encerra a travessia quando o nível virou (ou se demorar demais).
+void Monster::UpdateStairState(float dt) {
+    const Vec2 c = associated.box.Center();
+    velocityY = (hasPrevCenter && dt > 0.0f) ? (c.y - prevCenterY) / dt : 0.0f;
+    prevCenterY = c.y;
+    hasPrevCenter = true;
+
+    if (StageState* stage = Game::TryGetStageState()) {
+        const Vec2 foot(c.x, associated.box.y + associated.box.h);
+        for (const auto& goPtr : stage->GetObjectArray()) {
+            if (StairTrigger* st = goPtr ? goPtr->GetComponent<StairTrigger>() : nullptr) {
+                StairTrigger::ApplyCrossing(st->GetZone(), st->GetAnchorY(), foot, velocityY, isElevated, stairAnchorY);
+            }
+        }
+    }
+
+    if (!stairCrossing.active) return;
+    if (isElevated == stairCrossing.goingUp) {
+        stairCrossing.active = false;
+        pathRefreshTimer = kPathRefreshInterval;   // replaneja já no novo nível
+        return;
+    }
+    stairCrossing.timer += dt;
+    if (stairCrossing.timer > kStairCrossingTimeout) stairCrossing.active = false;
 }
 
 bool Monster::HasReachedTarget() const {

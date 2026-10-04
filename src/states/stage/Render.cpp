@@ -304,18 +304,25 @@ void StageState::SortObjectsForDrawing() {
         const GameObject* ref = o->owner ? o->owner : o.get();
         return ref->box.y + ref->box.h + o->depthOffset;
     };
+
+    // True se o objeto está em cima da escada; `anchor` recebe a base dela.
+    auto onStairs = [](const std::shared_ptr<GameObject>& o, float& anchor) {
+        if (Character* c = o->GetComponent<Character>()) { anchor = c->stairAnchorY; return c->isElevated; }
+        if (Monster* m = o->GetComponent<Monster>())     { anchor = m->stairAnchorY; return m->isElevated; }
+        return false;
+    };
+
     std::sort(objectArray.begin(), objectArray.end(),
               [&](const std::shared_ptr<GameObject>& a, const std::shared_ptr<GameObject>& b) {
         if (a->z != b->z) return a->z < b->z;
 
         float ya = baseY(a), yb = baseY(b);
-        Character* ca = a->GetComponent<Character>();
-        Character* cb = b->GetComponent<Character>();
-        const bool aUp = ca && ca->isElevated;
-        const bool bUp = cb && cb->isElevated;
+        float anchorA = 0.0f, anchorB = 0.0f;
+        const bool aUp = onStairs(a, anchorA);
+        const bool bUp = onStairs(b, anchorB);
         if (!(aUp && bUp)) {
-            if (aUp) ya = ca->stairAnchorY;
-            if (bUp) yb = cb->stairAnchorY;
+            if (aUp) ya = anchorA;
+            if (bUp) yb = anchorB;
         }
         if (std::abs(ya - yb) > 0.01f) return ya < yb;
         return a->sub_z < b->sub_z;

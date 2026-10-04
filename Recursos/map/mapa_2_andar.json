@@ -1026,7 +1026,7 @@
                         {
                          "name":"interactive",
                          "type":"bool",
-                         "value":true
+                         "value":false
                         }, 
                         {
                          "name":"type",

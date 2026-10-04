@@ -172,8 +172,10 @@ bool StageState::IsTileNavigableFor(const GameObject* agent, int tx, int ty, flo
     }
 
     GameObject* agentMut = const_cast<GameObject*>(agent);
-    const Character* agentChar = agentMut->GetComponent<Character>();
-    const bool elevated = agentChar ? agentChar->isElevated : false;
+    // Nível da escada do agente: irmão ou monstro (cada um anda no seu "andar").
+    bool elevated = false;
+    if (const Character* agentChar = agentMut->GetComponent<Character>()) elevated = agentChar->isElevated;
+    else if (const Monster* agentMonster = agentMut->GetComponent<Monster>()) elevated = agentMonster->isElevated;
     if (const_cast<LevelManager&>(level).CheckCollision(footCircle, elevated)) {
         return false;
     }

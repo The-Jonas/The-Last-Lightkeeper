@@ -127,7 +127,7 @@ void SpawnFactory::SpawnEntity(const EntitySpawn& spawn, StageState& stage, cons
     if (spawn.type == "Monstro") {
         GameObject* monsterObj = new GameObject();
         monsterObj->tiledId = spawn.tiledId;
-        monsterObj->z = spawn.z;
+        monsterObj->z = 2;
  
         Monster* monster = new Monster(*monsterObj);
  

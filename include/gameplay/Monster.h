@@ -19,13 +19,13 @@ class Window;
 class Monster : public Component {
 public:
     enum class MonsterState {
-        PATROL,                                                                 // anda entre os pontos de patrulha
-        INVESTIGATE,                                                            // vai até a última posição ouvida/vista
-        HUNT,                                                                   // caçada cega depois de tocar num irmão
-        CHASE,                                                                  // perseguição com linha de visão
-        FLEE_LIGHT,                                                             // recuando da luz
-        SABOTAGE_WINDOW,                                                        // indo abrir uma janela
-        UNSTUCK                                                                 // saindo de dentro de parede
+        PATROL,          // anda entre os pontos de patrulha
+        INVESTIGATE,     // vai até a última posição ouvida/vista
+        HUNT,            // caçada cega depois de tocar num irmão
+        CHASE,           // perseguição com linha de visão
+        FLEE_LIGHT,      // recuando da luz
+        SABOTAGE_WINDOW, // indo abrir uma janela
+        UNSTUCK          // saindo de dentro de parede
     };
 
     explicit Monster(GameObject& associated);
@@ -33,14 +33,14 @@ public:
 
     void Start() override;
     void Update(float dt) override;
-    void Render() override;                                                     // só debug (-DDEBUG + tecla [B])
-    void NotifyCollision(GameObject& other) override;                           // não usa: o dano é por hitbox própria
+    void Render() override;                              // só debug (-DDEBUG + tecla [B])
+    void NotifyCollision(GameObject& other) override;    // não usa: o dano é por hitbox própria
 
     void AddPatrolPoint(Vec2 worldPos);
-    void NotifyNoise(Vec2 noiseWorldPos);                                       // barulho do jogador por perto → investiga
+    void NotifyNoise(Vec2 noiseWorldPos);                // barulho do jogador por perto → investiga
 
     MonsterState GetState() const { return state; }
-    static const char* StateName(MonsterState s);                               // texto do estado (debug e telemetria)
+    static const char* StateName(MonsterState s);        // texto do estado (debug e telemetria)
     GameObject& GetAssociated() { return associated; }
 
     // ── Habilidade do irmãozinho: revela o monstro por um tempo ─────────────
@@ -56,10 +56,17 @@ public:
         return (echoRevealTimer > 0.0f) ? (echoRevealTimer / kEchoRevealDuration) : 0.0f;
     }
     static constexpr float kEchoRevealDuration = 0.55f;
-    static constexpr float kEchoStepPx         = 190.0f;                        // distância andada entre ondas (andando)
-    static constexpr float kEchoStepFarPx      = 420.0f;                        // idem, correndo
-    static constexpr float kEchoMinDistancePx  = 190.0f;                        // mais perto que isto, sem onda (abaixo do raio final da onda, 340)
-    static constexpr float kEchoLiftPx         = 34.0f;                         // quanto a origem da onda sobe acima dos pés
+    static constexpr float kEchoStepPx         = 190.0f; // distância andada entre ondas (andando)
+    static constexpr float kEchoStepFarPx      = 420.0f; // idem, correndo
+    static constexpr float kEchoMinDistancePx  = 190.0f; // mais perto que isto, sem onda (abaixo do raio final da onda, 340)
+    static constexpr float kEchoLiftPx         = 34.0f;  // quanto a origem da onda sobe acima dos pés
+
+    // ── Escada ───────────────────────────────────────────────────────────────
+    // Mesmo esquema dos irmãos: cruzar o StairTrigger subindo liga, descendo
+    // desliga. Só fere quem está no mesmo nível; para trocar de nível, dá a
+    // volta pelo caminho até a entrada da escada (PlanStairCrossing).
+    bool  isElevated = false;
+    float stairAnchorY = 0.0f;                           // base da escada para o Y-sort (igual ao Character)
 
 private:
     // Números de comportamento — as chaves de config/monster.json são os nomes
@@ -69,76 +76,79 @@ private:
         float speedInvestigate  = 120.0f;
         float speedChase        = 170.0f;
         float speedHunt         = 185.0f;
-        float speedFlee         = 220.0f;                                       // a fuga usa o dobro disto
+        float speedFlee         = 220.0f;                // a fuga usa o dobro disto
 
-        float sightRadius           = 800.0f;                                   // alcance da visão (px de mundo)
-        float illuminationThreshold = 0.20f;                                    // luz mínima no irmão para ser visto
-        float memoryDecayTime       = 10.0f;                                    // esquece a última posição depois disto
+        float sightRadius           = 800.0f;            // alcance da visão (px de mundo)
+        float illuminationThreshold = 0.20f;             // luz mínima no irmão para ser visto
+        float memoryDecayTime       = 10.0f;             // esquece a última posição depois disto
 
-        float campMaxTime            = 18.0f;                                   // irmão escondido por isto → modo cerco
-        float strategicRadarInterval = 4.0f;                                    // intervalo entre sabotagens no cerco
-        float strategicSabotageRest  = 8.0f;                                    // descanso no cerco depois de desistir de uma janela
+        float campMaxTime            = 18.0f;            // irmão escondido por isto → modo cerco
+        float strategicRadarInterval = 4.0f;             // intervalo entre sabotagens no cerco
+        float strategicSabotageRest  = 8.0f;             // descanso no cerco depois de desistir de uma janela
 
-        float boredTime      = 10.0f;                                           // rondando o mesmo lugar por isto → desiste
-        float boredRadius    = 320.0f;                                          // "mesmo lugar"
-        float boredAvoidTime = 8.0f;                                            // evita voltar lá por isto
+        float boredTime      = 10.0f;                    // rondando o mesmo lugar por isto → desiste
+        float boredRadius    = 320.0f;                   // "mesmo lugar"
+        float boredAvoidTime = 8.0f;                     // evita voltar lá por isto
 
-        float windowRadarInterval = 6.0f;                                       // intervalo entre procuras de janela
-        float windowRadarRange    = 2900.0f;                                    // alcance da procura
-        float sabotageDelay       = 4.0f;                                       // espera depois de abrir uma
-        float postSabotageIdle    = 8.0f;                                       // fica parado depois de abrir
+        float windowRadarInterval = 6.0f;                // intervalo entre procuras de janela
+        float windowRadarRange    = 2900.0f;             // alcance da procura
+        float sabotageDelay       = 4.0f;                // espera depois de abrir uma
+        float postSabotageIdle    = 8.0f;                // fica parado depois de abrir
 
         float noiseHearRadius = 950.0f;
         float noiseCooldown   = 1.5f;
 
-        float fleeDistance            = 500.0f;                                 // quanto foge da luz
-        float fleeLightAvoidTime      = 12.0f;                                  // evita o lugar da luz na patrulha por isto
+        float fleeDistance            = 500.0f;          // quanto foge da luz
+        float fleeLightAvoidTime      = 12.0f;           // evita o lugar da luz na patrulha por isto
         float fleeLightAvoidRadius    = 520.0f;
-        float fleeLightRadiusFraction = 0.85f;                                  // fração do raio da luz que conta como "na luz"
+        float fleeLightRadiusFraction = 0.85f;           // fração do raio da luz que conta como "na luz"
 
-        float chaseGraceDuration      = 1.5f;                                   // ignora a luz no início de uma perseguição
-        float firstChaseGraceDuration = 5.0f;                                   // idem, na primeira do jogo
-        float chaseIgnoreLightChance  = 0.50f;                                  // chance de ignorar a luz perseguindo
-        float huntIgnoreLightChance   = 0.85f;                                  // idem, caçando
+        float chaseGraceDuration      = 1.5f;            // ignora a luz no início de uma perseguição
+        float firstChaseGraceDuration = 5.0f;            // idem, na primeira do jogo
+        float chaseIgnoreLightChance  = 0.50f;           // chance de ignorar a luz perseguindo
+        float huntIgnoreLightChance   = 0.85f;           // idem, caçando
 
-        float sanityDamageDark   = 80.0f;                                       // dano de um toque no escuro
-        float sanityDamageLit    = 50.0f;                                       // dano de um toque na luz
+        float vocalCooldown      = 8.0f;                 // tempo mínimo entre dois gritos/rosnados
+
+        float sanityDamageDark   = 80.0f;                // dano de um toque no escuro
+        float sanityDamageLit    = 50.0f;                // dano de um toque na luz
         float damageCooldownTime = 1.5f;
     };
 
     // ── Constantes fixas ─────────────────────────────────────────────────────
     static constexpr int   kAnimFrameCount      = 5;
-    static constexpr float kAnimPxPerFrame      = 32.0f;                        // distância andada por quadro de animação
-    static constexpr float kDamageBoxScale      = 0.595f;                       // hitbox de dano = fração da caixa
+    static constexpr float kAnimPxPerFrame      = 32.0f;   // distância andada por quadro de animação
+    static constexpr float kDamageBoxScale      = 0.595f;  // hitbox de dano = fração da caixa
     static constexpr float kDamageBoxInset      = (1.0f - kDamageBoxScale) * 0.5f;
     static constexpr float kPathRefreshInterval = 0.30f;
-    static constexpr float kNavFootRadius       = 18.0f;                        // pé circular para a navegação
-    static constexpr float kSightLosRadius      = 25.0f;                        // espessura da linha de visão
-    static constexpr float kSpotSoundCooldown   = 6.0f;
-    static constexpr float kHuntScreamInterval  = 2.6f;
-    static constexpr float kStuckMoveEpsilon    = 6.0f;                         // andou menos que isto = parado
-    static constexpr float kStuckTime           = 2.5f;                         // parado por isto = preso
+    static constexpr float kNavFootRadius       = 18.0f;   // pé circular para a navegação
+    static constexpr float kSightLosRadius      = 25.0f;   // espessura da linha de visão
+    static constexpr float kStuckMoveEpsilon    = 6.0f;    // andou menos que isto = parado
+    static constexpr float kStuckTime           = 2.5f;    // parado por isto = preso
     static constexpr float kSpeedUnstuck        = 130.0f;
     static constexpr float kUnstuckMinTime      = 1.0f;
     static constexpr float kUnstuckMaxTime      = 3.5f;
 
-    static constexpr float kPatrolWaitTime        = 0.5f;                       // pausa ao chegar num ponto
-    static constexpr float kInvestigateNoPathTime = 5.0f;                       // sem caminho por isto → volta a patrulhar
-    static constexpr float kChaseLostSightTime    = 2.0f;                       // sem ver por isto → investiga
+    static constexpr float kPatrolWaitTime        = 0.5f;  // pausa ao chegar num ponto
+    static constexpr float kInvestigateNoPathTime = 5.0f;  // sem caminho por isto → volta a patrulhar
+    static constexpr float kChaseLostSightTime    = 2.0f;  // sem ver por isto → investiga
     static constexpr float kHuntMaxTime           = 8.0f;
-    static constexpr float kFleeReturnToChaseTime = 4.0f;                       // fugindo com memória → volta a perseguir
-    static constexpr float kFleeOutOfLightTime    = 1.5f;                       // fora da luz por isto → patrulha
+    static constexpr float kFleeReturnToChaseTime = 4.0f;  // fugindo com memória → volta a perseguir
+    static constexpr float kFleeOutOfLightTime    = 1.5f;  // fora da luz por isto → patrulha
 
-    static constexpr float kSabotageMaxTime       = 26.0f;                      // desiste da janela depois disto
-    static constexpr float kSabotageReachDist     = 480.0f;                     // perto assim já abre
+    static constexpr float kSabotageMaxTime       = 26.0f; // desiste da janela depois disto
+    static constexpr float kSabotageReachDist     = 480.0f;// perto assim já abre
     static constexpr float kSabotageGiveUpDist    = 540.0f;
-    static constexpr float kSabotageApproachDist  = 440.0f;                     // pontos ao redor da janela (fora do tapete)
-    static constexpr float kWindowRestNormal      = 15.0f;                      // descanso do radar ao desistir
-    static constexpr float kWindowRestStrategic   = 4.0f;                       // idem, no cerco
+    static constexpr float kSabotageApproachDist  = 440.0f;// pontos ao redor da janela (fora do tapete)
+    static constexpr float kWindowRestNormal      = 15.0f; // descanso do radar ao desistir
+    static constexpr float kWindowRestStrategic   = 4.0f;  // idem, no cerco
 
-    static constexpr float kPathDirectFallback = 150.0f;                        // sem A*, anda reto se o destino estiver perto assim
-    static constexpr float kPathSkipFirstNode  = 64.0f;                         // já em cima do 1º nó: pula
+    static constexpr float kPathDirectFallback = 150.0f;   // sem A*, anda reto se o destino estiver perto assim
+    static constexpr float kPathSkipFirstNode  = 64.0f;    // já em cima do 1º nó: pula
     static constexpr float kPathNodeReached    = 12.0f;
+
+    static constexpr float kStairApproachPx      = 60.0f;  // pés param antes/depois do tapete da escada
+    static constexpr float kStairCrossingTimeout = 6.0f;   // travessia que não completa é abandonada
 
     // ── Preparação ───────────────────────────────────────────────────────────
     void LoadTuning();                                   // config/monster.json → tuning
@@ -154,6 +164,7 @@ private:
     void UpdateWindowRadar();                            // escolhe janela para abrir
     void UpdateStuckDetection(float dt);                 // parado tempo demais → UNSTUCK
     void UpdateFootstepsAndEcho(float dt);               // animação, passos, eco e virar o sprite
+    void UpdateStairState(float dt);                     // velocidade vertical, gatilhos e fim da travessia
 
     // ── Estados ──────────────────────────────────────────────────────────────
     void TransitionTo(MonsterState next);
@@ -166,18 +177,21 @@ private:
     void UpdateSabotageWindow(float dt);
     void PickNextPatrolPoint();
     void GiveUpWindow(float radarRest);                  // solta a janela e volta a patrulhar
+    void TryVocalize(bool scream);                       // grito (caçada) ou rosnado (avistou), respeitando o cooldown
 
     // ── Sensores ─────────────────────────────────────────────────────────────
     void CheckDamageCollision();
-    bool CanSeeLitBrother(Vec2& outPos) const;
+    bool CanSeeLitBrother(Vec2& outPos, bool& outElevated) const;
     bool IsWorldPosInAnyLight(Vec2 worldPos, float extraRadius = 0.0f) const;
     bool IsSelfInLight() const;
-    bool FindNearestLight(Vec2& outLightPos) const;      // luz mais próxima (mapa ou luz de mão)
+    bool FindNearestLight(Vec2& outLightPos) const;      // luz do mundo mais próxima (isqueiro não espanta)
+    bool FootOnStairs() const;                           // pés dentro do sprite de alguma escada
     Window* FindNearbyClosedWindow();
     static bool AnyBrotherHidden();
 
     // ── Caminho ──────────────────────────────────────────────────────────────
-    void RequestPath(Vec2 destination);
+    void RequestPath(Vec2 destination, bool destElevated = false);   // destElevated = destino em cima da escada
+    bool PlanStairCrossing(bool goingUp);                // rota até a entrada da escada + reta pelo tapete
     void MoveAlongPath(float dt, float speed);
     bool HasReachedTarget() const;
     bool HasNoPath() const;
@@ -198,6 +212,7 @@ private:
     float pathRefreshTimer = 0.0f;
 
     Vec2  lastKnownPlayerPos;
+    bool  lastKnownElevated = false;                     // a última posição conhecida era em cima da escada
     bool  hasMemory = false;
     float memoryDecayTimer = 0.0f;
 
@@ -227,12 +242,21 @@ private:
 
     float damageCooldown = 0.0f;
     float noiseCooldownTimer = 0.0f;
-    float spotSoundCooldown = 0.0f;
-    float huntScreamTimer = 0.0f;
+    float vocalCooldown = 0.0f;                          // espera até poder gritar/rosnar de novo
     float visionRevealTimer = 0.0f;
     float echoRevealTimer = 0.0f;
     float echoDistAccum = 0.0f;                          // distância andada desde a última onda
     float debugLogTimer = 0.0f;
+
+    struct StairCrossing {                               // travessia da escada em andamento
+        bool  active = false;
+        bool  goingUp = false;
+        float timer = 0.0f;
+    };
+    StairCrossing stairCrossing;
+    float prevCenterY = 0.0f;
+    bool  hasPrevCenter = false;
+    float velocityY = 0.0f;                              // px/s, positivo = descendo na tela
 
     int   animFrame = 0;
     float animDistAccum = 0.0f;
