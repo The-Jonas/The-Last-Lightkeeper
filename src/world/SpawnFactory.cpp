@@ -27,7 +27,7 @@
 
 namespace {
 
-constexpr int kFuelMinPercent = 60;                      // frasco de combustível: 50% a 100% cheio
+constexpr int kFuelMinPercent = 70;                      // frasco de combustível: 70% a 100% cheio
 constexpr int kFuelMaxPercent = 100;
 
 // Propaga o flip do tile (decodificado do gid no Tiled) para o objeto. Inócuo em
